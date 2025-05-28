@@ -9,10 +9,12 @@ Este repositorio contiene los tres proyectos principales del sistema de gestión
 ---
 
 ## 📁 Estructura del Repositorio
+
+```text
 /almacen-system/
-├── android-app/ # Proyecto Android (Kotlin)
-├── api/ # Proyecto .NET Core (API)
-├── desktop-app/ # Proyecto C# (WPF)
+├── android-app/   # Proyecto Android (Kotlin)
+├── api/           # Proyecto .NET Core (API)
+├── desktop-app/   # Proyecto C# (WPF)
 └── README.md
 
 ---
