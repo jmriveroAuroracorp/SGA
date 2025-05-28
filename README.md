@@ -63,7 +63,7 @@ Ejecutar en un emulador o dispositivo Android.
 
 ### 📥 Clonar el repositorio
 ```bash
-git clone https://github.com/tu-usuario/almacen-system.git
+git clone https://github.com/jmriveroAuroracorp/SGA.git
 ```
 ---
 
