@@ -70,11 +70,11 @@ git clone https://github.com/jmriveroAuroracorp/SGA.git
 ### ✅ Buenas prácticas
 - Usa mensajes de commit claros. Ejemplos:
 
-- `feat: agregar funcionalidad de inventario`
+  - `feat: agregar funcionalidad de inventario`
 
-- `fix: corregir error de login`
+  - `fix: corregir error de login`
 
-- `refactor: optimizar consulta de productos`
+  - `refactor: optimizar consulta de productos`
 
 - Trabaja en ramas por módulo o funcionalidad.
 
