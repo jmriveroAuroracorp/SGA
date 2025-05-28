@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Login;
+using SGA_Api.Models.Pesaje;
 
 namespace SGA_Api.Data
 {

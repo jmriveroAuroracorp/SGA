@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
+using SGA_Api.Logic;
+using SGA_Api.Services;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +16,7 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<IPesajeService, PesajeLogic>();
 
 // CORS aquí
 builder.Services.AddCors(options =>
