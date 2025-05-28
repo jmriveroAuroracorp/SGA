@@ -1,0 +1,57 @@
+# ==========================
+# Android (.gradle, build)
+# ==========================
+android-app/.gradle/
+android-app/.idea/
+android-app/local.properties
+android-app/*.iml
+android-app/build/
+android-app/captures/
+android-app/.DS_Store
+*.apk
+*.ap_
+*.dex
+ 
+# ==========================
+# .NET (API y Escritorio)
+# ==========================
+**/bin/
+**/obj/
+**/*.user
+**/*.suo
+**/*.userosscache
+**/*.sln.docstates
+**/*.vspscc
+**/.vs/
+**/TestResults/
+**/packages/
+**/project.lock.json
+**/project.fragment.lock.json
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/*.db
+**/*.sqlite
+**/*.mdf
+**/*.ldf
+ 
+# ==========================
+# Node/NPM (por si usas herramientas JS)
+# ==========================
+node_modules/
+npm-debug.log*
+yarn-error.log
+ 
+# ==========================
+# General
+# ==========================
+*.log
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+*.orig
+*.rej
+*.zip
+*.tar.gz
+*.env
