@@ -4,9 +4,9 @@ using SGA_Api.Models.Pesaje;
 
 namespace SGA_Api.Data
 {
-    public class AppDbContext : DbContext
+    public class SageDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options)
+        public SageDbContext(DbContextOptions<SageDbContext> options)
             : base(options)
         {
         }

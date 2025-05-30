@@ -9,9 +9,9 @@ namespace SGA_Api.Controllers.Login
     [Route("api/[controller]")]
     public class OperariosAccesoController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly SageDbContext _context;
 
-        public OperariosAccesoController(AppDbContext context)
+        public OperariosAccesoController(SageDbContext context)
         {
             _context = context;
         }

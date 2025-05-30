@@ -6,9 +6,22 @@ using SGA_Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Agregamos el DbContext con SQL Server
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Agregamos el DbContext de SAGE
+builder.Services.AddDbContext<SageDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("Sage")));
+
+// Agregamos el DbContext de AURORA_SGA
+builder.Services.AddDbContext<AuroraSgaDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("AuroraSga")));
+
+// Agregamos el DbContext de StorageControl
+builder.Services.AddDbContext<StorageControlDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("StorageControl")));
+
+// Agregamos el DbContext de MobilityWH3
+builder.Services.AddDbContext<MobilityWH3DbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("MobilityWH3")));
+
 
 // Add services to the container.
 

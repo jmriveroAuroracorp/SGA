@@ -10,9 +10,9 @@ namespace SGA_Api.Controllers.Login
     [Route("api/[controller]")]
     public class LoginController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly SageDbContext _context;
 
-        public LoginController(AppDbContext context)
+        public LoginController(SageDbContext context)
         {
             _context = context;
         }
