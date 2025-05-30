@@ -1,0 +1,58 @@
+﻿<Window x:Class="SGA_Desktop.Login"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        WindowStartupLocation="CenterScreen"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        Background="{StaticResource BrushInputBorde}">
+
+    <Grid>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <!-- Logo arriba -->
+            <Image Source="/Assets/LogoSGA.jpg"
+                   Width="400" Height="Auto"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,20"/>
+
+            <!-- Formulario -->
+            <Border Background="White" Padding="30" CornerRadius="10"
+                    HorizontalAlignment="Center" Width="300"  Margin="40,20,40,30">
+                <StackPanel>
+                    <TextBlock Text="Iniciar Sesión"
+                               FontSize="22"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource BrushPrincipal }"
+                               FontFamily="{StaticResource FuentePrincipal}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Usuario"
+                               FontFamily="{StaticResource FuentePrincipal}" />
+                    <TextBox Text="{Binding Usuario, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EstiloCajaTexto}"/>
+
+                    <TextBlock Text="Contraseña"
+                               FontFamily="{StaticResource FuentePrincipal}" />
+                    <PasswordBox
+                            Style="{StaticResource EstiloPasswordBox}"
+                            helpers:PasswordBoxHelper.BindPassword="True"
+                            helpers:PasswordBoxHelper.BoundPassword="{Binding Contraseña, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+
+                    <Button Content="Entrar"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Command="{Binding IniciarSesionCommand}"
+                            IsDefault="True"/>
+
+                    <!-- Botón Salir -->
+                    <Button Content="Salir"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Click="BtnSalir_Click"
+                            Margin="0,10,0,0"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</Window>
