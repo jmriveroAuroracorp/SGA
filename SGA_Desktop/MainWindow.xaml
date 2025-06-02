@@ -1,0 +1,39 @@
+﻿<Window x:Class="SGA_Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+        Title="SGA"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
+        ResizeMode="NoResize"
+        Background="{StaticResource BrushFondo}">
+
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Menú lateral -->
+        <StackPanel Background="{StaticResource BrushPrincipal}" VerticalAlignment="Stretch">
+            <Image Source="Assets/logoSGA.jpg" Height="80" Margin="10"/>
+            <Button Content="Traspasos"
+                    Command="{Binding IrATraspasosCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
+            <Button Content="Inventario"
+                    Command="{Binding IrAInventarioCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
+            <Button Content="Salir"
+                    Click="BtnSalir_Click"
+                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
+        </StackPanel>
+
+        <!-- Contenido dinámico -->
+        <Frame x:Name="MainFrame"
+               Grid.Column="1"
+               NavigationUIVisibility="Hidden"/>
+    </Grid>
+    
+    
+</Window>

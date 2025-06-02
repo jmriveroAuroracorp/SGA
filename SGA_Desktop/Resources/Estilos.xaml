@@ -1,0 +1,82 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 🎨 Colores -->
+    <Color x:Key="ColorPrincipal">#0067C3</Color>
+    <Color x:Key="ColorSecundario1">#5FB4DD</Color>
+    <Color x:Key="ColorSecundario2">#6fc4fa</Color>
+    <Color x:Key="ColorFondo">#f3f6fb</Color>
+
+    <SolidColorBrush x:Key="BrushPrincipal" Color="{StaticResource ColorPrincipal}"/>
+    <SolidColorBrush x:Key="BrushSecundario1" Color="{StaticResource ColorSecundario1}"/>
+    <SolidColorBrush x:Key="BrushSecundario2" Color="{StaticResource ColorSecundario2}"/>
+    <SolidColorBrush x:Key="BrushFondo" Color="{StaticResource ColorFondo}"/>
+    <SolidColorBrush x:Key="BrushInputBorde" Color="#ccc"/>
+    <SolidColorBrush x:Key="BrushHoverBoton" Color="#031ca5"/>
+
+    <!-- 🅰 Tipografía -->
+    <FontFamily x:Key="FuentePrincipal">Open Sans</FontFamily>
+
+    <!-- 🧾 Cajas de texto -->
+    <Style x:Key="EstiloCajaTexto" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushInputBorde}"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
+    <!-- 🔒 PasswordBox estilo -->
+    <Style x:Key="EstiloPasswordBox" TargetType="PasswordBox">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushInputBorde}"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
+    <!-- 🔘 Botón principal -->
+    <Style x:Key="EstiloBotonPrincipal" TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource BrushPrincipal}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Margin" Value="0,10,0,0" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                        </Border>
+                        <Rectangle x:Name="hoverOverlay"
+                               Fill="#40FFFFFF"
+                               RadiusX="8" RadiusY="8"
+                               Opacity="0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="hoverOverlay" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="hoverOverlay" Property="Opacity" Value="0.2"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+</ResourceDictionary>
