@@ -26,7 +26,7 @@ namespace SGA_Api.Controllers.Login
                                    select new OperariosAccesoDto
                                    {
                                        Operario = o.Id,
-                                       NombreOperario = o.Nombre,
+                                       NombreOperario = o.Nombre!,
                                        Contraseña = o.Contraseña,
                                        MRH_CodigoAplicacion = a.MRH_CodigoAplicacion
                                    }).ToListAsync();

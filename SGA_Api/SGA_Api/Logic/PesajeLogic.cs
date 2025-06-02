@@ -18,7 +18,7 @@ namespace SGA_Api.Logic
 
         public async Task<PesajeResponseDto?> GetPesajeAsync(int ejercicio, string serie, int numero)
         {
-            var connectionString = _configuration.GetConnectionString("DefaultConnection");
+            var connectionString = _configuration.GetConnectionString("Sage");
             var query = @"
                 SELECT 
                     OrdenesFabricacion.EjercicioFabricacion,
@@ -87,7 +87,7 @@ namespace SGA_Api.Logic
                     datos.Add(new PesajeSqlRawDto
                     {
                         EjercicioFabricacion = reader.IsDBNull(0) ? 0 : Convert.ToInt32(reader.GetValue(0)),
-                        SerieFabricacion = reader.IsDBNull(1) ? null : reader.GetString(1),
+                        SerieFabricacion = reader.GetString(1),
                         NumeroFabricacion = reader.IsDBNull(2) ? 0 : Convert.ToInt32(reader.GetValue(2)),
                         CodigoArticuloOT = reader.IsDBNull(5) ? null : reader.GetString(5),
                         DescripcionArticuloOT = reader.IsDBNull(6) ? null : reader.GetString(6),
@@ -110,7 +110,7 @@ namespace SGA_Api.Logic
             var response = new PesajeResponseDto
             {
                 EjercicioFabricacion = primeraFila.EjercicioFabricacion,
-                SerieFabricacion = primeraFila.SerieFabricacion,
+                SerieFabricacion = primeraFila.SerieFabricacion!,
                 NumeroFabricacion = primeraFila.NumeroFabricacion,
                 VNumeroAmasijos = primeraFila.VNumeroAmasijos
             };

@@ -17,7 +17,7 @@ namespace SGA_Api.Controllers.Registro
         }
 
         [HttpPost("registrar")]
-        public async Task<IActionResult> RegistrarDispositivo([FromBody] ObtenerDispositivo request)
+        public async Task<IActionResult> RegistrarDispositivo([FromBody] ObtenerDispositivoDto request)
         {
             if (string.IsNullOrWhiteSpace(request.Id))
                 return BadRequest("ID de dispositivo requerido.");
@@ -31,14 +31,14 @@ namespace SGA_Api.Controllers.Registro
                     Id = request.Id,
                     Nombre = request.NombreOperario,
                     Tipo = request.Tipo,
-                    //Activo = -1 // Asumiendo que Activo es int, no bool
+                    Activo = -1 
                 };
 
                 _context.Dispositivos.Add(dispositivo);
             }
             else
             {
-               // dispositivo.Activo = -1; // Siempre establecer -1
+                dispositivo.Activo = -1; // Siempre establecer -1
 
                 _context.Dispositivos.Update(dispositivo);
             }

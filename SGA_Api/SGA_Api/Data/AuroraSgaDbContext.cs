@@ -24,7 +24,7 @@ namespace SGA_Api.Data
                 .HasColumnName("id")
                 .IsRequired()
                 .HasMaxLength(50);
-                
+
             modelBuilder.Entity<Dispositivo>()
                 .Property(d => d.Nombre)
                 .HasColumnName("nombre")
@@ -33,7 +33,7 @@ namespace SGA_Api.Data
             modelBuilder.Entity<Dispositivo>()
                 .Property(d => d.Tipo)
                 .HasColumnName("tipo")
-                .HasMaxLength(100); 
+                .HasMaxLength(100);
 
             modelBuilder.Entity<Dispositivo>()
                 .Property(d => d.Activo)
@@ -48,18 +48,14 @@ namespace SGA_Api.Data
                 .Property(e => e.Detalle)
                 .HasColumnType("text");
 
-            // 🔧 Enlazar correctamente DispositivoId con dispositivo_id
-            modelBuilder.Entity<LogEvento>()
-                .Property(e => e.DispositivoId)
-                .HasColumnName("dispositivo_id");
-
-            // ✅ RELACIÓN: LogEvento → Dispositivo (obligatoria)
+            // RELACIÓN: LogEvento → Dispositivo (obligatoria)
             modelBuilder.Entity<LogEvento>()
                 .HasOne(e => e.Dispositivo)
                 .WithMany(d => d.LogEventos)
-                .HasForeignKey(e => e.DispositivoId)
+                .HasForeignKey(e => e.IdDispositivo)
                 .IsRequired()
                 .OnDelete(DeleteBehavior.Restrict);
+
         }
     }
 }
