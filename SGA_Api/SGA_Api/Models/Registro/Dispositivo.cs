@@ -3,7 +3,6 @@
     public class Dispositivo
     {
         public required string Id { get; set; }
-        public string? Nombre { get; set; }
         public string? Tipo { get; set; }
         public int? Activo { get; set; }
 

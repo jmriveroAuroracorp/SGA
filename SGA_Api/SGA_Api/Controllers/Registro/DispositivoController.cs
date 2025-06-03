@@ -29,7 +29,6 @@ namespace SGA_Api.Controllers.Registro
                 dispositivo = new Dispositivo
                 {
                     Id = request.Id,
-                    Nombre = request.NombreOperario,
                     Tipo = request.Tipo,
                     Activo = -1 
                 };

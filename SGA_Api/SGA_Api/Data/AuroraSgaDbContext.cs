@@ -26,11 +26,6 @@ namespace SGA_Api.Data
                 .HasMaxLength(50);
 
             modelBuilder.Entity<Dispositivo>()
-                .Property(d => d.Nombre)
-                .HasColumnName("nombre")
-                .HasMaxLength(100);
-
-            modelBuilder.Entity<Dispositivo>()
                 .Property(d => d.Tipo)
                 .HasColumnName("tipo")
                 .HasMaxLength(100);

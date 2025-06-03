@@ -1,4 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+
+using Microsoft.Extensions.FileProviders;
+using System.IO;
+
 using SGA_Api.Data;
 using SGA_Api.Logic;
 using SGA_Api.Services;
@@ -49,6 +53,14 @@ var app = builder.Build();
     app.UseSwagger();
     app.UseSwaggerUI();
 //}
+app.UseStaticFiles(); // Para wwwroot (si lo usas, opcional)
+
+// Añadir esta configuración personalizada para /actualizaciones
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(@"C:\wamp64\www\SGA_Api\actualizaciones"),
+    RequestPath = "/actualizaciones"
+});
 
 app.UseAuthorization();
 
