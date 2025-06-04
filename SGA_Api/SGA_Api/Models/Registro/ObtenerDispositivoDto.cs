@@ -4,5 +4,6 @@
     {
         public required string Id { get; set; }
         public string Tipo { get; set; } = null!;
+        public int? IdUsuario { get; set; }
     }
 }

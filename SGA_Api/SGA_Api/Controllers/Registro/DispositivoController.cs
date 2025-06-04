@@ -21,6 +21,20 @@ namespace SGA_Api.Controllers.Registro
         {
             if (string.IsNullOrWhiteSpace(request.Id))
                 return BadRequest("ID de dispositivo requerido.");
+            if (request.IdUsuario == null)
+                return BadRequest("ID de usuario requerido.");
+
+            // Comprobamos si el usuario ya tiene otro dispositivo activo distinto
+            var otroDispositivoActivo = await _context.Dispositivos
+                .FirstOrDefaultAsync(d =>
+                    d.IdUsuario == request.IdUsuario &&
+                    d.Activo == -1 &&
+                    d.Id != request.Id);
+
+            if (otroDispositivoActivo != null)
+            {
+                return Conflict("Este usuario ya tiene una sesión activa en otro dispositivo.");
+            }
 
             var dispositivo = await _context.Dispositivos.FirstOrDefaultAsync(d => d.Id == request.Id);
 
@@ -30,14 +44,21 @@ namespace SGA_Api.Controllers.Registro
                 {
                     Id = request.Id,
                     Tipo = request.Tipo,
-                    Activo = -1 
+                    Activo = -1,
+                    IdUsuario = request.IdUsuario
                 };
 
                 _context.Dispositivos.Add(dispositivo);
             }
             else
             {
-                dispositivo.Activo = -1; // Siempre establecer -1
+                if (dispositivo.Activo == -1 && dispositivo.IdUsuario != request.IdUsuario)
+                {
+                    return Conflict("Este dispositivo ya está en uso por otro usuario.");
+                }
+
+                dispositivo.Activo = -1;
+                dispositivo.IdUsuario = request.IdUsuario;
 
                 _context.Dispositivos.Update(dispositivo);
             }
@@ -46,5 +67,27 @@ namespace SGA_Api.Controllers.Registro
 
             return Ok();
         }
+
+
+
+        [HttpPost("desactivar")]
+        public async Task<IActionResult> DesactivarDispositivo([FromBody] ObtenerDispositivoDto request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Id))
+                return BadRequest("ID de dispositivo requerido.");
+
+            var dispositivo = await _context.Dispositivos.FirstOrDefaultAsync(d => d.Id == request.Id);
+
+            if (dispositivo == null)
+                return NotFound($"No se encontró el dispositivo con ID '{request.Id}'.");
+
+            dispositivo.Activo = 0;
+
+            _context.Dispositivos.Update(dispositivo);
+            await _context.SaveChangesAsync();
+
+            return Ok();
+        }
+
     }
 }
