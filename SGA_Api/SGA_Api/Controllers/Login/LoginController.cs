@@ -29,26 +29,47 @@ namespace SGA_Api.Controllers.Login
             if (operario == null)
                 return Unauthorized("Operario o contraseña incorrectos.");
 
-            // ✅ Verifica si ya tiene sesión activa en otro dispositivo
-            var sesionActiva = await _auroraSgaContext.Dispositivos
-                .Where(d => d.Activo == -1)
-                .Join(_auroraSgaContext.LogEventos,
-                      d => d.Id,
-                      l => l.IdDispositivo,
-                      (d, l) => new { Dispositivo = d, Log = l })
-                .AnyAsync(x => x.Log.IdUsuario == operario.Id && x.Dispositivo.Id != login.IdDispositivo);
+            // 🔐 Generar nuevo token
+            var nuevoToken = Guid.NewGuid().ToString();
 
-            if (sesionActiva)
-                return Conflict("El operario ya ha iniciado sesión en otro dispositivo.");
+            // 🔁 Desactivar todos los dispositivos activos de este usuario
+            var dispositivosPrevios = await _auroraSgaContext.Dispositivos
+                .Where(d => d.IdUsuario == operario.Id && d.Activo == -1)
+                .ToListAsync();
 
-            // ✅ Si todo bien, marcar el dispositivo actual como activo (por si no lo está)
-            var dispositivo = await _auroraSgaContext.Dispositivos.FindAsync(login.IdDispositivo);
-            if (dispositivo != null)
+            foreach (var d in dispositivosPrevios)
             {
-                dispositivo.Activo = -1;
-                await _auroraSgaContext.SaveChangesAsync();
-            } 
+                d.Activo = 0;
+                d.SessionToken = null;
+            }
 
+            // ✅ Activar el nuevo dispositivo
+            var dispositivoActual = await _auroraSgaContext.Dispositivos
+                .FirstOrDefaultAsync(d => d.Id == login.IdDispositivo);
+
+            if (dispositivoActual != null)
+            {
+                dispositivoActual.Activo = -1;
+                dispositivoActual.IdUsuario = operario.Id;
+                dispositivoActual.SessionToken = nuevoToken;
+            }
+            else
+            {
+                dispositivoActual = new Models.Registro.Dispositivo
+                {
+                    Id = login.IdDispositivo,
+                    Tipo = "Android", // o lo que corresponda
+                    Activo = -1,
+                    IdUsuario = operario.Id,
+                    SessionToken = nuevoToken
+                };
+
+                _auroraSgaContext.Dispositivos.Add(dispositivoActual);
+            }
+
+            await _auroraSgaContext.SaveChangesAsync();
+
+            // Obtener accesos
             var accesos = await _context.AccesosOperarios
                 .Where(a => a.Operario == operario.Id)
                 .Select(a => a.MRH_CodigoAplicacion)
@@ -58,8 +79,10 @@ namespace SGA_Api.Controllers.Login
             {
                 Operario = operario.Id,
                 NombreOperario = operario.Nombre,
-                CodigosAplicacion = accesos
+                CodigosAplicacion = accesos,
+                Token = nuevoToken // <-- Añade este campo en el DTO si aún no existe
             });
         }
+
     }
 }

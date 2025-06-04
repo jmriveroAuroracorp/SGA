@@ -16,7 +16,31 @@ namespace SGA_Api.Controllers.Registro
             _context = context;
         }
 
-        [HttpPost("registrar")]
+       
+        [HttpPost("desactivar")]
+        public async Task<IActionResult> DesactivarDispositivo([FromBody] ObtenerDispositivoDto request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Id))
+                return BadRequest("ID de dispositivo requerido.");
+
+            var dispositivo = await _context.Dispositivos.FirstOrDefaultAsync(d => d.Id == request.Id);
+
+            if (dispositivo == null)
+                return NotFound($"No se encontró el dispositivo con ID '{request.Id}'.");
+
+            dispositivo.Activo = 0;
+            dispositivo.SessionToken = null; // 🔴 BORRAMOS EL TOKEN AL HACER LOGOUT
+
+            _context.Dispositivos.Update(dispositivo);
+            await _context.SaveChangesAsync();
+
+            return Ok();
+        }
+        
+    }
+} 
+
+/* [HttpPost("registrar")]
         public async Task<IActionResult> RegistrarDispositivo([FromBody] ObtenerDispositivoDto request)
         {
             if (string.IsNullOrWhiteSpace(request.Id))
@@ -24,18 +48,21 @@ namespace SGA_Api.Controllers.Registro
             if (request.IdUsuario == null)
                 return BadRequest("ID de usuario requerido.");
 
-            // Comprobamos si el usuario ya tiene otro dispositivo activo distinto
-            var otroDispositivoActivo = await _context.Dispositivos
-                .FirstOrDefaultAsync(d =>
-                    d.IdUsuario == request.IdUsuario &&
-                    d.Activo == -1 &&
-                    d.Id != request.Id);
+            // 1. Desactivar sesiones anteriores
+            var dispositivosPrevios = await _context.Dispositivos
+                .Where(d => d.IdUsuario == request.IdUsuario && d.Activo == -1 && d.Id != request.Id)
+                .ToListAsync();
 
-            if (otroDispositivoActivo != null)
+            foreach (var d in dispositivosPrevios)
             {
-                return Conflict("Este usuario ya tiene una sesión activa en otro dispositivo.");
+                d.Activo = 0;
+                d.SessionToken = null;
             }
 
+            // 2. Generar nuevo token
+            var nuevoToken = Guid.NewGuid().ToString();
+
+            // 3. Insertar o actualizar el dispositivo actual
             var dispositivo = await _context.Dispositivos.FirstOrDefaultAsync(d => d.Id == request.Id);
 
             if (dispositivo == null)
@@ -45,7 +72,8 @@ namespace SGA_Api.Controllers.Registro
                     Id = request.Id,
                     Tipo = request.Tipo,
                     Activo = -1,
-                    IdUsuario = request.IdUsuario
+                    IdUsuario = request.IdUsuario,
+                    SessionToken = nuevoToken
                 };
 
                 _context.Dispositivos.Add(dispositivo);
@@ -59,37 +87,16 @@ namespace SGA_Api.Controllers.Registro
 
                 dispositivo.Activo = -1;
                 dispositivo.IdUsuario = request.IdUsuario;
-
+                dispositivo.SessionToken = nuevoToken;
                 _context.Dispositivos.Update(dispositivo);
             }
 
             await _context.SaveChangesAsync();
 
-            return Ok();
-        }
+            return Ok(new { token = nuevoToken });
+        }*/ 
 
-
-
-        [HttpPost("desactivar")]
-        public async Task<IActionResult> DesactivarDispositivo([FromBody] ObtenerDispositivoDto request)
-        {
-            if (string.IsNullOrWhiteSpace(request.Id))
-                return BadRequest("ID de dispositivo requerido.");
-
-            var dispositivo = await _context.Dispositivos.FirstOrDefaultAsync(d => d.Id == request.Id);
-
-            if (dispositivo == null)
-                return NotFound($"No se encontró el dispositivo con ID '{request.Id}'.");
-
-            dispositivo.Activo = 0;
-
-            _context.Dispositivos.Update(dispositivo);
-            await _context.SaveChangesAsync();
-
-            return Ok();
-        }
-
-        [HttpGet("activo")]
+/*[HttpGet("activo")]
         public async Task<ActionResult<DispositivoActivoDto>> ObtenerDispositivoActivo([FromQuery] int idUsuario)
         {
             var dispositivo = await _context.Dispositivos
@@ -103,6 +110,4 @@ namespace SGA_Api.Controllers.Registro
                 Id = dispositivo.Id,
                 Tipo = dispositivo.Tipo
             });
-        }
-    }
-}
+        }*/

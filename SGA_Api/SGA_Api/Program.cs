@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
-
 using Microsoft.Extensions.FileProviders;
-using System.IO;
-
 using SGA_Api.Data;
 using SGA_Api.Logic;
+using SGA_Api.Middleware;
 using SGA_Api.Services;
+using System.IO;
+using SGA_Api.Middleware;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -61,6 +61,7 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = new PhysicalFileProvider(@"C:\wamp64\www\SGA_Api\actualizaciones"),
     RequestPath = "/actualizaciones"
 });
+app.UseMiddleware<TokenValidationMiddleware>();
 
 app.UseAuthorization();
 
