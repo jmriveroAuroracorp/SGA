@@ -89,5 +89,20 @@ namespace SGA_Api.Controllers.Registro
             return Ok();
         }
 
+        [HttpGet("activo")]
+        public async Task<ActionResult<DispositivoActivoDto>> ObtenerDispositivoActivo([FromQuery] int idUsuario)
+        {
+            var dispositivo = await _context.Dispositivos
+                .FirstOrDefaultAsync(d => d.IdUsuario == idUsuario && d.Activo == -1);
+
+            if (dispositivo == null)
+                return NotFound("No hay ningún dispositivo activo para este usuario.");
+
+            return Ok(new DispositivoActivoDto
+            {
+                Id = dispositivo.Id,
+                Tipo = dispositivo.Tipo
+            });
+        }
     }
 }
