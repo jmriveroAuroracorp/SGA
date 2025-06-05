@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using SGA_Api.Models.Impresion;
 using SGA_Api.Models.Registro;
 
 namespace SGA_Api.Data
@@ -9,8 +10,10 @@ namespace SGA_Api.Data
 
         public DbSet<Dispositivo> Dispositivos { get; set; }
         public DbSet<LogEvento> LogEventos { get; set; }
+		public DbSet<LogImpresion> LogImpresiones { get; set; }
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+
+		protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
@@ -51,6 +54,9 @@ namespace SGA_Api.Data
                 .IsRequired()
                 .OnDelete(DeleteBehavior.Restrict);
 
-        }
-    }
+			// PrintCenter
+			modelBuilder.Entity<LogImpresion>().ToTable("log_impresiones");
+
+		}
+	}
 }
