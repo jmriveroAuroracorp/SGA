@@ -24,7 +24,7 @@
                 path.Contains("/login") ||
                 path.Contains("/dispositivo/registrar") ||
                 path.Contains("/dispositivo/activo") ||
-                path.Contains("/actualizaciones");
+                path.StartsWith("/api/version");
 
             if (!rutaExenta)
             {
