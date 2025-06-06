@@ -3,9 +3,14 @@ using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Services;
 using SGA_Desktop.Views;
+using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using Newtonsoft.Json;
+using System.Net.Http.Headers;
+
 
 namespace SGA_Desktop.ViewModels
 {
@@ -22,39 +27,70 @@ namespace SGA_Desktop.ViewModels
 		{
 			// Implementar en el futuro
 		}
+
 		[RelayCommand]
 		public async Task CerrarSesion()
 		{
-			var loginService = new LoginService();
 			string idDispositivo = Environment.MachineName;
-			string tipo;
-
-			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-				tipo = "Windows";
-			else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-				tipo = "Linux";
-			else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-				tipo = "macOS";
-			else
-				tipo = "Desconocido";
-
+			string tipo = GetTipoSO();
 			int idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
 
 			try
 			{
+				// 1. Registrar evento de logout ANTES de invalidar token
+				using var http = new HttpClient();
+
+				if (string.IsNullOrWhiteSpace(SessionManager.Token))
+				{
+					MessageBox.Show("Token no disponible.");
+					return;
+				}
+
+				http.DefaultRequestHeaders.Authorization =
+					new AuthenticationHeaderValue("Bearer", SessionManager.Token);
+
+				var evento = new
+				{
+					fecha = DateTime.Now,
+					idUsuario = idUsuario,
+					tipo = "LOGOUT",
+					origen = "MainWindow",
+					descripcion = "Sesión Cerrada",
+					detalle = $"El usuario cerró sesión.",
+					idDispositivo = idDispositivo
+				};
+
+				var json = JsonConvert.SerializeObject(evento);
+				var content = new StringContent(json, Encoding.UTF8, "application/json");
+				var response = await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
+
+				if (!response.IsSuccessStatusCode)
+				{
+					var errorText = await response.Content.ReadAsStringAsync();
+					MessageBox.Show($"Error al registrar evento de logout:\n{response.StatusCode}\n{errorText}");
+				}
+
+				// 2. Desactivar el dispositivo (esto borra el token)
+				var loginService = new LoginService();
 				await loginService.DesactivarDispositivoAsync(idDispositivo, tipo, idUsuario);
 			}
 			catch (Exception ex)
 			{
 				MessageBox.Show($"Error al cerrar sesión: {ex.Message}");
+				return;
 			}
 
-			// Limpieza de sesión local
+			// 3. Limpiar sesión y cerrar
 			SessionManager.UsuarioActual = null;
-
-			// Salir completamente de la aplicación
 			Application.Current.Shutdown();
+		}
 
+		private string GetTipoSO()
+		{
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "Windows";
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return "Linux";
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "macOS";
+			return "Desconocido";
 		}
 	}
 }
