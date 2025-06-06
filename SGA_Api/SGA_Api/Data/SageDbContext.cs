@@ -13,6 +13,7 @@ namespace SGA_Api.Data
 
         public DbSet<Operario> Operarios { get; set; }
         public DbSet<AccesoOperario> AccesosOperarios { get; set; }
+        public DbSet<OperarioAlmacen> OperariosAlmacenes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -33,6 +34,24 @@ namespace SGA_Api.Data
                 .HasOne<Operario>()
                 .WithMany()
                 .HasForeignKey(a => a.Operario);
+
+                modelBuilder.Entity<OperarioAlmacen>()
+                .ToTable("MRH_OperariosAlmacenes")
+                .HasKey(o => new { o.CodigoEmpresa, o.Operario, o.CodigoAlmacen });
+
+            modelBuilder.Entity<OperarioAlmacen>()
+                .Property(o => o.CodigoEmpresa)
+                .HasColumnName("CodigoEmpresa");
+
+            modelBuilder.Entity<OperarioAlmacen>()
+                .Property(o => o.Operario)
+                .HasColumnName("Operario");
+
+            modelBuilder.Entity<OperarioAlmacen>()
+                .Property(o => o.CodigoAlmacen)
+                .HasColumnName("CodigoAlmacen")
+                .HasMaxLength(10); // o el tamaño real si lo sabes (ej. 5, 50...)
+
         }
     }
 }

@@ -58,7 +58,7 @@ namespace SGA_Api.Controllers.Login
                 dispositivoActual = new Models.Registro.Dispositivo
                 {
                     Id = login.IdDispositivo,
-                    Tipo = "Android", // o lo que corresponda
+                    Tipo = dispositivoActual.Tipo, // "Android", // o lo que corresponda
                     Activo = -1,
                     IdUsuario = operario.Id,
                     SessionToken = nuevoToken
@@ -75,13 +75,21 @@ namespace SGA_Api.Controllers.Login
                 .Select(a => a.MRH_CodigoAplicacion)
                 .ToListAsync();
 
+            var almacenes = await _context.OperariosAlmacenes
+                .Where(a => a.Operario == operario.Id)
+                .Select(a => a.CodigoAlmacen)
+                .ToListAsync();
+
             return Ok(new LoginResponseDto
             {
                 Operario = operario.Id,
                 NombreOperario = operario.Nombre,
                 CodigosAplicacion = accesos,
-                Token = nuevoToken // <-- Añade este campo en el DTO si aún no existe
+                CodigosAlmacen = almacenes,
+                Token = nuevoToken 
             });
+
+
         }
 
     }
