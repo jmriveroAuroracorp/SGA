@@ -12,7 +12,7 @@ namespace SGA_Desktop
 	{
 		public Login()
 		{
-			InitializeComponent();
+		
 			DataContext = new ViewModels.LoginViewModel();
 		}
 

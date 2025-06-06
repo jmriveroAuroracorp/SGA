@@ -11,6 +11,8 @@ namespace SGA_Desktop.Models
 		public int operario { get; set; }
 		public string nombreOperario { get; set; } = string.Empty;
 		public List<int> codigosAplicacion { get; set; } = new();
+		// Recibimos el token
+		public string token { get; set; } = string.Empty; 
 	}
 
 }

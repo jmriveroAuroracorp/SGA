@@ -5,6 +5,7 @@
         Title="SGA"
         WindowStartupLocation="CenterScreen"
         WindowState="Maximized"
+        WindowStyle="None" 
         ResizeMode="NoResize"
         Background="{StaticResource BrushFondo}">
 
@@ -25,8 +26,8 @@
                     Command="{Binding IrAInventarioCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
             <Button Content="Salir"
-                    Click="BtnSalir_Click"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
+                     Command="{Binding CerrarSesionCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10" Cursor=""/>
         </StackPanel>
 
         <!-- Contenido dinámico -->

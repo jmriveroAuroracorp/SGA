@@ -10,6 +10,7 @@ namespace SGA_Desktop.Helpers
 	public static class SessionManager
 	{
 		public static LoginResponse? UsuarioActual { get; set; }
+		public static string Token => UsuarioActual?.token ?? string.Empty;
 	}
 
 }
