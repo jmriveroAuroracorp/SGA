@@ -14,9 +14,6 @@ namespace SGA_Desktop
 		}
 
 
-		private void BtnSalir_Click(object sender, RoutedEventArgs e)
-		{
-			Application.Current.Shutdown();
-		}
+		
 	}
 }

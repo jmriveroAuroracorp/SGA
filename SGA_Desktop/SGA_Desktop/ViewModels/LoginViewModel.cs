@@ -58,6 +58,7 @@ namespace SGA_Desktop.ViewModels
 			if (respuesta != null)
 			{
 				SessionManager.UsuarioActual = respuesta;
+				string token = SessionManager.Token;
 
 				// Detectar tipo de SO
 				string tipoDispositivo;
@@ -112,5 +113,6 @@ namespace SGA_Desktop.ViewModels
 				});
 			}
 		}
+
 	}
 }
