@@ -68,20 +68,6 @@
                          Text="{Binding FiltroPartida}" />
             </StackPanel>
 
-            <!-- Caducidad -->
-            <StackPanel Grid.Column="5" Margin="5,0" Orientation="Vertical">
-                <TextBlock Text="Caducidad" FontWeight="Bold" />
-                <DatePicker Width="130"
-                            Style="{StaticResource EstiloDatePicker }"
-                            SelectedDate="{Binding FechaCaducidad}" />
-            </StackPanel>
-
-            <!-- Stock ≠ 0 -->
-            <StackPanel Grid.Column="6" Margin="10,15,0,0" Orientation="Horizontal">
-                <CheckBox IsChecked="{Binding SoloConStock}" VerticalAlignment="Center"/>
-                <TextBlock Text="Con stock" VerticalAlignment="Center" Margin="5,0,0,0"/>
-            </StackPanel>
-
             <!-- Buscar -->
             <Button Grid.Column="7"
                     Content="Buscar"
