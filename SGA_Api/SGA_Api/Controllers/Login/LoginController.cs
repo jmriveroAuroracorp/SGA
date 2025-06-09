@@ -59,7 +59,7 @@ namespace SGA_Api.Controllers.Login
                 dispositivoActual = new Models.Registro.Dispositivo
                 {
                     Id = login.IdDispositivo,
-                    Tipo = dispositivoActual.Tipo, // "Android", // o lo que corresponda
+                    Tipo = login.TipoDispositivo, // "Android", // o lo que corresponda
                     Activo = -1,
                     IdUsuario = operario.Id,
                     SessionToken = nuevoToken

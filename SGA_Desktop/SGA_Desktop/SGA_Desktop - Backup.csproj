@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>Assets\icono.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,10 +13,6 @@
     <None Remove="Assets\logoSGA.jpg" />
     <None Remove="Fonts\OpenSans-Italic-VariableFont_wdth,wght.ttf" />
     <None Remove="Fonts\OpenSans-VariableFont_wdth,wght.ttf" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Assets\icono.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -41,6 +36,5 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>
