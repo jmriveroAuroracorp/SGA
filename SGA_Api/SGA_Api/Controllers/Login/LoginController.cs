@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models;
 using SGA_Api.Models.Login;
+using SGA_Api.Models.UsuarioConf;
 
 namespace SGA_Api.Controllers.Login
 {
@@ -79,6 +80,21 @@ namespace SGA_Api.Controllers.Login
                 .Where(a => a.Operario == operario.Id)
                 .Select(a => a.CodigoAlmacen)
                 .ToListAsync();
+
+            // ✅ Insertar configuración por defecto si no existe en tabla Usuarios
+            var existeUsuario = await _auroraSgaContext.Usuarios.AnyAsync(u => u.IdUsuario == operario.Id);
+            if (!existeUsuario)
+            {
+                _auroraSgaContext.Usuarios.Add(new Usuario
+                {
+                    IdUsuario = operario.Id,
+                    IdEmpresa = null, // valor por defecto
+                    Impresora = null, // o null si la columna lo permite
+                    Etiqueta = null   // lo mismo aquí
+                });
+
+                await _auroraSgaContext.SaveChangesAsync(); // importante guardar aquí
+            } 
 
             return Ok(new LoginResponseDto
             {
