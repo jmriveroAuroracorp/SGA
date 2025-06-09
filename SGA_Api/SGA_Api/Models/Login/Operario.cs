@@ -10,5 +10,7 @@ namespace SGA_Api.Models.Login
         public string? Nombre { get; set; }               // Nombre del operario
         public required string Contraseña { get; set; }           // Contraseña en texto plano
         public DateTime? FechaBaja { get; set; }         // Si no es null, el operario está de baja
+
+        public string? CodigoCentro { get; set; }
     }
 }

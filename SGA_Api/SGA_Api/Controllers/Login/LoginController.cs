@@ -94,7 +94,13 @@ namespace SGA_Api.Controllers.Login
                 });
 
                 await _auroraSgaContext.SaveChangesAsync(); // importante guardar aquí
-            } 
+            }
+
+            //Permisos de Empresa
+            var empresas = await _context.OperariosEmpresas
+            .Where(e => e.Operario == operario.Id)
+            .Select(e => e.Empresa)
+            .ToListAsync();
 
             return Ok(new LoginResponseDto
             {
@@ -102,9 +108,10 @@ namespace SGA_Api.Controllers.Login
                 NombreOperario = operario.Nombre,
                 CodigosAplicacion = accesos,
                 CodigosAlmacen = almacenes,
+                Empresas = empresas,
+                CodigoCentro = operario.CodigoCentro,
                 Token = nuevoToken 
             });
-
 
         }
 
