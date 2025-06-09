@@ -39,18 +39,20 @@
         <Setter Property="Margin" Value="0,0,0,10"/>
     </Style>
 
-    <!-- 🔽 ComboBox estilo -->
+    <!-- 🔽 ComboBox estilo corregido -->
     <Style x:Key="EstiloComboBox" TargetType="ComboBox">
         <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="MinWidth" Value="150" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="BorderBrush" Value="{StaticResource BrushInputBorde}" />
         <Setter Property="Background" Value="White" />
+        <Setter Property="Foreground" Value="Black" />
         <Setter Property="Margin" Value="0,0,0,10" />
-        <Setter Property="Height" Value="30" />
-        <Setter Property="MinWidth" Value="100" />
     </Style>
+
 
     <!-- 📅 DatePicker estilo -->
     <Style x:Key="EstiloDatePicker" TargetType="DatePicker">
