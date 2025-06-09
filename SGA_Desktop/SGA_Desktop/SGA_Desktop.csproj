@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>icono.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +14,10 @@
     <None Remove="Assets\logoSGA.jpg" />
     <None Remove="Fonts\OpenSans-Italic-VariableFont_wdth,wght.ttf" />
     <None Remove="Fonts\OpenSans-VariableFont_wdth,wght.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="icono.ico" />
   </ItemGroup>
 
   <ItemGroup>

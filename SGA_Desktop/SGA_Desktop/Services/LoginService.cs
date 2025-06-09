@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace SGA_Desktop.Services;
 public class LoginService : ApiService
@@ -34,21 +35,30 @@ public class LoginService : ApiService
 		{
 			// Error de red: la API no responde
 			Console.WriteLine($"Error de conexión: {ex.Message}");
-			System.Windows.MessageBox.Show("No se pudo conectar con el servidor. Verificá tu conexión o intentá más tarde.", "Error de conexión", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+			MessageBox.Show("No se pudo conectar con el servidor. Verifica tu conexión o inténtalo más tarde.",
+							"Error de conexión",
+							MessageBoxButton.OK,
+							MessageBoxImage.Error);
 			return null;
 		}
 		catch (TaskCanceledException ex)
 		{
 			// Timeout
 			Console.WriteLine($"Timeout al intentar conectar: {ex.Message}");
-			System.Windows.MessageBox.Show("La solicitud tardó demasiado y fue cancelada. Intentá nuevamente más tarde.", "Timeout", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+			MessageBox.Show("La solicitud tardó demasiado y fue cancelada. Inténtalo nuevamente más tarde.",
+							"Tiempo de espera agotado",
+							MessageBoxButton.OK,
+							MessageBoxImage.Warning);
 			return null;
 		}
 		catch (Exception ex)
 		{
 			// Otros errores no controlados
 			Console.WriteLine($"Error inesperado: {ex.Message}");
-			System.Windows.MessageBox.Show("Ocurrió un error inesperado al iniciar sesión.", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+			MessageBox.Show("Ocurrió un error inesperado al iniciar sesión.",
+							"Error",
+							MessageBoxButton.OK,
+							MessageBoxImage.Error);
 			return null;
 		}
 	}
