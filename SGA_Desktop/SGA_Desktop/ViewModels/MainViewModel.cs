@@ -17,6 +17,12 @@ namespace SGA_Desktop.ViewModels
 	public partial class MainViewModel : ObservableObject
 	{
 		[RelayCommand]
+		public void IrAConsultaStock()
+		{
+			NavigationStore.MainFrame.Navigate(new ConsultaStockView());
+		}
+
+		[RelayCommand]
 		public void IrATraspasos()
 		{
 			NavigationStore.MainFrame.Navigate(new TraspasosView());

@@ -10,7 +10,9 @@ public class ApiService
 	{
 		_httpClient = new HttpClient
 		{
-			BaseAddress = new Uri("http://10.0.0.175:5234/api/")
+			//BaseAddress = new Uri("http://10.0.0.175:5234/api/")
+			BaseAddress = new Uri("http://localhost:5234/api/")
+
 		};
 
 		_httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));

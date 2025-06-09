@@ -53,34 +53,16 @@ namespace SGA_Desktop.ViewModels
 			{
 				operario = operario,
 				contraseña = Contraseña,
-				idDispositivo = idDispositivo
+				idDispositivo = idDispositivo,
+				tipoDispositivo = tipo
 			});
 			if (respuesta != null)
 			{
 				SessionManager.UsuarioActual = respuesta;
 				string token = SessionManager.Token;
 
-				// Detectar tipo de SO
-				string tipoDispositivo;
-				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-					tipoDispositivo = "Windows";
-				else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-					tipoDispositivo = "Linux";
-				else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-					tipoDispositivo = "macOS";
-				else
-					tipoDispositivo = "Desconocido";
 
-				// Registrar dispositivo (si no se ha hecho antes)
-				try
-				{
-					await loginService.RegistrarDispositivoAsync(new Dispositivo
-					{
-						Id = idDispositivo,
-						Tipo = tipoDispositivo
-					});
-				}
-				catch { /* Ignorar errores si ya está registrado */ }
+		
 
 				// Registrar evento de login
 				try
@@ -92,7 +74,7 @@ namespace SGA_Desktop.ViewModels
 						tipo = "LOGIN",
 						origen = "PantallaLogin",
 						descripcion = "Inicio de sesión correcto",
-						detalle = $"El usuario accedió desde dispositivo {tipoDispositivo.ToLower()}",
+						detalle = $"El usuario accedió desde dispositivo {tipo.ToLower()}",
 						idDispositivo = idDispositivo
 					});
 				}
