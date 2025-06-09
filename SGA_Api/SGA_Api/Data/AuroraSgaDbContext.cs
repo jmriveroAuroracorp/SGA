@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Impresion;
 using SGA_Api.Models.Registro;
+using SGA_Api.Models.UsuarioConf;
 
 namespace SGA_Api.Data
 {
@@ -12,8 +13,9 @@ namespace SGA_Api.Data
         public DbSet<LogEvento> LogEventos { get; set; }
 		public DbSet<LogImpresion> LogImpresiones { get; set; }
 
+        public DbSet<Usuario> Usuarios { get; set; }
 
-		protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
@@ -57,6 +59,19 @@ namespace SGA_Api.Data
 			// PrintCenter
 			modelBuilder.Entity<LogImpresion>().ToTable("log_impresiones");
 
-		}
+            //Tabla Usuarios. Configuración por defecto
+            modelBuilder.Entity<Usuario>()
+              .ToTable("usuarios") 
+              .HasKey(u => u.IdUsuario);
+
+            modelBuilder.Entity<Usuario>()
+                .Property(u => u.IdUsuario).HasColumnName("IdUsuario");
+            modelBuilder.Entity<Usuario>()
+                .Property(u => u.IdEmpresa).HasColumnName("IdEmpresa");
+            modelBuilder.Entity<Usuario>()
+                .Property(u => u.Impresora).HasColumnName("Impresora");
+            modelBuilder.Entity<Usuario>()
+                .Property(u => u.Etiqueta).HasColumnName("Etiqueta");
+        }
 	}
 }
