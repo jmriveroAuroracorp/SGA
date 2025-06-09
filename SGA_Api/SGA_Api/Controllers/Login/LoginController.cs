@@ -59,7 +59,7 @@ namespace SGA_Api.Controllers.Login
                 dispositivoActual = new Models.Registro.Dispositivo
                 {
                     Id = login.IdDispositivo,
-                    Tipo = dispositivoActual.Tipo, // "Android", // o lo que corresponda
+                    Tipo = login.TipoDispositivo, // "Android", // o lo que corresponda
                     Activo = -1,
                     IdUsuario = operario.Id,
                     SessionToken = nuevoToken
@@ -94,7 +94,13 @@ namespace SGA_Api.Controllers.Login
                 });
 
                 await _auroraSgaContext.SaveChangesAsync(); // importante guardar aquí
-            } 
+            }
+
+            //Permisos de Empresa
+            var empresas = await _context.OperariosEmpresas
+            .Where(e => e.Operario == operario.Id)
+            .Select(e => e.Empresa)
+            .ToListAsync();
 
             return Ok(new LoginResponseDto
             {
@@ -102,9 +108,10 @@ namespace SGA_Api.Controllers.Login
                 NombreOperario = operario.Nombre,
                 CodigosAplicacion = accesos,
                 CodigosAlmacen = almacenes,
+                Empresas = empresas,
+                CodigoCentro = operario.CodigoCentro,
                 Token = nuevoToken 
             });
-
 
         }
 

@@ -5,6 +5,6 @@
         public required int Operario { get; set; }
         public required string Contraseña { get; set; }
         public string IdDispositivo { get; set; } = null!;
-
+        public string TipoDispositivo { get; set; }
     }
 }
