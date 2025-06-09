@@ -39,6 +39,32 @@
         <Setter Property="Margin" Value="0,0,0,10"/>
     </Style>
 
+    <!-- 🔽 ComboBox estilo -->
+    <Style x:Key="EstiloComboBox" TargetType="ComboBox">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource BrushInputBorde}" />
+        <Setter Property="Background" Value="White" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="MinWidth" Value="100" />
+    </Style>
+
+    <!-- 📅 DatePicker estilo -->
+    <Style x:Key="EstiloDatePicker" TargetType="DatePicker">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource BrushInputBorde}" />
+        <Setter Property="Background" Value="White" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="MinWidth" Value="130" />
+    </Style>
+
     <!-- 🔘 Botón principal -->
     <Style x:Key="EstiloBotonPrincipal" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource BrushPrincipal}" />

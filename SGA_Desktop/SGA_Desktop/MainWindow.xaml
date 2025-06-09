@@ -19,6 +19,9 @@
         <!-- Menú lateral -->
         <StackPanel Background="{StaticResource BrushPrincipal}" VerticalAlignment="Stretch">
             <Image Source="Assets/logoSGA.jpg" Height="80" Margin="10"/>
+            <Button Content="Consulta de Stock"
+                    Command="{Binding IrAConsultaStockCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
             <Button Content="Traspasos"
                     Command="{Binding IrATraspasosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
@@ -35,6 +38,6 @@
                Grid.Column="1"
                NavigationUIVisibility="Hidden"/>
     </Grid>
-    
-    
+
+
 </Window>

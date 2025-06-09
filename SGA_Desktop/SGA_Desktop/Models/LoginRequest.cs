@@ -11,5 +11,6 @@ namespace SGA_Desktop.Models
 		public int operario { get; set; }
 		public string contraseña { get; set; } = string.Empty;
 		public string idDispositivo { get; set; }
+		public string tipoDispositivo { get; set; } // ✅ Agregado
 	}
 }
