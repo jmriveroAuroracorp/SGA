@@ -10,6 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Assets\1.png" />
+    <None Remove="Assets\3.png" />
+    <None Remove="Assets\999.png" />
     <None Remove="Assets\logo.png" />
     <None Remove="Assets\logoSGA.jpg" />
     <None Remove="Fonts\OpenSans-Italic-VariableFont_wdth,wght.ttf" />
@@ -21,6 +24,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\1.png" />
+    <Resource Include="Assets\3.png" />
+    <Resource Include="Assets\999.png" />
     <Resource Include="Assets\logo.png">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Resource>

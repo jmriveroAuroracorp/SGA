@@ -15,6 +15,8 @@ namespace SGA_Api.Data
 
         public DbSet<Usuario> Usuarios { get; set; }
 
+
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -72,6 +74,8 @@ namespace SGA_Api.Data
                 .Property(u => u.Impresora).HasColumnName("Impresora");
             modelBuilder.Entity<Usuario>()
                 .Property(u => u.Etiqueta).HasColumnName("Etiqueta");
+
+
         }
 	}
 }

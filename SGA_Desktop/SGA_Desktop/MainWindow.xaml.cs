@@ -10,7 +10,7 @@ namespace SGA_Desktop
 		{
 			InitializeComponent();
 			NavigationStore.MainFrame = MainFrame;
-			DataContext = new ViewModels.MainViewModel(); // <- FALTA ESTA LÍNEA
+			DataContext = new ViewModels.MainViewModel(new Services.LoginService()); // <- FALTA ESTA LÍNEA
 		}
 
 

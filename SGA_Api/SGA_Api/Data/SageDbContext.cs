@@ -18,7 +18,11 @@ namespace SGA_Api.Data
         public DbSet<OperarioEmpresa> OperariosEmpresas { get; set; }
         public DbSet<Almacenes> Almacenes { get; set; }
         public DbSet<Periodo> Periodos { get; set; }
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+		public DbSet<Empresa> Empresas { get; set; } = default!;
+		public DbSet<Articulo> Articulos { get; set; }
+
+
+		protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
@@ -68,9 +72,28 @@ namespace SGA_Api.Data
                 .Property(e => e.Empresa)
                 .HasColumnName("Empresa");
 
-            modelBuilder.Entity<Almacenes>().HasNoKey();
-            modelBuilder.Entity<Periodo>().HasNoKey();
+            //Almacenes
+			modelBuilder.Entity<Almacenes>()
+		   .HasNoKey()
+		   .ToTable("Almacenes");   
 
-        }
-    }
+
+			modelBuilder.Entity<Periodo>().HasNoKey();
+
+			modelBuilder.Entity<Empresa>(e =>
+			{
+				e.ToTable("EMPRESAS");                
+				e.HasKey(x => x.CodigoEmpresa);
+
+				e.Property(x => x.CodigoEmpresa)
+				 .HasColumnName("CodigoEmpresa");      
+
+				e.Property(x => x.EmpresaNombre)
+				 .HasColumnName("Empresa");
+			});
+
+
+
+		}
+	}
 }

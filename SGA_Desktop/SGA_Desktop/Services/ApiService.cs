@@ -1,6 +1,6 @@
-﻿using System.Net.Http;
+﻿using SGA_Desktop.Helpers;
 using System.Net.Http.Headers;
-using SGA_Desktop.Helpers; // Asegúrate de tener acceso a SessionManager
+using System.Net.Http;
 
 public class ApiService
 {
@@ -14,14 +14,22 @@ public class ApiService
 			BaseAddress = new Uri("http://localhost:5234/api/")
 
 		};
+		_httpClient.DefaultRequestHeaders.Accept
+				   .Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-		_httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-		// ✅ Añadir el token si está presente
 		if (!string.IsNullOrWhiteSpace(SessionManager.Token))
-		{
 			_httpClient.DefaultRequestHeaders.Authorization =
 				new AuthenticationHeaderValue("Bearer", SessionManager.Token);
-		}
+	}
+
+	/// <summary>
+	/// Hace GET a la ruta relativa (añade BaseAddress y token automáticamente)
+	/// y devuelve el contenido como string o lanza excepción si no es 2xx.
+	/// </summary>
+	protected async Task<string> GetStringAsync(string ruta)
+	{
+		var resp = await _httpClient.GetAsync(ruta);
+		resp.EnsureSuccessStatusCode();
+		return await resp.Content.ReadAsStringAsync();
 	}
 }

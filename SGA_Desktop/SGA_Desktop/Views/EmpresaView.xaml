@@ -1,0 +1,116 @@
+﻿<Page x:Class="SGA_Desktop.Views.EmpresaView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:conv="clr-namespace:SGA_Desktop.Helpers">
+
+    <Page.Resources>
+        <conv:CodigoToLogoConverter x:Key="LogoConv"/>
+    </Page.Resources>
+
+    <!-- CONTENEDOR raíz -->
+    <DockPanel>
+
+        <!-- Cabecera (color corporativo) -->
+        <Border Background="{StaticResource BrushPrincipal}"
+        DockPanel.Dock="Top"
+        Height="80">
+
+            <!-- Contenedor interno para logo + título -->
+            <DockPanel VerticalAlignment="Center">
+
+
+
+                <!-- Título -->
+                <TextBlock Text="Selección de empresa"
+                   Foreground="White"
+                   FontFamily="{StaticResource FuentePrincipal}"
+                   FontSize="30"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Margin="20,0"/>
+            </DockPanel>
+        </Border>
+
+
+        <!-- Contenido principal -->
+        <Grid>
+
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <ListView Grid.Row="0"
+                      ItemsSource="{Binding Empresas}"
+                      SelectedItem="{Binding EmpresaSeleccionada, Mode=TwoWay}"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+
+                <ListView.Resources>
+                    <Style TargetType="ListViewItem">
+
+                        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="MinHeight" Value="110"/>
+                        <Setter Property="Margin" Value="0,0,0,16"/>
+
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <Border x:Name="Bd"
+                            Background="Transparent">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource BrushSecundario1}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.Resources>
+
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="8">
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+
+                            <Image Width="128" Height="128"
+               Source="{Binding Codigo, Converter={StaticResource LogoConv}}" Cursor=""/>
+
+
+                            <!-- Texto -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Codigo}"          
+                           FontWeight="SemiBold"
+                           FontSize="24"                  
+                           Foreground="{StaticResource BrushPrincipal}"/>
+                                <TextBlock Text="{Binding Nombre}"
+                           FontSize="22"                     
+                           TextWrapping="Wrap"
+                           Foreground="#455A64"/>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+
+            </ListView>
+
+            <!-- BOTÓN flotante 100 % corporativo -->
+            <Button Grid.Row="1"
+                    Style="{StaticResource EstiloBotonFlotante}"
+                    Command="{Binding AceptarCommand}"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,24,12"
+                    Content="✔"/>
+        </Grid>
+    </DockPanel>
+</Page>
