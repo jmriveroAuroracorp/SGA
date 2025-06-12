@@ -7,96 +7,132 @@
       mc:Ignorable="d"
       Background="{StaticResource BrushFondo}">
 
-    <Grid Margin="20">
+    <Page.DataContext>
+        <vm:ConsultaStockViewModel />
+    </Page.DataContext>
+
+    <Grid Margin="0">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <!-- Encabezado fijo -->
+            <RowDefinition Height="80" />
+            <!-- Contenido -->
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 🔍 Filtros -->
-        <Grid Margin="0 0 0 10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <!-- CABECERA estilo EmpresaView -->
+        <Border Background="{StaticResource BrushPrincipal}" Grid.Row="0">
+            <DockPanel VerticalAlignment="Center">
+                <TextBlock Text="Consulta de Stock"
+             Foreground="White"
+             FontFamily="{StaticResource FuentePrincipal}"
+             FontSize="30"
+             FontWeight="Bold"
+             VerticalAlignment="Center"
+             Margin="20,0"/>
+                <TextBlock Text="{Binding EmpresaActual}"
+             Foreground="White"
+             FontFamily="{StaticResource FuentePrincipal}"
+             FontSize="30"
+             FontWeight="Bold"
+             VerticalAlignment="Center"
+             Margin="40,0,0,0"/>
+            </DockPanel>
+        </Border>
 
-            <!-- Empresa -->
-            <StackPanel Grid.Column="0" Margin="5,0" Orientation="Vertical">
-                <TextBlock Text="Empresa" FontWeight="Bold" />
-                <ComboBox Width="120"
-                          Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding Empresas}"
-                          SelectedItem="{Binding EmpresaSeleccionada}" />
+        <!-- CONTENIDO original en Grid.Row=1 -->
+        <Grid Grid.Row="1" Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- 🔍 Filtros -->
+            <StackPanel Margin="0 0 0 10" Orientation="Vertical">
+
+                <!-- Primera fila: Combos -->
+                <StackPanel Orientation="Horizontal" Margin="0 0 0 5">
+                    <!-- Artículo -->
+                    <StackPanel Margin="5,0" Orientation="Vertical">
+                        <TextBlock Text="Artículo" FontWeight="Bold" />
+                        <TextBox Width="150"
+                                  Style="{StaticResource EstiloCajaTexto}"
+                                  Text="{Binding FiltroArticulo,Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+/>
+                    </StackPanel>
+                    <!-- Almacén -->
+                    <StackPanel Margin="20,0" Orientation="Vertical" Cursor="">
+                        <TextBlock Text="Almacén" FontWeight="Bold" />
+                        <ComboBox Width="120"
+                      Style="{StaticResource EstiloComboBox}"
+                      ItemsSource="{Binding Almacenes}"
+                      SelectedItem="{Binding AlmacenSeleccionado,Mode=TwoWay}"
+                      IsEnabled="{Binding CanEnableInputs}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Segunda fila: Filtros de texto -->
+                <StackPanel Orientation="Horizontal" Margin="0 0 0 5">
+
+
+                    <!-- Ubicación -->
+                    <StackPanel Margin="5,0" Orientation="Vertical">
+                        <TextBlock Text="Ubicación" FontWeight="Bold" />
+                        <TextBox Width="120"
+                     Style="{StaticResource EstiloCajaTexto}"
+                     Text="{Binding FiltroUbicacion,Mode=TwoWay}"
+                                 IsEnabled="{Binding CanEnableInputs}"/>
+                    </StackPanel>
+
+                    <!-- Partida -->
+                    <StackPanel Margin="5,0" Orientation="Vertical">
+                        <TextBlock Text="Partida" FontWeight="Bold" />
+                        <TextBox Width="120"
+                     Style="{StaticResource EstiloCajaTexto}"
+                     Text="{Binding FiltroPartida,Mode=TwoWay}"
+                                 IsEnabled="{Binding CanEnableInputs}"/>
+                    </StackPanel>
+
+                    <!-- Buscar -->
+                    <Button Content="Buscar"
+                  Style="{StaticResource EstiloBotonPrincipal}"
+                  Width="100"
+                  Margin="20,15,0,0"
+                  VerticalAlignment="Top"
+                  Command="{Binding BuscarStockCommand}"
+                            IsEnabled="{Binding CanEnableInputs}"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Grid.Row="0"
+             Text="{Binding ArticuloMostrado}"
+             FontFamily="{StaticResource FuentePrincipal}"
+             FontSize="30"
+             FontWeight="Bold"
+             Foreground="{StaticResource BrushPrincipal}"
+             Margin="0,20,0,0" />
+                </StackPanel>
             </StackPanel>
 
-            <!-- Artículo -->
-            <StackPanel Grid.Column="1" Margin="5,0" Orientation="Vertical">
-                <TextBlock Text="Artículo" FontWeight="Bold" />
-                <TextBox Width="150"
-                         Style="{StaticResource EstiloCajaTexto}"
-                         Text="{Binding FiltroArticulo}" />
-            </StackPanel>
 
-            <!-- Almacén -->
-            <StackPanel Grid.Column="2" Margin="5,0" Orientation="Vertical">
-                <TextBlock Text="Almacén" FontWeight="Bold" />
-                <ComboBox Width="120"
-                          Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding Almacenes}"
-                          SelectedItem="{Binding AlmacenSeleccionado}" />
-            </StackPanel>
+            <!-- 📋 Resultados -->
+            <DataGrid Grid.Row="2"
+                ItemsSource="{Binding ResultadosStock}"
+                AutoGenerateColumns="False"
+                IsReadOnly="True"
+                AlternatingRowBackground="{StaticResource BrushSecundario1}"
+                GridLinesVisibility="Vertical"
+                HeadersVisibility="Column"
+                Margin="0,10,0,0"
+                FontSize="14">
+                <DataGrid.Columns>
 
-            <!-- Ubicación -->
-            <StackPanel Grid.Column="3" Margin="5,0" Orientation="Vertical">
-                <TextBlock Text="Ubicación" FontWeight="Bold" />
-                <TextBox Width="120"
-                         Style="{StaticResource EstiloCajaTexto}"
-                         Text="{Binding FiltroUbicacion}" />
-            </StackPanel>
-
-            <!-- Partida -->
-            <StackPanel Grid.Column="4" Margin="5,0" Orientation="Vertical">
-                <TextBlock Text="Partida" FontWeight="Bold" />
-                <TextBox Width="120"
-                         Style="{StaticResource EstiloCajaTexto}"
-                         Text="{Binding FiltroPartida}" />
-            </StackPanel>
-
-            <!-- Buscar -->
-            <Button Grid.Column="7"
-                    Content="Buscar"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Width="100"
-                    Margin="20,15,0,0"
-                    VerticalAlignment="Bottom"
-                    Command="{Binding BuscarCommand}" />
+                    <DataGridTextColumn Header="Artículo" Binding="{Binding CodigoArticulo}" Width="*" />
+                    <DataGridTextColumn Header="Almacén" Binding="{Binding Almacen}" Width="*" />
+                    <DataGridTextColumn Header="Ubicación" Binding="{Binding Ubicacion}" Width="*" />
+                    <DataGridTextColumn Header="Partida" Binding="{Binding Partida}" Width="*" />
+                    <DataGridTextColumn Header="Caducidad" Binding="{Binding FechaCaducidad, StringFormat=d}" Width="*" />
+                    <DataGridTextColumn Header="Saldo" Binding="{Binding UnidadSaldo}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
         </Grid>
-
-        <!-- 📋 Resultados -->
-        <DataGrid Grid.Row="1"
-                  ItemsSource="{Binding ResultadosStock}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  AlternatingRowBackground="{StaticResource BrushSecundario1}"
-                  GridLinesVisibility="Vertical"
-                  HeadersVisibility="Column"
-                  Margin="0,10,0,0"
-                  FontSize="14">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Empresa" Binding="{Binding CodigoEmpresa}" Width="*" />
-                <DataGridTextColumn Header="Artículo" Binding="{Binding CodigoArticulo}" Width="*" />
-                <DataGridTextColumn Header="Almacén" Binding="{Binding Almacen}" Width="*" />
-                <DataGridTextColumn Header="Ubicación" Binding="{Binding Ubicacion}" Width="*" />
-                <DataGridTextColumn Header="Partida" Binding="{Binding Partida}" Width="*" />
-                <DataGridTextColumn Header="Caducidad" Binding="{Binding FechaCaducidad, StringFormat=d}" Width="*" />
-                <DataGridTextColumn Header="Saldo" Binding="{Binding UnidadSaldo}" Width="*" />
-            </DataGrid.Columns>
-        </DataGrid>
     </Grid>
 </Page>

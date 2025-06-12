@@ -5,7 +5,10 @@ using SGA_Api.Models.UsuarioConf;
 
 namespace SGA_Api.Controllers.UsuarioConf
 {
-    public class UsuariosController : ControllerBase
+	[ApiController]
+	[Route("api/[controller]")]
+	public class UsuariosController : ControllerBase
+
     {
         private readonly AuroraSgaDbContext _context;
 

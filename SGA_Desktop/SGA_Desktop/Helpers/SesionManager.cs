@@ -11,6 +11,17 @@ namespace SGA_Desktop.Helpers
 	{
 		public static LoginResponse? UsuarioActual { get; set; }
 		public static string Token => UsuarioActual?.token ?? string.Empty;
-	}
 
+		public static short? EmpresaSeleccionada { get; private set; }
+
+		public static event EventHandler? EmpresaCambiada;
+
+		public static void SetEmpresa(short codigo)
+		{
+			EmpresaSeleccionada = codigo;
+			EmpresaCambiada?.Invoke(null, EventArgs.Empty);   // avisa a quien escuche
+		}
+	}
 }
+
+

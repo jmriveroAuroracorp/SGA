@@ -1,5 +1,4 @@
-﻿using SGA_Desktop.ViewModels;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,17 +16,14 @@ using System.Windows.Shapes;
 namespace SGA_Desktop.Views
 {
 	/// <summary>
-	/// Lógica de interacción para ConsultaStockView.xaml
+	/// Lógica de interacción para EmpresaView.xaml
 	/// </summary>
-	public partial class ConsultaStockView : Page
+	public partial class EmpresaView : Page
 	{
-		public ConsultaStockView()
+		public EmpresaView()
 		{
 			InitializeComponent();
-			DataContext = new ConsultaStockViewModel(new Services.StockService());
-			//DataContext = new ConsultaStockViewModel(new ApiService());
-
+			DataContext = new ViewModels.EmpresaViewModel(new Services.LoginService()); // 👈 Esto soluciona el error
 		}
 	}
-
 }

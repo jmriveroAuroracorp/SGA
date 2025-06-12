@@ -28,11 +28,15 @@
             <Button Content="Inventario"
                     Command="{Binding IrAInventarioCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
+            <Button Content="Empresa"
+                    Command="{Binding IrASeleccionEmpresaCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
             <Button Content="Salir"
                      Command="{Binding CerrarSesionCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}" Margin="10" Cursor=""/>
         </StackPanel>
 
+        
         <!-- Contenido dinámico -->
         <Frame x:Name="MainFrame"
                Grid.Column="1"

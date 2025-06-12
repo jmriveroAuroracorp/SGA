@@ -96,13 +96,23 @@ namespace SGA_Api.Controllers.Login
                 await _auroraSgaContext.SaveChangesAsync(); // importante guardar aquí
             }
 
-            //Permisos de Empresa
-            var empresas = await _context.OperariosEmpresas
-            .Where(e => e.Operario == operario.Id)
-            .Select(e => e.Empresa)
-            .ToListAsync();
+			//Permisos de Empresa
+			// Permisos de Empresa  (DESPUÉS)
+			var empresas = await _context.OperariosEmpresas
+	            .Where(oe => oe.Operario == operario.Id)
+	            .Join(
+		            _context.Empresas,              // DbSet<Empresa>
+		            oe => oe.Empresa,               // string  (nombre)
+		            em => em.EmpresaNombre,         // string  (nombre)  <-- Mismo tipo
+		            (oe, em) => new EmpresaDto
+		            {
+			            Codigo = em.CodigoEmpresa,  // int
+			            Nombre = em.EmpresaNombre   // string
+		            })
+	            .ToListAsync();
 
-            return Ok(new LoginResponseDto
+
+			return Ok(new LoginResponseDto
             {
                 Operario = operario.Id,
                 NombreOperario = operario.Nombre,

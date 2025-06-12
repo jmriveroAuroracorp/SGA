@@ -16,6 +16,36 @@ namespace SGA_Desktop.ViewModels
 {
 	public partial class MainViewModel : ObservableObject
 	{
+
+		private readonly LoginService _login;
+
+		public MainViewModel(LoginService loginService)
+		{
+			_login = loginService;
+			// Cuando entras a la MainWindow, asignas aquí la empresa preferida:
+			_ = InicializarEmpresaPreferidaAsync();
+
+
+			// Aquí ves al arrancar qué tiene tu SessionManager
+			MessageBox.Show(
+				$"ID usuario: {SessionManager.UsuarioActual?.operario}\n" +
+				$"EmpresaSeleccionada: {SessionManager.EmpresaSeleccionada}");
+
+			_ = InitializeAsync();
+		}
+
+		private async Task InitializeAsync()
+		{
+			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
+			var (ok, idEmpresa) = await _login.ObtenerEmpresaPreferidaAsync(idUsuario);
+
+			// Y aquí ves lo que devuelve el endpoint
+			MessageBox.Show(
+				$"Obtuve del endpoint Usuarios/{idUsuario} → " +
+				$"ok={ok}, idEmpresa={idEmpresa}");
+
+			// … resto de tu lógica
+		}
 		[RelayCommand]
 		public void IrAConsultaStock()
 		{
@@ -33,6 +63,14 @@ namespace SGA_Desktop.ViewModels
 		{
 			// Implementar en el futuro
 		}
+
+		// MainViewModel.cs
+		[RelayCommand]
+		public void IrASeleccionEmpresa()
+		{
+			NavigationStore.MainFrame.Navigate(new EmpresaView());
+		}
+
 
 		[RelayCommand]
 		public async Task CerrarSesion()
@@ -97,6 +135,17 @@ namespace SGA_Desktop.ViewModels
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return "Linux";
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "macOS";
 			return "Desconocido";
+		}
+
+		private async Task InicializarEmpresaPreferidaAsync()
+		{
+			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
+			var (ok, idEmpresa) = await _login.ObtenerEmpresaPreferidaAsync(idUsuario);
+			if (ok && idEmpresa.GetValueOrDefault() > 0)
+			{
+				// Esto guarda la empresa real de la BD en SessionManager
+				SessionManager.SetEmpresa(idEmpresa.Value);
+			}
 		}
 	}
 }

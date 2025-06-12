@@ -106,5 +106,28 @@
         </Setter>
     </Style>
 
+    <!-- 🔘 Botón flotante redondo -->
+    <Style x:Key="EstiloBotonFlotante"
+       TargetType="Button"
+       BasedOn="{StaticResource EstiloBotonPrincipal}">
+        <Setter Property="Width"  Value="56"/>
+        <Setter Property="Height" Value="56"/>
+        <Setter Property="FontSize" Value="24"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Bottom"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border CornerRadius="28"
+                        Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 
 </ResourceDictionary>

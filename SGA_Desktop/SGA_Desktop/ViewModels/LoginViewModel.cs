@@ -59,10 +59,8 @@ namespace SGA_Desktop.ViewModels
 			if (respuesta != null)
 			{
 				SessionManager.UsuarioActual = respuesta;
-				string token = SessionManager.Token;
+				
 
-
-		
 
 				// Registrar evento de login
 				try
