@@ -1,9 +1,5 @@
 ﻿using SGA_Desktop.Models;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SGA_Desktop.Helpers
 {
@@ -11,6 +7,12 @@ namespace SGA_Desktop.Helpers
 	{
 		public static LoginResponse? UsuarioActual { get; set; }
 		public static string Token => UsuarioActual?.token ?? string.Empty;
+
+		// Nuevo: ID numérico del operario
+		public static int Operario => UsuarioActual?.operario ?? 0;
+
+		// Nuevo: Nombre completo del operario
+		public static string NombreOperario => UsuarioActual?.nombreOperario ?? string.Empty;
 
 		public static short? EmpresaSeleccionada { get; private set; }
 
@@ -23,5 +25,3 @@ namespace SGA_Desktop.Helpers
 		}
 	}
 }
-
-

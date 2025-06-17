@@ -1,5 +1,7 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using ClosedXML.Excel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
@@ -7,192 +9,439 @@ using SGA_Desktop.Services;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 
 namespace SGA_Desktop.ViewModels
 {
-    public partial class ConsultaStockViewModel : ObservableObject
-    {
-        private readonly StockService _stockService;
+	public partial class ConsultaStockViewModel : ObservableObject
+	{
+		#region Constants
+		private const string SIN_UBICACION = "Sin ubicación";
+		private const string TODAS = "Todas";
+		#endregion
 
-        // ----------------------
-        // CONSTRUCTORES
-        // ----------------------
+		#region Fields & Services
+		private readonly StockService _stockService;
+		#endregion
 
-        // Constructor principal (inyección de StockService)
-        public ConsultaStockViewModel(StockService stockService)
-        {
-            _stockService    = stockService;
-            Almacenes        = new ObservableCollection<string>();
-            ResultadosStock  = new ObservableCollection<StockDto>();
+		#region Constructor
+		public ConsultaStockViewModel(StockService stockService)
+		{
+			_stockService = stockService;
+			EmpresaActual = ObtenerNombreEmpresaActual();
+			Almacenes = new ObservableCollection<string>();
+			Ubicaciones = new ObservableCollection<string>();
+			ResultadosStock = new ObservableCollection<StockDto>();
 
-            // Inicializa filtros y cabecera
-            FiltroArticulo   = string.Empty;
-            FiltroUbicacion  = string.Empty;
-            FiltroPartida    = string.Empty;
-            EmpresaActual    = ObtenerNombreEmpresaActual();
+			FiltroArticulo = string.Empty;
+			FiltroUbicacion = string.Empty;
+			FiltroPartida = string.Empty;
+
+			// ② Inicializa ambas colecciones
+			ResultadosStock = new ObservableCollection<StockDto>();
+			ResultadosStockPorUbicacion = new ObservableCollection<StockDto>();
 
 			if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
-			{
 				_ = InitializeAsync();
-			}
 		}
 
-        // Constructor sin parámetros (para XAML/code-behind)
-        public ConsultaStockViewModel()
-            : this(new StockService())
-        { }
+		public ConsultaStockViewModel() : this(new StockService()) { }
+		#endregion
 
-        // ----------------------
-        // PROPIEDADES BOUND
-        // ----------------------
-
-        /// <summary>Cabecera: “[Código] Nombre” de la empresa.</summary>
-        [ObservableProperty]
-        private string empresaActual = string.Empty;
-
-        /// <summary>Lista de almacenes para el ComboBox.</summary>
-        public ObservableCollection<string> Almacenes { get; }
-
-        [ObservableProperty]
-        private string? almacenSeleccionado;
-
-        [ObservableProperty]
-        private string filtroArticulo = string.Empty;
-
-		// Indica cuándo hay texto en Artículo
-		public bool CanEnableInputs =>
-			!string.IsNullOrWhiteSpace(FiltroArticulo);
-
-		// Asegúrate de notificar cuando cambie FiltroArticulo:
-		partial void OnFiltroArticuloChanged(string oldValue, string newValue)
-		{
-			// Fource reevaluación de CanEnableInputs
-			OnPropertyChanged(nameof(CanEnableInputs));
-		}
-
+		#region Observable Properties
 		[ObservableProperty]
-        private string filtroUbicacion = string.Empty;
+		private string empresaActual;
 
-        [ObservableProperty]
-        private string filtroPartida = string.Empty;
-		[ObservableProperty]
-		private string articuloMostrado = string.Empty;
-
-		/// <summary>Resultados que muestra el DataGrid.</summary>
+		public ObservableCollection<string> Almacenes { get; }
+		public ObservableCollection<string> Ubicaciones { get; }
 		public ObservableCollection<StockDto> ResultadosStock { get; }
 
-		// ----------------------
-		// COMANDOS
-		// ----------------------
+		public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
 
-		/// <summary>Lanza la consulta al endpoint de stock con los filtros y la empresa/almacén seleccionados.</summary>
+		[ObservableProperty]
+		private string almacenSeleccionado;
+
+		[ObservableProperty]
+		private string filtroArticulo;
+
+		[ObservableProperty]
+		private string filtroUbicacion;
+
+		[ObservableProperty]
+		private string filtroPartida;
+
+		[ObservableProperty]
+		private string articuloMostrado;
+
+		[ObservableProperty]
+		private bool isArticleMode;
+
+		[ObservableProperty]
+		private bool isLocationMode;
+		#endregion
+
+		#region Computed Properties
+
+
+		public IEnumerable<StockDto> ResultadosStockActive =>
+			IsLocationMode
+				? ResultadosStockPorUbicacion
+				: ResultadosStock;
+		public bool CanEnableInputs => !string.IsNullOrWhiteSpace(FiltroArticulo);
+
+		public bool CanEnableLocation =>
+			IsLocationMode &&
+			!string.IsNullOrWhiteSpace(AlmacenSeleccionado) &&
+			AlmacenSeleccionado != TODAS;
+
+		public Visibility ArticleFiltersVisibility => IsArticleMode ? Visibility.Visible : Visibility.Collapsed;
+		public Visibility LocationFiltersVisibility => IsLocationMode ? Visibility.Visible : Visibility.Collapsed;
+
+		public IRelayCommand BuscarCommand =>
+			IsArticleMode ? BuscarPorArticuloCommand : BuscarPorUbicacionCommand;
+		#endregion
+
+		#region Property Change Callbacks
+		partial void OnFiltroArticuloChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanEnableInputs));
+			OnPropertyChanged(nameof(CanEnableLocation));
+		}
+
+		partial void OnAlmacenSeleccionadoChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanEnableLocation));
+			_ = LoadUbicacionesAsync(newValue);
+		}
+
+		partial void OnIsArticleModeChanged(bool oldValue, bool newValue)
+		{
+			if (newValue)
+			{
+				SwitchMode(resetFilters: true, setArticle: true);
+			}
+			OnPropertyChanged(nameof(BuscarCommand));
+		}
+
+		partial void OnIsLocationModeChanged(bool oldValue, bool newValue)
+		{
+			if (newValue)
+			{
+				SwitchMode(resetFilters: true, setArticle: false);
+			}
+			OnPropertyChanged(nameof(BuscarCommand));
+		}
+		#endregion
+
+		#region Commands
 		[RelayCommand]
-		private async Task BuscarStockAsync()
+		private async Task BuscarPorArticuloAsync()
 		{
 			try
 			{
-				// 1) Llamada al servicio
-				var json = await _stockService.ConsultaStockRawAsync(
-					codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value,
-					codigoUbicacion: FiltroUbicacion,
-					codigoAlmacen: AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!,
-					codigoArticulo: FiltroArticulo,
-					codigoCentro: SessionManager.UsuarioActual!.codigoCentro,
-					almacen: AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!,
-					partida: FiltroPartida);
-
-				var lista = JsonConvert
-					.DeserializeObject<List<StockDto>>(json)
-					?? new List<StockDto>();
-
-				// 2) Combina los almacenes que cargaste por centro + los del login
-				var desdeCentro = Almacenes;
-				var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-				var permitidos = desdeCentro.Concat(desdeLogin).Distinct().ToList();
-
-				// 3) Si seleccionaste “Todos”, mantén el conjunto completo;
-				//    si no, solo el único seleccionado
-				if (AlmacenSeleccionado != "Todos")
-					permitidos = new List<string> { AlmacenSeleccionado! };
-
-				// 4) Filtra la lista por esos códigos combinados
-				var filtrada = lista.Where(s => permitidos.Contains(s.CodigoAlmacen)).ToList();
-
-				// 5) Asigna ArticuloMostrado: descripción si existe, sino el código
-				var primero = filtrada.FirstOrDefault();
-				ArticuloMostrado = primero?.DescripcionArticulo
-								   ?? primero?.CodigoArticulo
-								   ?? string.Empty;
-
-				// 6) Rellena el DataGrid
-				ResultadosStock.Clear();
-				foreach (var item in filtrada)
-					ResultadosStock.Add(item);
+				var (almacenParam, ubicParam) = BuildArticleParams();
+				var lista = await _stockService.ObtenerPorArticuloAsync(
+					SessionManager.EmpresaSeleccionada!.Value,
+					FiltroArticulo,
+					string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
+					almacenParam,
+					ubicParam);
+				LlenarResultados(lista, filterByPermissions: true);
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show(ex.Message, "Error al consultar Stock",
-								MessageBoxButton.OK, MessageBoxImage.Error);
+				MostrarError("Error al consultar por artículo", ex);
 			}
 		}
 
+		[RelayCommand]
+		private async Task BuscarPorUbicacionAsync()
+		{
+			try
+			{
+				var lista = await _stockService.ObtenerPorUbicacionAsync(
+					SessionManager.EmpresaSeleccionada!.Value,
+					AlmacenSeleccionado,
+					FiltroUbicacion == SIN_UBICACION ? string.Empty : FiltroUbicacion);
+				LlenarResultados(lista, filterByPermissions: true);
+			}
+			catch (Exception ex)
+			{
+				MostrarError("Error al consultar por ubicación", ex);
+			}
+		}
+		[RelayCommand]
+		private void ExportarExcel()
+		{
+			// 1) Obtén la lista activa
+			var listaActiva = IsArticleMode
+				? ResultadosStock.ToList()
+				: ResultadosStockPorUbicacion.ToList();
 
+			if (!listaActiva.Any())
+			{
+				MessageBox.Show("No hay datos para exportar.", "Exportar Excel",
+								MessageBoxButton.OK, MessageBoxImage.Warning);
+				return;
+			}
 
-			// ----------------------
-			// MÉTODOS PRIVADOS
-			// ----------------------
+			// 2) Diálogo para elegir fichero
+			var dlg = new SaveFileDialog
+			{
+				Filter = "Libro de Excel (*.xlsx)|*.xlsx",
+				FileName = IsArticleMode
+					? "ConsultaPorArticulo.xlsx"
+					: "ConsultaPorUbicacion.xlsx"
+			};
+			if (dlg.ShowDialog() != true) return;
 
-			/// <summary>Lee el nombre de la empresa actual desde SessionManager.UsuarioActual.empresas.</summary>
-			private string ObtenerNombreEmpresaActual()
-        {
-            var code = SessionManager.EmpresaSeleccionada;
-            var dto  = SessionManager.UsuarioActual?.empresas
-                         .FirstOrDefault(e => e.Codigo == code);
-            return dto != null ? $"{dto.Nombre}" : $"[{code}]";
-        }
+			// 3) Crea el workbook y la hoja
+			using var wb = new XLWorkbook();
+			var ws = wb.Worksheets.Add("Stock");
 
-		/// <summary>Inicializa la lista de almacenes a partir del códigoCentro del usuario.</summary>
+			// 4) Escribe cabecera
+			var headers = new[] {
+		"Código Empresa",
+		"Código Artículo",
+		"Descripción",
+		"Almacén",
+		"Ubicación",
+		"Partida",
+		"Fecha Caducidad",
+		"Saldo"
+	};
+			for (int i = 0; i < headers.Length; i++)
+				ws.Cell(1, i + 1).Value = headers[i];
+
+			// 5) Escribe filas con tipos nativos
+			int row = 2;
+			foreach (var item in listaActiva)
+			{
+				ws.Cell(row, 1).Value = item.CodigoEmpresa;
+				ws.Cell(row, 2).Value = item.CodigoArticulo;
+				ws.Cell(row, 3).Value = item.DescripcionArticulo ?? "";
+				ws.Cell(row, 4).Value = $"{item.CodigoAlmacen} – {item.Almacen}";
+				ws.Cell(row, 5).Value = item.Ubicacion;
+				ws.Cell(row, 6).Value = item.Partida;
+				ws.Cell(row, 7).Value = item.FechaCaducidad.HasValue
+					? item.FechaCaducidad.Value
+					: (DateTime?)null;
+				ws.Cell(row, 8).Value = item.UnidadSaldo;
+				row++;
+			}
+
+			// 6) Auto‐ajusta anchos
+			ws.Columns().AdjustToContents();
+
+			// 7) Guarda y avisa
+			wb.SaveAs(dlg.FileName);
+			MessageBox.Show($"Datos exportados correctamente a:\n{dlg.FileName}",
+							"Exportar Excel", MessageBoxButton.OK, MessageBoxImage.Information);
+		}
+
+		#endregion
+
+		#region Initialization & Data Loading
 		private async Task InitializeAsync()
 		{
 			try
 			{
-				// 1) Carga desde el centro logístico
 				var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-				var desdeCentro = await _stockService.ObtenerAlmacenesAsync(centro); // List<string>
+				var desdeCentro = await _stockService.ObtenerAlmacenesAsync(centro);
+				var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-				// 2) Toma los permisos individuales del login
-				var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen
-								 ?? new List<string>();
-
-				// 3) Une ambas listas y elimina duplicados
-				var todosCodigos = desdeCentro
-					.Concat(desdeLogin)
+				var todosCodigos = desdeCentro.Concat(desdeLogin)
 					.Distinct()
-					.OrderBy(c => c)     // opcional: orden alfabético
+					.OrderBy(c => c)
 					.ToList();
 
-				// 4) Limpia y rellena tu ObservableCollection
 				Almacenes.Clear();
-
-				// Inserta “Todos” al principio
-				Almacenes.Add("Todos");
-
-				foreach (var codigo in todosCodigos)
-					Almacenes.Add(codigo);
-
-				// 5) Pre‐selecciona “Todos”
-				AlmacenSeleccionado = "Todos";
+				Almacenes.Add(TODAS);
+				todosCodigos.ForEach(c => Almacenes.Add(c));
+				AlmacenSeleccionado = TODAS;
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show(ex.Message, "Error cargando almacenes",
-								MessageBoxButton.OK, MessageBoxImage.Error);
+				MostrarError("Error cargando almacenes", ex);
+			}
+		}
+
+		private async Task LoadUbicacionesAsync(string codigoAlmacen)
+		{
+			Ubicaciones.Clear();
+			if (string.IsNullOrWhiteSpace(codigoAlmacen) || codigoAlmacen == TODAS)
+			{
+				FiltroUbicacion = string.Empty;
+				return;
+			}
+
+			var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen);
+			if (IsArticleMode) Ubicaciones.Add(TODAS);
+			lista.ForEach(u => Ubicaciones.Add(string.IsNullOrEmpty(u) ? SIN_UBICACION : u));
+
+			FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
+		}
+		#endregion
+
+		#region Private Helpers
+		private (string? almacenParam, string? ubicParam) BuildArticleParams()
+		{
+			string? almacenParam = AlmacenSeleccionado == TODAS ? null : AlmacenSeleccionado;
+			string? ubicParam = null;
+
+			if (almacenParam != null)
+			{
+				if (FiltroUbicacion == SIN_UBICACION) ubicParam = string.Empty;
+				else if (FiltroUbicacion != TODAS) ubicParam = FiltroUbicacion;
+			}
+
+			return (almacenParam, ubicParam);
+		}
+
+		private void LlenarResultados(List<StockDto> lista, bool filterByPermissions)
+		{
+			var basePerm = filterByPermissions
+				? SessionManager.UsuarioActual?.codigosAlmacen
+				: null;
+
+			var permitidos = filterByPermissions
+				? (AlmacenSeleccionado == TODAS
+					? Almacenes.Concat(basePerm ?? Enumerable.Empty<string>())
+					: new[] { AlmacenSeleccionado })
+				: lista.Select(s => s.CodigoAlmacen);
+
+			var filtrada = lista
+				.Where(s => permitidos.Contains(s.CodigoAlmacen))
+				.ToList();
+
+			if (IsArticleMode)
+			{
+				// en modo artículo actualiza ArticuloMostrado y clear/fill ResultadosStock
+				ArticuloMostrado = filtrada
+					.FirstOrDefault()?.DescripcionArticulo
+					?? string.Empty;
+
+				ResultadosStock.Clear();
+				filtrada.ForEach(x => ResultadosStock.Add(x));
+			}
+			else
+			{
+				// en modo ubicación no mostramos destacado y clear/fill la otra colección
+				ArticuloMostrado = string.Empty;
+
+				ResultadosStockPorUbicacion.Clear();
+				filtrada.ForEach(x => ResultadosStockPorUbicacion.Add(x));
 			}
 		}
 
 
+		private void SwitchMode(bool resetFilters, bool setArticle)
+		{
+			if (resetFilters)
+			{
+				FiltroArticulo = string.Empty;
+				FiltroUbicacion = string.Empty;
+				FiltroPartida = string.Empty;
+				AlmacenSeleccionado = TODAS;
+				//ArticuloMostrado = string.Empty;
+			}
+			IsArticleMode = setArticle;
+			IsLocationMode = !setArticle;
+			OnPropertyChanged(nameof(ArticleFiltersVisibility));
+			OnPropertyChanged(nameof(LocationFiltersVisibility));
+		}
+
+		private void MostrarError(string titulo, Exception ex)
+		{
+			MessageBox.Show(ex.Message, titulo, MessageBoxButton.OK, MessageBoxImage.Error);
+		}
+
+		private string ObtenerNombreEmpresaActual()
+		{
+			var code = SessionManager.EmpresaSeleccionada;
+			var dto = SessionManager.UsuarioActual?.empresas
+						.FirstOrDefault(e => e.Codigo == code);
+			return dto != null ? dto.Nombre : $"[{code}]";
+		}
+		
+		private static string EscapeCsv(string campo)
+		{
+			if (campo.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
+				return $"\"{campo.Replace("\"", "\"\"")}\"";
+			return campo;
+		}
+		#endregion
 	}
 }
+
+
+///// <summary>Lanza la consulta al endpoint de stock con los filtros y la empresa/almacén seleccionados.</summary>
+//[RelayCommand]
+//private async Task BuscarStockAsync()
+//{
+//	try
+//	{
+//		// 0) Traducimos "Sin ubicación" -> "" para la llamada a la API
+//		var ubicacionParaApi = FiltroUbicacion == SIN_UBICACION
+//							  ? string.Empty
+//							  : FiltroUbicacion;
+
+//		// Log de los parámetros que se envían a la API
+//		Console.WriteLine($"Llamada a la API - Empresa: {SessionManager.EmpresaSeleccionada!.Value}, Ubicación: '{ubicacionParaApi}', Almacén: '{(AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!)}', Artículo: '{FiltroArticulo}', Centro: '{SessionManager.UsuarioActual!.codigoCentro}', Partida: '{FiltroPartida}'");
+
+//		// 1) Llamada al servicio usando el valor traducido
+//		var json = await _stockService.ConsultaStockRawAsync(
+//			codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value,
+//			codigoUbicacion: ubicacionParaApi,
+//			codigoAlmacen: AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!,
+//			codigoArticulo: FiltroArticulo,
+//			codigoCentro: SessionManager.UsuarioActual!.codigoCentro,
+//			almacen: AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!,
+//			partida: FiltroPartida);
+
+//		var lista = JsonConvert
+//			.DeserializeObject<List<StockDto>>(json)
+//			?? new List<StockDto>();
+
+//		// 2) Combina los almacenes que cargaste por centro + los del login
+//		var desdeCentro = Almacenes;
+//		var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+//		var permitidos = desdeCentro.Concat(desdeLogin).Distinct().ToList();
+
+//		// 3) Si seleccionaste “Todos”, mantén el conjunto completo;
+//		//    si no, solo el único seleccionado
+//		if (AlmacenSeleccionado != "Todos")
+//			permitidos = new List<string> { AlmacenSeleccionado! };
+
+//		// 4) Filtra la lista por esos códigos combinados
+//		var filtrada = lista.Where(s => permitidos.Contains(s.CodigoAlmacen)).ToList();
+
+//		// 5) Asigna ArticuloMostrado solo si estamos en modo de búsqueda por artículo
+//		if (IsArticleMode)
+//		{
+//			var primero = filtrada.FirstOrDefault();
+//			ArticuloMostrado = primero?.DescripcionArticulo
+//							   ?? primero?.CodigoArticulo
+//							   ?? string.Empty;
+//		}
+//		else
+//		{
+//			ArticuloMostrado = string.Empty; // Limpia el artículo mostrado si no es por artículo
+//		}
+
+//		// 6) Rellena el DataGrid
+//		ResultadosStock.Clear();
+//		foreach (var item in filtrada)
+//			ResultadosStock.Add(item);
+//	}
+//	catch (Exception ex)
+//	{
+//		MessageBox.Show(ex.Message, "Error al consultar Stock",
+//						MessageBoxButton.OK, MessageBoxImage.Error);
+//	}
+//}
+

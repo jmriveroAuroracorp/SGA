@@ -26,10 +26,10 @@ namespace SGA_Desktop.ViewModels
 			_ = InicializarEmpresaPreferidaAsync();
 
 
-			// Aquí ves al arrancar qué tiene tu SessionManager
-			MessageBox.Show(
-				$"ID usuario: {SessionManager.UsuarioActual?.operario}\n" +
-				$"EmpresaSeleccionada: {SessionManager.EmpresaSeleccionada}");
+			//// Aquí ves al arrancar qué tiene tu SessionManager
+			//MessageBox.Show(
+			//	$"ID usuario: {SessionManager.UsuarioActual?.operario}\n" +
+			//	$"EmpresaSeleccionada: {SessionManager.EmpresaSeleccionada}");
 
 			_ = InitializeAsync();
 		}
@@ -39,10 +39,10 @@ namespace SGA_Desktop.ViewModels
 			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
 			var (ok, idEmpresa) = await _login.ObtenerEmpresaPreferidaAsync(idUsuario);
 
-			// Y aquí ves lo que devuelve el endpoint
-			MessageBox.Show(
-				$"Obtuve del endpoint Usuarios/{idUsuario} → " +
-				$"ok={ok}, idEmpresa={idEmpresa}");
+			//// Y aquí ves lo que devuelve el endpoint
+			//MessageBox.Show(
+			//	$"Obtuve del endpoint Usuarios/{idUsuario} → " +
+			//	$"ok={ok}, idEmpresa={idEmpresa}");
 
 			// … resto de tu lógica
 		}
@@ -64,7 +64,12 @@ namespace SGA_Desktop.ViewModels
 			// Implementar en el futuro
 		}
 
-		// MainViewModel.cs
+		[RelayCommand]
+		public void IrAEtiquetas()
+		{
+			NavigationStore.MainFrame.Navigate(new ImpresionEtiquetasView());
+		}
+
 		[RelayCommand]
 		public void IrASeleccionEmpresa()
 		{
