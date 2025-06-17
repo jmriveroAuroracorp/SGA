@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace SGA_Api.Models.Stock
+namespace SGA_Api.Models.Almacen
 {
     [Keyless]
     public class Almacenes

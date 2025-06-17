@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using SGA_Api.Models.Almacen;
 using SGA_Api.Models.Login;
 using SGA_Api.Models.Pesaje;
 using SGA_Api.Models.Stock;
@@ -20,6 +21,8 @@ namespace SGA_Api.Data
         public DbSet<Periodo> Periodos { get; set; }
 		public DbSet<Empresa> Empresas { get; set; } = default!;
 		public DbSet<Articulo> Articulos { get; set; }
+        // Vista para los alérgenos de las etiquetas
+		public DbSet<VisArticulo> VisArticulos { get; set; } = null!;
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -92,8 +95,14 @@ namespace SGA_Api.Data
 				 .HasColumnName("Empresa");
 			});
 
+			modelBuilder
+	          .Entity<Ubicaciones>()
+	          .HasNoKey()
+	          .ToView("Ubicaciones");
 
-
+			modelBuilder.Entity<VisArticulo>()
+	           .HasNoKey()
+	           .ToView("Vis_Articulos");
 		}
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using SGA_Api.Models.Almacen;
 using SGA_Api.Models.Stock;
 
 namespace SGA_Api.Data
@@ -10,12 +11,17 @@ namespace SGA_Api.Data
         {
         }
         public DbSet<AcumuladoStockUbicacion> AcumuladoStockUbicacion { get; set; }
-
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+		public DbSet<Ubicaciones> Ubicaciones { get; set; }
+		protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<AcumuladoStockUbicacion>().HasNoKey();
-        }
+
+			modelBuilder
+		  .Entity<Ubicaciones>()
+		  .HasNoKey()
+		  .ToView("Ubicaciones");
+		}
     }
 }

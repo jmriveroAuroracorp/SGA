@@ -129,5 +129,58 @@
         </Setter>
     </Style>
 
+    <!-- 📊 DataGrid General -->
+    <Style x:Key="EstiloDataGrid" TargetType="DataGrid">
+        <!-- Estructura básica -->
+        <Setter Property="AutoGenerateColumns" Value="False"/>
+        <Setter Property="IsReadOnly" Value="True"/>
+        <Setter Property="SelectionMode" Value="Extended"/>
+        <Setter Property="HeadersVisibility" Value="Column"/>
+        <Setter Property="GridLinesVisibility" Value="Vertical"/>
+
+        <!-- Que cada columna se ajuste al ancho necesario -->
+        <Setter Property="ColumnWidth" Value="Auto"/>
+
+        <!-- Si sobrepasa el ancho, que salga scroll -->
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+
+        <!-- Apariencia -->
+        <Setter Property="RowBackground" Value="White"/>
+        <Setter Property="AlternatingRowBackground" Value="{StaticResource BrushSecundario1}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushInputBorde}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+        <Setter Property="FontSize" Value="14"/>
+
+        <!-- Espaciado -->
+        <Setter Property="Margin" Value="20,10"/>
+
+        <!-- Celdas centradas y con padding -->
+        <Setter Property="CellStyle">
+            <Setter.Value>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                    <Setter Property="Padding" Value="8,4"/>
+                    <Setter Property="FontSize" Value="14"/>
+                    <!-- Para multilineado (si lo quieres) -->
+                    <Setter Property="TextBlock.TextWrapping" Value="Wrap"/>
+                </Style>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!-- 📋 Encabezados de columna centrados y tamaño mayor -->
+    <Style x:Key="EstiloDataGridHeader" TargetType="DataGridColumnHeader">
+        <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="FontSize" Value="15"/>
+        <Setter Property="Height" Value="40"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+
 
 </ResourceDictionary>

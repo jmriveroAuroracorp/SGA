@@ -1,47 +1,154 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Threading.Tasks;
+using System.Windows;
 using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
+using SGA_Desktop.Models;
 
 namespace SGA_Desktop.Services
 {
 	public class StockService : ApiService
 	{
 		/// <summary>
-		/// Llama a GET /api/Stock/consulta-stock?codigoEmpresa=…&otros filtros
-		/// usando el mismo HttpClient configurado en ApiService.
+		/// GET /api/Stock/articulo
+		/// Búsqueda por artículo (+ opcional partida, almacén, ubicación)
 		/// </summary>
-		public Task<string> ConsultaStockRawAsync(
+		public async Task<List<StockDto>> ObtenerPorArticuloAsync(
 			int codigoEmpresa,
-			string codigoUbicacion = "",
-			string codigoAlmacen = "",
-			string codigoArticulo = "",
-			string codigoCentro = "",
-			string almacen = "",
-			string partida = "")
+			string codigoArticulo,
+			string? partida = null,
+			string? codigoAlmacen = null,
+			string? codigoUbicacion = null)
 		{
-			var qs = $"?codigoEmpresa={codigoEmpresa}"
-				   + $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}"
-				   + $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
-				   + $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}"
-				   + $"&codigoCentro={Uri.EscapeDataString(codigoCentro)}"
-				   + $"&almacen={Uri.EscapeDataString(almacen)}"
-				   + $"&partida={Uri.EscapeDataString(partida)}";
+			if (string.IsNullOrWhiteSpace(codigoArticulo))
+				throw new ArgumentException("codigoArticulo es obligatorio.", nameof(codigoArticulo));
 
-			return GetStringAsync($"Stock/consulta-stock{qs}");
+			var qs = $"?codigoEmpresa={codigoEmpresa}"
+				   + $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+
+			if (!string.IsNullOrWhiteSpace(partida))
+				qs += $"&partida={Uri.EscapeDataString(partida!)}";
+
+			if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+				qs += $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen!)}";
+
+			// **ojo**: aquí aceptamos incluso la cadena vacía
+			if (codigoUbicacion != null)
+				qs += $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
+
+			return await GetAsync<List<StockDto>>($"Stock/articulo{qs}");
 		}
 
 		/// <summary>
+		/// GET /api/Stock/ubicacion
+		/// Búsqueda por almacén + ubicación (-> "" para Sin ubicación)
+		/// </summary>
+		public async Task<List<StockDto>> ObtenerPorUbicacionAsync(
+			int codigoEmpresa,
+			string codigoAlmacen,
+			string codigoUbicacion)
+		{
+			if (string.IsNullOrWhiteSpace(codigoAlmacen))
+				throw new ArgumentException("codigoAlmacen es obligatorio.", nameof(codigoAlmacen));
+			if (codigoUbicacion == null)
+				throw new ArgumentNullException(nameof(codigoUbicacion));
+
+			var qs = $"?codigoEmpresa={codigoEmpresa}"
+				   + $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
+				   // Siempre incluimos codigoUbicacion, aunque sea cadena vacía:
+				   + $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
+
+			try
+			{
+				return await GetAsync<List<StockDto>>($"Stock/ubicacion{qs}");
+			}
+			catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+			{
+				// No hay nada en esa ubicación → lista vacía
+				return new List<StockDto>();
+			}
+		}
+
+		public async Task<string> ObtenerAlergenosArticuloAsync(
+	int codigoEmpresa,
+	string codigoArticulo)
+		{
+			try
+			{
+				var url = $"Stock/articulo/alergenos?codigoEmpresa={codigoEmpresa}"
+						+ $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+
+				var response = await _httpClient.GetAsync(url);
+
+				// Si devolvió un 404 o 500, tratamos igual:
+				if (!response.IsSuccessStatusCode)
+					return string.Empty;
+
+				// Leemos el JSON { "alergenos": "GLUTEN,LACTEOS" }
+				var wrapper = await response.Content
+					.ReadFromJsonAsync<AlergenosWrapper>();
+
+				// Devolvemos la propiedad, o cadena vacía si es null
+				return wrapper?.alergenos ?? string.Empty;
+			}
+			catch
+			{
+				// Cualquier excepción (timeout, JSON mal formado, 500, etc.)
+				return string.Empty;
+			}
+		}
+		/// <summary>
+		/// Helper genérico para GET + deserializar JSON
+		/// </summary>
+		private async Task<T> GetAsync<T>(string relativeUrl)
+		{
+			var response = await _httpClient.GetAsync(relativeUrl);
+			response.EnsureSuccessStatusCode();
+			var json = await response.Content.ReadAsStringAsync();
+			return JsonConvert.DeserializeObject<T>(json)!;
+		}
+
+		// ----------------------
+		// Métodos existentes para /api/Almacen
+		// ----------------------
+
+		/// <summary>
 		/// GET /api/Almacen?codigoCentro=…
-		/// Devuelve sólo la lista de códigos de almacén.
+		/// Devuelve solo la lista de códigos de almacén.
 		/// </summary>
 		public async Task<List<string>> ObtenerAlmacenesAsync(string codigoCentro)
 		{
 			var resp = await _httpClient.GetAsync($"Almacen?codigoCentro={Uri.EscapeDataString(codigoCentro)}");
 			resp.EnsureSuccessStatusCode();
-			// Deserializamos directamente a List<string>
 			return JsonConvert.DeserializeObject<List<string>>(await resp.Content.ReadAsStringAsync())
 				   ?? new List<string>();
+		}
+
+		/// <summary>
+		/// GET /api/Almacen/Ubicaciones?codigoAlmacen=...
+		/// Devuelve la lista de códigos de ubicación para el almacén dado.
+		/// </summary>
+		public async Task<List<string>> ObtenerUbicacionesAsync(string codigoAlmacen)
+		{
+			var url = $"Almacen/Ubicaciones?codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+			using var resp = await _httpClient.GetAsync(url);
+			resp.EnsureSuccessStatusCode();
+			var json = await resp.Content.ReadAsStringAsync();
+			var dtoList = JsonConvert
+				.DeserializeObject<List<UbicacionDto>>(json)
+				?? new List<UbicacionDto>();
+			return dtoList.Select(x => x.Ubicacion).ToList();
+		}
+
+
+		private class AlergenosWrapper
+		{
+			public string alergenos { get; set; } = string.Empty;
 		}
 	}
 }

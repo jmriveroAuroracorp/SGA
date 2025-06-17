@@ -35,5 +35,12 @@ namespace SGA_Desktop.Models
 
 		[JsonPropertyName("descripcionArticulo")]
 		public string? DescripcionArticulo { get; set; }
+
+		[JsonPropertyName("codigoAlternativo")]
+		public string CodigoAlternativo { get; set; } = string.Empty;
+
+		// JSON debe venir como "alergenos" o "vNEWAlergenos" según tu API
+		[JsonPropertyName("alergenos")]
+		public string Alergenos { get; set; } = string.Empty;
 	}
 }
