@@ -67,17 +67,17 @@
         <Setter Property="MinWidth" Value="130" />
     </Style>
 
-    <!-- 🔘 Botón principal -->
     <Style x:Key="EstiloBotonPrincipal" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource BrushPrincipal}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="Height" Value="40" />
-        <Setter Property="Margin" Value="0,10,0,0" />
-        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Padding" Value="12,4" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -85,8 +85,8 @@
                         <Border x:Name="border"
                             Background="{TemplateBinding Background}"
                             CornerRadius="8">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center" />
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <Rectangle x:Name="hoverOverlay"
                                Fill="#40FFFFFF"
@@ -105,6 +105,7 @@
             </Setter.Value>
         </Setter>
     </Style>
+
 
     <!-- 🔘 Botón flotante redondo -->
     <Style x:Key="EstiloBotonFlotante"
@@ -181,6 +182,57 @@
         <Setter Property="Height" Value="40"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
     </Style>
+
+
+    <!-- Estilo “chulo” para RadioButton -->
+
+    <Style x:Key="FancyRadioButton" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+        <Setter Property="FontSize" Value="16"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" >
+                        <!-- Grid para superponer círculos -->
+                        <Grid Width="20" Height="20" VerticalAlignment="Center">
+                            <!-- Círculo exterior -->
+                            <Ellipse x:Name="OuterCircle"
+                       Stroke="{TemplateBinding Foreground}"
+                       StrokeThickness="2"
+                       Fill="Transparent"/>
+                            <!-- Círculo interior -->
+                            <Ellipse x:Name="InnerCircle"
+                       Fill="{TemplateBinding Foreground}"
+                       Width="12" Height="12"
+                       Visibility="Collapsed"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Texto -->
+                        <ContentPresenter Margin="8,0,0,0"
+                              VerticalAlignment="Center"
+                              RecognizesAccessKey="True"/>
+                    </StackPanel>
+
+                    <ControlTemplate.Triggers>
+                        <!-- Hover: relleno suave en el exterior -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="OuterCircle" Property="Fill"
+                      Value="{StaticResource BrushSecundario2}"/>
+                        </Trigger>
+                        <!-- Checked: mostramos el círculo interior -->
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="InnerCircle" Property="Visibility"
+                      Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 
 
 </ResourceDictionary>

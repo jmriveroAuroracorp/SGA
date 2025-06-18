@@ -14,142 +14,145 @@
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </Page.Resources>
-    
+
     <Grid Margin="0" Cursor="">
         <Grid.RowDefinitions>
-            <!-- 0: Cabecera fija -->
-            <RowDefinition Height="80" />
-            <!-- 1: RadioButtons de modo -->
+            <!-- 0: RadioButtons de modo -->
             <RowDefinition Height="Auto" />
-            <!-- 2: Filtros -->
+            <!-- 1: Filtros -->
             <RowDefinition Height="Auto" />
-            <!-- 3: Artículo destacado -->
+            <!-- 2: Artículo destacado -->
             <RowDefinition Height="Auto" />
-            <!-- 4: Resultados -->
+            <!-- 3: Resultados -->
             <RowDefinition Height="*" />
+            <!-- 4: Botón Exportar -->
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- CABECERA -->
-        <Border Grid.Row="0" Background="{StaticResource BrushPrincipal}">
-            <DockPanel VerticalAlignment="Center" Margin="20,0">
-                <TextBlock Text="Consulta de Stock"
-                           Foreground="White"
-                           FontFamily="{StaticResource FuentePrincipal}"
-                           FontSize="30"
-                           FontWeight="Bold" />
-                <TextBlock Text="{Binding EmpresaActual}"
-                           Foreground="White"
-                           Margin="40,0,0,0"
-                           FontFamily="{StaticResource FuentePrincipal}"
-                           FontSize="30"
-                           FontWeight="Bold" />
-            </DockPanel>
-        </Border>
-
         <!-- MODO DE BÚSQUEDA -->
-        <StackPanel Grid.Row="1"
+        <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
                     Margin="20,10"
                     HorizontalAlignment="Left">
+            <TextBlock Text="Modo de Búsqueda"
+               FontFamily="{StaticResource FuentePrincipal}"
+               FontSize="16"
+               FontWeight="Bold"
+               VerticalAlignment="Center"
+                       Foreground="{StaticResource BrushPrincipal}"
+                       Margin="0,0,30,0"/>
             <RadioButton Content="Por Artículo"
-                         GroupName="Mode"
-                         Margin="0,0,20,0"
-                         IsChecked="{Binding IsArticleMode, Mode=TwoWay}" />
+                         FontWeight="Bold"
+                         FontFamily="{StaticResource FuentePrincipal}"
+             GroupName="Mode"
+             Style="{StaticResource FancyRadioButton}"
+             IsChecked="{Binding IsArticleMode}" 
+                         Margin="0,0,40,0"/>
+
             <RadioButton Content="Por Ubicación"
-                         GroupName="Mode"
-                         IsChecked="{Binding IsLocationMode, Mode=TwoWay}" />
+                            FontWeight="Bold"
+   FontFamily="{StaticResource FuentePrincipal}"
+             GroupName="Mode"
+             Style="{StaticResource FancyRadioButton}"
+             IsChecked="{Binding IsLocationMode}"/>
         </StackPanel>
 
-        <!-- FILTROS: dos paneles independientes -->
-        <!-- FILTROS: Panel Artículo -->
-        <StackPanel Grid.Row="2"
-            Orientation="Horizontal"
-            Margin="20,5"
-            HorizontalAlignment="Left"
-            Visibility="{Binding ArticleFiltersVisibility}">
-            <StackPanel Orientation="Vertical" Margin="0,0,20,0">
-                <TextBlock Text="Artículo" FontWeight="Bold" />
-                <TextBox Width="150"
-                   Style="{StaticResource EstiloCajaTexto}"
-                   Text="{Binding FiltroArticulo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        <Grid Grid.Row="1" Margin="20,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <!-- Filtros -->
+                <ColumnDefinition Width="Auto" />
+                <!-- Botones -->
+            </Grid.ColumnDefinitions>
+
+            <!-- 🔍 Filtros a la izquierda -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Bottom">
+                <!-- Filtros por artículo -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,20,0"
+                    Visibility="{Binding ArticleFiltersVisibility}">
+                    <!-- Artículo -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Artículo" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Width="150"
+                         Style="{StaticResource EstiloCajaTexto}"
+                         Text="{Binding FiltroArticulo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+
+                    <!-- Partida -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Partida" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Width="120"
+                         Style="{StaticResource EstiloCajaTexto}"
+                         Text="{Binding FiltroPartida, Mode=TwoWay}"
+                         IsEnabled="{Binding CanEnableInputs}"/>
+                    </StackPanel>
+
+                    <!-- Almacén -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="150"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding Almacenes}"
+                          SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}"
+                          IsEnabled="{Binding CanEnableInputs}"/>
+                    </StackPanel>
+
+                    <!-- Ubicación -->
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="120"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding Ubicaciones}"
+                          SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
+                          IsEnabled="{Binding CanEnableInputs}"
+                          MaxDropDownHeight="200"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Filtros por ubicación -->
+                <StackPanel Orientation="Horizontal" Visibility="{Binding LocationFiltersVisibility}">
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="150"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding Almacenes}"
+                          SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="120"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding Ubicaciones}"
+                          SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"/>
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
-            <StackPanel Orientation="Vertical" Margin="0,0,20,0">
-                <TextBlock Text="Partida" FontWeight="Bold" />
-                <TextBox Width="120"
-                 Style="{StaticResource EstiloCajaTexto}"
-                 Text="{Binding FiltroPartida, Mode=TwoWay}"
-                 IsEnabled="{Binding CanEnableInputs}" />
-            </StackPanel>
-            <StackPanel Orientation="Vertical" Margin="0,0,20,0">
-                <TextBlock Text="Almacén" FontWeight="Bold" />
-                <ComboBox Width="150"
-               Style="{StaticResource EstiloComboBox}"
-               ItemsSource="{Binding Almacenes}"
-               SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}" 
-               IsEnabled="{Binding CanEnableInputs}" />
-            </StackPanel>
-            <StackPanel Orientation="Vertical" Margin="0,0,20,0">
-                <TextBlock Text="Ubicación" FontWeight="Bold" />
-                <!-- Reemplazamos TextBox por ComboBox -->
-                <ComboBox Width="120"
-                  Style="{StaticResource EstiloComboBox}"
-                  ItemsSource="{Binding Ubicaciones}"
-                  SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
-                  IsEnabled="{Binding CanEnableInputs}"
-                  MaxDropDownHeight="200"/>
-            </StackPanel>
-            <StackPanel Cursor="">
+
+            <!-- ✅ Botones a la derecha -->
+            <StackPanel Grid.Column="1"
+                Orientation="Horizontal"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Right"
+                Margin="20,0,0,0">
                 <Button Content="Buscar"
-        Style="{StaticResource EstiloBotonPrincipal}"
-        Width="100" Height="30"
-        VerticalAlignment="Bottom"
-        Command="{Binding BuscarPorArticuloCommand}"
-        IsEnabled="{Binding CanEnableInputs}" />
-                <Button Content="Exportar Excel"
                 Style="{StaticResource EstiloBotonPrincipal}"
-                Width="120" Height="30"
-                Command="{Binding ExportarExcelCommand}" />
-            </StackPanel>
-        </StackPanel>
+                Width="120" Height="36"
+                Command="{Binding BuscarCommand}"
+                Margin="0,0,12,0"/>
 
-        <!-- FILTROS: Panel Ubicación -->
-        <StackPanel Grid.Row="2"
-            Orientation="Horizontal"
-            Margin="20,5"
-            HorizontalAlignment="Left"
-            Visibility="{Binding LocationFiltersVisibility}">
-            <StackPanel Orientation="Vertical" Margin="0,0,20,0">
-                <TextBlock Text="Almacén" FontWeight="Bold" />
-                <ComboBox Width="150"
-                  Style="{StaticResource EstiloComboBox}"
-                  ItemsSource="{Binding Almacenes}"
-                  SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}" />
-            </StackPanel>
-
-            <StackPanel Orientation="Vertical" Margin="0,0,20,0">
-                <TextBlock Text="Ubicación" FontWeight="Bold" />
-                <ComboBox Width="120"
-                  Style="{StaticResource EstiloComboBox}"
-                  ItemsSource="{Binding Ubicaciones}"
-                  SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"/>
-            </StackPanel>
-            <StackPanel>
-                <Button Content="Buscar"
-        Style="{StaticResource EstiloBotonPrincipal}"
-        Width="100" Height="30"
-        VerticalAlignment="Bottom"
-        Command="{Binding BuscarPorUbicacionCommand}"
-        IsEnabled="{Binding CanEnableLocation}" />
-                <Button Content="Exportar Excel"
+                <Button Content="Limpiar filtros"
                 Style="{StaticResource EstiloBotonPrincipal}"
-                Width="120" Height="30"
-                Command="{Binding ExportarExcelCommand}" />
+                Width="120" Height="36"
+                Command="{Binding LimpiarFiltrosCommand}"/>
             </StackPanel>
-        </StackPanel>
+        </Grid>
+
+
 
 
         <!-- ARTÍCULO DESTACADO -->
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="2"
            Text="{Binding ArticuloMostrado}"
            Margin="20,10,20,0"
            FontFamily="{StaticResource FuentePrincipal}"
@@ -158,95 +161,225 @@
            Foreground="{StaticResource BrushPrincipal}"
            Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}" />
 
-
-        
         <!-- RESULTADOS: MODO POR ARTÍCULO -->
-        <DataGrid
-    Grid.Row="4"
-    Style="{StaticResource EstiloDataGrid}"
-    ColumnHeaderStyle="{StaticResource EstiloDataGridHeader}"
-    Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}"
-    ItemsSource="{Binding ResultadosStock}">
-            <DataGrid.Columns>
-                <!-- Las columnas que ya tenías en artículo-mode -->
-                <DataGridTextColumn Header="Artículo"
-                            Binding="{Binding CodigoArticulo}" Width="*" />
-                <DataGridTemplateColumn Header="Almacén" Width="*">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
+        <ListView Grid.Row="3"
+          ItemsSource="{Binding ResultadosStock}"
+          Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}"
+          SelectionMode="Single"
+          ScrollViewer.VerticalScrollBarVisibility="Auto">
+
+            <ListView.Resources>
+                <!-- Estilo de cada tarjeta -->
+                <Style TargetType="ListViewItem">
+                    <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="MinHeight" Value="80"/>
+                    <Setter Property="Margin" Value="0,0,0,10"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                BorderThickness="1"
+                                BorderBrush="{StaticResource BrushPrincipal}">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#10CCCCCC"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushSecundario1}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.Resources>
+
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="8">
+                        <Grid.ColumnDefinitions>
+                            <!-- Código -->
+                            <ColumnDefinition Width="180"/>
+                            <!-- Artículo + Almacén -->
+                            <ColumnDefinition Width="2*"/>
+                            <!-- Ubicación + Partida + Fecha -->
+                            <ColumnDefinition Width="2*"/>
+                            <!-- Saldo -->
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 1) Código -->
+                        <TextBlock Grid.Column="0"
+                           Text="{Binding CodigoArticulo}"
+                           FontWeight="Bold"
+                           FontSize="20"
+                           Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center"/>
+
+                        <!-- 2) Artículo y almacén -->
+                        <StackPanel Grid.Column="1"
+                            VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DescripcionArticulo}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
                             <TextBlock>
-                        <Run Text="{Binding CodigoAlmacen}" />
-                        <Run Text=" – " />
-                        <Run Text="{Binding Almacen}" />
+                        <Run Text="{Binding CodigoAlmacen}"/>
+                        <Run Text=" – "/>
+                        <Run Text="{Binding Almacen}"/>
                             </TextBlock>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Ubicación"
-                            Binding="{Binding Ubicacion}" Width="*" />
-                <DataGridTextColumn Header="Partida"
-                            Binding="{Binding Partida}" Width="*" />
-                <DataGridTextColumn Header="Caducidad"
-                            Binding="{Binding FechaCaducidad, StringFormat=d}"
-                            Width="*" />
-                <DataGridTextColumn Header="Saldo"
-                            Binding="{Binding UnidadSaldo, StringFormat=N2}"
-                            Width="*" />
-            </DataGrid.Columns>
-        </DataGrid>
+                        </StackPanel>
+
+                        <!-- 3) Ubicación / Partida / Caducidad -->
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Ubicacion, StringFormat='Ubicación: {0}'}"
+                               FontSize="14"
+                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                            <TextBlock Text="{Binding Partida, StringFormat='Partida: {0}'}"
+                               FontSize="14"
+                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                            <TextBlock Text="{Binding FechaCaducidad, StringFormat='Cad.: {0:d}'}"
+                               FontSize="14"
+                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                        </StackPanel>
+
+                        <!-- 4) Saldo -->
+                        <TextBlock Grid.Column="3"
+                           Text="{Binding UnidadSaldo, StringFormat=N2}"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
+                           VerticalAlignment="Center"
+                           TextAlignment="Right"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
 
         <!-- RESULTADOS: MODO POR UBICACIÓN -->
-        <DataGrid
-    Grid.Row="4"
-    Style="{StaticResource EstiloDataGrid}"
-    ColumnHeaderStyle="{StaticResource EstiloDataGridHeader}"
-    Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
-    ItemsSource="{Binding ResultadosStockPorUbicacion}">
-            <DataGrid.Columns>
-                <!-- 1) Código de artículo -->
-                <DataGridTextColumn Header="Código Artículo"
-                            Binding="{Binding CodigoArticulo}"
-                            Width="*" />
+        <ListView Grid.Row="3"
+          ItemsSource="{Binding ResultadosStockPorUbicacion}"
+          Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
+          SelectionMode="Single"
+          ScrollViewer.VerticalScrollBarVisibility="Auto">
 
-                <!-- 2) DESCRIPCIÓN -->
-                <DataGridTextColumn Header="Descripción"
-                            Binding="{Binding DescripcionArticulo}"
-                            Width="2*" />
+            <!-- 1) Estilo de tarjeta idéntico -->
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="MinHeight" Value="80"/>
+                    <Setter Property="Margin" Value="0,0,0,10"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{StaticResource BrushPrincipal}">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#10CCCCCC"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushSecundario1}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.ItemContainerStyle>
 
-                <!-- 3) Almacén -->
-                <DataGridTemplateColumn Header="Almacén" Width="*">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
+            <!-- 2) Template de tarjeta replicado -->
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 2.1 Código Artículo -->
+                        <TextBlock Grid.Column="0"
+                   Text="{Binding CodigoArticulo}"
+                   FontWeight="Bold"
+                   FontSize="20"
+                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
+                   VerticalAlignment="Center"
+                   TextAlignment="Center"/>
+
+                        <!-- 2) Artículo y almacén -->
+                        <StackPanel Grid.Column="1"
+      VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DescripcionArticulo}"
+         FontSize="16"
+         FontWeight="SemiBold"
+         Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
                             <TextBlock>
-                        <Run Text="{Binding CodigoAlmacen}" />
-                        <Run Text=" – " />
-                        <Run Text="{Binding Almacen}" />
+  <Run Text="{Binding CodigoAlmacen}"/>
+  <Run Text=" – "/>
+  <Run Text="{Binding Almacen}"/>
                             </TextBlock>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                        </StackPanel>
 
-                <!-- 4) Ubicación -->
-                <DataGridTextColumn Header="Ubicación"
-                            Binding="{Binding Ubicacion}"
-                            Width="*" />
+                        <!-- 3) Ubicación / Partida / Caducidad -->
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Ubicacion, StringFormat='Ubicación: {0}'}"
+        FontSize="14"
+        Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                            <TextBlock Text="{Binding Partida, StringFormat='Partida: {0}'}"
+        FontSize="14"
+        Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                            <TextBlock Text="{Binding FechaCaducidad, StringFormat='Cad.: {0:d}'}"
+        FontSize="14"
+        Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                        </StackPanel>
 
-                <!-- 5) Partida -->
-                <DataGridTextColumn Header="Partida"
-                            Binding="{Binding Partida}"
-                            Width="*" />
+                        <!-- 2.5 Saldo -->
+                        <TextBlock Grid.Column="3"
+                   Text="{Binding UnidadSaldo, StringFormat=N2}"
+                   FontSize="16"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   TextAlignment="Right"
+                   Margin="8,0,0,0"
+                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
 
-                <!-- 6) Caducidad -->
-                <DataGridTextColumn Header="Caducidad"
-                            Binding="{Binding FechaCaducidad, StringFormat=d}"
-                            Width="*" />
 
-                <!-- 7) Saldo -->
-                <DataGridTextColumn Header="Saldo"
-                            Binding="{Binding UnidadSaldo, StringFormat=N2}"
-                            Width="*" />
-            </DataGrid.Columns>
-        </DataGrid>
 
+
+        <!-- AÑADIMOS LA FILA 4: Exportar Excel ABAJO A LA DERECHA -->
+        <StackPanel Grid.Row="4"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Margin="20,10,20,20">
+            <Button Content="Exportar Excel"
+            Style="{StaticResource EstiloBotonPrincipal}"
+            Width="120"
+            Height="30"
+            Command="{Binding ExportarExcelCommand}"/>
+        </StackPanel>
     </Grid>
 </Page>

@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SGA_Desktop.Dialog;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
@@ -50,23 +51,43 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		try
 		{
 			Articulos.Clear();
+			if (string.IsNullOrWhiteSpace(FiltroArticulo))
+			{
+				var advertencia = new WarningDialog(
+					"Buscar artículo",
+					"Debes introducir un código o descripción para buscar.",
+					"\uE814" // ícono advertencia
+				)
+				{ Owner = Application.Current.MainWindow };
 
-			// 1) Trae todo el stock
+				advertencia.ShowDialog();
+				return;
+			}
+			// 1) Primero intenta búsqueda por código
 			var lista = await _stockService.ObtenerPorArticuloAsync(
 				SessionManager.EmpresaSeleccionada!.Value,
-				FiltroArticulo, null, null, null);
+				codigoArticulo: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo,
+				descripcion: null);
 
-			// 2) Intenta permisos directos
+			// 2) Si no encuentra, intenta búsqueda por descripción
+			if (!lista.Any())
+			{
+				lista = await _stockService.ObtenerPorArticuloAsync(
+					SessionManager.EmpresaSeleccionada!.Value,
+					codigoArticulo: null,
+					descripcion: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo);
+			}
+
+			// 3) Obtén permisos del usuario
 			var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-			// 3) Si no trae ninguno, descompón el centro
 			if (!permisos.Any())
 			{
 				var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
 				permisos = await _stockService.ObtenerAlmacenesAsync(centro);
 			}
 
-			// 4) Si tras el fallback sigue sin permisos, avisamos y salimos
+			// 4) Manejo si no hay permisos
 			if (!permisos.Any())
 			{
 				MessageBox.Show(
@@ -77,20 +98,19 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 				return;
 			}
 
-			// 5) Filtra según combo (Todas = todos los permisos)
-			IEnumerable<StockDto> filtrada = AlmacenSeleccionado == TODAS
+			// 5) Filtra según selección del almacén
+			var filtrada = AlmacenSeleccionado == TODAS
 				? lista.Where(x => permisos.Contains(x.CodigoAlmacen))
 				: lista.Where(x => x.CodigoAlmacen == AlmacenSeleccionado);
 
-			// 6) Rellena grid y combo de lotes
+			// 6) Llena los artículos
 			foreach (var art in filtrada)
 				Articulos.Add(art);
-
 		}
 		catch (Exception ex)
 		{
 			MessageBox.Show(ex.Message, "Error al buscar artículos",
-							MessageBoxButton.OK, MessageBoxImage.Error);
+				MessageBoxButton.OK, MessageBoxImage.Error);
 		}
 	}
 
@@ -100,7 +120,35 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 	[RelayCommand]
 	private async Task ImprimirEtiquetaAsync()
 	{
-		if (SelectedArticulo is null) return;
+		if (SelectedArticulo == null)
+		{
+			var advertencia = new WarningDialog(
+				"Artículo no seleccionado",
+				"Debes seleccionar un artículo antes de imprimir.",
+				"\uE814" // icono de advertencia (exclamación)
+			)
+			{ Owner = Application.Current.MainWindow };
+
+			advertencia.ShowDialog();
+			return;
+		}
+
+
+		var detalles =
+	$"Artículo: {SelectedArticulo.CodigoArticulo} – {SelectedArticulo.DescripcionArticulo}\n" +
+	$"Partida: {SelectedArticulo.Partida}\n" +
+	$"Almacén: {SelectedArticulo.CodigoAlmacen} – {SelectedArticulo.Almacen}\n" +
+	$"Caducidad: {SelectedArticulo.FechaCaducidad:dd/MM/yyyy}\n\n" +
+	"¿Deseas continuar?";
+		var dialog = new ConfirmationDialog(
+			"Confirmar impresión",
+			detalles,
+			"\uE946"   // glyph de INFO
+		)
+		{ Owner = Application.Current.MainWindow };
+		if (dialog.ShowDialog() != true)
+			return;
+
 
 		var alergenos = await _stockService.ObtenerAlergenosArticuloAsync(
 	SessionManager.EmpresaSeleccionada!.Value,

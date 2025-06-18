@@ -14,22 +14,54 @@ namespace SGA_Desktop.Services
 {
 	public class StockService : ApiService
 	{
+		///// <summary>
+		///// GET /api/Stock/articulo
+		///// Búsqueda por artículo (+ opcional partida, almacén, ubicación)
+		///// </summary>
+		//public async Task<List<StockDto>> ObtenerPorArticuloAsync(
+		//	int codigoEmpresa,
+		//	string codigoArticulo,
+		//	string? partida = null,
+		//	string? codigoAlmacen = null,
+		//	string? codigoUbicacion = null)
+		//{
+		//	if (string.IsNullOrWhiteSpace(codigoArticulo))
+		//		throw new ArgumentException("codigoArticulo es obligatorio.", nameof(codigoArticulo));
+
+		//	var qs = $"?codigoEmpresa={codigoEmpresa}"
+		//		   + $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+
+		//	if (!string.IsNullOrWhiteSpace(partida))
+		//		qs += $"&partida={Uri.EscapeDataString(partida!)}";
+
+		//	if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+		//		qs += $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen!)}";
+
+		//	// **ojo**: aquí aceptamos incluso la cadena vacía
+		//	if (codigoUbicacion != null)
+		//		qs += $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
+
+		//	return await GetAsync<List<StockDto>>($"Stock/articulo{qs}");
+		//}
 		/// <summary>
 		/// GET /api/Stock/articulo
-		/// Búsqueda por artículo (+ opcional partida, almacén, ubicación)
+		/// Búsqueda por artículo (+ opcional partida, almacén, ubicación, descripción)
 		/// </summary>
 		public async Task<List<StockDto>> ObtenerPorArticuloAsync(
-			int codigoEmpresa,
-			string codigoArticulo,
-			string? partida = null,
-			string? codigoAlmacen = null,
-			string? codigoUbicacion = null)
+	int codigoEmpresa,
+	string? codigoArticulo,
+	string? partida = null,
+	string? codigoAlmacen = null,
+	string? codigoUbicacion = null,
+	string? descripcion = null) // Nuevo parámetro
 		{
-			if (string.IsNullOrWhiteSpace(codigoArticulo))
-				throw new ArgumentException("codigoArticulo es obligatorio.", nameof(codigoArticulo));
+			if (string.IsNullOrWhiteSpace(codigoArticulo) && string.IsNullOrWhiteSpace(descripcion))
+				throw new ArgumentException("Se debe proporcionar codigoArticulo o descripcion.", nameof(codigoArticulo));
 
-			var qs = $"?codigoEmpresa={codigoEmpresa}"
-				   + $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+			var qs = $"?codigoEmpresa={codigoEmpresa}";
+
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+				qs += $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
 
 			if (!string.IsNullOrWhiteSpace(partida))
 				qs += $"&partida={Uri.EscapeDataString(partida!)}";
@@ -37,12 +69,17 @@ namespace SGA_Desktop.Services
 			if (!string.IsNullOrWhiteSpace(codigoAlmacen))
 				qs += $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen!)}";
 
-			// **ojo**: aquí aceptamos incluso la cadena vacía
 			if (codigoUbicacion != null)
 				qs += $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
 
+			// Agregar el nuevo parámetro de descripción si no se proporciona código de artículo
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				qs += $"&descripcion={Uri.EscapeDataString(descripcion)}";
+
 			return await GetAsync<List<StockDto>>($"Stock/articulo{qs}");
 		}
+
+
 
 		/// <summary>
 		/// GET /api/Stock/ubicacion
