@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using SGA_Desktop.Dialog;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
@@ -82,6 +83,16 @@ namespace SGA_Desktop.ViewModels
 
 		[ObservableProperty]
 		private bool isLocationMode;
+
+		[ObservableProperty]
+		private string filtroDescripcion;
+
+		[ObservableProperty]
+		private string? almacenSeleccionadoArticulo;
+
+		[ObservableProperty]
+		private string? almacenSeleccionadoUbicacion;
+
 		#endregion
 
 		#region Computed Properties
@@ -118,11 +129,12 @@ namespace SGA_Desktop.ViewModels
 			_ = LoadUbicacionesAsync(newValue);
 		}
 
+
 		partial void OnIsArticleModeChanged(bool oldValue, bool newValue)
 		{
 			if (newValue)
 			{
-				SwitchMode(resetFilters: true, setArticle: true);
+				SwitchMode(resetFilters: false, setArticle: true);
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 		}
@@ -131,25 +143,94 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (newValue)
 			{
-				SwitchMode(resetFilters: true, setArticle: false);
+				SwitchMode(resetFilters: false, setArticle: false);
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 		}
 		#endregion
 
 		#region Commands
+		//[RelayCommand]
+		//private async Task BuscarPorArticuloAsync()
+		//{
+		//	try
+		//	{
+		//		var (almacenParam, ubicParam) = BuildArticleParams();
+		//		var lista = await _stockService.ObtenerPorArticuloAsync(
+		//			SessionManager.EmpresaSeleccionada!.Value,
+		//			FiltroArticulo,
+		//			string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
+		//			almacenParam,
+		//			ubicParam);
+		//		LlenarResultados(lista, filterByPermissions: true);
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		MostrarError("Error al consultar por artículo", ex);
+		//	}
+		//}
+		[RelayCommand]
+		private void LimpiarFiltros()
+		{
+			if (IsArticleMode)
+			{
+				// Solo limpia filtros del modo artículo
+				FiltroArticulo = string.Empty;
+				FiltroPartida = string.Empty;
+				AlmacenSeleccionado = TODAS;
+		
+			}
+			else if (IsLocationMode)
+			{
+				// Solo limpia filtros del modo ubicación
+				AlmacenSeleccionado = TODAS;
+	
+			}
+		}
+
+
+
 		[RelayCommand]
 		private async Task BuscarPorArticuloAsync()
 		{
 			try
 			{
+				if (string.IsNullOrWhiteSpace(FiltroArticulo))
+				{
+					var advertencia = new WarningDialog(
+						"Buscar artículo",
+						"Debes introducir un código o descripción para buscar.",
+						"\uE814" // ícono advertencia
+					)
+					{ Owner = Application.Current.MainWindow };
+
+					advertencia.ShowDialog();
+					return;
+				}
 				var (almacenParam, ubicParam) = BuildArticleParams();
-				var lista = await _stockService.ObtenerPorArticuloAsync(
+
+				List<StockDto> lista = await _stockService.ObtenerPorArticuloAsync(
 					SessionManager.EmpresaSeleccionada!.Value,
-					FiltroArticulo,
-					string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
-					almacenParam,
-					ubicParam);
+					codigoArticulo: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo,
+					partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
+					codigoAlmacen: almacenParam,
+					codigoUbicacion: ubicParam,
+					descripcion: null // primero intentar por código, descripción null
+				);
+
+				if (lista == null || !lista.Any())
+				{
+					// Si no encontró por código, busca por descripción
+					lista = await _stockService.ObtenerPorArticuloAsync(
+						SessionManager.EmpresaSeleccionada!.Value,
+						codigoArticulo: null, // ahora null
+						partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
+						codigoAlmacen: almacenParam,
+						codigoUbicacion: ubicParam,
+						descripcion: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo
+					);
+				}
+
 				LlenarResultados(lista, filterByPermissions: true);
 			}
 			catch (Exception ex)
@@ -157,6 +238,9 @@ namespace SGA_Desktop.ViewModels
 				MostrarError("Error al consultar por artículo", ex);
 			}
 		}
+
+
+
 
 		[RelayCommand]
 		private async Task BuscarPorUbicacionAsync()
@@ -177,17 +261,34 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		private void ExportarExcel()
 		{
-			// 1) Obtén la lista activa
 			var listaActiva = IsArticleMode
 				? ResultadosStock.ToList()
 				: ResultadosStockPorUbicacion.ToList();
 
 			if (!listaActiva.Any())
 			{
-				MessageBox.Show("No hay datos para exportar.", "Exportar Excel",
-								MessageBoxButton.OK, MessageBoxImage.Warning);
+				var advertencia = new WarningDialog(
+					"Exportar Excel",
+					"No hay datos para exportar.",
+					"\uE814" // ícono de advertencia
+				)
+				{ Owner = Application.Current.MainWindow };
+
+				advertencia.ShowDialog();
 				return;
 			}
+
+			// 1) Confirmar con nuestro dialog
+			var confirm = new ConfirmationDialog(
+	"Confirmar exportación",
+	$"Se van a exportar {listaActiva.Count} registros.\n¿Deseas continuar?",
+	"\uE11B"    // <-- aquí el ícono de pregunta
+)
+			{
+				Owner = Application.Current.MainWindow
+			};
+			if (confirm.ShowDialog() != true)
+				return;
 
 			// 2) Diálogo para elegir fichero
 			var dlg = new SaveFileDialog
@@ -199,25 +300,25 @@ namespace SGA_Desktop.ViewModels
 			};
 			if (dlg.ShowDialog() != true) return;
 
-			// 3) Crea el workbook y la hoja
+			// 3) Crear workbook...
 			using var wb = new XLWorkbook();
 			var ws = wb.Worksheets.Add("Stock");
 
-			// 4) Escribe cabecera
+			// 4) Cabeceras
 			var headers = new[] {
-		"Código Empresa",
-		"Código Artículo",
-		"Descripción",
-		"Almacén",
-		"Ubicación",
-		"Partida",
-		"Fecha Caducidad",
-		"Saldo"
-	};
+				"Código Empresa",
+				"Código Artículo",
+				"Descripción",
+				"Almacén",
+				"Ubicación",
+				"Partida",
+				"Fecha Caducidad",
+				"Saldo"
+			};
 			for (int i = 0; i < headers.Length; i++)
 				ws.Cell(1, i + 1).Value = headers[i];
 
-			// 5) Escribe filas con tipos nativos
+			// 5) Filas
 			int row = 2;
 			foreach (var item in listaActiva)
 			{
@@ -227,21 +328,26 @@ namespace SGA_Desktop.ViewModels
 				ws.Cell(row, 4).Value = $"{item.CodigoAlmacen} – {item.Almacen}";
 				ws.Cell(row, 5).Value = item.Ubicacion;
 				ws.Cell(row, 6).Value = item.Partida;
-				ws.Cell(row, 7).Value = item.FechaCaducidad.HasValue
-					? item.FechaCaducidad.Value
-					: (DateTime?)null;
+				ws.Cell(row, 7).Value = item.FechaCaducidad;
 				ws.Cell(row, 8).Value = item.UnidadSaldo;
 				row++;
 			}
 
-			// 6) Auto‐ajusta anchos
+			// 6) Auto‐ajustar anchos
 			ws.Columns().AdjustToContents();
 
-			// 7) Guarda y avisa
+			// 7) Guardar y avisar
 			wb.SaveAs(dlg.FileName);
-			MessageBox.Show($"Datos exportados correctamente a:\n{dlg.FileName}",
-							"Exportar Excel", MessageBoxButton.OK, MessageBoxImage.Information);
+			var info = new WarningDialog(
+	"Exportación completada",
+	$"Datos exportados correctamente a:\n{dlg.FileName}",
+	"\uE946" // ícono de información
+)
+			{ Owner = Application.Current.MainWindow };
+
+			info.ShowDialog();
 		}
+
 
 		#endregion
 
@@ -367,7 +473,7 @@ namespace SGA_Desktop.ViewModels
 						.FirstOrDefault(e => e.Codigo == code);
 			return dto != null ? dto.Nombre : $"[{code}]";
 		}
-		
+
 		private static string EscapeCsv(string campo)
 		{
 			if (campo.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)

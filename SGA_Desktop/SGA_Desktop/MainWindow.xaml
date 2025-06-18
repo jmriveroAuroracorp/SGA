@@ -5,46 +5,150 @@
         Title="SGA"
         WindowStartupLocation="CenterScreen"
         WindowState="Maximized"
-        WindowStyle="None" 
+        WindowStyle="None"
         ResizeMode="NoResize"
         Background="{StaticResource BrushFondo}">
 
+    <!-- No DataContext en XAML, lo asignamos en code‐behind -->
 
     <Grid>
+        <!-- Dos filas: 0=Header, 1=Cuerpo -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="70"/>
+            <!-- Header fijo -->
+            <RowDefinition Height="*"/>
+            <!-- Menú + contenido -->
+        </Grid.RowDefinitions>
+        <!-- Dos columnas: 0=Menú, 1=Contenido -->
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="200"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Menú lateral -->
-        <StackPanel Background="{StaticResource BrushPrincipal}" VerticalAlignment="Stretch">
-            <Image Source="Assets/logoSGA.jpg" Height="80" Margin="10"/>
-            <Button Content="Consulta de Stock"
-                    Command="{Binding IrAConsultaStockCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
-            <Button Content="Traspasos"
-                    Command="{Binding IrATraspasosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
-            <Button Content="Inventario"
-                    Command="{Binding IrAInventarioCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
-            <Button Content="Etiquetas"
-                    Command="{Binding IrAEtiquetasCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
-            <Button Content="Empresa"
-                    Command="{Binding IrASeleccionEmpresaCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10"/>
-            <Button Content="Salir"
-                     Command="{Binding CerrarSesionCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}" Margin="10" Cursor=""/>
-        </StackPanel>
+        <!-- === 1) HEADER GLOBAL (fila 0, span 2 columnas) === -->
+        <Border Grid.Row="0"
+            Grid.ColumnSpan="2"
+            Background="{StaticResource BrushPrincipal}"
+            MinHeight="70">
+            <Grid Margin="20,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-        
-        <!-- Contenido dinámico -->
-        <Frame x:Name="MainFrame"
-               Grid.Column="1"
-               NavigationUIVisibility="Hidden"/>
+                <!-- 1) Nombre de la vista -->
+                <!-- 1) Nombre de la vista, alineado a la izquierda -->
+                <TextBlock Grid.Column="0"
+               Text="{Binding CurrentHeader}"
+               Foreground="White"
+               FontFamily="{StaticResource FuentePrincipal}"
+               FontSize="30"
+               FontWeight="Bold"
+               VerticalAlignment="Center"
+               HorizontalAlignment="Left"/>
+
+                <!-- 2) Empresa, colocada en la columna central y centrada -->
+                <TextBlock Grid.Column="1"
+               Text="{Binding EmpresaNombre, StringFormat='EMPRESA: {0}'}"
+               Foreground="White"
+               FontFamily="{StaticResource FuentePrincipal}"
+               FontSize="24"
+               FontWeight="Bold"
+               VerticalAlignment="Center"
+               HorizontalAlignment="Center"
+               Margin="0,0,30,0"            />
+
+                <!-- 3) Operario, alineado a la derecha -->
+                <TextBlock Grid.Column="2"
+               Text="{Binding NombreOperario, StringFormat='OPERARIO: {0}'}"
+               Foreground="White"
+               FontFamily="{StaticResource FuentePrincipal}"
+               FontSize="24"
+               FontWeight="Bold"
+               VerticalAlignment="Center"
+               HorizontalAlignment="Right"/>
+            </Grid>
+        </Border>
+
+        <!-- === 2) MENÚ LATERAL (fila 1, col 0) === -->
+        <Grid Grid.Row="1" Grid.Column="0"
+          Background="{StaticResource BrushFondo}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- logo -->
+                <RowDefinition Height="*"/>
+                <!-- botones -->
+            </Grid.RowDefinitions>
+
+            <!-- Logo -->
+            <Border Grid.Row="0"
+        Background="White"
+        Padding="16"
+        Margin="10"
+        CornerRadius="8"
+        BorderBrush="{StaticResource BrushPrincipal}"  
+                BorderThickness="2">
+                <!-- grosor del borde -->
+                <Image Source="Assets/iconoSGA.jpg"
+           Height="60"
+           HorizontalAlignment="Center"/>
+            </Border>
+
+            <!-- Botones -->
+            <StackPanel Grid.Row="1"
+                  Margin="0,20,0,0"
+                  VerticalAlignment="Top">
+                <Button Content="Consulta de Stock"
+                Command="{Binding IrAConsultaStockCommand}"
+                Style="{StaticResource EstiloBotonPrincipal}"
+                Margin="10,5"/>
+                <Button Content="Traspasos"
+                Command="{Binding IrATraspasosCommand}"
+                Style="{StaticResource EstiloBotonPrincipal}"
+                Margin="10,5"/>
+                <!--<Button Content="Inventario" …/>-->
+                <Button Content="Etiquetas"
+                Command="{Binding IrAEtiquetasCommand}"
+                Style="{StaticResource EstiloBotonPrincipal}"
+                Margin="10,5"/>
+                <Button Content="Empresa"
+                Command="{Binding IrASeleccionEmpresaCommand}"
+                Style="{StaticResource EstiloBotonPrincipal}"
+                Margin="10,5"/>
+                <Button Content="Salir"
+                Command="{Binding CerrarSesionCommand}"
+                Style="{StaticResource EstiloBotonPrincipal}"
+                Margin="10,5"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- === 3) ÁREA DE CONTENIDO (fila 1, col 1) === -->
+        <Border Grid.Row="1" Grid.Column="1"
+        Margin="20"
+        Padding="12"
+        CornerRadius="8"
+        Background="{StaticResource BrushFondo}"
+        BorderBrush="{StaticResource BrushPrincipal}"
+        BorderThickness="2">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="8"
+                          ShadowDepth="4"
+                          Opacity="0.3"/>
+            </Border.Effect>
+
+            <Frame x:Name="MainFrame"
+           NavigationUIVisibility="Hidden"
+           Margin="0"                                
+                HorizontalAlignment="Stretch"
+ 
+                VerticalAlignment="Stretch"
+      
+                HorizontalContentAlignment="Stretch"
+     
+                VerticalContentAlignment="Stretch"/>
+
+        </Border>
+
     </Grid>
-
-
 </Window>

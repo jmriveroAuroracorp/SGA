@@ -1,139 +1,143 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Services;
-using SGA_Desktop.Views;
-using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using Newtonsoft.Json;
 using System.Net.Http.Headers;
-
+using System.Net.Http;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Runtime.InteropServices;
+using SGA_Desktop.Dialog;
 
 namespace SGA_Desktop.ViewModels
 {
 	public partial class MainViewModel : ObservableObject
 	{
-
 		private readonly LoginService _login;
 
 		public MainViewModel(LoginService loginService)
 		{
 			_login = loginService;
-			// Cuando entras a la MainWindow, asignas aquí la empresa preferida:
+
+			CurrentHeader = string.Empty;
+			EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
+			nombreOperario = SessionManager.NombreOperario;
+			SessionManager.EmpresaCambiada += (_, __) =>
+			{
+				EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
+			};
+
 			_ = InicializarEmpresaPreferidaAsync();
-
-
-			//// Aquí ves al arrancar qué tiene tu SessionManager
-			//MessageBox.Show(
-			//	$"ID usuario: {SessionManager.UsuarioActual?.operario}\n" +
-			//	$"EmpresaSeleccionada: {SessionManager.EmpresaSeleccionada}");
-
-			_ = InitializeAsync();
 		}
 
-		private async Task InitializeAsync()
+		[ObservableProperty]
+		private string currentHeader;
+
+		[ObservableProperty]
+		private string empresaNombre;
+
+		[ObservableProperty]
+		private string nombreOperario = "";
+
+		private async Task InicializarEmpresaPreferidaAsync()
 		{
 			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
 			var (ok, idEmpresa) = await _login.ObtenerEmpresaPreferidaAsync(idUsuario);
 
-			//// Y aquí ves lo que devuelve el endpoint
-			//MessageBox.Show(
-			//	$"Obtuve del endpoint Usuarios/{idUsuario} → " +
-			//	$"ok={ok}, idEmpresa={idEmpresa}");
-
-			// … resto de tu lógica
+			if (ok && idEmpresa.GetValueOrDefault() > 0)
+			{
+				SessionManager.SetEmpresa(idEmpresa.Value);
+				EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
+			}
 		}
+
 		[RelayCommand]
 		public void IrAConsultaStock()
 		{
-			NavigationStore.MainFrame.Navigate(new ConsultaStockView());
+			NavigationStore.Navigate("ConsultaStock");
+			CurrentHeader = "CONSULTA DE STOCK";
 		}
 
 		[RelayCommand]
 		public void IrATraspasos()
 		{
-			NavigationStore.MainFrame.Navigate(new TraspasosView());
+			NavigationStore.Navigate("Traspasos");
+			CurrentHeader = "TRASPASOS";
 		}
 
 		[RelayCommand]
 		public void IrAInventario()
 		{
-			// Implementar en el futuro
+			NavigationStore.Navigate("Inventario");
+			CurrentHeader = "INVENTARIO";
 		}
 
 		[RelayCommand]
 		public void IrAEtiquetas()
 		{
-			NavigationStore.MainFrame.Navigate(new ImpresionEtiquetasView());
+			NavigationStore.Navigate("Etiquetas");
+			CurrentHeader = "IMPRESIÓN DE ETIQUETAS";
 		}
 
 		[RelayCommand]
 		public void IrASeleccionEmpresa()
 		{
-			NavigationStore.MainFrame.Navigate(new EmpresaView());
+			NavigationStore.Navigate("SeleccionEmpresa");
+			CurrentHeader = "SELECCIÓN DE EMPRESA";
 		}
-
 
 		[RelayCommand]
-		public async Task CerrarSesion()
+		private async Task CerrarSesion()
 		{
-			string idDispositivo = Environment.MachineName;
-			string tipo = GetTipoSO();
-			int idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
+			// 1) Muestra tu diálogo personalizado
+			var dialog = new ConfirmationDialog(
+				"Confirmar salida",
+				"¿Estás seguro de que quieres salir de la aplicación?")
+			{
+				Owner = Application.Current.MainWindow
+			};
+			if (dialog.ShowDialog() != true)
+				return;  // si pulsa “No”, salimos sin cerrar
 
+			// 2) Intentos de logout en segundo plano (no bloquea la salida)
 			try
 			{
-				// 1. Registrar evento de logout ANTES de invalidar token
-				using var http = new HttpClient();
-
-				if (string.IsNullOrWhiteSpace(SessionManager.Token))
+				if (!string.IsNullOrWhiteSpace(SessionManager.Token))
 				{
-					MessageBox.Show("Token no disponible.");
-					return;
+					using var http = new HttpClient();
+					http.DefaultRequestHeaders.Authorization =
+						new AuthenticationHeaderValue("Bearer", SessionManager.Token);
+
+					var evento = new
+					{
+						fecha = DateTime.Now,
+						idUsuario = SessionManager.UsuarioActual?.operario ?? 0,
+						tipo = "LOGOUT",
+						origen = "MainWindow",
+						descripcion = "Sesión Cerrada",
+						detalle = $"El usuario cerró sesión.",
+						idDispositivo = Environment.MachineName
+					};
+
+					var json = JsonConvert.SerializeObject(evento);
+					var content = new StringContent(json, Encoding.UTF8, "application/json");
+					await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
+
+					// Desactivar dispositivo en tu servicio
+					await _login.DesactivarDispositivoAsync(
+						evento.idDispositivo!, GetTipoSO(), evento.idUsuario);
 				}
-
-				http.DefaultRequestHeaders.Authorization =
-					new AuthenticationHeaderValue("Bearer", SessionManager.Token);
-
-				var evento = new
-				{
-					fecha = DateTime.Now,
-					idUsuario = idUsuario,
-					tipo = "LOGOUT",
-					origen = "MainWindow",
-					descripcion = "Sesión Cerrada",
-					detalle = $"El usuario cerró sesión.",
-					idDispositivo = idDispositivo
-				};
-
-				var json = JsonConvert.SerializeObject(evento);
-				var content = new StringContent(json, Encoding.UTF8, "application/json");
-				var response = await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
-
-				if (!response.IsSuccessStatusCode)
-				{
-					var errorText = await response.Content.ReadAsStringAsync();
-					MessageBox.Show($"Error al registrar evento de logout:\n{response.StatusCode}\n{errorText}");
-				}
-
-				// 2. Desactivar el dispositivo (esto borra el token)
-				var loginService = new LoginService();
-				await loginService.DesactivarDispositivoAsync(idDispositivo, tipo, idUsuario);
 			}
-			catch (Exception ex)
+			catch
 			{
-				MessageBox.Show($"Error al cerrar sesión: {ex.Message}");
-				return;
+				// ignoramos errores en logout, vamos a cerrar de todas formas
 			}
 
-			// 3. Limpiar sesión y cerrar
-			SessionManager.UsuarioActual = null;
+			// 3) Cierra la aplicación
 			Application.Current.Shutdown();
 		}
-
 		private string GetTipoSO()
 		{
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "Windows";
@@ -142,15 +146,12 @@ namespace SGA_Desktop.ViewModels
 			return "Desconocido";
 		}
 
-		private async Task InicializarEmpresaPreferidaAsync()
+		private void OnEmpresaCambiada(object? sender, EventArgs e)
 		{
-			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
-			var (ok, idEmpresa) = await _login.ObtenerEmpresaPreferidaAsync(idUsuario);
-			if (ok && idEmpresa.GetValueOrDefault() > 0)
-			{
-				// Esto guarda la empresa real de la BD en SessionManager
-				SessionManager.SetEmpresa(idEmpresa.Value);
-			}
+			// Actualizo la propiedad ligada al header
+			EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
 		}
+
+
 	}
 }

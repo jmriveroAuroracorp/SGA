@@ -10,28 +10,6 @@
     <!-- CONTENEDOR raíz -->
     <DockPanel>
 
-        <!-- Cabecera (color corporativo) -->
-        <Border Background="{StaticResource BrushPrincipal}"
-        DockPanel.Dock="Top"
-        Height="80">
-
-            <!-- Contenedor interno para logo + título -->
-            <DockPanel VerticalAlignment="Center">
-
-
-
-                <!-- Título -->
-                <TextBlock Text="Selección de empresa"
-                   Foreground="White"
-                   FontFamily="{StaticResource FuentePrincipal}"
-                   FontSize="30"
-                   FontWeight="Bold"
-                   VerticalAlignment="Center"
-                   Margin="20,0"/>
-            </DockPanel>
-        </Border>
-
-
         <!-- Contenido principal -->
         <Grid>
 

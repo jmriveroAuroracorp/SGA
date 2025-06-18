@@ -1,6 +1,5 @@
-﻿using SGA_Desktop.Helpers;
-using System.Windows;
-using System.Windows.Controls;
+﻿using System.Windows;
+using SGA_Desktop.Helpers;
 
 namespace SGA_Desktop
 {
@@ -9,11 +8,15 @@ namespace SGA_Desktop
 		public MainWindow()
 		{
 			InitializeComponent();
+
+			// ← Aquí asignas el Frame definido en el XAML
 			NavigationStore.MainFrame = MainFrame;
-			DataContext = new ViewModels.MainViewModel(new Services.LoginService()); // <- FALTA ESTA LÍNEA
+
+			// Luego ajustas el DataContext de tu VM
+			DataContext = new ViewModels.MainViewModel(new Services.LoginService());
+
+			//// (Opcional) Navega inmediatamente a la vista inicial
+			//NavigationStore.Navigate("ConsultaStock");
 		}
-
-
-		
 	}
 }
