@@ -10,6 +10,7 @@ using SGA_Desktop.Services;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -23,6 +24,11 @@ namespace SGA_Desktop.ViewModels
 		#region Constants
 		private const string SIN_UBICACION = "Sin ubicación";
 		private const string TODAS = "Todas";
+		#endregion
+
+
+		#region Variables
+		private bool _busquedaPorDescripcion;
 		#endregion
 
 		#region Fields & Services
@@ -51,6 +57,8 @@ namespace SGA_Desktop.ViewModels
 		}
 
 		public ConsultaStockViewModel() : this(new StockService()) { }
+
+
 		#endregion
 
 		#region Observable Properties
@@ -60,8 +68,9 @@ namespace SGA_Desktop.ViewModels
 		public ObservableCollection<string> Almacenes { get; }
 		public ObservableCollection<string> Ubicaciones { get; }
 		public ObservableCollection<StockDto> ResultadosStock { get; }
-
 		public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
+		public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
+		public ObservableCollection<StockDto> StockFiltrado { get; } = new();
 
 		[ObservableProperty]
 		private string almacenSeleccionado;
@@ -93,6 +102,8 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private string? almacenSeleccionadoUbicacion;
 
+		[ObservableProperty] 
+		private ArticuloResumenDto? articuloSeleccionado;
 		#endregion
 
 		#region Computed Properties
@@ -111,6 +122,16 @@ namespace SGA_Desktop.ViewModels
 
 		public Visibility ArticleFiltersVisibility => IsArticleMode ? Visibility.Visible : Visibility.Collapsed;
 		public Visibility LocationFiltersVisibility => IsLocationMode ? Visibility.Visible : Visibility.Collapsed;
+
+		public Visibility ArticulosUnicosVisibility =>
+	_busquedaPorDescripcion && ArticulosUnicos.Count > 1
+		? Visibility.Visible
+		: Visibility.Collapsed;
+
+		public Visibility ListViewVisibility =>
+			(!_busquedaPorDescripcion || StockFiltrado.Any())
+				? Visibility.Visible
+				: Visibility.Collapsed;
 
 		public IRelayCommand BuscarCommand =>
 			IsArticleMode ? BuscarPorArticuloCommand : BuscarPorUbicacionCommand;
@@ -147,6 +168,31 @@ namespace SGA_Desktop.ViewModels
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 		}
+
+		partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? oldValue, ArticuloResumenDto? newValue)
+		{
+			if (newValue == null)
+				return;
+
+			// 1) Pongo la descripción como ArticuloMostrado
+			ArticuloMostrado = newValue.DescripcionArticulo;
+
+			// 2) Relleno StockFiltrado
+			StockFiltrado.Clear();
+			foreach (var s in ResultadosStock.Where(x => x.CodigoArticulo == newValue.CodigoArticulo))
+				StockFiltrado.Add(s);
+
+			// 3) Ahora ya no estamos en búsqueda por descripción
+			_busquedaPorDescripcion = false;
+
+			// 4) Disparo todas las notificaciones
+			OnPropertyChanged(nameof(ArticuloMostrado));
+			OnPropertyChanged(nameof(ArticulosUnicosVisibility));
+			OnPropertyChanged(nameof(ListViewVisibility));
+		}
+
+
+
 		#endregion
 
 		#region Commands
@@ -189,57 +235,164 @@ namespace SGA_Desktop.ViewModels
 		}
 
 
+		// INTRODUCE BUSQUEDA POR ARTÍCULO
+		//[RelayCommand]
+		//private async Task BuscarPorArticuloAsync()
+		//{
+		//	try
+		//	{
+		//		if (string.IsNullOrWhiteSpace(FiltroArticulo))
+		//		{
+		//			var advertencia = new WarningDialog(
+		//				"Buscar artículo",
+		//				"Debes introducir un código o descripción para buscar.",
+		//				"\uE814" // ícono advertencia
+		//			)
+		//			{ Owner = Application.Current.MainWindow };
+
+		//			advertencia.ShowDialog();
+		//			return;
+		//		}
+		//		var (almacenParam, ubicParam) = BuildArticleParams();
+
+		//		List<StockDto> lista = await _stockService.ObtenerPorArticuloAsync(
+		//			SessionManager.EmpresaSeleccionada!.Value,
+		//			codigoArticulo: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo,
+		//			partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
+		//			codigoAlmacen: almacenParam,
+		//			codigoUbicacion: ubicParam,
+		//			descripcion: null // primero intentar por código, descripción null
+		//		);
+
+		//		if (lista == null || !lista.Any())
+		//		{
+		//			// Si no encontró por código, busca por descripción
+		//			lista = await _stockService.ObtenerPorArticuloAsync(
+		//				SessionManager.EmpresaSeleccionada!.Value,
+		//				codigoArticulo: null, // ahora null
+		//				partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
+		//				codigoAlmacen: almacenParam,
+		//				codigoUbicacion: ubicParam,
+		//				descripcion: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo
+		//			);
+		//		}
+
+		//		LlenarResultados(lista, filterByPermissions: true);
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		MostrarError("Error al consultar por artículo", ex);
+		//	}
+		//}
+
 
 		[RelayCommand]
 		private async Task BuscarPorArticuloAsync()
 		{
 			try
 			{
+				// 0) Validación básica
 				if (string.IsNullOrWhiteSpace(FiltroArticulo))
 				{
 					var advertencia = new WarningDialog(
 						"Buscar artículo",
 						"Debes introducir un código o descripción para buscar.",
-						"\uE814" // ícono advertencia
+						"\uE814"
 					)
 					{ Owner = Application.Current.MainWindow };
-
 					advertencia.ShowDialog();
 					return;
 				}
+
+				// Limpiar estados previos
+				ArticulosUnicos.Clear();
+				StockFiltrado.Clear();
+				ArticuloMostrado = string.Empty;
+				_busquedaPorDescripcion = false;
+				OnPropertyChanged(nameof(ArticuloMostrado));
+				OnPropertyChanged(nameof(ArticulosUnicosVisibility));
+				OnPropertyChanged(nameof(ListViewVisibility));
+
 				var (almacenParam, ubicParam) = BuildArticleParams();
 
-				List<StockDto> lista = await _stockService.ObtenerPorArticuloAsync(
+				// 1) Intento buscar por código
+				var lista = await _stockService.ObtenerPorArticuloAsync(
 					SessionManager.EmpresaSeleccionada!.Value,
-					codigoArticulo: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo,
+					codigoArticulo: FiltroArticulo,
 					partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
 					codigoAlmacen: almacenParam,
 					codigoUbicacion: ubicParam,
-					descripcion: null // primero intentar por código, descripción null
+					descripcion: null
 				);
 
+				// 2) Si no hay resultados por código, intento por descripción
 				if (lista == null || !lista.Any())
 				{
-					// Si no encontró por código, busca por descripción
+					_busquedaPorDescripcion = true;
 					lista = await _stockService.ObtenerPorArticuloAsync(
 						SessionManager.EmpresaSeleccionada!.Value,
-						codigoArticulo: null, // ahora null
+						codigoArticulo: null,
 						partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
 						codigoAlmacen: almacenParam,
 						codigoUbicacion: ubicParam,
-						descripcion: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo
+						descripcion: FiltroArticulo
 					);
 				}
 
-				LlenarResultados(lista, filterByPermissions: true);
+				// 3) Filtrar por permisos de almacén
+				var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+				if (!permisos.Any())
+				{
+					var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+					permisos = await _stockService.ObtenerAlmacenesAsync(centro);
+				}
+				lista = lista.Where(x => permisos.Contains(x.CodigoAlmacen)).ToList();
+
+				// 4) Guardar todo el stock filtrado para detalle
+				ResultadosStock.Clear();
+				foreach (var s in lista)
+					ResultadosStock.Add(s);
+
+				// 5) Agrupar en artículos únicos
+				var grupos = lista
+					.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
+					.Select(g => new ArticuloResumenDto
+					{
+						CodigoArticulo = g.Key.CodigoArticulo,
+						DescripcionArticulo = g.Key.DescripcionArticulo
+					})
+					.OrderBy(a => a.CodigoArticulo)
+					.ToList();
+
+				// 6) Si no venimos de descripción o solo hay un artículo único,
+				//    mostramos detalle directo; si no, llenamos el combo
+				if (!_busquedaPorDescripcion || grupos.Count == 1)
+				{
+					// Mostrar directamente partidas/ubicaciones
+					ArticuloMostrado = grupos.FirstOrDefault()?.DescripcionArticulo ?? string.Empty;
+
+					StockFiltrado.Clear();
+					foreach (var s in lista)
+						StockFiltrado.Add(s);
+				}
+				else
+				{
+					// Mostrar lista de artículos únicos en el ComboBox
+					ArticulosUnicos.Clear();
+					foreach (var art in grupos)
+						ArticulosUnicos.Add(art);
+				}
+
+				// 7) Actualizar visibilidades
+				OnPropertyChanged(nameof(ArticuloMostrado));
+				OnPropertyChanged(nameof(ArticulosUnicosVisibility));
+				OnPropertyChanged(nameof(ListViewVisibility));
 			}
 			catch (Exception ex)
 			{
 				MostrarError("Error al consultar por artículo", ex);
 			}
 		}
-
-
 
 
 		[RelayCommand]
@@ -258,11 +411,13 @@ namespace SGA_Desktop.ViewModels
 				MostrarError("Error al consultar por ubicación", ex);
 			}
 		}
+
 		[RelayCommand]
 		private void ExportarExcel()
 		{
+			// ▶️ Cambiado: exportamos StockFiltrado en modo artículo
 			var listaActiva = IsArticleMode
-				? ResultadosStock.ToList()
+				? StockFiltrado.ToList()
 				: ResultadosStockPorUbicacion.ToList();
 
 			if (!listaActiva.Any())
@@ -273,20 +428,17 @@ namespace SGA_Desktop.ViewModels
 					"\uE814" // ícono de advertencia
 				)
 				{ Owner = Application.Current.MainWindow };
-
 				advertencia.ShowDialog();
 				return;
 			}
 
 			// 1) Confirmar con nuestro dialog
 			var confirm = new ConfirmationDialog(
-	"Confirmar exportación",
-	$"Se van a exportar {listaActiva.Count} registros.\n¿Deseas continuar?",
-	"\uE11B"    // <-- aquí el ícono de pregunta
-)
-			{
-				Owner = Application.Current.MainWindow
-			};
+				"Confirmar exportación",
+				$"Se van a exportar {listaActiva.Count} registros.\n¿Deseas continuar?",
+				"\uE11B"    // ícono de pregunta
+			)
+			{ Owner = Application.Current.MainWindow };
 			if (confirm.ShowDialog() != true)
 				return;
 
@@ -306,15 +458,15 @@ namespace SGA_Desktop.ViewModels
 
 			// 4) Cabeceras
 			var headers = new[] {
-				"Código Empresa",
-				"Código Artículo",
-				"Descripción",
-				"Almacén",
-				"Ubicación",
-				"Partida",
-				"Fecha Caducidad",
-				"Saldo"
-			};
+		"Código Empresa",
+		"Código Artículo",
+		"Descripción",
+		"Almacén",
+		"Ubicación",
+		"Partida",
+		"Fecha Caducidad",
+		"Saldo"
+	};
 			for (int i = 0; i < headers.Length; i++)
 				ws.Cell(1, i + 1).Value = headers[i];
 
@@ -336,15 +488,14 @@ namespace SGA_Desktop.ViewModels
 			// 6) Auto‐ajustar anchos
 			ws.Columns().AdjustToContents();
 
-			// 7) Guardar y avisar
+			// 7) Guardar y aviso final
 			wb.SaveAs(dlg.FileName);
 			var info = new WarningDialog(
-	"Exportación completada",
-	$"Datos exportados correctamente a:\n{dlg.FileName}",
-	"\uE946" // ícono de información
-)
+				"Exportación completada",
+				$"Datos exportados correctamente a:\n{dlg.FileName}",
+				"\uE946" // ícono de información
+			)
 			{ Owner = Application.Current.MainWindow };
-
 			info.ShowDialog();
 		}
 

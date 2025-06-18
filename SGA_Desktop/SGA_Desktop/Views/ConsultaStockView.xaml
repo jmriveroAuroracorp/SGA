@@ -107,6 +107,18 @@
                           IsEnabled="{Binding CanEnableInputs}"
                           MaxDropDownHeight="200"/>
                     </StackPanel>
+
+                    <!-- Combo de Artículos únicos (solo tras búsqueda por descripción) -->
+                    <!--<StackPanel Orientation="Vertical"
+                    Visibility="{Binding ArticulosUnicosVisibility}">
+                        <TextBlock Text="Selecciona artículo" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="250"
+                      Style="{StaticResource EstiloComboBox}"
+                      ItemsSource="{Binding ArticulosUnicos}"
+                      SelectedItem="{Binding ArticuloSeleccionado, Mode=TwoWay}"
+                      DisplayMemberPath="Display"
+                      IsEditable="False"/>
+                    </StackPanel>-->
                 </StackPanel>
 
                 <!-- Filtros por ubicación -->
@@ -149,22 +161,43 @@
         </Grid>
 
 
+        <!-- FILA 2: artículo destacado / combo -->
+        <StackPanel Grid.Row="2"
+            Orientation="Vertical"
+            Margin="20,0,20,10"
+            Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}">
+
+            <!-- 1) Artículo destacado (solo en búsquedas por código) -->
+            <TextBlock Text="{Binding ArticuloMostrado}"
+               FontFamily="{StaticResource FuentePrincipal}"
+               FontSize="28"
+               FontWeight="Bold"
+               Foreground="{StaticResource BrushPrincipal}"
+               Visibility="{Binding ListViewVisibility}" />
+
+            <!-- 2) Combo para elegir artículo (solo en búsquedas por descripción) -->
+            <StackPanel Orientation="Horizontal"
+                Margin="0,8,0,0"
+                Visibility="{Binding ArticulosUnicosVisibility}">
+                <TextBlock Text="Selecciona artículo"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Margin="0,0,8,0"/>
+                <ComboBox Width="300"
+                  Style="{StaticResource EstiloComboBox}"
+                  ItemsSource="{Binding ArticulosUnicos}"
+                  SelectedItem="{Binding ArticuloSeleccionado, Mode=TwoWay}"
+                  DisplayMemberPath="Display"
+                  IsEditable="False"/>
+            </StackPanel>
+        </StackPanel>
 
 
-        <!-- ARTÍCULO DESTACADO -->
-        <TextBlock Grid.Row="2"
-           Text="{Binding ArticuloMostrado}"
-           Margin="20,10,20,0"
-           FontFamily="{StaticResource FuentePrincipal}"
-           FontSize="28"
-           FontWeight="Bold"
-           Foreground="{StaticResource BrushPrincipal}"
-           Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}" />
 
         <!-- RESULTADOS: MODO POR ARTÍCULO -->
         <ListView Grid.Row="3"
-          ItemsSource="{Binding ResultadosStock}"
-          Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}"
+          ItemsSource="{Binding StockFiltrado}"
+          Visibility="{Binding ListViewVisibility}"
           SelectionMode="Single"
           ScrollViewer.VerticalScrollBarVisibility="Auto">
 
