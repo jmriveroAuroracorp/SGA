@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Impresion;
 using SGA_Api.Models.Registro;
+using SGA_Api.Models.Ubicacion;
 using SGA_Api.Models.UsuarioConf;
 
 namespace SGA_Api.Data
@@ -14,7 +15,7 @@ namespace SGA_Api.Data
 		public DbSet<LogImpresion> LogImpresiones { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Impresora> Impresoras { get; set; }
-
+        public DbSet<UbicacionDetallada> vUbicacionesDetalladas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -86,6 +87,11 @@ namespace SGA_Api.Data
 				   .IsRequired()
 				   .HasMaxLength(200);           
 			});
+
+			modelBuilder
+	           .Entity<UbicacionDetallada>()
+	           .HasNoKey()
+	           .ToView("vUbicacionesDetalladas");
 		}
 	}
 }

@@ -21,6 +21,7 @@ namespace SGA_Desktop.Helpers
 				{
 					"ConsultaStock" => new ConsultaStockView(),
 					"Traspasos" => new TraspasosView(),
+					"Ubicaciones" => new GestionUbicacionesView(),
 					//"Inventario" => new InventarioView(),
 					"Etiquetas" => new ImpresionEtiquetasView(),
 					"SeleccionEmpresa" => new EmpresaView(),

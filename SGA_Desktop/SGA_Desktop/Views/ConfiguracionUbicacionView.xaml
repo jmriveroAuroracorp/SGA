@@ -1,0 +1,26 @@
+﻿<Page x:Class="SGA_Desktop.Views.ConfiguracionUbicacionView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      Title="Configurar Ubicación">
+
+    <StackPanel Margin="20" Width="400">
+        <TextBlock Text="Ubicación:" FontWeight="Bold"/>
+        <TextBox Text="{Binding Ubicacion}" IsReadOnly="True"/>
+
+        <TextBlock Text="Descripción:" Margin="0,10,0,0"/>
+        <TextBox Text="{Binding DescripcionUbicacion, Mode=TwoWay}"/>
+
+        <TextBlock Text="Tipo de Ubicación:" Margin="0,10,0,0"/>
+        <ComboBox ItemsSource="{Binding TiposDisponibles}"
+                  SelectedItem="{Binding TipoUbicacion, Mode=TwoWay}"/>
+
+        <CheckBox Content="Habilitada"
+                  IsChecked="{Binding Habilitada, Mode=TwoWay}"
+                  Margin="0,10,0,0"/>
+
+        <Button Content="Guardar" 
+                Command="{Binding GuardarCommand}"
+                Margin="0,20,0,0" Width="100" HorizontalAlignment="Left"/>
+    </StackPanel>
+</Page>

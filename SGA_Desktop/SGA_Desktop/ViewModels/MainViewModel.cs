@@ -61,6 +61,13 @@ namespace SGA_Desktop.ViewModels
 		}
 
 		[RelayCommand]
+		public void IrAUbicaciones()
+		{
+			NavigationStore.Navigate("Ubicaciones");
+			CurrentHeader = "GESTIÓN DE UBICACIONES";
+		}
+
+		[RelayCommand]
 		public void IrATraspasos()
 		{
 			NavigationStore.Navigate("Traspasos");
