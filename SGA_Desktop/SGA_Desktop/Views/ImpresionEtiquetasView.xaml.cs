@@ -11,7 +11,8 @@ namespace SGA_Desktop.Views
 			InitializeComponent();
 			DataContext = new ImpresionEtiquetasViewModel(
 							  new StockService(),
-							  new PrintQueueService());
+							  new PrintQueueService(),
+							  new LoginService());
 		}
 
 	}

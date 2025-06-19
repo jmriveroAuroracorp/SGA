@@ -303,6 +303,33 @@ namespace SGA_Api.Controllers.Stock
 			return Ok(resultado);
 		}
 
+		/// <summary>
+		/// GET api/Stock/articulo/alergenos
+		/// Devuelve los alérgenos de un artículo, leyendo Vis_Articulos.VNEWALERGENOS
+		/// </summary>
+		// GET api/Stock/articulo/alergenos?codigoEmpresa=1&codigoArticulo=096124
+		[HttpGet("articulo/alergenos")]
+		public async Task<IActionResult> GetAlergenos(
+			[FromQuery] short codigoEmpresa,
+			[FromQuery] string codigoArticulo)
+		{
+			var art = await _sageContext.VisArticulos
+				.AsNoTracking()
+				.FirstOrDefaultAsync(x =>
+					x.CodigoEmpresa == codigoEmpresa &&
+					x.CodigoArticulo.Equals(codigoArticulo));
+
+			if (art == null)
+				return NotFound();
+
+			// Ahora sí leerá bien la propiedad mapeada
+			var alerg = art.VNEWAlergenos ?? string.Empty;
+
+			return Ok(new { alergenos = alerg });
+		}
+
+
+
 		// helper para proyectar
 		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos)
 		{

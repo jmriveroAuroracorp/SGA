@@ -100,9 +100,27 @@ namespace SGA_Api.Data
 	          .HasNoKey()
 	          .ToView("Ubicaciones");
 
-			modelBuilder.Entity<VisArticulo>()
-	           .HasNoKey()
-	           .ToView("Vis_Articulos");
+			modelBuilder.Entity<VisArticulo>(eb =>
+			{
+				eb.HasNoKey();
+				eb.ToView("Vis_Articulos");
+
+				eb.Property(v => v.CodigoEmpresa)
+				  .HasColumnName("CodigoEmpresa");
+
+				eb.Property(v => v.CodigoArticulo)
+				  .HasColumnName("CodigoArticulo");
+
+				eb.Property(v => v.DescripcionArticulo)
+				  .HasColumnName("DescripcionArticulo");
+
+				eb.Property(v => v.CodigoAlternativo)
+				  .HasColumnName("CodigoAlternativo");
+
+				eb.Property(v => v.VNEWAlergenos)         // coincide con tu POCO
+				  .HasColumnName("VNEWALERGENOS");        // exacto nombre de la columna
+			});
+
 		}
 	}
 }

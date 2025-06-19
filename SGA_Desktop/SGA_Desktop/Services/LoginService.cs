@@ -3,6 +3,7 @@ using SGA_Desktop.Models;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -19,24 +20,27 @@ public class LoginService : ApiService
 			var content = new StringContent(json, Encoding.UTF8, "application/json");
 
 			var response = await _httpClient.PostAsync("Login", content);
+			if (!response.IsSuccessStatusCode)
+				return null;
 
-			if (response.IsSuccessStatusCode)
+			var result = await response.Content.ReadAsStringAsync();
+			var loginResp = JsonSerializer.Deserialize<LoginResponse>(result,
+								new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+			if (loginResp != null)
 			{
-				var result = await response.Content.ReadAsStringAsync();
+				// 1) Guardamos la respuesta de login en sesión
+				SessionManager.UsuarioActual = loginResp;
 
-				var loginResp = JsonSerializer.Deserialize<LoginResponse>(result,
-								 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-				var codigoInicial = loginResp.empresas.FirstOrDefault()?.Codigo ?? 0;
-
-				if (loginResp != null)
+				// 2) A continuación, cargamos la impresora preferida del usuario
+				var (okPrn, printerName) = await ObtenerImpresoraPreferidaAsync(loginResp.operario);
+				if (okPrn && !string.IsNullOrWhiteSpace(printerName))
 				{
-					SessionManager.UsuarioActual = loginResp;
+					SessionManager.PreferredPrinter = printerName!;
 				}
-				return loginResp;
 			}
 
-			return null;
+			return loginResp;
 		}
 		catch (HttpRequestException ex)
 		{
@@ -174,5 +178,70 @@ public class LoginService : ApiService
 		return (false, null);
 	}
 
+	/// <summary>
+	/// PATCH api/Usuarios/{id}
+	/// Actualiza solo la propiedad "impresora" del usuario.
+	/// </summary>
+	public async Task<(bool ok, string? detalle, HttpStatusCode status)> EstablecerImpresoraPreferidaAsync(
+		int idUsuario, string nombreImpresora)
+	{
+		// Prepara el body JSON con la propiedad 'impresora'
+		var body = JsonSerializer.Serialize(new { impresora = nombreImpresora });
+		var content = new StringContent(body, Encoding.UTF8, "application/json");
+
+		// Construye la petición PATCH a Usuarios/{id}
+		var req = new HttpRequestMessage(HttpMethod.Patch, $"Usuarios/{idUsuario}")
+		{
+			Content = content
+		};
+
+		// Añade el token si existe
+		if (!string.IsNullOrWhiteSpace(SessionManager.Token))
+			_httpClient.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", SessionManager.Token);
+
+		// Envía la petición
+		var resp = await _httpClient.SendAsync(req);
+		var detalle = await resp.Content.ReadAsStringAsync();
+		return (resp.IsSuccessStatusCode, detalle, resp.StatusCode);
+	}
+
+	/// <summary>
+	/// PATCH api/Usuarios/{id}
+	/// Actualiza solo la propiedad "impresora" del usuario.
+	/// </summary>
+	public async Task<bool> ActualizarImpresoraAsync(int idUsuario, string nombreImpresora)
+	{
+		if (!string.IsNullOrEmpty(SessionManager.Token))
+			_httpClient.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", SessionManager.Token);
+
+		// Sólo enviamos la propiedad que queremos actualizar
+		var body = JsonSerializer.Serialize(new { impresora = nombreImpresora });
+		var req = new HttpRequestMessage(HttpMethod.Patch, $"Usuarios/{idUsuario}")
+		{
+			Content = new StringContent(body, Encoding.UTF8, "application/json")
+		};
+		var resp = await _httpClient.SendAsync(req);
+		return resp.IsSuccessStatusCode;
+	}
+
+	public async Task<(bool ok, string? impresora)> ObtenerImpresoraPreferidaAsync(int idUsuario)
+	{
+		if (!string.IsNullOrWhiteSpace(SessionManager.Token))
+			_httpClient.DefaultRequestHeaders.Authorization =
+				new AuthenticationHeaderValue("Bearer", SessionManager.Token);
+
+		var resp = await _httpClient.GetAsync($"Usuarios/{idUsuario}");
+		if (!resp.IsSuccessStatusCode) return (false, null);
+
+		var json = await resp.Content.ReadAsStringAsync();
+		using var doc = JsonDocument.Parse(json);
+
+		if (doc.RootElement.TryGetProperty("impresora", out var prop))
+			return (true, prop.GetString());
+
+		return (true, null);
+	}
 
 }

@@ -2,6 +2,7 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
       Background="{StaticResource BrushFondo}"
       FontFamily="{StaticResource FuentePrincipal}">
 
@@ -126,16 +127,50 @@
 
 
         <!-- 3) BOTÓN IMPRIMIR -->
-        <StackPanel Grid.Row="2"
-                Orientation="Horizontal"
-                HorizontalAlignment="Right"
-                Margin="0,16,0,0">
-            <Button Content="Imprimir etiqueta"
-              Style="{StaticResource EstiloBotonPrincipal}"
-              Width="140"
-              Height="36"
-              Command="{Binding ImprimirEtiquetaCommand}"
-              IsEnabled="{Binding CanImprimir}" />
+        <StackPanel
+    Grid.Row="2"
+    Orientation="Horizontal"
+    HorizontalAlignment="Right"
+    VerticalAlignment="Center"
+    Margin="0,16,0,0">
+
+            <!-- Etiqueta Impresora -->
+            <TextBlock
+      Text="Impresora:"
+      VerticalAlignment="Center"
+      Margin="0,0,4,0"/>
+
+            <!-- Combo de impresoras -->
+            <ComboBox
+      Width="200"
+      ItemsSource="{Binding Impresoras}"
+      SelectedItem="{Binding ImpresoraSeleccionada}"
+      DisplayMemberPath="Nombre"
+      Style="{StaticResource EstiloComboBox}"
+      Margin="0,0,16,0"/>
+
+            <!-- Etiqueta Copias -->
+            <TextBlock
+      Text="Copias:"
+      VerticalAlignment="Center"
+      Margin="0,0,4,0"/>
+
+            <!-- TextBox Número de copias -->
+            <xctk:IntegerUpDown
+    Width="60"
+    Minimum="1"
+    Value="{Binding NumeroCopias, Mode=TwoWay}"
+
+    Margin="0,0,16,0"/>
+
+            <!-- Botón Imprimir -->
+            <Button
+      Content="Imprimir etiqueta"
+      Style="{StaticResource EstiloBotonPrincipal}"
+      Width="140"
+      Height="36"
+      Command="{Binding ImprimirEtiquetaCommand}"
+      IsEnabled="{Binding CanImprimir}" />
         </StackPanel>
     </Grid>
 </Page>

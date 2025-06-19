@@ -31,5 +31,20 @@ namespace SGA_Desktop.Helpers
 			EmpresaSeleccionada = codigo;
 			EmpresaCambiada?.Invoke(null, EventArgs.Empty);
 		}
+
+		private static string _preferredPrinter = string.Empty;
+		public static string PreferredPrinter
+		{
+			get => _preferredPrinter;
+			set
+			{
+				if (_preferredPrinter != value)
+				{
+					_preferredPrinter = value;
+					PreferredPrinterChanged?.Invoke(null, EventArgs.Empty);
+				}
+			}
+		}
+		public static event EventHandler? PreferredPrinterChanged;
 	}
 }

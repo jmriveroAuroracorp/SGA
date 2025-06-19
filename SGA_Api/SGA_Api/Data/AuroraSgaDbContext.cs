@@ -12,9 +12,8 @@ namespace SGA_Api.Data
         public DbSet<Dispositivo> Dispositivos { get; set; }
         public DbSet<LogEvento> LogEventos { get; set; }
 		public DbSet<LogImpresion> LogImpresiones { get; set; }
-
         public DbSet<Usuario> Usuarios { get; set; }
-
+        public DbSet<Impresora> Impresoras { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -75,7 +74,18 @@ namespace SGA_Api.Data
             modelBuilder.Entity<Usuario>()
                 .Property(u => u.Etiqueta).HasColumnName("Etiqueta");
 
-
-        }
+			modelBuilder.Entity<Impresora>(ent =>
+			{
+				ent.ToTable("impresoras");        
+				ent.HasKey(p => p.Id);            
+				ent.Property(p => p.Id)
+				   .HasColumnName("id")           
+				   .IsRequired();
+				ent.Property(p => p.Nombre)
+				   .HasColumnName("nombre")         
+				   .IsRequired()
+				   .HasMaxLength(200);           
+			});
+		}
 	}
 }

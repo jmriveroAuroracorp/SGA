@@ -56,7 +56,39 @@ namespace SGA_Desktop.Services
 				MessageBoxImage.Information);
 		}
 
+		/// <summary>
+		/// GET /api/Impresion/impresoras
+		/// Obtiene la lista de impresoras disponibles desde la API.
+		/// </summary>
+		public async Task<List<ImpresoraDto>> ObtenerImpresorasAsync()
+		{
+			try
+			{
+				var lista = await _httpClient
+					.GetFromJsonAsync<List<ImpresoraDto>>("Impresion/impresoras");
 
+				return lista ?? new List<ImpresoraDto>();
+			}
+			catch (HttpRequestException ex)
+			{
+				MessageBox.Show(
+					$"Error de red al obtener impresoras:\n{ex.Message}",
+					"Error HTTP",
+					MessageBoxButton.OK,
+					MessageBoxImage.Error);
+				return new List<ImpresoraDto>();
+			}
+			catch (NotSupportedException)
+			{
+				MessageBox.Show(
+					"El contenido de la respuesta no está en formato JSON.",
+					"Error de formato",
+					MessageBoxButton.OK,
+					MessageBoxImage.Error);
+				return new List<ImpresoraDto>();
+			}
+		
 
+		}
 	}
 }
