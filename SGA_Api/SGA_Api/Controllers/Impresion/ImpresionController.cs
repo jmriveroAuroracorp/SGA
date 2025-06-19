@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Impresion;
 
@@ -50,7 +51,23 @@ namespace SGA_Api.Controllers.Impresion
 					details = ex.InnerException?.Message // 👈 esto es clave
 				});
 			}
-
 		}
+		// GET api/Impresion/impresoras
+		[HttpGet("impresoras")]
+		public async Task<ActionResult<List<ImpresoraDto>>> GetImpresoras()
+		{
+			var lista = await _context.Impresoras
+									  .AsNoTracking()
+									  .OrderBy(p => p.Nombre)   // ahora se llama Nombre
+									  .Select(p => new ImpresoraDto
+									  {
+										  Id = p.Id,
+										  Nombre = p.Nombre
+									  })
+									  .ToListAsync();
+			return Ok(lista);
+		}
+
+
 	}
 }

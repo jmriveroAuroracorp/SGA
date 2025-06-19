@@ -12,22 +12,31 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 	private const string TODAS = "Todas";
 	private readonly StockService _stockService;
 	private readonly PrintQueueService _printService;
+	private readonly LoginService _loginService;    // ← añade esto
 
-	public ImpresionEtiquetasViewModel(StockService stockService, PrintQueueService printService)
+	// Ctor principal con DI
+	public ImpresionEtiquetasViewModel(
+		StockService stockService,
+		PrintQueueService printService,
+		LoginService loginService)       // ← y esto
 	{
 		_stockService = stockService;
 		_printService = printService;
+		_loginService = loginService;   // ← y esto
 
 		Articulos = new ObservableCollection<StockDto>();
 		Almacenes = new ObservableCollection<string>();
+		Impresoras = new ObservableCollection<ImpresoraDto>();
 
-		// Arranca la carga de almacenes
 		_ = InitializeAsync();
+		_ = LoadImpresorasAsync();
 	}
 
-	// Constructor sin parámetros para el designer
+	// Ctor sin parámetros para el diseñador / XAML
 	public ImpresionEtiquetasViewModel()
-		: this(new StockService(), new PrintQueueService())
+		: this(new StockService(),
+			   new PrintQueueService(),
+			   new LoginService())          // ← aquí creas LoginService
 	{ }
 
 	// -------------------
@@ -42,6 +51,34 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 	public ObservableCollection<string> Almacenes { get; }
 	[ObservableProperty] private string almacenSeleccionado = TODAS;
 
+	// Colección de impresoras
+	public ObservableCollection<ImpresoraDto> Impresoras { get; }
+		= new ObservableCollection<ImpresoraDto>();
+
+	// Propiedad de la impresora seleccionada (añádela si aún no la tienes)
+	[ObservableProperty]
+	private ImpresoraDto? impresoraSeleccionada;
+
+	partial void OnImpresoraSeleccionadaChanged(ImpresoraDto? nueva)
+	{
+		if (nueva is null) return;
+
+		// 1) Guardar en sesión (opcional, para recargar en esta sesión)
+		SessionManager.PreferredPrinter = nueva.Nombre;
+
+		// 2) Llamar al servicio para que se escriba en la BD
+		_ = _loginService
+			.EstablecerImpresoraPreferidaAsync(SessionManager.Operario, nueva.Nombre)
+			.ContinueWith(t =>
+			{
+				if (!t.Result.ok)
+				{
+					// Opcional: mostrar error si no guardó
+					MessageBox.Show($"No se pudo guardar la impresora preferida:\n{t.Result.detalle}",
+									"Error al guardar", MessageBoxButton.OK, MessageBoxImage.Warning);
+				}
+			}, TaskScheduler.FromCurrentSynchronizationContext());
+	}
 	// -------------------
 	// Comando de Búsqueda
 	// -------------------
@@ -114,6 +151,39 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		}
 	}
 
+	/// <summary>
+	/// Carga del endpoint la lista de impresoras y pre-selecciona la preferida.
+	/// </summary>
+	private async Task LoadImpresorasAsync()
+	{
+		try
+		{
+			// 1) Obtén todas las impresoras
+			var lista = await _printService.ObtenerImpresorasAsync();
+
+			// 2) Actualiza la ObservableCollection
+			Impresoras.Clear();
+			foreach (var imp in lista.OrderBy(x => x.Nombre))
+				Impresoras.Add(imp);
+
+			// 3) Decide cuál seleccionar
+			var nombrePref = SessionManager.PreferredPrinter;
+			// Busca la impresora cuya propiedad Nombre coincida
+			var preseleccion = Impresoras.FirstOrDefault(x => x.Nombre == nombrePref)
+							  // Si no la encuentra, simplemente la primera de la lista
+							  ?? Impresoras.FirstOrDefault();
+
+			ImpresoraSeleccionada = preseleccion;
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(
+				$"Error al cargar impresoras: {ex.Message}",
+				"Error de impresoras",
+				MessageBoxButton.OK,
+				MessageBoxImage.Error);
+		}
+	}
 
 
 
@@ -159,7 +229,7 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 			Usuario = SessionManager.Operario.ToString(),
 			Dispositivo = Environment.MachineName,
 			IdImpresora = 2, // Asegúrate de que este ID sea correcto
-			EtiquetaImpresa = 1,
+			EtiquetaImpresa = 0,
 			Copias = null,
 			CodigoArticulo = SelectedArticulo.CodigoArticulo,
 			DescripcionArticulo = SelectedArticulo.DescripcionArticulo ?? string.Empty,
@@ -174,6 +244,16 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		{
 			// Inserción en la base de datos
 			await _printService.InsertarRegistroImpresionAsync(dto);
+			await _loginService.RegistrarLogEventoAsync(new LogEvento
+			{
+				fecha = DateTime.Now,
+				idUsuario = SessionManager.Operario,
+				tipo = "IMPRESION_ETIQUETA",
+				origen = "ImpresionEtiquetasView",
+				descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
+				detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}",
+				idDispositivo = dto.Dispositivo
+			});
 		}
 		catch (Exception ex)
 		{

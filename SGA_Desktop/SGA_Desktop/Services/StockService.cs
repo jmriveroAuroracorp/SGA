@@ -111,34 +111,23 @@ namespace SGA_Desktop.Services
 			}
 		}
 
-		public async Task<string> ObtenerAlergenosArticuloAsync(
-	int codigoEmpresa,
-	string codigoArticulo)
+		public async Task<string> ObtenerAlergenosArticuloAsync(int codigoEmpresa, string codigoArticulo)
 		{
-			try
-			{
-				var url = $"Stock/articulo/alergenos?codigoEmpresa={codigoEmpresa}"
-						+ $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+			var url = $"Stock/articulo/alergenos?codigoEmpresa={codigoEmpresa}&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+			var response = await _httpClient.GetAsync(url);
+			var jsonRaw = await response.Content.ReadAsStringAsync();
 
-				var response = await _httpClient.GetAsync(url);
+			// 1) Muéstralo en pantalla para inspeccionarlo:
+			MessageBox.Show(jsonRaw, "JSON crudo de alérgenos");
 
-				// Si devolvió un 404 o 500, tratamos igual:
-				if (!response.IsSuccessStatusCode)
-					return string.Empty;
-
-				// Leemos el JSON { "alergenos": "GLUTEN,LACTEOS" }
-				var wrapper = await response.Content
-					.ReadFromJsonAsync<AlergenosWrapper>();
-
-				// Devolvemos la propiedad, o cadena vacía si es null
-				return wrapper?.alergenos ?? string.Empty;
-			}
-			catch
-			{
-				// Cualquier excepción (timeout, JSON mal formado, 500, etc.)
+			if (!response.IsSuccessStatusCode)
 				return string.Empty;
-			}
+
+			// Resto de deserialización…
+			var wrapper = JsonConvert.DeserializeObject<AlergenosWrapper>(jsonRaw);
+			return wrapper?.Alergenos ?? string.Empty;
 		}
+
 		/// <summary>
 		/// Helper genérico para GET + deserializar JSON
 		/// </summary>
@@ -183,9 +172,11 @@ namespace SGA_Desktop.Services
 		}
 
 
+
 		private class AlergenosWrapper
 		{
-			public string alergenos { get; set; } = string.Empty;
+			[JsonProperty("alergenos")]       // coincide con la clave JSON
+			public string Alergenos { get; set; }
 		}
 	}
 }
