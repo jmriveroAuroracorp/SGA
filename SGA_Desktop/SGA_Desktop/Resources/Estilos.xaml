@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- 🎨 Colores -->
+    <!--<Color x:Key="ColorPrincipal">#0067C3</Color>-->
     <Color x:Key="ColorPrincipal">#0067C3</Color>
     <Color x:Key="ColorSecundario1">#5FB4DD</Color>
     <Color x:Key="ColorSecundario2">#6fc4fa</Color>
