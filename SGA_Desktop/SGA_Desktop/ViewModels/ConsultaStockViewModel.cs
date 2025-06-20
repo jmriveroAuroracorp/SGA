@@ -24,6 +24,7 @@ namespace SGA_Desktop.ViewModels
 		#region Constants
 		private const string SIN_UBICACION = "Sin ubicación";
 		private const string TODAS = "Todas";
+
 		#endregion
 
 
@@ -71,6 +72,7 @@ namespace SGA_Desktop.ViewModels
 		public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
 		public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
 		public ObservableCollection<StockDto> StockFiltrado { get; } = new();
+		public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
 
 		[ObservableProperty]
 		private string almacenSeleccionado;
@@ -104,6 +106,12 @@ namespace SGA_Desktop.ViewModels
 
 		[ObservableProperty] 
 		private ArticuloResumenDto? articuloSeleccionado;
+
+		[ObservableProperty]
+		private AlmacenDto? almacenSeleccionadoCombo;
+
+		[ObservableProperty]
+		private bool filtrarUbicacionesConStock = true;
 		#endregion
 
 		#region Computed Properties
@@ -119,6 +127,7 @@ namespace SGA_Desktop.ViewModels
 			IsLocationMode &&
 			!string.IsNullOrWhiteSpace(AlmacenSeleccionado) &&
 			AlmacenSeleccionado != TODAS;
+
 
 		public Visibility ArticleFiltersVisibility => IsArticleMode ? Visibility.Visible : Visibility.Collapsed;
 		public Visibility LocationFiltersVisibility => IsLocationMode ? Visibility.Visible : Visibility.Collapsed;
@@ -144,11 +153,18 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(CanEnableLocation));
 		}
 
-		partial void OnAlmacenSeleccionadoChanged(string oldValue, string newValue)
+		partial void OnAlmacenSeleccionadoComboChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
 		{
-			OnPropertyChanged(nameof(CanEnableLocation));
-			_ = LoadUbicacionesAsync(newValue);
+			if (newValue is null) return;
+
+			AlmacenSeleccionado = newValue.CodigoAlmacen;
+			_ = LoadUbicacionesAsync(newValue.CodigoAlmacen);
 		}
+
+
+
+
+
 
 
 		partial void OnIsArticleModeChanged(bool oldValue, bool newValue)
@@ -394,23 +410,40 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
-
 		[RelayCommand]
 		private async Task BuscarPorUbicacionAsync()
 		{
 			try
 			{
+				var almacen = AlmacenSeleccionadoCombo ?? AlmacenesCombo
+	.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
+				
+
+				if (almacen == null || almacen.CodigoAlmacen == TODAS)
+				{
+					return;
+				}
+
+				
 				var lista = await _stockService.ObtenerPorUbicacionAsync(
 					SessionManager.EmpresaSeleccionada!.Value,
-					AlmacenSeleccionado,
-					FiltroUbicacion == SIN_UBICACION ? string.Empty : FiltroUbicacion);
-				LlenarResultados(lista, filterByPermissions: true);
+					almacen.CodigoAlmacen,
+					FiltroUbicacion == SIN_UBICACION ? string.Empty : FiltroUbicacion
+				);
+
+				
+
+				LlenarResultados(lista, filterByPermissions: false); // ← desactiva permisos para probar
 			}
 			catch (Exception ex)
 			{
 				MostrarError("Error al consultar por ubicación", ex);
 			}
 		}
+
+
+
+
 
 		[RelayCommand]
 		private void ExportarExcel()
@@ -503,23 +536,55 @@ namespace SGA_Desktop.ViewModels
 		#endregion
 
 		#region Initialization & Data Loading
+		//private async Task InitializeAsync()
+		//{
+		//	try
+		//	{
+		//		var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+		//		var desdeCentro = await _stockService.ObtenerAlmacenesAsync(centro);
+		//		var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+
+		//		var todosCodigos = desdeCentro.Concat(desdeLogin)
+		//			.Distinct()
+		//			.OrderBy(c => c)
+		//			.ToList();
+
+		//		Almacenes.Clear();
+		//		Almacenes.Add(TODAS);
+		//		todosCodigos.ForEach(c => Almacenes.Add(c));
+		//		AlmacenSeleccionado = TODAS;
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		MostrarError("Error cargando almacenes", ex);
+		//	}
+		//}
 		private async Task InitializeAsync()
 		{
 			try
 			{
+				var empresa = SessionManager.EmpresaSeleccionada!.Value;
 				var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-				var desdeCentro = await _stockService.ObtenerAlmacenesAsync(centro);
 				var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-				var todosCodigos = desdeCentro.Concat(desdeLogin)
-					.Distinct()
-					.OrderBy(c => c)
-					.ToList();
 
-				Almacenes.Clear();
-				Almacenes.Add(TODAS);
-				todosCodigos.ForEach(c => Almacenes.Add(c));
-				AlmacenSeleccionado = TODAS;
+				var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+			
+
+				AlmacenesCombo.Clear();
+
+				// Añadir opción "Todas"
+				AlmacenesCombo.Add(new AlmacenDto
+				{
+					CodigoAlmacen = "Todas",
+					NombreAlmacen = "Todas",
+					CodigoEmpresa = empresa
+				});
+
+				foreach (var a in resultado)
+					AlmacenesCombo.Add(a);
+
+				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
 			}
 			catch (Exception ex)
 			{
@@ -527,27 +592,113 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
+
+
+		//private async Task LoadUbicacionesAsync(string codigoAlmacen)
+		//{
+		//	Ubicaciones.Clear();
+		//	if (string.IsNullOrWhiteSpace(codigoAlmacen) || codigoAlmacen == TODAS)
+		//	{
+		//		FiltroUbicacion = string.Empty;
+		//		return;
+		//	}
+
+		//	var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen);
+		//	if (IsArticleMode) Ubicaciones.Add(TODAS);
+		//	lista.ForEach(u => Ubicaciones.Add(string.IsNullOrEmpty(u) ? SIN_UBICACION : u));
+
+		//	FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
+		//}
+
+
+
 		private async Task LoadUbicacionesAsync(string codigoAlmacen)
 		{
 			Ubicaciones.Clear();
+
 			if (string.IsNullOrWhiteSpace(codigoAlmacen) || codigoAlmacen == TODAS)
 			{
 				FiltroUbicacion = string.Empty;
 				return;
 			}
 
-			var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen);
-			if (IsArticleMode) Ubicaciones.Add(TODAS);
-			lista.ForEach(u => Ubicaciones.Add(string.IsNullOrEmpty(u) ? SIN_UBICACION : u));
+			try
+			{
+				short codigoEmpresa = SessionManager.EmpresaSeleccionada ?? 0;
+				bool soloConStock = FiltrarUbicacionesConStock;
 
-			FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
+				var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen, codigoEmpresa, soloConStock);
+
+				if (lista.Count == 0)
+				{
+					const string SIN_STOCK = "SIN STOCK";
+					Ubicaciones.Add(SIN_STOCK);
+					FiltroUbicacion = SIN_STOCK;
+					return;
+				}
+
+				if (IsArticleMode)
+					Ubicaciones.Add(TODAS);
+
+				foreach (var ubic in lista)
+					Ubicaciones.Add(string.IsNullOrEmpty(ubic.Ubicacion) ? SIN_UBICACION : ubic.Ubicacion);
+
+				FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
+			}
+			catch (Exception ex)
+			{
+				MostrarError("Error cargando ubicaciones", ex);
+			}
 		}
+
+
+
+
+
+
+		// ANTIGUO QUE NO TIENE PARA FILTRAR SI EXISTE STOCK
+
+		//private async Task LoadUbicacionesAsync(string codigoAlmacen)
+		//{
+		//	MessageBox.Show($"[DEBUG] Cargando ubicaciones para: {codigoAlmacen}");
+
+		//	Ubicaciones.Clear();
+
+		//	if (string.IsNullOrWhiteSpace(codigoAlmacen) || codigoAlmacen == TODAS)
+		//	{
+		//		FiltroUbicacion = string.Empty;
+		//		return;
+		//	}
+
+		//	try
+		//	{
+		//		var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen);
+		//		MessageBox.Show($"[DEBUG] Nº ubicaciones recibidas: {lista.Count}");
+
+		//		if (IsArticleMode)
+		//			Ubicaciones.Add(TODAS);
+
+		//		lista.ForEach(u =>
+		//			Ubicaciones.Add(string.IsNullOrEmpty(u) ? SIN_UBICACION : u));
+
+		//		FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		MostrarError("Error cargando ubicaciones", ex);
+		//	}
+		//}
+
+
+
+
+
 		#endregion
 
 		#region Private Helpers
 		private (string? almacenParam, string? ubicParam) BuildArticleParams()
 		{
-			string? almacenParam = AlmacenSeleccionado == TODAS ? null : AlmacenSeleccionado;
+			string? almacenParam = AlmacenSeleccionadoCombo?.CodigoAlmacen == TODAS ? null : AlmacenSeleccionadoCombo?.CodigoAlmacen;
 			string? ubicParam = null;
 
 			if (almacenParam != null)
@@ -558,6 +709,7 @@ namespace SGA_Desktop.ViewModels
 
 			return (almacenParam, ubicParam);
 		}
+
 
 		private void LlenarResultados(List<StockDto> lista, bool filterByPermissions)
 		{

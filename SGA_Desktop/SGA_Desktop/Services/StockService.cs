@@ -14,46 +14,14 @@ namespace SGA_Desktop.Services
 {
 	public class StockService : ApiService
 	{
-		///// <summary>
-		///// GET /api/Stock/articulo
-		///// Búsqueda por artículo (+ opcional partida, almacén, ubicación)
-		///// </summary>
-		//public async Task<List<StockDto>> ObtenerPorArticuloAsync(
-		//	int codigoEmpresa,
-		//	string codigoArticulo,
-		//	string? partida = null,
-		//	string? codigoAlmacen = null,
-		//	string? codigoUbicacion = null)
-		//{
-		//	if (string.IsNullOrWhiteSpace(codigoArticulo))
-		//		throw new ArgumentException("codigoArticulo es obligatorio.", nameof(codigoArticulo));
 
-		//	var qs = $"?codigoEmpresa={codigoEmpresa}"
-		//		   + $"&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
-
-		//	if (!string.IsNullOrWhiteSpace(partida))
-		//		qs += $"&partida={Uri.EscapeDataString(partida!)}";
-
-		//	if (!string.IsNullOrWhiteSpace(codigoAlmacen))
-		//		qs += $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen!)}";
-
-		//	// **ojo**: aquí aceptamos incluso la cadena vacía
-		//	if (codigoUbicacion != null)
-		//		qs += $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
-
-		//	return await GetAsync<List<StockDto>>($"Stock/articulo{qs}");
-		//}
-		/// <summary>
-		/// GET /api/Stock/articulo
-		/// Búsqueda por artículo (+ opcional partida, almacén, ubicación, descripción)
-		/// </summary>
 		public async Task<List<StockDto>> ObtenerPorArticuloAsync(
-	int codigoEmpresa,
-	string? codigoArticulo,
-	string? partida = null,
-	string? codigoAlmacen = null,
-	string? codigoUbicacion = null,
-	string? descripcion = null) // Nuevo parámetro
+		int codigoEmpresa,
+		string? codigoArticulo,
+		string? partida = null,
+		string? codigoAlmacen = null,
+		string? codigoUbicacion = null,
+		string? descripcion = null) // Nuevo parámetro
 		{
 			if (string.IsNullOrWhiteSpace(codigoArticulo) && string.IsNullOrWhiteSpace(descripcion))
 				throw new ArgumentException("Se debe proporcionar codigoArticulo o descripcion.", nameof(codigoArticulo));
@@ -159,19 +127,51 @@ namespace SGA_Desktop.Services
 		/// GET /api/Almacen/Ubicaciones?codigoAlmacen=...
 		/// Devuelve la lista de códigos de ubicación para el almacén dado.
 		/// </summary>
-		public async Task<List<string>> ObtenerUbicacionesAsync(string codigoAlmacen)
+		/// 
+		public async Task<List<UbicacionDto>> ObtenerUbicacionesAsync(string codigoAlmacen, short codigoEmpresa, bool soloConStock = false)
 		{
-			var url = $"Almacen/Ubicaciones?codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+			var url = $"Almacen/Ubicaciones?codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}" +
+					  $"&codigoEmpresa={codigoEmpresa}" +
+					  $"&soloConStock={soloConStock.ToString().ToLower()}";
+
 			using var resp = await _httpClient.GetAsync(url);
 			resp.EnsureSuccessStatusCode();
 			var json = await resp.Content.ReadAsStringAsync();
-			var dtoList = JsonConvert
-				.DeserializeObject<List<UbicacionDto>>(json)
-				?? new List<UbicacionDto>();
-			return dtoList.Select(x => x.Ubicacion).ToList();
+			return JsonConvert.DeserializeObject<List<UbicacionDto>>(json) ?? new();
 		}
 
 
+
+
+		// VERSION QUE NO FILTRA UBICACIONES POR SI TIENEN O NO STOCK
+
+		//public async Task<List<string>> ObtenerUbicacionesAsync(string codigoAlmacen)
+		//{
+		//	var url = $"Almacen/Ubicaciones?codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+		//	using var resp = await _httpClient.GetAsync(url);
+		//	resp.EnsureSuccessStatusCode();
+		//	var json = await resp.Content.ReadAsStringAsync();
+		//	var dtoList = JsonConvert
+		//		.DeserializeObject<List<UbicacionDto>>(json)
+		//		?? new List<UbicacionDto>();
+		//	return dtoList.Select(x => x.Ubicacion).ToList();
+		//}
+
+		public async Task<List<AlmacenDto>> ObtenerAlmacenesAutorizadosAsync(short empresa, string centro, List<string> codigos)
+		{
+			var request = new AlmacenesAutorizadosRequest
+			{
+				CodigoEmpresa = empresa,
+				CodigoCentro = centro,
+				CodigosAlmacen = codigos
+			};
+
+			var resp = await _httpClient.PostAsJsonAsync("Almacen/Combos/Autorizados", request);
+			resp.EnsureSuccessStatusCode();
+
+			var json = await resp.Content.ReadAsStringAsync();
+			return JsonConvert.DeserializeObject<List<AlmacenDto>>(json) ?? new List<AlmacenDto>();
+		}
 
 		private class AlergenosWrapper
 		{
