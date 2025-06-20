@@ -90,10 +90,11 @@
                     <!-- Almacén -->
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <ComboBox Width="150"
+                        <ComboBox Width="250"
                           Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding Almacenes}"
-                          SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}"
+                          ItemsSource="{Binding AlmacenesCombo}"
+                          DisplayMemberPath="DescripcionCombo"
+                          SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"
                           IsEnabled="{Binding CanEnableInputs}"/>
                     </StackPanel>
 
@@ -125,10 +126,11 @@
                 <StackPanel Orientation="Horizontal" Visibility="{Binding LocationFiltersVisibility}">
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <ComboBox Width="150"
-                          Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding Almacenes}"
-                          SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}"/>
+                        <ComboBox Width="250"
+                         Style="{StaticResource EstiloComboBox}"
+ ItemsSource="{Binding AlmacenesCombo}"
+ DisplayMemberPath="DescripcionCombo"
+ SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">

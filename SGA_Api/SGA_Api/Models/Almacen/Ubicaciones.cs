@@ -7,6 +7,8 @@ namespace SGA_Api.Models.Almacen
 	[Table("Ubicaciones")]                    // Nombre real de la tabla (o de la vista) en la BD
 	public class Ubicaciones
 	{
+		[Column("CodigoEmpresa")]
+		public short CodigoEmpresa { get; set; }  
 		[Column("CodigoAlmacen")]              // Opcional, si el nombre ya coincide no hace falta
 		public string CodigoAlmacen { get; set; } = null!;
 
