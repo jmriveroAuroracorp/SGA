@@ -9,9 +9,16 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	private readonly StockService _stockService;
 	private readonly UbicacionesService _ubicService;
 
+	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
+		= new ObservableCollection<AlmacenDto>();
+	[ObservableProperty] private AlmacenDto? selectedAlmacenCombo;
+
+	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
+		= new ObservableCollection<UbicacionDetalladaDto>();
+	[ObservableProperty] private UbicacionDetalladaDto? selectedUbicacion;
+
 	public GestionUbicacionesViewModel()
-		: this(new StockService(), new UbicacionesService())
-	{ }
+		: this(new StockService(), new UbicacionesService()) { }
 
 	public GestionUbicacionesViewModel(
 		StockService stockService,
@@ -19,37 +26,32 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	{
 		_stockService = stockService;
 		_ubicService = ubicService;
-
-		Almacenes = new ObservableCollection<string>();
-		Ubicaciones = new ObservableCollection<UbicacionDetalladaDto>();
-
 		_ = InitializeAsync();
 	}
 
-	public ObservableCollection<string> Almacenes { get; }
-	[ObservableProperty] private string selectedAlmacen;
-
-	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
-
 	private async Task InitializeAsync()
 	{
-		var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
 		var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-		var desdeStock = await _stockService.ObtenerAlmacenesAsync(centro);
+		var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-		var todos = desdeLogin.Concat(desdeStock)
-							  .Distinct()
-							  .OrderBy(x => x)
-							  .ToList();
+		// 1) Filtramos almacenes
+		var autorizados = await _stockService
+			.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
 
-		Almacenes.Clear();
-		foreach (var a in todos) Almacenes.Add(a);
-		SelectedAlmacen = Almacenes.FirstOrDefault();
+		AlmacenesCombo.Clear();
+		foreach (var a in autorizados)
+			AlmacenesCombo.Add(a);
+
+		// 2) Seleccionamos el primero y disparamos carga de ubicaciones
+		SelectedAlmacenCombo = AlmacenesCombo.FirstOrDefault();
 	}
 
-	partial void OnSelectedAlmacenChanged(string almacen)
+	partial void OnSelectedAlmacenComboChanged(
+		AlmacenDto? old, AlmacenDto? nuev)
 	{
-		_ = LoadUbicacionesAsync(almacen);
+		if (nuev is not null)
+			_ = LoadUbicacionesAsync(nuev.CodigoAlmacen);
 	}
 
 	private async Task LoadUbicacionesAsync(string almacen)
@@ -57,12 +59,15 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		Ubicaciones.Clear();
 		if (string.IsNullOrWhiteSpace(almacen)) return;
 
-		// Llama a tu GET detallado:
-		var empresa = SessionManager.EmpresaSeleccionada ?? 0;
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+
+		// 3) Llamamos al endpoint de DETALLE
 		var lista = await _ubicService
 			.ObtenerUbicacionesDetalladasAsync(empresa, almacen);
 
 		foreach (var dto in lista)
 			Ubicaciones.Add(dto);
+
+		SelectedUbicacion = Ubicaciones.FirstOrDefault();
 	}
 }
