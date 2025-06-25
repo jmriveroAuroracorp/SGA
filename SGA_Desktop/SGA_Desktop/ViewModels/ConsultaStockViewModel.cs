@@ -25,11 +25,15 @@ namespace SGA_Desktop.ViewModels
 		private const string SIN_UBICACION = "Sin ubicación";
 		private const string TODAS = "Todas";
 
+
 		#endregion
 
 
 		#region Variables
 		private bool _busquedaPorDescripcion;
+		private AlmacenDto? almacenArticuloPorDefecto;
+		private AlmacenDto? almacenUbicacionPorDefecto;
+
 		#endregion
 
 		#region Fields & Services
@@ -171,15 +175,20 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (newValue)
 			{
+				almacenUbicacionPorDefecto = AlmacenSeleccionadoCombo;
+				AlmacenSeleccionadoCombo = almacenArticuloPorDefecto ?? AlmacenesCombo.FirstOrDefault();
 				SwitchMode(resetFilters: false, setArticle: true);
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 		}
 
+
 		partial void OnIsLocationModeChanged(bool oldValue, bool newValue)
 		{
 			if (newValue)
 			{
+				almacenArticuloPorDefecto = AlmacenSeleccionadoCombo;
+				AlmacenSeleccionadoCombo = almacenUbicacionPorDefecto ?? AlmacenesCombo.FirstOrDefault();
 				SwitchMode(resetFilters: false, setArticle: false);
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
@@ -240,13 +249,13 @@ namespace SGA_Desktop.ViewModels
 				FiltroArticulo = string.Empty;
 				FiltroPartida = string.Empty;
 				AlmacenSeleccionado = TODAS;
-		
+				// 👇 Añade esta línea para reiniciar el ComboBox de almacenes
+				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
 			else if (IsLocationMode)
 			{
-				// Solo limpia filtros del modo ubicación
 				AlmacenSeleccionado = TODAS;
-	
+				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
 		}
 
@@ -640,8 +649,11 @@ namespace SGA_Desktop.ViewModels
 				if (IsArticleMode)
 					Ubicaciones.Add(TODAS);
 
-				foreach (var ubic in lista)
+				foreach (var ubic in lista
+	.OrderBy(u => u.Ubicacion))
+				{
 					Ubicaciones.Add(string.IsNullOrEmpty(ubic.Ubicacion) ? SIN_UBICACION : ubic.Ubicacion);
+				}
 
 				FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
 			}

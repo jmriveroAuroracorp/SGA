@@ -19,7 +19,7 @@ public partial class ConfiguracionUbicacionViewModel : ObservableObject
 		// Inicializa las props ligadas:
 		Ubicacion = dto.Ubicacion;
 		DescripcionUbicacion = dto.DescripcionUbicacion;
-		TipoUbicacion = dto.TipoUbicacion;
+		TipoUbicacionDescripcion = dto.TipoUbicacionDescripcion;
 		Habilitada = dto.Habilitada;
 		TiposDisponibles = new List<string> { "Picking", "Almacenaje", "..." };
 
@@ -30,6 +30,7 @@ public partial class ConfiguracionUbicacionViewModel : ObservableObject
 	[ObservableProperty] private string descripcionUbicacion;
 	[ObservableProperty] private string tipoUbicacion;
 	[ObservableProperty] private bool habilitada;
+	[ObservableProperty] private string tipoUbicacionDescripcion;
 	public List<string> TiposDisponibles { get; }
 
 	public IRelayCommand GuardarCommand { get; }

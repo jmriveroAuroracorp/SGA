@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Net.Http;
 using System.Windows;
 using System.Text;
+using System.Diagnostics;
 
 namespace SGA_Desktop.Services
 {
@@ -11,41 +12,6 @@ namespace SGA_Desktop.Services
 	{
 		public UbicacionesService() : base() { }
 
-		///// <summary>
-		///// GET /api/Ubicaciones?codigoEmpresa=X&codigoAlmacen=Y
-		///// </summary>
-		//public async Task<List<UbicacionDetalladaDto>> ObtenerUbicacionesDetalladasAsync(
-		//	short codigoEmpresa,
-		//	string codigoAlmacen)
-		//{
-		//	try
-		//	{
-		//		// Llama al endpoint GET que ya tienes:
-		//		var url = $"Ubicaciones?codigoEmpresa={codigoEmpresa}"
-		//				+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
-		//		var lista = await _httpClient
-		//			.GetFromJsonAsync<List<UbicacionDetalladaDto>>(url);
-		//		return lista ?? new List<UbicacionDetalladaDto>();
-		//	}
-		//	catch (HttpRequestException ex)
-		//	{
-		//		MessageBox.Show(
-		//			$"Error al obtener ubicaciones:\n{ex.Message}",
-		//			"Error HTTP",
-		//			MessageBoxButton.OK,
-		//			MessageBoxImage.Error);
-		//		return new List<UbicacionDetalladaDto>();
-		//	}
-		//	catch (NotSupportedException)
-		//	{
-		//		MessageBox.Show(
-		//			"Respuesta no está en formato JSON.",
-		//			"Error de formato",
-		//			MessageBoxButton.OK,
-		//			MessageBoxImage.Error);
-		//		return new List<UbicacionDetalladaDto>();
-		//	}
-		//}
 		// 1) Si en algún otro sitio usas UbicacionDto (solo código+empresa+ubicación)
 		public async Task<List<UbicacionDto>> ObtenerUbicacionesAsync(
 			string codigoAlmacen,
@@ -76,6 +42,64 @@ namespace SGA_Desktop.Services
 			return lista ?? new List<UbicacionDetalladaDto>();
 		}
 
+		// 2.2) Nuevo: carga solo lo “básico” sin alérgenos ni riesgo
+		public async Task<List<UbicacionDetalladaDto>> ObtenerUbicacionesBasicoAsync(
+	short codigoEmpresa,
+	string codigoAlmacen)
+		{
+			// ¡ojo al nombre!
+			var url = $"Ubicaciones/basica"
+					+ $"?codigoEmpresa={codigoEmpresa}"
+					+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+
+			var lista = await _httpClient
+				.GetFromJsonAsync<List<UbicacionDetalladaDto>>(url);
+			return lista ?? new List<UbicacionDetalladaDto>();
+		}
+
+		/// <summary>
+		/// GET api/ubicaciones/alergenos/presentes
+		/// </summary>
+		/// <summary>GET /api/ubicaciones/alergenos/presentes?codigoEmpresa=X&codigoAlmacen=Y&ubicacion=Z</summary>
+		public async Task<List<AlergenoDto>> ObtenerAlergenosPresentesAsync(
+			short codigoEmpresa, string codigoAlmacen, string ubicacion)
+		{
+			var url = $"Ubicaciones/alergenos/presentes"
+					+ $"?codigoEmpresa={codigoEmpresa}"
+					+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
+					+ $"&ubicacion={Uri.EscapeDataString(ubicacion)}";
+
+			return await _httpClient.GetFromJsonAsync<List<AlergenoDto>>(url)
+				   ?? new List<AlergenoDto>();
+		}
+
+		/// <summary>GET /api/ubicaciones/alergenos/permitidos?codigoEmpresa=X&codigoAlmacen=Y&ubicacion=Z</summary>
+		public async Task<List<AlergenoDto>> ObtenerAlergenosPermitidosAsync(
+			short codigoEmpresa, string codigoAlmacen, string ubicacion)
+		{
+			var url = $"Ubicaciones/alergenos/permitidos"
+					+ $"?codigoEmpresa={codigoEmpresa}"
+					+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
+					+ $"&ubicacion={Uri.EscapeDataString(ubicacion)}";
+
+			return await _httpClient.GetFromJsonAsync<List<AlergenoDto>>(url)
+				   ?? new List<AlergenoDto>();
+		}
+
+		public async Task<bool> CrearUbicacionDetalladaAsync(CrearUbicacionDetalladaDto dto)
+		{
+			var resp = await _httpClient.PostAsJsonAsync(
+				"Ubicaciones", dto);
+			return resp.IsSuccessStatusCode;
+		}
+
+		public async Task<List<TipoUbicacionDto>> ObtenerTiposUbicacionAsync()
+		{
+			// GET /api/ubicaciones/tipos?codigoEmpresa=1
+			var url = $"Ubicaciones/tipos";
+			var lista = await _httpClient.GetFromJsonAsync<List<TipoUbicacionDto>>(url);
+			return lista ?? new List<TipoUbicacionDto>();
+		}
 	}
 }
 

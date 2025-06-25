@@ -3,62 +3,113 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
       mc:Ignorable="d"
       d:DesignHeight="600" d:DesignWidth="900"
       Title="Gestión de Ubicaciones">
 
-    <Grid Margin="10">
+    <Grid Margin="10" Background="{StaticResource BrushFondo}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <!-- Filtro -->
             <RowDefinition Height="*"/>
+            <!-- Listado -->
         </Grid.RowDefinitions>
 
-        <!-- Selector de almacén -->
+        <!-- 2) Filtro de Almacén, siempre fijo arriba -->
         <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="Almacén:" 
-                 VerticalAlignment="Center" 
+            <TextBlock Text="Almacén:"
+                 VerticalAlignment="Center"
+                 FontFamily="{StaticResource FuentePrincipal}"
+                 FontSize="14"
                  Margin="0,0,5,0"/>
             <ComboBox Width="250"
-          Style="{StaticResource EstiloComboBox}"
-          ItemsSource="{Binding AlmacenesCombo}"
-          DisplayMemberPath="DescripcionCombo"
-          SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"/>
-
+                Style="{StaticResource EstiloComboBox}"
+                ItemsSource="{Binding AlmacenesCombo}"
+                DisplayMemberPath="DescripcionCombo"
+                SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"/>
+            <Button Content="Nueva ubicación"
+          Margin="10,0,0,0"
+          Padding="8,4"
+          Style="{StaticResource EstiloBotonPrincipal}"
+          Command="{Binding CreateUbicacionCommand}"
+          CommandParameter="{Binding SelectedAlmacenCombo}"
+          ToolTip="Crear una ubicación en este almacén"/>
         </StackPanel>
-        <!-- ListView que se estira -->
+
+        <!-- 3) ListView con virtualización y estilo de tarjeta -->
         <ListView Grid.Row="1"
               ItemsSource="{Binding Ubicaciones}"
               SelectedItem="{Binding SelectedUbicacion}"
+              ScrollViewer.VerticalScrollBarVisibility="Auto"
               BorderThickness="0"
-              Margin="0"
-              HorizontalContentAlignment="Stretch"
-              VerticalContentAlignment="Top">
+              VirtualizingStackPanel.IsVirtualizing="True"
+              VirtualizingStackPanel.VirtualizationMode="Recycling"
+              Background="Transparent">
 
-            <!-- Cada item también se estira -->
+            <!-- 3.1) Estilo de contenedor: tarjeta con hover/selección -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0"/>
                     <Setter Property="Margin" Value="0,0,0,10"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="VerticalContentAlignment" Value="Top"/>
+                    <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="Background" Value="White"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border x:Name="Bd"
+                        SnapsToDevicePixels="True"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{StaticResource BrushSecundario1}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                                    <ContentPresenter Margin="4"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd"
+                            Property="Background"
+                            Value="{StaticResource BrushSecundario2}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Bd"
+                            Property="Background"
+                            Value="{StaticResource BrushPrincipal}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
                 </Style>
             </ListView.ItemContainerStyle>
 
+            <!-- 3.2) Plantilla de contenido -->
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Border Padding="10"
-                  BorderBrush="LightGray"
-                  BorderThickness="1"
-                  CornerRadius="5"
+                    <Border Padding="12"
                   Background="White"
-                  HorizontalAlignment="Stretch">
+                  BorderBrush="{StaticResource BrushInputBorde}"
+                  BorderThickness="1"
+                  CornerRadius="6">
                         <Border.Effect>
                             <DropShadowEffect ShadowDepth="2"
                                 BlurRadius="6"
-                                Opacity="0.3"/>
+                                Opacity="0.2"/>
                         </Border.Effect>
 
                         <Expander HorizontalAlignment="Stretch">
+                            <!-- 1) Definimos el trigger para Expanded -->
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="Expanded">
+                                    <i:InvokeCommandAction
+        Command="{Binding DataContext.LoadAlergenosCommand,
+                  RelativeSource={RelativeSource AncestorType=Page}}"
+        CommandParameter="{Binding}" />
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
                             <!-- HEADER -->
                             <Expander.Header>
                                 <Grid>
@@ -68,11 +119,13 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <StackPanel Orientation="Vertical" Grid.Column="0">
+                                    <StackPanel Grid.Column="0" Orientation="Vertical">
                                         <TextBlock Text="{Binding Ubicacion}"
-                               FontSize="14"
-                               FontWeight="Bold"/>
+                               FontFamily="{StaticResource FuentePrincipal}"
+                               FontWeight="Bold"
+                               FontSize="14"/>
                                         <TextBlock Text="{Binding DescripcionUbicacion}"
+                               FontFamily="{StaticResource FuentePrincipal}"
                                FontSize="12"
                                Foreground="Gray"
                                Margin="0,2,0,0"/>
@@ -81,6 +134,7 @@
                                     <TextBlock Text="{Binding TipoUbicacion}"
                              Grid.Column="1"
                              VerticalAlignment="Center"
+                             FontFamily="{StaticResource FuentePrincipal}"
                              FontStyle="Italic"
                              Margin="10,0,0,0"/>
 
@@ -88,51 +142,132 @@
                             Grid.Column="2"
                             VerticalAlignment="Center"
                             Content="Activo"
+                            FontFamily="{StaticResource FuentePrincipal}"
                             Margin="10,0,0,0"/>
                                 </Grid>
                             </Expander.Header>
 
                             <!-- CONTENT -->
                             <Expander.Content>
-                                <StackPanel>
-                                    <WrapPanel Margin="0,5,0,0">
-                                        <TextBlock Text="Pasillo:" FontWeight="Bold"/>
-                                        <TextBlock Text="{Binding Pasillo}" Margin="5,0,0,0"/>
-                                        <TextBlock Text="Estantería:" FontWeight="Bold" Margin="20,0,0,0"/>
-                                        <TextBlock Text="{Binding Estanteria}" Margin="5,0,0,0"/>
-                                        <TextBlock Text="Altura:" FontWeight="Bold" Margin="20,0,0,0"/>
-                                        <TextBlock Text="{Binding Altura}" Margin="5,0,0,0"/>
-                                        <TextBlock Text="Posición:" FontWeight="Bold" Margin="20,0,0,0"/>
-                                        <TextBlock Text="{Binding Posicion}" Margin="5,0,0,0"/>
-                                    </WrapPanel>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <!-- posición -->
+                                        <RowDefinition Height="Auto"/>
+                                        <!-- temp/palet -->
+                                        <RowDefinition Height="*"/>
+                                        <!-- alérgenos -->
+                                        <RowDefinition Height="Auto"/>
+                                        <!-- checkbox riesgo -->
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="3*"/>
+                                    </Grid.ColumnDefinitions>
 
-                                    <WrapPanel Margin="0,5,0,0">
-                                        <TextBlock Text="Temp. Mín (°C):" FontWeight="Bold"/>
-                                        <TextBlock Text="{Binding TemperaturaMin}" Margin="5,0,0,0"/>
-                                        <TextBlock Text="Temp. Máx (°C):" FontWeight="Bold" Margin="20,0,0,0"/>
-                                        <TextBlock Text="{Binding TemperaturaMax}" Margin="5,0,0,0"/>
-                                        <TextBlock Text="Tipo Palet:" FontWeight="Bold" Margin="20,0,0,0"/>
-                                        <TextBlock Text="{Binding TipoPaletPermitido}" Margin="5,0,0,0"/>
-                                    </WrapPanel>
+                                    <!-- Datos de ubicación -->
+                                    <StackPanel Orientation="Horizontal"
+                              Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2">
+                                        <TextBlock Text="Pasillo:" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding Pasillo}" Margin="0,0,12,0"/>
+                                        <TextBlock Text="Estantería:" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding Estanteria}" Margin="0,0,12,0"/>
+                                        <TextBlock Text="Altura:" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding Altura}" Margin="0,0,12,0"/>
+                                        <TextBlock Text="Posición:" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding Posicion}"/>
+                                    </StackPanel>
 
+                                    <!-- Temperaturas y tipo de palet -->
+                                    <StackPanel Orientation="Horizontal"
+                                         Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
+                                        <TextBlock Text="Temp. Mín (°C):" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding TemperaturaMin}" Margin="0,0,12,0"/>
+                                        <TextBlock Text="Temp. Máx (°C):" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding TemperaturaMax}" Margin="0,0,12,0"/>
+                                        <TextBlock Text="Tipo Palet:" FontWeight="Bold" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding TipoPaletPermitido}"/>
+                                    </StackPanel>
+
+                                    <!-- Alérgenos Presentes como chips -->
                                     <GroupBox Header="Alérgenos Presentes"
-                            IsEnabled="False"
-                            Margin="0,5,0,0">
-                                        <TextBlock Text="{Binding AlergenosPresentes}"
-                               TextWrapping="Wrap"/>
+                                        Grid.Row="2" Grid.Column="0"
+                                        Padding="8">
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                     VerticalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding AlergenosPresentesList}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel IsItemsHost="True"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{StaticResource BrushSecundario1}"
+                                                                CornerRadius="4"
+                                                                Padding="4,2"
+                                                                Margin="2">
+                                                            <TextBlock Text="{Binding Descripcion}" FontSize="12"/>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
                                     </GroupBox>
 
+                                    <!-- Alérgenos Permitidos como chips -->
                                     <GroupBox Header="Alérgenos Permitidos"
-                            Margin="0,5,0,0">
-                                        <TextBlock Text="{Binding AlergenosPermitidos}"
-                               TextWrapping="Wrap"/>
+                                              Grid.Row="2" Grid.Column="1"
+                                              Padding="8">
+                                        <Grid>
+                                            <!-- 1) ItemsControl de chips -->
+                                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                            VerticalScrollBarVisibility="Disabled">
+                                                <ItemsControl ItemsSource="{Binding AlergenosPermitidosList}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel IsItemsHost="True"/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="{StaticResource BrushSecundario2}"
+                                                            CornerRadius="4"
+                                                            Padding="4,2"
+                                                            Margin="2">
+                                                                <TextBlock Text="{Binding Descripcion}" FontSize="12"/>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+
+                                            <!-- 2) Placeholder “— Ninguno —” -->
+                                            <TextBlock Text="— No hay limitación de alérgenos en esta ubicación —"
+                                                       FontStyle="Italic"
+                                                       Foreground="Gray"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding AlergenosPermitidosList.Count}" Value="0">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
                                     </GroupBox>
 
+                                    <!-- Riesgo de Contaminación -->
                                     <CheckBox Content="Riesgo de Contaminación"
                             IsChecked="{Binding RiesgoContaminacion}"
-                            IsEnabled="False"
-                            Margin="0,5,0,0"/>
-                                </StackPanel>
+                            Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                            Margin="0,8,0,0"/>
+                                </Grid>
                             </Expander.Content>
                         </Expander>
                     </Border>

@@ -128,9 +128,9 @@
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="250"
                          Style="{StaticResource EstiloComboBox}"
- ItemsSource="{Binding AlmacenesCombo}"
- DisplayMemberPath="DescripcionCombo"
- SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"/>
+                         ItemsSource="{Binding AlmacenesCombo}"
+                         DisplayMemberPath="DescripcionCombo"
+                         SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">
