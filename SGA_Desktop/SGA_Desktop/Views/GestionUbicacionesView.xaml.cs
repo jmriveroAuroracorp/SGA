@@ -26,5 +26,7 @@ namespace SGA_Desktop.Views
 			InitializeComponent();
 			DataContext = new GestionUbicacionesViewModel();
 		}
+
+
 	}
 }

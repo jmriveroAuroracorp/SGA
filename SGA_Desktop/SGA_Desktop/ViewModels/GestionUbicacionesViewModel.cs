@@ -1,8 +1,16 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using SGA_Desktop.Dialog;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
+using SGA_Desktop.ViewModels;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Windows;
+
 
 public partial class GestionUbicacionesViewModel : ObservableObject
 {
@@ -20,12 +28,24 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public GestionUbicacionesViewModel()
 		: this(new StockService(), new UbicacionesService()) { }
 
+	/// <summary>Comando que carga los alérgenos de una ubicación.</summary>
+	public IAsyncRelayCommand<UbicacionDetalladaDto> LoadAlergenosCommand { get; }
+
+	public IRelayCommand CreateUbicacionCommand { get; }
+
+
 	public GestionUbicacionesViewModel(
 		StockService stockService,
 		UbicacionesService ubicService)
 	{
 		_stockService = stockService;
 		_ubicService = ubicService;
+		LoadAlergenosCommand = new AsyncRelayCommand<UbicacionDetalladaDto>(LoadAlergenosAsync);
+		CreateUbicacionCommand = new RelayCommand<AlmacenDto>(
+		OpenCrearUbicacionDialog,
+		alm => alm != null
+		);
+
 		_ = InitializeAsync();
 	}
 
@@ -61,13 +81,85 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 
 		var empresa = SessionManager.EmpresaSeleccionada!.Value;
 
-		// 3) Llamamos al endpoint de DETALLE
-		var lista = await _ubicService
-			.ObtenerUbicacionesDetalladasAsync(empresa, almacen);
+		// Llama al endpoint ligero
+		var listaBasica = await _ubicService
+			.ObtenerUbicacionesBasicoAsync(empresa, almacen);
 
-		foreach (var dto in lista)
+		foreach (var dto in listaBasica)
+		{
+			// Asegúrate de que estos campos existen en tu DTO
+			dto.AlergenosPresentes = "";
+			dto.AlergenosPermitidos = "";
+			dto.RiesgoContaminacion = false;
 			Ubicaciones.Add(dto);
+		}
 
 		SelectedUbicacion = Ubicaciones.FirstOrDefault();
 	}
+
+	public async Task LoadAlergenosAsync(UbicacionDetalladaDto dto)
+	{
+		if (dto.AlergenosPresentesList.Any()) return;
+
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+		var almacen = SelectedAlmacenCombo!.CodigoAlmacen;
+		var ubic = dto.Ubicacion;
+
+		List<AlergenoDto> presentes;
+		try
+		{
+			//Presentes
+			presentes = await _ubicService
+				.ObtenerAlergenosPresentesAsync(empresa, almacen, ubic);
+			// Permitidos
+			var permitidos = await _ubicService.ObtenerAlergenosPermitidosAsync(empresa, almacen, ubic);
+			dto.AlergenosPermitidosList.Clear();
+			foreach (var a in permitidos)
+				dto.AlergenosPermitidosList.Add(a);
+			// (Opcional) recalcula el riesgo:
+			dto.RiesgoContaminacion = dto.AlergenosPresentesList
+				.Any(p => !dto.AlergenosPermitidosList.Any(q => q.Codigo == p.Codigo));
+		}
+		catch (HttpRequestException ex)
+		{
+			Debug.WriteLine($"HTTP error cargando presentes: {ex.Message}");
+			presentes = new List<AlergenoDto>();
+		}
+
+		dto.AlergenosPresentesList.Clear();
+		foreach (var a in presentes)
+			dto.AlergenosPresentesList.Add(a);
+
+		// (igual para permitidos si lo necesitas)
+	}
+	private void OpenCrearUbicacionDialog(AlmacenDto almacen)
+	{
+		// Recupera la empresa seleccionada del SessionManager
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+
+		// 3) Instancia del VM de diálogo
+		var dialogVm = new UbicacionDialogViewModel(
+			_ubicService,         // tu servicio inyectado en este VM
+			empresa,              // CódigoEmpresa
+			almacen.CodigoAlmacen // CódigoAlmacen
+								  // el cuarto parámetro es 'existing' y al no pasarlo, será null => modo Crear
+		);
+
+		// 4) Instancia de la ventana
+		var dlg = new UbicacionDialogWindow
+		{
+			DataContext = dialogVm,
+			Owner = Application.Current.MainWindow
+		};
+
+		// 5) Mostrar y, si OK, recargar la lista
+		if (dlg.ShowDialog() == true)
+		{
+			// recarga poste creación
+			_ = LoadUbicacionesAsync(almacen.CodigoAlmacen);
+		}
+	}
+
+
+
 }
