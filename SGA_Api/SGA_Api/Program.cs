@@ -6,6 +6,7 @@ using SGA_Api.Middleware;
 using SGA_Api.Services;
 using System.IO;
 using SGA_Api.Middleware;
+using SGA_Api.JsonConverter;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,6 +36,13 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IPesajeService, PesajeLogic>();
 
+//JSON CONVERTER
+builder.Services
+	   .AddControllers()
+	   .AddJsonOptions(opts =>
+		   opts.JsonSerializerOptions.Converters.Add(new ShortJsonConverter())
+	   );
+
 // CORS aquí
 builder.Services.AddCors(options =>
 {
@@ -47,12 +55,19 @@ builder.Services.AddCors(options =>
 });
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment())
+{
+	app.UseDeveloperExceptionPage();
+	app.UseSwagger();
+	app.UseSwaggerUI();
+}
+
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
 //{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-//}
+//app.UseSwagger();
+//    app.UseSwaggerUI();
+////}
 app.UseStaticFiles(); // Para wwwroot (si lo usas, opcional)
 
 // Añadir esta configuración personalizada para /actualizaciones
@@ -62,6 +77,31 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/actualizaciones"
 });
 app.UseMiddleware<TokenValidationMiddleware>();
+
+app.UseExceptionHandler(errApp =>
+{
+	errApp.Run(async context =>
+	{
+		// Siempre JSON
+		context.Response.ContentType = "application/json";
+
+		// Captura la excepción
+		var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+		var ex = feature?.Error;
+
+		// Código HTTP 500
+		context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+
+		// Construye un payload JSON con el detalle
+		var response = new
+		{
+			Message = ex?.Message,
+			Exception = app.Environment.IsDevelopment() ? ex?.ToString() : null
+		};
+
+		await context.Response.WriteAsJsonAsync(response);
+	});
+});
 
 app.UseAuthorization();
 

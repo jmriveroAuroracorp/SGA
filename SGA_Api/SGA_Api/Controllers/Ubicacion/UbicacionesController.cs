@@ -134,7 +134,7 @@ namespace SGA_Api.Controllers.Ubicacion
 					Estanteria = u.Estanteria,
 					Altura = u.Altura,
 					Posicion = u.Posicion,
-
+					Orden = u.Orden,
 					// PROTEGEMOS LOS CAMPOS OPCIONALES
 					TemperaturaMin = cfg != null ? cfg.TemperaturaMin : (short?)null,
 					TemperaturaMax = cfg != null ? cfg.TemperaturaMax : (short?)null,
@@ -146,7 +146,13 @@ namespace SGA_Api.Controllers.Ubicacion
 
 					AlergenosPermitidos = "",  // o incluso podrías tirarlas desde aquí
 					AlergenosPresentes = "",
-					RiesgoContaminacion = false
+					RiesgoContaminacion = false,
+					 // Nuevos campos físicos
+					Peso = u.Peso,
+					DimensionX = u.DimensionX,
+					DimensionY = u.DimensionY,
+					DimensionZ = u.DimensionZ,
+					Angulo = u.Angulo
 				}
 			).ToListAsync();
 
@@ -246,7 +252,13 @@ namespace SGA_Api.Controllers.Ubicacion
 				Estanteria = dto.Estanteria,
 				Altura = dto.Altura,
 				Posicion = dto.Posicion,
-				Obsoleta = 0
+				Obsoleta = 0,
+				Orden = dto.Orden,
+				Peso = dto.Peso,
+				DimensionX = dto.DimensionX,
+				DimensionY = dto.DimensionY,
+				DimensionZ = dto.DimensionZ,
+				Angulo = dto.Angulo
 			};
 			_auroraSgaContext.Ubicaciones.Add(u);
 
@@ -277,6 +289,7 @@ namespace SGA_Api.Controllers.Ubicacion
 					VCodigoAlergeno = codAler
 				});
 			}
+			await _auroraSgaContext.SaveChangesAsync();
 
 
 			return CreatedAtAction(
@@ -307,6 +320,7 @@ namespace SGA_Api.Controllers.Ubicacion
 					Estanteria = x.Estanteria,
 					Altura = x.Altura,
 					Posicion = x.Posicion,
+					Orden = x.Orden,
 					TemperaturaMin = x.TemperaturaMin,
 					TemperaturaMax = x.TemperaturaMax,
 					TipoPaletPermitido = x.TipoPaletPermitido,
@@ -321,6 +335,91 @@ namespace SGA_Api.Controllers.Ubicacion
 
 			return Ok(dto);
 		}
+
+		[HttpPut("{codigoEmpresa}/{codigoAlmacen}/{codigoUbicacion}")]
+		public async Task<IActionResult> ActualizarUbicacionDetallada(
+		short codigoEmpresa,
+		string codigoAlmacen,
+		string codigoUbicacion,
+		[FromBody] CrearUbicacionDetalladaDto dto)
+		{
+			// 1. Validaciones básicas
+			if (dto == null)
+				return BadRequest("El cuerpo de la solicitud no puede ser vacío.");
+
+			if (dto.CodigoEmpresa != codigoEmpresa
+			 || !string.Equals(dto.CodigoAlmacen, codigoAlmacen, StringComparison.Ordinal)
+			 || !string.Equals(dto.CodigoUbicacion, codigoUbicacion, StringComparison.Ordinal))
+			{
+				return BadRequest("Los parámetros de ruta y el DTO no coinciden.");
+			}
+
+			// 2. Buscar la entidad Ubicacion
+			var entidad = await _auroraSgaContext.Ubicaciones
+				.FirstOrDefaultAsync(u =>
+					u.CodigoEmpresa == codigoEmpresa &&
+					u.CodigoAlmacen == codigoAlmacen &&
+					u.CodigoUbicacion == codigoUbicacion);
+			if (entidad == null)
+				return NotFound();
+
+			// 3. Actualizar campos físicos
+			entidad.DescripcionUbicacion = dto.DescripcionUbicacion;
+			entidad.Pasillo = dto.Pasillo;
+			entidad.Estanteria = dto.Estanteria;
+			entidad.Altura = dto.Altura;
+			entidad.Posicion = dto.Posicion;
+			entidad.Orden = dto.Orden;
+			entidad.Peso = dto.Peso;
+			entidad.DimensionX = dto.DimensionX;
+			entidad.DimensionY = dto.DimensionY;
+			entidad.DimensionZ = dto.DimensionZ;
+			entidad.Angulo = dto.Angulo;
+			entidad.Orden = dto.Orden;
+
+			// 4. Actualizar configuración si existe
+			var cfg = await _auroraSgaContext.Ubicaciones_Configuracion
+				.FirstOrDefaultAsync(c =>
+					c.CodigoEmpresa == codigoEmpresa &&
+					c.CodigoAlmacen == codigoAlmacen &&
+					c.Ubicacion == codigoUbicacion);
+			if (cfg != null)
+			{
+				cfg.TemperaturaMin = dto.TemperaturaMin;
+				cfg.TemperaturaMax = dto.TemperaturaMax;
+				cfg.TipoPaletPermitido = dto.TipoPaletPermitido;
+				cfg.Habilitada = dto.Habilitada;
+				cfg.TipoUbicacionId = dto.TipoUbicacionId;
+				
+			}
+
+			// 5. Reemplazar alérgenos permitidos
+			var existentes = _auroraSgaContext.Ubicaciones_AlergenosPermitidos
+				.Where(a =>
+					a.CodigoEmpresa == codigoEmpresa &&
+					a.CodigoAlmacen == codigoAlmacen &&
+					a.Ubicacion == codigoUbicacion);
+			_auroraSgaContext.Ubicaciones_AlergenosPermitidos.RemoveRange(existentes);
+
+			if (dto.AlergenosPermitidos != null)
+			{
+				foreach (var codAler in dto.AlergenosPermitidos)
+				{
+					_auroraSgaContext.Ubicaciones_AlergenosPermitidos.Add(new UbicacionesAlergenosPermitidos
+					{
+						CodigoEmpresa = codigoEmpresa,
+						CodigoAlmacen = codigoAlmacen,
+						Ubicacion = codigoUbicacion,
+						VCodigoAlergeno = codAler
+					});
+				}
+			}
+
+			// 6. Guardar cambios
+			await _auroraSgaContext.SaveChangesAsync();
+			return NoContent();
+		}
+
 
 		/// <summary>
 		/// GET api/ubicaciones/tipos

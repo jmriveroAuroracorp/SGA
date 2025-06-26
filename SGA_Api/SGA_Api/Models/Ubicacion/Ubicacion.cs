@@ -11,6 +11,12 @@
 		public int? Altura { get; set; }
 		public int? Posicion { get; set; }
 		public int Obsoleta { get; set; }
+		public int ? Orden {  get; set; }
+		public decimal? Peso { get; set; }
+		public decimal? DimensionX { get; set; }
+		public decimal? DimensionY { get; set; }
+		public decimal? DimensionZ { get; set; }
+		public decimal? Angulo { get; set; }
 	}
 
 	public class UbicacionesConfiguracion

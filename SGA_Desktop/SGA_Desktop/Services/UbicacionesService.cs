@@ -93,6 +93,21 @@ namespace SGA_Desktop.Services
 			return resp.IsSuccessStatusCode;
 		}
 
+		// PUT (actualizar)
+		public async Task<(bool Success, string? ErrorMessage)> ActualizarUbicacionDetalladaAsync(CrearUbicacionDetalladaDto dto)
+		{
+			var url = $"Ubicaciones/{dto.CodigoEmpresa}/{Uri.EscapeDataString(dto.CodigoAlmacen)}/{Uri.EscapeDataString(dto.CodigoUbicacion)}";
+			var resp = await _httpClient.PutAsJsonAsync(url, dto);
+			if (resp.IsSuccessStatusCode)
+				return (true, null);
+
+			// Lee el mensaje de error de la API
+			var content = await resp.Content.ReadAsStringAsync();
+			return (false, $"{(int)resp.StatusCode} {resp.ReasonPhrase}: {content}");
+		}
+
+
+
 		public async Task<List<TipoUbicacionDto>> ObtenerTiposUbicacionAsync()
 		{
 			// GET /api/ubicaciones/tipos?codigoEmpresa=1
@@ -100,6 +115,14 @@ namespace SGA_Desktop.Services
 			var lista = await _httpClient.GetFromJsonAsync<List<TipoUbicacionDto>>(url);
 			return lista ?? new List<TipoUbicacionDto>();
 		}
+		public async Task<List<AlergenoDto>> ObtenerAlergenosMaestrosAsync()
+		{
+			var lista = await _httpClient
+				.GetFromJsonAsync<List<AlergenoDto>>("Alergenos/maestros");
+			return lista ?? new List<AlergenoDto>();
+		}
+
+
 	}
 }
 
