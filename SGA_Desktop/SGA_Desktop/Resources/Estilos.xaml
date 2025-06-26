@@ -107,7 +107,15 @@
         </Setter>
     </Style>
 
-
+    <!-- 🔖 Estilo para etiquetas (labels) -->
+    <Style x:Key="LabelStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    
     <!-- 🔘 Botón flotante redondo -->
     <Style x:Key="EstiloBotonFlotante"
        TargetType="Button"

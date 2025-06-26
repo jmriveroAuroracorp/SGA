@@ -16,6 +16,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 {
 	private readonly StockService _stockService;
 	private readonly UbicacionesService _ubicService;
+	private readonly PaletService _paletService;
 
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
 		= new ObservableCollection<AlmacenDto>();
@@ -26,26 +27,33 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	[ObservableProperty] private UbicacionDetalladaDto? selectedUbicacion;
 
 	public GestionUbicacionesViewModel()
-		: this(new StockService(), new UbicacionesService()) { }
+	: this(new StockService(), new UbicacionesService(), new PaletService())
+	{ }
 
 	/// <summary>Comando que carga los alérgenos de una ubicación.</summary>
 	public IAsyncRelayCommand<UbicacionDetalladaDto> LoadAlergenosCommand { get; }
 
 	public IRelayCommand CreateUbicacionCommand { get; }
+	public IRelayCommand<UbicacionDetalladaDto> EditarUbicacionCommand { get; }
 
 
 	public GestionUbicacionesViewModel(
 		StockService stockService,
-		UbicacionesService ubicService)
+		UbicacionesService ubicService,
+		PaletService paletService)
 	{
 		_stockService = stockService;
 		_ubicService = ubicService;
+		_paletService = paletService;
 		LoadAlergenosCommand = new AsyncRelayCommand<UbicacionDetalladaDto>(LoadAlergenosAsync);
 		CreateUbicacionCommand = new RelayCommand<AlmacenDto>(
 		OpenCrearUbicacionDialog,
 		alm => alm != null
 		);
-
+		EditarUbicacionCommand = new RelayCommand<UbicacionDetalladaDto>(
+	  OpenEditarUbicacionDialog,
+	  dto => dto != null
+  );
 		_ = InitializeAsync();
 	}
 
@@ -139,7 +147,8 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 
 		// 3) Instancia del VM de diálogo
 		var dialogVm = new UbicacionDialogViewModel(
-			_ubicService,         // tu servicio inyectado en este VM
+			_ubicService, 
+			_paletService,// tu servicio inyectado en este VM
 			empresa,              // CódigoEmpresa
 			almacen.CodigoAlmacen // CódigoAlmacen
 								  // el cuarto parámetro es 'existing' y al no pasarlo, será null => modo Crear
@@ -157,6 +166,36 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		{
 			// recarga poste creación
 			_ = LoadUbicacionesAsync(almacen.CodigoAlmacen);
+		}
+	}
+	private void OpenEditarUbicacionDialog(UbicacionDetalladaDto dto)
+	{
+		if (dto == null) return;
+
+		// Recupera la empresa y el almacén
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+		var almacen = dto.CodigoAlmacen;
+
+		// 1) VM del diálogo en modo edición (pasamos el DTO existente)
+		var dialogVm = new UbicacionDialogViewModel(
+			_ubicService,
+			_paletService,
+			empresa,
+			almacen,
+			existing: dto
+		);
+
+		// 2) Ventana del diálogo
+		var dlg = new UbicacionDialogWindow
+		{
+			DataContext = dialogVm,
+			Owner = Application.Current.MainWindow
+		};
+
+		// 3) Mostrar modal y, al volver true, recargar la lista
+		if (dlg.ShowDialog() == true)
+		{
+			_ = LoadUbicacionesAsync(almacen);
 		}
 	}
 
