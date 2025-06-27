@@ -35,6 +35,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 
 	public IRelayCommand CreateUbicacionCommand { get; }
 	public IRelayCommand<UbicacionDetalladaDto> EditarUbicacionCommand { get; }
+	public IRelayCommand<AlmacenDto> OpenMasivoCommand { get; }
 
 
 	public GestionUbicacionesViewModel(
@@ -42,6 +43,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		UbicacionesService ubicService,
 		PaletService paletService)
 	{
+
 		_stockService = stockService;
 		_ubicService = ubicService;
 		_paletService = paletService;
@@ -55,6 +57,8 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	  dto => dto != null
   );
 		_ = InitializeAsync();
+		OpenMasivoCommand = new RelayCommand<AlmacenDto>(OpenMasivoDialog, alm => alm != null);
+
 	}
 
 	private async Task InitializeAsync()
@@ -198,7 +202,22 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 			_ = LoadUbicacionesAsync(almacen);
 		}
 	}
+	private void OpenMasivoDialog(AlmacenDto almacen)
+	{
+		if (almacen == null) return;
 
+		// Pasa el CódigoAlmacen al constructor
+		var dlg = new UbicacionMasivoDialog(almacen)
+		{
+			Owner = Application.Current.MainWindow
+		};
+
+		// Si tu diálogo devuelve true al cerrar, recarga la lista
+		if (dlg.ShowDialog() == true)
+		{
+			_ = LoadUbicacionesAsync(almacen.CodigoAlmacen);
+		}
+	}
 
 
 }

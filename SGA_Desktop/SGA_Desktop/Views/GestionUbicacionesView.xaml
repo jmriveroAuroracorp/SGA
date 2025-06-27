@@ -29,12 +29,21 @@
                 DisplayMemberPath="DescripcionCombo"
                 SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"/>
             <Button Content="Nueva ubicación"
-          Margin="10,0,0,0"
+          Margin="20,0,20,0"
           Padding="8,4"
+                    Width="150"
           Style="{StaticResource EstiloBotonPrincipal}"
           Command="{Binding CreateUbicacionCommand}"
           CommandParameter="{Binding SelectedAlmacenCombo}"
           ToolTip="Crear una ubicación en este almacén"/>
+            <Button Content="Multiples ubicaciones"
+          Margin="10,0,0,0"
+                    Width="150"
+          Padding="8,4"
+          Style="{StaticResource EstiloBotonPrincipal}"
+          Command="{Binding OpenMasivoCommand}"
+          CommandParameter="{Binding SelectedAlmacenCombo}"
+          ToolTip="Generar ubicaciones en bloque"/>
         </StackPanel>
 
         <!-- 3) ListView con virtualización y estilo de tarjeta -->
@@ -136,7 +145,7 @@
                                     </StackPanel>
 
                                     <!-- Columna 1: Tipo de ubicación -->
-                                    <TextBlock Text="{Binding TipoUbicacion}"
+                                    <TextBlock Text="{Binding TipoUbicacionDescripcion}"
                                    Grid.Column="1"
                                    VerticalAlignment="Center"
                                    FontFamily="{StaticResource FuentePrincipal}"

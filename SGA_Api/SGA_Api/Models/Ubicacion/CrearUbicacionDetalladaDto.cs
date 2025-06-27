@@ -16,6 +16,7 @@ namespace SGA_Api.Models.Ubicacion
 		public int? TemperaturaMin { get; set; }
 		public int? TemperaturaMax { get; set; }
 		public decimal? Peso { get; set; }
+		public decimal? Alto { get; set; }
 		public decimal? DimensionX { get; set; }
 		public decimal? DimensionY { get; set; }
 		public decimal? DimensionZ { get; set; }
@@ -27,6 +28,9 @@ namespace SGA_Api.Models.Ubicacion
 		public short? TipoUbicacionId { get; set; }
 		/// <summary>Códigos de alérgenos que estarán permitidos en esta ubicación.</summary>
 		public List<short> AlergenosPermitidos { get; set; } = new();
+
+		/// <summary>Marca para indicar que el código está duplicado en la generación.</summary>
+		public bool IsDuplicate { get; set; }
 
 	}
 }

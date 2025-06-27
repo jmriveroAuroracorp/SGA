@@ -1,0 +1,269 @@
+﻿<Window x:Class="SGA_Desktop.Dialog.UbicacionMasivoDialog"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Generar ubicaciones por patrón"
+        Width="600" Height="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0"
+             Text="{Binding TituloDisplay}"
+             Style="{StaticResource LabelStyle}"
+             FontSize="20"
+             FontWeight="Bold"
+             Margin="0,0,0,12" />
+            <TabControl Grid.Row="1">
+                <!-- Parámetros de generación -->
+                <TabItem Header="Parámetros">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10" >
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Pasillo -->
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical">
+                                <TextBlock Text="Pasillo desde:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding PasilloDesde, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical">
+                                <TextBlock Text="hasta:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding PasilloHasta, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+
+                            <!-- Estantería -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical">
+                                <TextBlock Text="Estantería desde:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding EstanteriaDesde, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical">
+                                <TextBlock Text="hasta:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding EstanteriaHasta, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+
+                            <!-- Altura -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Vertical">
+                                <TextBlock Text="Altura desde:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding AlturaDesde, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Vertical">
+                                <TextBlock Text="hasta:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding AlturaHasta, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+
+                            <!-- Posición -->
+                            <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Vertical">
+                                <TextBlock Text="Posición desde:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding PosicionDesde, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Vertical">
+                                <TextBlock Text="hasta:" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding PosicionHasta, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 1) Nueva pestaña Configuración -->
+                <TabItem Header="Configuración">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <!-- 0: Temp. Mín -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 1: Temp. Máx -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 2: Tipo Palet -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 3: Tipo Ubicación -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 4: Peso -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 5: Alto -->
+                            </Grid.RowDefinitions>
+
+                            <!-- Temperatura Min -->
+                            <TextBlock Text="Temp. Mín (°C):"
+                       Grid.Row="0" Grid.Column="0"
+                       Style="{StaticResource LabelStyle}" />
+                            <TextBox  Text="{Binding TemperaturaMin, UpdateSourceTrigger=PropertyChanged}"
+                      Grid.Row="0" Grid.Column="1"
+                      Style="{StaticResource EstiloCajaTexto}" />
+
+                            <!-- Temperatura Máx -->
+                            <TextBlock Text="Temp. Máx (°C):"
+                       Grid.Row="1" Grid.Column="0"
+                       Style="{StaticResource LabelStyle}" />
+                            <TextBox  Text="{Binding TemperaturaMax, UpdateSourceTrigger=PropertyChanged}"
+                      Grid.Row="1" Grid.Column="1"
+                      Style="{StaticResource EstiloCajaTexto}" />
+
+                            <!-- Tipo Palet -->
+                            <TextBlock Text="Tipo Palet:"
+                       Grid.Row="2" Grid.Column="0"
+                       Style="{StaticResource LabelStyle}" />
+                            <ComboBox ItemsSource="{Binding TiposPaletDisponibles}"
+                      SelectedValue="{Binding TipoPaletPermitido}"
+                      SelectedValuePath="CodigoPalet"
+                      DisplayMemberPath="Descripcion"
+                      Grid.Row="2" Grid.Column="1"
+                      Style="{StaticResource EstiloComboBox}" />
+
+                            <!-- Tipo Ubicación -->
+                            <TextBlock Text="Tipo Ubicación:"
+                       Grid.Row="3" Grid.Column="0"
+                       Style="{StaticResource LabelStyle}" />
+                            <ComboBox ItemsSource="{Binding TiposUbicacionDisponibles}"
+                      SelectedValuePath="TipoUbicacionId"
+                      DisplayMemberPath="Descripcion"
+                      SelectedValue="{Binding TipoUbicacionId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      Grid.Row="3" Grid.Column="1"
+                      Style="{StaticResource EstiloComboBox}" />
+
+                            <!-- Peso (kg) -->
+                            <TextBlock Text="Peso (kg):"
+                       Grid.Row="4" Grid.Column="0"
+                       Style="{StaticResource LabelStyle}" />
+                            <TextBox Text="{Binding Peso, UpdateSourceTrigger=PropertyChanged}"
+                     Grid.Row="4" Grid.Column="1"
+                     Style="{StaticResource EstiloCajaTexto}" />
+
+                            <!-- Alto (mm) -->
+                            <TextBlock Text="Alto (mm):"
+                       Grid.Row="5" Grid.Column="0"
+                       Style="{StaticResource LabelStyle}" />
+                            <TextBox Text="{Binding Alto, UpdateSourceTrigger=PropertyChanged}"
+                     Grid.Row="5" Grid.Column="1"
+                     Style="{StaticResource EstiloCajaTexto}" />
+
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="Alérgenos">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+                        <StackPanel>
+                            <TextBlock Text="Alérgenos Permitidos:" 
+                   Style="{StaticResource LabelStyle}" 
+                   Margin="0,0,0,8"/>
+
+                            <ItemsControl ItemsSource="{Binding AlergenosDisponibles}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel IsItemsHost="True" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Descripcion}"
+                        IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                        Margin="4"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+                <!-- Previsualización -->
+                <TabItem Header="Previsualización">
+                    <DataGrid ItemsSource="{Binding UbicacionesGeneradas}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              Margin="10">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Excluir" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox 
+                                        IsChecked="{Binding Excluir, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Código"
+                                                Binding="{Binding CodigoUbicacion}"
+                                                IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Pasillo"
+                                                Binding="{Binding Pasillo}"
+                                                IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Estantería"
+                                                Binding="{Binding Estanteria}"
+                                                IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Altura"
+                                                Binding="{Binding Altura}"
+                                                IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Posición"
+                                                Binding="{Binding Posicion}"
+                                                IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Descripción"
+                                                Binding="{Binding DescripcionUbicacion}"
+                                                IsReadOnly="True" />
+
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+            </TabControl>
+
+            <!-- Botones -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Cancelar"
+                        Width="90"
+                        Margin="0,0,8,0"
+                        Command="{Binding CancelCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Generar"
+                        Width="90"
+                        Margin="0,0,8,0"
+                        Command="{Binding GenerarCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Guardar"
+                        Width="90"
+                        Command="{Binding GuardarCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

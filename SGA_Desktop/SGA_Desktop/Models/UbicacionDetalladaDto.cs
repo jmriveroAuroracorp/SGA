@@ -67,6 +67,8 @@ public class UbicacionDetalladaDto
 	public bool RiesgoContaminacion { get; set; }
 	[JsonProperty("peso")]
 	public decimal? Peso { get; set; }
+	[JsonProperty("alto")]
+	public decimal? Alto { get; set; }
 	[JsonProperty("dimensionx")]
 	public decimal? DimensionX { get; set; }
 	[JsonProperty("dimensiony")]
@@ -75,6 +77,7 @@ public class UbicacionDetalladaDto
 	public decimal? DimensionZ { get; set; }
 	[JsonProperty("angulo")]
 	public decimal? Angulo { get; set; }
+
 	// Colecciones para binding de chips
 	public ObservableCollection<AlergenoDto> AlergenosPermitidosList { get; }
 		= new ObservableCollection<AlergenoDto>();

@@ -40,6 +40,7 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty] private short? tipoUbicacionId;
 		[ObservableProperty] private int? orden;
 		[ObservableProperty] private decimal? peso;
+		[ObservableProperty] private decimal? alto;
 		[ObservableProperty] private decimal? dimensionX;
 		[ObservableProperty] private decimal? dimensionY;
 		[ObservableProperty] private decimal? dimensionZ;
@@ -85,6 +86,7 @@ namespace SGA_Desktop.ViewModels
 				TipoUbicacionId = existing.TipoUbicacionId;
 				Orden = existing.Orden;
 				Peso = existing.Peso;
+				Alto = existing.Alto;
 				DimensionX = existing.DimensionX;
 				DimensionY = existing.DimensionY;
 				DimensionZ = existing.DimensionZ;
@@ -128,6 +130,7 @@ namespace SGA_Desktop.ViewModels
 				TipoUbicacionId = tipoUbicacionId,
 				Orden = orden,
 				Peso = peso,
+				Alto = Alto,
 				DimensionX = dimensionX,
 				DimensionY = dimensionY,
 				DimensionZ = dimensionZ,
