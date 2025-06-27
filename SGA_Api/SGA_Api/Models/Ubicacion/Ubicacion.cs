@@ -13,6 +13,7 @@
 		public int Obsoleta { get; set; }
 		public int ? Orden {  get; set; }
 		public decimal? Peso { get; set; }
+		public decimal? Alto { get; set; }	
 		public decimal? DimensionX { get; set; }
 		public decimal? DimensionY { get; set; }
 		public decimal? DimensionZ { get; set; }

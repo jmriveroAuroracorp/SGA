@@ -122,6 +122,20 @@ namespace SGA_Desktop.Services
 			return lista ?? new List<AlergenoDto>();
 		}
 
+		/// <summary>
+		/// POST /api/ubicaciones/masivo
+		/// Envía un lote de ubicaciones para crear en bloque.
+		/// </summary>
+		public async Task<bool> CrearUbicacionesMasivoAsync(
+			List<CrearUbicacionDetalladaDto> dtos)
+		{
+			if (dtos == null || dtos.Count == 0)
+				return false;
+
+			// Serializamos y lanzamos el POST al endpoint "Ubicaciones/masivo"
+			var resp = await _httpClient.PostAsJsonAsync("Ubicaciones/masivo", dtos);
+			return resp.IsSuccessStatusCode;
+		}
 
 	}
 }

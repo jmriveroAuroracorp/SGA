@@ -19,10 +19,12 @@ namespace SGA_Desktop.Models
 		public int? Posicion { get; set; }
 		public int? Orden { get; set; }
 		public decimal? Peso { get; set; }
+		public decimal? Alto { get; set; }
 		public decimal? DimensionX { get; set; }
 		public decimal? DimensionY { get; set; }
 		public decimal? DimensionZ { get; set; }
 		public decimal? Angulo { get; set; }
+
 		// CONFIGURACIÓN
 		public int? TemperaturaMin { get; set; }
 		public int? TemperaturaMax { get; set; }
@@ -30,7 +32,17 @@ namespace SGA_Desktop.Models
 		public bool? Habilitada { get; set; } = true;
 		public short? TipoUbicacionId { get; set; }
 
+		/// <summary>Descripción legible del tipo de ubicación (p.ej. “Refrigerada”)</summary>
+		public string TipoUbicacionDescripcion { get; set; } = "";
+
 		/// <summary>Códigos de alérgenos que estarán permitidos en esta ubicación.</summary>
 		public List<short> AlergenosPermitidos { get; set; } = new();
+
+		// Exclusión de ubicación en generación masiva
+		public bool Excluir { get; set; }
+		/// <summary>Marca para indicar que el código está duplicado en la generación.</summary>
+		public bool IsDuplicate { get; set; }
+
 	}
+
 }

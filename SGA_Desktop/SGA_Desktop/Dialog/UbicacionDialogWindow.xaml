@@ -123,20 +123,26 @@
                                 <TextBox Text="{Binding Peso}" Style="{StaticResource EstiloCajaTexto}"/>
                             </StackPanel>
                             <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical" Margin="0,0,0,10">
+                                <TextBlock Text="Alto (mm):" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding Alto}" Style="{StaticResource EstiloCajaTexto}"/>
+                            </StackPanel>
+
+                            <!-- Fila 1: Dim X / Dim Y -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical" Margin="0,0,20,10">
                                 <TextBlock Text="Dim X (mm):" Style="{StaticResource LabelStyle}"/>
                                 <TextBox Text="{Binding DimensionX}" Style="{StaticResource EstiloCajaTexto}"/>
                             </StackPanel>
-
-                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical" Margin="0,0,20,10">
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical" Margin="0,0,0,10">
                                 <TextBlock Text="Dim Y (mm):" Style="{StaticResource LabelStyle}"/>
                                 <TextBox Text="{Binding DimensionY}" Style="{StaticResource EstiloCajaTexto}"/>
                             </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical" Margin="0,0,0,10">
+
+                            <!-- Fila 2: Dim Z / Ángulo -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Vertical" Margin="0,0,20,0">
                                 <TextBlock Text="Dim Z (mm):" Style="{StaticResource LabelStyle}"/>
                                 <TextBox Text="{Binding DimensionZ}" Style="{StaticResource EstiloCajaTexto}"/>
                             </StackPanel>
-
-                            <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Vertical">
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Vertical">
                                 <TextBlock Text="Ángulo (°):" Style="{StaticResource LabelStyle}"/>
                                 <TextBox Text="{Binding Angulo}" Style="{StaticResource EstiloCajaTexto}"/>
                             </StackPanel>

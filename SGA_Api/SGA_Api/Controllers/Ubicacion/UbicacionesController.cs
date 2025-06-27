@@ -135,6 +135,7 @@ namespace SGA_Api.Controllers.Ubicacion
 					Altura = u.Altura,
 					Posicion = u.Posicion,
 					Orden = u.Orden,
+					Alto = u.Alto,
 					// PROTEGEMOS LOS CAMPOS OPCIONALES
 					TemperaturaMin = cfg != null ? cfg.TemperaturaMin : (short?)null,
 					TemperaturaMax = cfg != null ? cfg.TemperaturaMax : (short?)null,
@@ -255,6 +256,7 @@ namespace SGA_Api.Controllers.Ubicacion
 				Obsoleta = 0,
 				Orden = dto.Orden,
 				Peso = dto.Peso,
+				Alto = dto.Alto,
 				DimensionX = dto.DimensionX,
 				DimensionY = dto.DimensionY,
 				DimensionZ = dto.DimensionZ,
@@ -298,6 +300,7 @@ namespace SGA_Api.Controllers.Ubicacion
 				dto);
 		}
 
+
 		[HttpGet("{codigoEmpresa}/{codigoAlmacen}/{codigoUbicacion}")]
 		public async Task<ActionResult<UbicacionDetalladaDto>> GetUbicacionDetallada(
 		short codigoEmpresa,
@@ -320,6 +323,7 @@ namespace SGA_Api.Controllers.Ubicacion
 					Estanteria = x.Estanteria,
 					Altura = x.Altura,
 					Posicion = x.Posicion,
+					Alto = x.Alto,
 					Orden = x.Orden,
 					TemperaturaMin = x.TemperaturaMin,
 					TemperaturaMax = x.TemperaturaMax,
@@ -371,6 +375,7 @@ namespace SGA_Api.Controllers.Ubicacion
 			entidad.Posicion = dto.Posicion;
 			entidad.Orden = dto.Orden;
 			entidad.Peso = dto.Peso;
+			entidad.Alto = dto.Alto;
 			entidad.DimensionX = dto.DimensionX;
 			entidad.DimensionY = dto.DimensionY;
 			entidad.DimensionZ = dto.DimensionZ;
@@ -418,6 +423,76 @@ namespace SGA_Api.Controllers.Ubicacion
 			// 6. Guardar cambios
 			await _auroraSgaContext.SaveChangesAsync();
 			return NoContent();
+		}
+
+
+		/// <summary>
+		/// POST api/ubicaciones/masivo
+		/// Crea en bloque Ubicacion, Ubicaciones_Configuracion y Ubicaciones_AlergenosPermitidos.
+		/// </summary>
+		[HttpPost("masivo")]
+		public async Task<IActionResult> CrearMasivo(
+			[FromBody] List<CrearUbicacionDetalladaDto> dtos)
+		{
+			if (dtos == null || dtos.Count == 0)
+				return BadRequest("No se recibieron ubicaciones para creación masiva.");
+
+			// 1) Mapear a entidades Ubicacion
+			var ubicaciones = dtos.Select(dto => new SGA_Api.Models.Ubicacion.Ubicacion
+			{
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoAlmacen = dto.CodigoAlmacen,
+				CodigoUbicacion = $"UB{dto.Pasillo:D3}{dto.Estanteria:D3}{dto.Altura:D3}{dto.Posicion:D3}",
+				DescripcionUbicacion = dto.DescripcionUbicacion,
+				Pasillo = dto.Pasillo,
+				Estanteria = dto.Estanteria,
+				Altura = dto.Altura,
+				Posicion = dto.Posicion,
+				Obsoleta = 0,
+				Orden = dto.Orden,
+				Peso = dto.Peso,
+				Alto = dto.Alto,
+				DimensionX = dto.DimensionX,
+				DimensionY = dto.DimensionY,
+				DimensionZ = dto.DimensionZ,
+				Angulo = dto.Angulo
+			}).ToList();
+
+			// 2) Mapear a Ubicaciones_Configuracion
+			var configs = dtos.Select(dto => new UbicacionesConfiguracion
+			{
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoAlmacen = dto.CodigoAlmacen,
+				Ubicacion = dto.CodigoUbicacion,
+				TemperaturaMin = dto.TemperaturaMin,
+				TemperaturaMax = dto.TemperaturaMax,
+				TipoPaletPermitido = dto.TipoPaletPermitido,
+				Habilitada = dto.Habilitada,
+				TipoUbicacionId = dto.TipoUbicacionId
+			}).ToList();
+
+			// 3) Mapear a Ubicaciones_AlergenosPermitidos
+			var alergenos = dtos
+				.Where(dto => dto.AlergenosPermitidos != null)
+				.SelectMany(dto => dto.AlergenosPermitidos.Select(a => new UbicacionesAlergenosPermitidos
+				{
+					CodigoEmpresa = dto.CodigoEmpresa,
+					CodigoAlmacen = dto.CodigoAlmacen,
+					Ubicacion = dto.CodigoUbicacion,
+					VCodigoAlergeno = a
+				}))
+				.ToList();
+
+			// 4) Añadir en bloque
+			await _auroraSgaContext.Ubicaciones.AddRangeAsync(ubicaciones);
+			await _auroraSgaContext.Ubicaciones_Configuracion.AddRangeAsync(configs);
+			if (alergenos.Any())
+				await _auroraSgaContext.Ubicaciones_AlergenosPermitidos.AddRangeAsync(alergenos);
+
+			// 5) Un único SaveChangesAsync → todo en la misma transacción
+			await _auroraSgaContext.SaveChangesAsync();
+
+			return Ok(new { Created = dtos.Count });
 		}
 
 
