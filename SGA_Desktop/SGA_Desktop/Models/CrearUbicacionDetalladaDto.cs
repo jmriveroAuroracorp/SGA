@@ -40,8 +40,8 @@ namespace SGA_Desktop.Models
 
 		// Exclusión de ubicación en generación masiva
 		public bool Excluir { get; set; }
-		/// <summary>Marca para indicar que el código está duplicado en la generación.</summary>
-		public bool IsDuplicate { get; set; }
+		/// <summary>Marca si ya existe esta ubicación en la BD.</summary>
+		public bool ExistsInDb { get; set; }
 
 	}
 

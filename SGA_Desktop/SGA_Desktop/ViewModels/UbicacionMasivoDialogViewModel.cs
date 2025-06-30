@@ -22,131 +22,84 @@ namespace SGA_Desktop.ViewModels
 		private readonly Dictionary<string, List<string>> _errors = new();
 		private readonly string _descripcionAlmacen;
 
-
-		/// <summary>Lo que se mostrará en el título</summary>
-		public string TituloDisplay => $"{_descripcionAlmacen}";
+		public string TituloDisplay => _descripcionAlmacen;
 
 		public UbicacionMasivoDialogViewModel(
-		AlmacenDto almacen,
-		UbicacionesService ubicService,
-		PaletService paletService)
+			AlmacenDto almacen,
+			UbicacionesService ubicService,
+			PaletService paletService)
 		{
+			// 1) Inicializamos datos de cabecera
+			_descripcionAlmacen = almacen.DescripcionCombo;
 			_codigoAlmacen = almacen.CodigoAlmacen;
 			_ubicacionService = ubicService ?? throw new ArgumentNullException(nameof(ubicService));
 			_paletService = paletService ?? throw new ArgumentNullException(nameof(paletService));
 
-			// Inicializo colecciones BINDABLES
+			// 2) Colecciones vacías (se llenan en InitializeAsync)
 			TiposPaletDisponibles = new ObservableCollection<TipoPaletDto>();
-
 			TiposUbicacionDisponibles = new ObservableCollection<TipoUbicacionDto>();
-
-			// Resto de setup (rangos, comandos…)
+			AlergenosDisponibles = new ObservableCollection<AlergenoSeleccionable>();
 			UbicacionesGeneradas = new ObservableCollection<CrearUbicacionDetalladaDto>();
+
+			// 3) Comandos asíncronos
 			CancelCommand = new RelayCommand(() => CloseAction?.Invoke());
-			GenerarCommand = new RelayCommand(Generar, CanGenerate);
+			GenerarCommand = new AsyncRelayCommand(GenerarAsync, () => !HasErrors);
 			GuardarCommand = new AsyncRelayCommand(GuardarAsync, CanSave);
 
+			// 4) Validamos rangos por si el usuario ya puso algo
 			ValidateAllRanges();
+
+			// 5) Carga inicial de palets, tipos y alérgenos
+			_ = InitializeAsync();
 		}
-
-
 
 		// ——— Propiedades de rango ———
-		[ObservableProperty]
-		private int pasilloDesde;
+		[ObservableProperty] private int pasilloDesde;
+		partial void OnPasilloDesdeChanged(int _, int __) { ValidateRange(nameof(PasilloDesde), nameof(PasilloHasta)); NotifyCommands(); }
 
-		partial void OnPasilloDesdeChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(PasilloDesde), nameof(PasilloHasta));
-			NotifyCommands();
-		}
+		[ObservableProperty] private int pasilloHasta;
+		partial void OnPasilloHastaChanged(int _, int __) { ValidateRange(nameof(PasilloDesde), nameof(PasilloHasta)); NotifyCommands(); }
 
-		[ObservableProperty]
-		private int pasilloHasta;
+		[ObservableProperty] private int estanteriaDesde;
+		partial void OnEstanteriaDesdeChanged(int _, int __) { ValidateRange(nameof(EstanteriaDesde), nameof(EstanteriaHasta)); NotifyCommands(); }
 
-		partial void OnPasilloHastaChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(PasilloDesde), nameof(PasilloHasta));
-			NotifyCommands();
-		}
+		[ObservableProperty] private int estanteriaHasta;
+		partial void OnEstanteriaHastaChanged(int _, int __) { ValidateRange(nameof(EstanteriaDesde), nameof(EstanteriaHasta)); NotifyCommands(); }
 
-		[ObservableProperty]
-		private int estanteriaDesde;
+		[ObservableProperty] private int alturaDesde;
+		partial void OnAlturaDesdeChanged(int _, int __) { ValidateRange(nameof(AlturaDesde), nameof(AlturaHasta)); NotifyCommands(); }
 
-		partial void OnEstanteriaDesdeChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(EstanteriaDesde), nameof(EstanteriaHasta));
-			NotifyCommands();
-		}
+		[ObservableProperty] private int alturaHasta;
+		partial void OnAlturaHastaChanged(int _, int __) { ValidateRange(nameof(AlturaDesde), nameof(AlturaHasta)); NotifyCommands(); }
 
-		[ObservableProperty]
-		private int estanteriaHasta;
+		[ObservableProperty] private int posicionDesde;
+		partial void OnPosicionDesdeChanged(int _, int __) { ValidateRange(nameof(PosicionDesde), nameof(PosicionHasta)); NotifyCommands(); }
 
-		partial void OnEstanteriaHastaChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(EstanteriaDesde), nameof(EstanteriaHasta));
-			NotifyCommands();
-		}
+		[ObservableProperty] private int posicionHasta;
+		partial void OnPosicionHastaChanged(int _, int __) { ValidateRange(nameof(PosicionDesde), nameof(PosicionHasta)); NotifyCommands(); }
 
-		[ObservableProperty]
-		private int alturaDesde;
-
-		partial void OnAlturaDesdeChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(AlturaDesde), nameof(AlturaHasta));
-			NotifyCommands();
-		}
-
-		[ObservableProperty]
-		private int alturaHasta;
-
-		partial void OnAlturaHastaChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(AlturaDesde), nameof(AlturaHasta));
-			NotifyCommands();
-		}
-
-		[ObservableProperty]
-		private int posicionDesde;
-
-		partial void OnPosicionDesdeChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(PosicionDesde), nameof(PosicionHasta));
-			NotifyCommands();
-		}
-
-		[ObservableProperty]
-		private int posicionHasta;
-
-		partial void OnPosicionHastaChanged(int oldValue, int newValue)
-		{
-			ValidateRange(nameof(PosicionDesde), nameof(PosicionHasta));
-			NotifyCommands();
-		}
-
-		// Props para binding
+		// ——— Campos comunes de configuración ———
 		[ObservableProperty] private int? temperaturaMin;
 		[ObservableProperty] private int? temperaturaMax;
 		[ObservableProperty] private string? tipoPaletPermitido;
 		[ObservableProperty] private short? tipoUbicacionId;
 		[ObservableProperty] private decimal? peso;
 		[ObservableProperty] private decimal? alto;
-		// Colecciones de selección
+
+		// ——— Colecciones para los dropdowns y alérgenos ———
 		public ObservableCollection<TipoPaletDto> TiposPaletDisponibles { get; }
 		public ObservableCollection<TipoUbicacionDto> TiposUbicacionDisponibles { get; }
 		public ObservableCollection<AlergenoSeleccionable> AlergenosDisponibles { get; }
-  = new ObservableCollection<AlergenoSeleccionable>();
 
-
-		// ——— Colección para el grid de preview ———
+		// ——— Preview de las ubicaciones generadas ———
 		public ObservableCollection<CrearUbicacionDetalladaDto> UbicacionesGeneradas { get; }
 
 		// ——— Comandos ———
 		public IRelayCommand CancelCommand { get; }
-		public IRelayCommand GenerarCommand { get; }
+		public IAsyncRelayCommand GenerarCommand { get; }
 		public IAsyncRelayCommand GuardarCommand { get; }
 
-		// ——— Para cerrar la ventana ———
+		// ——— Cierre de ventana ———
 		public Action CloseAction { get; set; }
 
 		#region Validación (INotifyDataErrorInfo)
@@ -155,9 +108,7 @@ namespace SGA_Desktop.ViewModels
 		public IEnumerable GetErrors(string propertyName)
 			=> string.IsNullOrEmpty(propertyName)
 			   ? _errors.SelectMany(kv => kv.Value)
-			   : (_errors.ContainsKey(propertyName)
-					? _errors[propertyName]
-					: Enumerable.Empty<string>());
+			   : (_errors.TryGetValue(propertyName, out var list) ? list : Enumerable.Empty<string>());
 
 		private void ValidateRange(string propMin, string propMax)
 		{
@@ -171,7 +122,6 @@ namespace SGA_Desktop.ViewModels
 				AddError(propMax, $"{propMax} ({max}) no puede ser menor que {propMin} ({min}).");
 			}
 		}
-
 		private void ValidateAllRanges()
 		{
 			ValidateRange(nameof(PasilloDesde), nameof(PasilloHasta));
@@ -179,18 +129,15 @@ namespace SGA_Desktop.ViewModels
 			ValidateRange(nameof(AlturaDesde), nameof(AlturaHasta));
 			ValidateRange(nameof(PosicionDesde), nameof(PosicionHasta));
 		}
-
 		private void AddError(string prop, string msg)
 		{
-			if (!_errors.ContainsKey(prop))
-				_errors[prop] = new List<string>();
+			if (!_errors.ContainsKey(prop)) _errors[prop] = new List<string>();
 			if (!_errors[prop].Contains(msg))
 			{
 				_errors[prop].Add(msg);
 				ErrorsChanged?.Invoke(this, new DataErrorsChangedEventArgs(prop));
 			}
 		}
-
 		private void ClearErrors(string prop)
 		{
 			if (_errors.Remove(prop))
@@ -198,70 +145,87 @@ namespace SGA_Desktop.ViewModels
 		}
 		#endregion
 
-		#region Lógica de comandos
-		private void Generar()
+		#region Lógica de Generación + Persistencia
+		private async Task GenerarAsync()
 		{
 			UbicacionesGeneradas.Clear();
 			var empresa = SessionManager.EmpresaSeleccionada!.Value;
-	
+
+			// 1) Genero todas las combinaciones en memoria
+			var todas = new List<CrearUbicacionDetalladaDto>();
 			for (int p = PasilloDesde; p <= PasilloHasta; p++)
 				for (int e = EstanteriaDesde; e <= EstanteriaHasta; e++)
 					for (int a = AlturaDesde; a <= AlturaHasta; a++)
 						for (int o = PosicionDesde; o <= PosicionHasta; o++)
 						{
+							var codigo = $"UB{p:D3}{e:D3}{a:D3}{o:D3}";
 							var descripcion = $"Pasillo {p}, Estantería {e}, Altura {a}, Posición {o}";
 							var tipoDesc = TiposUbicacionDisponibles
-				 .FirstOrDefault(t => t.TipoUbicacionId == TipoUbicacionId)
-				 ?.Descripcion
-			   ?? "";
-							UbicacionesGeneradas.Add(new CrearUbicacionDetalladaDto
-							{
+												 .FirstOrDefault(t => t.TipoUbicacionId == TipoUbicacionId)
+												 ?.Descripcion ?? "";
 
+							todas.Add(new CrearUbicacionDetalladaDto
+							{
 								CodigoEmpresa = empresa,
 								CodigoAlmacen = _codigoAlmacen,
-								CodigoUbicacion = $"UB{p:D3}{e:D3}{a:D3}{o:D3}",
+								CodigoUbicacion = codigo,
 								DescripcionUbicacion = descripcion,
 								Pasillo = p,
-								Orden = 0,
 								Estanteria = e,
 								Altura = a,
 								Posicion = o,
-								Excluir = false,
-								IsDuplicate = false,
+								Orden = 0,
+								Peso = Peso,
+								Alto = Alto,
 								TemperaturaMin = TemperaturaMin,
 								TemperaturaMax = TemperaturaMax,
+								TipoPaletPermitido = TipoPaletPermitido,
 								TipoUbicacionId = TipoUbicacionId,
 								TipoUbicacionDescripcion = tipoDesc,
-								TipoPaletPermitido = TipoPaletPermitido,
-								Peso = this.Peso,
-								Alto = this.Alto,
 								AlergenosPermitidos = AlergenosDisponibles
-								.Where(x => x.IsSelected)
-								.Select(x => x.Codigo)
-								.ToList(),
+															  .Where(x => x.IsSelected)
+															  .Select(x => x.Codigo)
+															  .ToList(),
+								Excluir = false,
+								ExistsInDb = false
 							});
 						}
+
+			// 2) Consulto BD qué códigos ya existen
+			var existentes = await _ubicacionService
+				.ObtenerUbicacionesBasicoAsync(empresa, _codigoAlmacen);
+			var setExistentes = new HashSet<string>(
+				existentes.Select(x => x.Ubicacion),
+				StringComparer.OrdinalIgnoreCase);
+
+			// 3) Marco y añado al ObservableCollection
+			foreach (var dto in todas)
+			{
+				dto.ExistsInDb = setExistentes.Contains(dto.CodigoUbicacion);
+				UbicacionesGeneradas.Add(dto);
+			}
+
 			NotifyCommands();
 		}
 
-		private bool CanGenerate() => !HasErrors;
-		private bool CanSave() => UbicacionesGeneradas.Any(u => !u.Excluir);
+		private bool CanSave()
+			=> UbicacionesGeneradas.Any(u => !u.Excluir && !u.ExistsInDb);
 
 		private async Task GuardarAsync()
 		{
+			// Solo enviamos las nuevas (no excluidas y que no existan en BD)
 			var lista = UbicacionesGeneradas
-						  .Where(u => !u.Excluir)
+						  .Where(u => !u.Excluir && !u.ExistsInDb)
 						  .ToList();
 			if (!lista.Any()) { CloseAction?.Invoke(); return; }
 
 			try
 			{
-				var ok = await _ubicacionService.CrearUbicacionesMasivoAsync(lista);
-				// notifica al usuario…
+				await _ubicacionService.CrearUbicacionesMasivoAsync(lista);
 			}
 			catch (Exception ex)
 			{
-				// manejar error…
+				// TODO: mostrar mensaje de error
 			}
 			CloseAction?.Invoke();
 		}
@@ -273,23 +237,19 @@ namespace SGA_Desktop.ViewModels
 		}
 		#endregion
 
+		/// <summary>
+		/// Carga inicial de palets, tipos de ubicación y alérgenos.
+		/// </summary>
 		public async Task InitializeAsync()
 		{
-			// Cargo palets sin bloquear la UI
-			var palets = await _paletService.ObtenerTiposPaletAsync();
-			foreach (var p in palets)
-				TiposPaletDisponibles.Add(p);
+			//var palets = await _paletService.ObtenerTiposPaletAsync();
+			//foreach (var p in palets) TiposPaletDisponibles.Add(p);
 
-			// Cargo tipos de ubicación sin bloquear la UI
-			var tipos = await _ubicacionService.ObtenerTiposUbicacionAsync();
-			foreach (var t in tipos)
-				TiposUbicacionDisponibles.Add(t);
+			//var tipos = await _ubicacionService.ObtenerTiposUbicacionAsync();
+			//foreach (var t in tipos) TiposUbicacionDisponibles.Add(t);
 
 			var maestros = await _ubicacionService.ObtenerAlergenosMaestrosAsync();
-			AlergenosDisponibles.Clear();
-			foreach (var a in maestros)
-				AlergenosDisponibles.Add(new AlergenoSeleccionable(a));
+			foreach (var a in maestros) AlergenosDisponibles.Add(new AlergenoSeleccionable(a));
 		}
-
 	}
 }
