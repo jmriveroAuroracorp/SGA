@@ -8,6 +8,11 @@
       d:DesignHeight="600" d:DesignWidth="900"
       Title="Gestión de Ubicaciones">
 
+    <Page.Resources>
+        <!-- Conversor Boolean → Visibility disponible aquí -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Page.Resources>
+
     <Grid Margin="10" Background="{StaticResource BrushFondo}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -47,7 +52,7 @@
         </StackPanel>
 
         <!-- 3) ListView con virtualización y estilo de tarjeta -->
-        <ListView Grid.Row="1"
+        <ListView x:Name="lvUbicaciones" Grid.Row="1"
               ItemsSource="{Binding Ubicaciones}"
               SelectedItem="{Binding SelectedUbicacion}"
               ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -69,23 +74,23 @@
                         <Setter.Value>
                             <ControlTemplate TargetType="ListViewItem">
                                 <Border x:Name="Bd"
-                        SnapsToDevicePixels="True"
-                        Background="{TemplateBinding Background}"
-                        BorderBrush="{StaticResource BrushSecundario1}"
-                        BorderThickness="1"
-                        CornerRadius="8">
+                  SnapsToDevicePixels="True"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{StaticResource BrushSecundario1}"
+                  BorderThickness="1"
+                  CornerRadius="8">
                                     <ContentPresenter Margin="4"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter TargetName="Bd"
-                            Property="Background"
-                            Value="{StaticResource BrushSecundario2}"/>
+                      Property="Background"
+                      Value="{StaticResource BrushSecundario2}"/>
                                     </Trigger>
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter TargetName="Bd"
-                            Property="Background"
-                            Value="{StaticResource BrushPrincipal}"/>
+                      Property="Background"
+                      Value="{StaticResource BrushPrincipal}"/>
                                         <Setter Property="Foreground" Value="White"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
@@ -94,7 +99,6 @@
                     </Setter>
                 </Style>
             </ListView.ItemContainerStyle>
-
             <!-- 3.2) Plantilla de contenido -->
             <ListView.ItemTemplate>
                 <DataTemplate>
@@ -109,7 +113,7 @@
                             Opacity="0.2"/>
                         </Border.Effect>
 
-                        <Expander HorizontalAlignment="Stretch">
+                        <Expander HorizontalAlignment="Stretch" Expanded="Expander_Expanded">
                             <!-- Trigger para cargar alérgenos al expandir -->
                             <i:Interaction.Triggers>
                                 <i:EventTrigger EventName="Expanded">

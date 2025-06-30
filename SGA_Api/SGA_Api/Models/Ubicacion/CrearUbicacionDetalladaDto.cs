@@ -29,8 +29,7 @@ namespace SGA_Api.Models.Ubicacion
 		/// <summary>Códigos de alérgenos que estarán permitidos en esta ubicación.</summary>
 		public List<short> AlergenosPermitidos { get; set; } = new();
 
-		/// <summary>Marca para indicar que el código está duplicado en la generación.</summary>
-		public bool IsDuplicate { get; set; }
+
 
 	}
 }

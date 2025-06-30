@@ -14,6 +14,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -220,6 +221,17 @@
                                         IsChecked="{Binding Excluir, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
                                         VerticalAlignment="Center"
                                         HorizontalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="⚠ Ya existe" Width="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="Existe"
+                 Foreground="DarkOrange"
+                 FontWeight="Bold"
+                 Visibility="{Binding ExistsInDb,
+                              Converter={StaticResource BoolToVis}}"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
