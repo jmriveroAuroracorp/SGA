@@ -26,6 +26,7 @@ namespace SGA_Api.Data
 		public DbSet<AlergenoMaestro> AlergenoMaestros { get; set; }
 		public DbSet<TipoUbicacion> TipoUbicaciones { get; set; }
 		public DbSet<TipoPalet> TipoPalets { get; set; }
+		public DbSet<Palet> Palets { get; set; }
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			base.OnModelCreating(modelBuilder);

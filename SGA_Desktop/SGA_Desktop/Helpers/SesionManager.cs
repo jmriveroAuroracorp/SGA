@@ -19,7 +19,7 @@ namespace SGA_Desktop.Helpers
 		/// </summary>
 		public static string EmpresaSeleccionadaNombre
 			=> UsuarioActual?
-				  .empresas?                              // colección de EmpresaDto
+				  .empresas?                              
 				  .FirstOrDefault(e => e.Codigo == EmpresaSeleccionada)?
 				  .Nombre
 			   ?? string.Empty;

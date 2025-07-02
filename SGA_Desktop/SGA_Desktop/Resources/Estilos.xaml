@@ -242,6 +242,66 @@
         </Setter>
     </Style>
 
+    <!-- 📁 Estilo para TabControl general -->
+    <Style x:Key="EstiloTabControl" TargetType="TabControl">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Background" Value="{StaticResource BrushFondo}" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- 🗂️ Estilo para TabItem mejorado -->
+    <Style x:Key="EstiloTabItem" TargetType="TabItem">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Padding" Value="16,8" />
+        <Setter Property="Margin" Value="0,0,4,0" />
+        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Bd"
+                        Background="Transparent"
+                        CornerRadius="10,10,0,0"
+                        BorderThickness="0"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch">
+                        <Grid>
+                            <ContentPresenter x:Name="ContentSite"
+                          ContentSource="Header"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Center"
+                          Margin="12,6"
+                          RecognizesAccessKey="True" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushPrincipal}" />
+                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="FontWeight" Value="Bold" />
+                        </Trigger>
+
+                        <!-- Mantener texto blanco cuando no hay foco -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True"/>
+                                <Condition Property="IsKeyboardFocusWithin" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter Property="Foreground" Value="White"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+
+
+
+
+
 
 
 </ResourceDictionary>

@@ -4,8 +4,7 @@ using System.Linq;
 using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
-using SGA_Desktop.Models;
-
+using SGA_Desktop.Models;         // Asegúrate de que PaletDto y TipoPaletDto están aquí
 namespace SGA_Desktop.Services
 {
 	public class PaletService : ApiService
@@ -19,5 +18,62 @@ namespace SGA_Desktop.Services
 				?? new List<TipoPaletDto>();
 		}
 
+		/// <summary>
+		/// Obtiene pallets aplicando uno o más filtros:
+		/// codigo, estado, fechaApertura, fechaCierre,
+		/// fechaAperturaDesde, fechaCierreHasta,
+		/// usuarioApertura, usuarioCierre.
+		/// </summary>
+		public async Task<List<PaletDto>> ObtenerPaletsAsync(
+		short codigoEmpresa,
+		string? codigo = null,
+		string? estado = null,
+		string? tipoPaletCodigo = null,
+		DateTime? fechaApertura = null,
+		DateTime? fechaCierre = null,
+		DateTime? fechaDesde = null,
+		DateTime? fechaHasta = null,
+		int? usuarioApertura = null,
+		int? usuarioCierre = null,
+		bool sinCierre = false
+	)
+		{
+			var query = new List<string> { $"codigoEmpresa={codigoEmpresa}" };
+
+			if (!string.IsNullOrWhiteSpace(codigo)) query.Add($"codigo={codigo}");
+			if (!string.IsNullOrWhiteSpace(estado)) query.Add($"estado={estado}");
+			if (!string.IsNullOrWhiteSpace(tipoPaletCodigo)) query.Add($"tipoPaletCodigo={tipoPaletCodigo}");
+			if (fechaApertura.HasValue) query.Add($"fechaApertura={fechaApertura:yyyy-MM-dd}");
+			if (fechaCierre.HasValue) query.Add($"fechaCierre={fechaCierre:yyyy-MM-dd}");
+			if (fechaDesde.HasValue) query.Add($"fechaDesde={fechaDesde:yyyy-MM-dd}");
+			if (fechaHasta.HasValue) query.Add($"fechaHasta={fechaHasta:yyyy-MM-dd}");
+			if (usuarioApertura.HasValue) query.Add($"usuarioApertura={usuarioApertura}");
+			if (usuarioCierre.HasValue) query.Add($"usuarioCierre={usuarioCierre}");
+			if (sinCierre) query.Add("sinCierre=true");
+
+			var uri = "palet/filtros?" + string.Join("&", query);
+			return await _httpClient.GetFromJsonAsync<List<PaletDto>>(uri)
+								  ?? new List<PaletDto>();
+		}
+
+
+		/// <summary>
+		/// Obtiene las líneas de un pallet específico.
+		/// </summary>
+		public async Task<List<LineaPaletDto>> ObtenerLineasAsync(Guid paletId)
+		{
+			return await _httpClient
+				.GetFromJsonAsync<List<LineaPaletDto>>($"palet/{paletId}/lineas")
+				?? new List<LineaPaletDto>();
+		}
+
+		/// <summary>
+		/// Lanza la impresión de la etiqueta para un pallet.
+		/// </summary>
+		public async Task ImprimirEtiquetaAsync(Guid paletId)
+		{
+			var resp = await _httpClient.PostAsync($"palet/{paletId}/imprimir", null);
+			resp.EnsureSuccessStatusCode();
+		}
 	}
 }

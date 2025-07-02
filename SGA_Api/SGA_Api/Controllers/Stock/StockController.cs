@@ -262,45 +262,109 @@ namespace SGA_Api.Controllers.Stock
 		// 1.d) Buscar artículo (nuevo endpoint)
 		[HttpGet("buscar-articulo")]
 		public async Task<IActionResult> BuscarArticulo(
-			[FromQuery] string? codigoAlternativo,
-			[FromQuery] string? codigoArticulo,
-			[FromQuery] string? descripcion)
+[FromQuery] short codigoEmpresa,
+[FromQuery] string? descripcion,
+[FromQuery] string? codigoAlternativo,
+[FromQuery] string? codigoArticulo,
+// mismos filtros opcionales
+[FromQuery] string? codigoUbicacion,
+[FromQuery] string? codigoAlmacen,
+[FromQuery] string? partida)
 		{
-			var query = _sageContext.Articulos.AsQueryable();
-
+			// 1. búsquedas directas (sin cambios) ------------
 			if (!string.IsNullOrWhiteSpace(codigoAlternativo))
+				return await BuscarPorAlternativo(codigoAlternativo);
+
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+				return await BuscarPorCodigo(codigoArticulo);
+
+			// 2. descripción + stock -------------------------
+			if (!string.IsNullOrWhiteSpace(descripcion))
 			{
-				query = query.Where(a =>
-					a.CodigoAlternativo == codigoAlternativo ||
-					a.CodigoAlternativo2 == codigoAlternativo ||
-					a.ReferenciaEdi_ == codigoAlternativo ||
-					a.MRHCodigoAlternativo3 == codigoAlternativo ||
-					a.VCodigoDUN14 == codigoAlternativo
-				);
-			}
-			else if (!string.IsNullOrWhiteSpace(codigoArticulo))
-			{
-				query = query.Where(a => a.CodigoArticulo == codigoArticulo);
-			}
-			else if (!string.IsNullOrWhiteSpace(descripcion))
-			{
-				query = query.Where(a => a.DescripcionArticulo.Contains(descripcion));
-			}
-			else
-			{
-				return BadRequest("Debe especificar algún criterio de búsqueda.");
+				var ejercicioActual = await _sageContext.Periodos
+					.Where(p => p.CodigoEmpresa == codigoEmpresa &&
+								p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+
+				if (ejercicioActual == 0)
+					return BadRequest("Ejercicio no encontrado");
+
+				// 2.1 códigos CON stock (mismos filtros que consulta-stock)
+				var codigosConStock = await _storageContext.AcumuladoStockUbicacion
+					.Where(s =>
+						s.CodigoEmpresa == codigoEmpresa &&
+						s.Ejercicio == ejercicioActual &&
+						s.UnidadSaldo > 0 &&
+						(partida == null || s.Partida == partida) &&
+						(codigoAlmacen == null || s.CodigoAlmacen == codigoAlmacen) &&
+						(codigoUbicacion == null || s.Ubicacion == codigoUbicacion))
+					.Select(s => s.CodigoArticulo)
+					.Distinct()
+					.ToListAsync();
+
+				if (codigosConStock.Count == 0)
+					return Ok(new List<ArticuloDto>());
+
+				var codigosSet = codigosConStock.ToHashSet();
+
+				// 2.2 Artículos cuya descripción contenga el texto
+				var articulos = await _sageContext.Articulos
+					.Where(a =>
+						a.CodigoEmpresa == codigoEmpresa &&
+						a.DescripcionArticulo.Contains(descripcion))
+					.Select(a => new ArticuloDto
+					{
+						CodigoArticulo = a.CodigoArticulo,
+						Descripcion = a.DescripcionArticulo,
+						CodigoAlternativo = a.CodigoAlternativo
+					})
+					.ToListAsync();
+
+				// 2.3 Filtrado en memoria (evita OPENJSON)
+				var resultado = articulos
+					.Where(a => codigosSet.Contains(a.CodigoArticulo))
+					.ToList();
+
+				return Ok(resultado);
 			}
 
-			var resultado = await query
-				.Select(a => new ArticuloDto
-				{
-					CodigoArticulo = a.CodigoArticulo,
-					Descripcion = a.DescripcionArticulo,
-					CodigoAlternativo = a.CodigoAlternativo
-				})
-				.ToListAsync();
+			return BadRequest("Debe especificar algún criterio de búsqueda.");
 
-			return Ok(resultado);
+			// --- helpers privados ---------------------------
+			async Task<IActionResult> BuscarPorAlternativo(string alt)
+			{
+				var lista = await _sageContext.Articulos
+					.Where(a =>
+						a.CodigoAlternativo == alt ||
+						a.CodigoAlternativo2 == alt ||
+						a.ReferenciaEdi_ == alt ||
+						a.MRHCodigoAlternativo3 == alt ||
+						a.VCodigoDUN14 == alt)
+					.Select(a => new ArticuloDto
+					{
+						CodigoArticulo = a.CodigoArticulo,
+						Descripcion = a.DescripcionArticulo,
+						CodigoAlternativo = a.CodigoAlternativo
+					})
+					.ToListAsync();
+				return Ok(lista);
+			}
+
+			async Task<IActionResult> BuscarPorCodigo(string cod)
+			{
+				var lista = await _sageContext.Articulos
+					.Where(a => a.CodigoArticulo == cod)
+					.Select(a => new ArticuloDto
+					{
+						CodigoArticulo = a.CodigoArticulo,
+						Descripcion = a.DescripcionArticulo,
+						CodigoAlternativo = a.CodigoAlternativo
+					})
+					.ToListAsync();
+				return Ok(lista);
+			}
 		}
 
 		/// <summary>
