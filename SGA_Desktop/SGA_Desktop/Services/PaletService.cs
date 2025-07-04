@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using SGA_Desktop.Models;         // Asegúrate de que PaletDto y TipoPaletDto están aquí
 namespace SGA_Desktop.Services
@@ -56,6 +57,30 @@ namespace SGA_Desktop.Services
 								  ?? new List<PaletDto>();
 		}
 
+		public async Task<List<EstadoPaletDto>> ObtenerEstadosAsync()
+		{
+			return await _httpClient
+				.GetFromJsonAsync<List<EstadoPaletDto>>("palet/estados")
+				?? new List<EstadoPaletDto>();
+		}
+
+		public async Task<PaletDto> PaletCrearAsync(PaletCrearDto req)
+		{
+			var resp = await _httpClient.PostAsJsonAsync("palet", req);
+			var text = await resp.Content.ReadAsStringAsync();
+			if (!resp.IsSuccessStatusCode)
+				throw new ApplicationException($"API error {(int)resp.StatusCode}: {text}");
+
+			return JsonSerializer.Deserialize<PaletDto>(text,
+				new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+		}
+
+
+		public async Task<List<string>> ObtenerAlmacenesAsync()
+		{
+			return await _httpClient.GetFromJsonAsync<List<string>>("palet/almacenes")
+				?? new List<string>();
+		}
 
 		/// <summary>
 		/// Obtiene las líneas de un pallet específico.

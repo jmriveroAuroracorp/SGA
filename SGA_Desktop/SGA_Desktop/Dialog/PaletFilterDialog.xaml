@@ -52,7 +52,7 @@
 
             <!-- Estado -->
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Estado:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding EstadosDisponibles}" SelectedItem="{Binding EstadoSeleccionado}" Style="{StaticResource EstiloComboBox}" Width="200"/>
+            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding EstadosDisponibles}" SelectedItem="{Binding EstadoSeleccionado}" Style="{StaticResource EstiloComboBox}" DisplayMemberPath="Descripcion" SelectedValuePath="CodigoEstado" Width="200"/>
 
             <!-- Tipo de palet -->
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Tipo de palet:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>

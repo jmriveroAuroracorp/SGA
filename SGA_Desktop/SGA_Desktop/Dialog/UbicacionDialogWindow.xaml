@@ -44,11 +44,13 @@
 
                             <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical" Margin="0,0,20,10">
                                 <TextBlock Text="Código:" Style="{StaticResource LabelStyle}"/>
-                                <TextBox Text="{Binding CodigoUbicacion}" Style="{StaticResource EstiloCajaTexto}"/>
+                                <TextBox Text="{Binding CodigoUbicacion}" Style="{StaticResource EstiloCajaTexto}"
+                                         IsEnabled="{Binding CanEditCodigo}"/>
                             </StackPanel>
                             <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical" Margin="0,0,0,10">
                                 <TextBlock Text="Descripción:" Style="{StaticResource LabelStyle}"/>
-                                <TextBox Text="{Binding DescripcionUbicacion}" Style="{StaticResource EstiloCajaTexto}"/>
+                                <TextBox Text="{Binding DescripcionUbicacion}" Style="{StaticResource EstiloCajaTexto}"
+                                         IsEnabled="{Binding CanEditDescripcion}"/>
                             </StackPanel>
 
                             <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical" Margin="0,0,20,10">

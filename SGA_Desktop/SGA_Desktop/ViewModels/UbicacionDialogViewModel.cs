@@ -25,14 +25,38 @@ namespace SGA_Desktop.ViewModels
 		public string CodigoAlmacen { get; }
 
 		[ObservableProperty]
-		[NotifyCanExecuteChangedFor(nameof(SaveCommand))]
-		private string codigoUbicacion;
+		private int? pasillo;
+		partial void OnPasilloChanged(int? oldValue, int? newValue) => UpdateCodigoYDescripcion();
 
-		[ObservableProperty] private string? descripcionUbicacion;
-		[ObservableProperty] private int? pasillo;
-		[ObservableProperty] private int? estanteria;
-		[ObservableProperty] private int? altura;
-		[ObservableProperty] private int? posicion;
+		[ObservableProperty]
+		private int? estanteria;
+		partial void OnEstanteriaChanged(int? oldValue, int? newValue) => UpdateCodigoYDescripcion();
+
+		[ObservableProperty]
+		private int? altura;
+		partial void OnAlturaChanged(int? oldValue, int? newValue) => UpdateCodigoYDescripcion();
+
+		[ObservableProperty]
+		private int? posicion;
+		partial void OnPosicionChanged(int? oldValue, int? newValue) => UpdateCodigoYDescripcion();
+
+		[ObservableProperty]
+		[NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+		private string codigoUbicacion = string.Empty;
+		partial void OnCodigoUbicacionChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanEditCodigo));
+		}
+		public bool CanEditCodigo => _isNew && !string.IsNullOrEmpty(CodigoUbicacion);
+
+		[ObservableProperty]
+		private string? descripcionUbicacion;
+		partial void OnDescripcionUbicacionChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanEditDescripcion));
+		}
+		public bool CanEditDescripcion => _isNew && !string.IsNullOrEmpty(DescripcionUbicacion);
+
 		[ObservableProperty] private int? temperaturaMin;
 		[ObservableProperty] private int? temperaturaMax;
 		[ObservableProperty] private string? tipoPaletPermitido;
@@ -54,11 +78,11 @@ namespace SGA_Desktop.ViewModels
 		public IRelayCommand CancelCommand { get; }
 
 		public UbicacionDialogViewModel(
-	UbicacionesService svc,
-	PaletService paletService,
-	short codigoEmpresa,
-	string codigoAlmacen,
-	UbicacionDetalladaDto? existing = null)
+			UbicacionesService svc,
+			PaletService paletService,
+			short codigoEmpresa,
+			string codigoAlmacen,
+			UbicacionDetalladaDto? existing = null)
 		{
 			_svc = svc;
 			_paletService = paletService;
@@ -72,7 +96,7 @@ namespace SGA_Desktop.ViewModels
 
 			if (existing != null)
 			{
-				// *** AQUÍ SE USAN LAS PROPIEDADES, NO LOS CAMPOS PRIVADOS ***
+				// EN EDICIÓN: tomar valores existentes y NO permitir regenerar
 				CodigoUbicacion = existing.Ubicacion;
 				DescripcionUbicacion = existing.DescripcionUbicacion;
 				Pasillo = existing.Pasillo;
@@ -98,9 +122,8 @@ namespace SGA_Desktop.ViewModels
 			}
 			else
 			{
-				// valores por defecto al crear
+				// CREACIÓN: valores por defecto
 				Habilitada = true;
-				CodigoUbicacion = string.Empty;
 				_ = LoadAlergenosAsync();
 			}
 
@@ -108,8 +131,7 @@ namespace SGA_Desktop.ViewModels
 			_ = LoadTiposPaletAsync();
 		}
 
-
-		private bool CanSave() => !string.IsNullOrWhiteSpace(codigoUbicacion);
+		private bool CanSave() => !string.IsNullOrWhiteSpace(CodigoUbicacion);
 
 		private async Task SaveAsync()
 		{
@@ -117,27 +139,27 @@ namespace SGA_Desktop.ViewModels
 			{
 				CodigoEmpresa = CodigoEmpresa,
 				CodigoAlmacen = CodigoAlmacen,
-				CodigoUbicacion = codigoUbicacion,
-				DescripcionUbicacion = descripcionUbicacion,
-				Pasillo = pasillo,
-				Estanteria = estanteria,
-				Altura = altura,
-				Posicion = posicion,
-				TemperaturaMin = temperaturaMin,
-				TemperaturaMax = temperaturaMax,
-				TipoPaletPermitido = tipoPaletPermitido,
-				Habilitada = habilitada,
-				TipoUbicacionId = tipoUbicacionId,
-				Orden = orden,
-				Peso = peso,
+				CodigoUbicacion = CodigoUbicacion,
+				DescripcionUbicacion = DescripcionUbicacion,
+				Pasillo = Pasillo,
+				Estanteria = Estanteria,
+				Altura = Altura,
+				Posicion = Posicion,
+				TemperaturaMin = TemperaturaMin,
+				TemperaturaMax = TemperaturaMax,
+				TipoPaletPermitido = TipoPaletPermitido,
+				Habilitada = Habilitada,
+				TipoUbicacionId = TipoUbicacionId,
+				Orden = Orden,
+				Peso = Peso,
 				Alto = Alto,
-				DimensionX = dimensionX,
-				DimensionY = dimensionY,
-				DimensionZ = dimensionZ,
-				Angulo = angulo,
+				DimensionX = DimensionX,
+				DimensionY = DimensionY,
+				DimensionZ = DimensionZ,
+				Angulo = Angulo,
 				AlergenosPermitidos = AlergenosDisponibles.Where(a => a.IsSelected)
-														   .Select(a => a.Codigo)
-														   .ToList()
+													 .Select(a => a.Codigo)
+													 .ToList()
 			};
 
 			bool ok;
@@ -145,14 +167,11 @@ namespace SGA_Desktop.ViewModels
 
 			if (_isNew)
 			{
-				// El POST sigue devolviendo un bool
 				ok = await _svc.CrearUbicacionDetalladaAsync(dto);
-				if (!ok)
-					error = "El servidor falló al crear la ubicación.";
+				if (!ok) error = "El servidor falló al crear la ubicación.";
 			}
 			else
 			{
-				// El PUT ahora devuelve un tuple
 				var result = await _svc.ActualizarUbicacionDetalladaAsync(dto);
 				ok = result.Success;
 				error = result.ErrorMessage;
@@ -160,15 +179,13 @@ namespace SGA_Desktop.ViewModels
 
 			if (!ok)
 			{
-				MessageBox.Show(
-					$"Error al {(_isNew ? "crear" : "actualizar")} ubicación:\n{error}",
-					"SGA",
-					MessageBoxButton.OK,
-					MessageBoxImage.Error);
+				MessageBox.Show($"Error al {(_isNew ? "crear" : "actualizar")} ubicación:\n{error}",
+								"SGA",
+								MessageBoxButton.OK,
+								MessageBoxImage.Error);
 				return;
 			}
 
-			// Si todo va bien, cerramos el diálogo
 			var wnd = Application.Current.Windows
 							  .OfType<Window>()
 							  .SingleOrDefault(w => w.IsActive);
@@ -184,8 +201,8 @@ namespace SGA_Desktop.ViewModels
 			var lista = await _svc.ObtenerTiposUbicacionAsync();
 			TiposDisponibles.Clear();
 			foreach (var t in lista) TiposDisponibles.Add(t);
-			if (!_isNew && tipoUbicacionId.HasValue)
-				OnPropertyChanged(nameof(tipoUbicacionId));
+			if (!_isNew && TipoUbicacionId.HasValue)
+				OnPropertyChanged(nameof(TipoUbicacionId));
 		}
 
 		private async Task LoadAlergenosAsync(IList<short>? permitidos)
@@ -209,14 +226,37 @@ namespace SGA_Desktop.ViewModels
 			var lista = await _paletService.ObtenerTiposPaletAsync();
 			TiposPaletDisponibles.Clear();
 			foreach (var p in lista) TiposPaletDisponibles.Add(p);
-			if (!_isNew && !string.IsNullOrEmpty(tipoPaletPermitido))
-				OnPropertyChanged(nameof(tipoPaletPermitido));
+			if (!_isNew && !string.IsNullOrEmpty(TipoPaletPermitido))
+				OnPropertyChanged(nameof(TipoPaletPermitido));
 		}
 
 		private void Cancel()
 		{
-			var wnd = Application.Current.Windows.OfType<Window>().SingleOrDefault(w => w.IsActive);
+			var wnd = Application.Current.Windows
+							  .OfType<Window>()
+							  .SingleOrDefault(w => w.IsActive);
 			wnd?.Close();
+		}
+
+		private void UpdateCodigoYDescripcion()
+		{
+			if (!_isNew)
+				return;
+
+			if (Pasillo == null || Estanteria == null || Altura == null || Posicion == null)
+			{
+				CodigoUbicacion = string.Empty;
+				DescripcionUbicacion = string.Empty;
+			}
+			else
+			{
+				CodigoUbicacion = $"UB{Pasillo:000}{Estanteria:000}{Altura:000}{Posicion:000}";
+				DescripcionUbicacion = $"Pasillo {Pasillo}, Estantería {Estanteria}, Altura {Altura}, Posición {Posicion}";
+			}
+
+			OnPropertyChanged(nameof(CanEditCodigo));
+			OnPropertyChanged(nameof(CanEditDescripcion));
+			SaveCommand.NotifyCanExecuteChanged();
 		}
 	}
 }

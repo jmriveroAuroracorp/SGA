@@ -27,6 +27,8 @@ namespace SGA_Api.Data
 		public DbSet<TipoUbicacion> TipoUbicaciones { get; set; }
 		public DbSet<TipoPalet> TipoPalets { get; set; }
 		public DbSet<Palet> Palets { get; set; }
+		public DbSet<TipoEstadoPalet> TipoEstadoPalet { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
 			base.OnModelCreating(modelBuilder);
@@ -187,6 +189,22 @@ namespace SGA_Api.Data
 	  eb.ToView("vUbicacionesDetalladas");
 	  eb.Property(v => v.Orden).HasColumnName("Orden");
   });
+
+			modelBuilder.Entity<TipoEstadoPalet>(eb =>
+			{
+				eb.ToTable("TipoEstadoPalet");
+				eb.HasKey(e => e.CodigoEstado);
+				eb.Property(e => e.Descripcion).IsRequired();
+				eb.Property(e => e.Orden).IsRequired();
+			});
+
+			modelBuilder.Entity<Palet>(eb =>
+			{
+				eb.HasOne<TipoEstadoPalet>()
+				  .WithMany(e => e.Palets)
+				  .HasForeignKey(p => p.Estado)
+				  .HasConstraintName("FK_Palets_TipoEstadoPalet");
+			});
 
 		}
 	}
