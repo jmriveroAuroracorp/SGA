@@ -23,6 +23,10 @@ namespace SGA_Desktop.ViewModels
 		public ObservableCollection<TipoPaletDto> TiposPaletDisponibles { get; }
 			= new ObservableCollection<TipoPaletDto>();
 		[ObservableProperty] private TipoPaletDto? _tipoPaletSeleccionado;
+		public ObservableCollection<UsuarioConNombre> UsuariosDisponibles { get; }
+			= new ObservableCollection<UsuarioConNombre>();
+		[ObservableProperty] private UsuarioConNombre? _usuarioAperturaSeleccionado;
+		[ObservableProperty] private UsuarioConNombre? _usuarioCierreSeleccionado;
 
 		// ▶️ Otros filtros
 		[ObservableProperty] private string? _codigo;
@@ -90,7 +94,52 @@ namespace SGA_Desktop.ViewModels
 
 				TipoPaletSeleccionado = TiposPaletDisponibles[0];
 			});
-
 		}
+
+		public void ActualizarUsuariosDisponibles(IEnumerable<PaletDto> palets)
+		{
+			UsuariosDisponibles.Clear();
+
+			System.Diagnostics.Debug.WriteLine($"🔷 Palets recibidos: {palets.Count()}");
+
+			foreach (var p in palets)
+			{
+				System.Diagnostics.Debug.WriteLine(
+					$"Palet: {p.Codigo} | UsuarioAperturaId: {p.UsuarioAperturaId} | UsuarioAperturaNombre: {p.UsuarioAperturaNombre}");
+			}
+
+			// Añade la opción "Todos"
+			UsuariosDisponibles.Add(new UsuarioConNombre
+			{
+				UsuarioId = 0,
+				NombreOperario = "-- Todos los usuarios --"
+			});
+
+			var usuariosUnicos = palets
+				.Where(p => p.UsuarioAperturaId.HasValue)
+				.GroupBy(p => p.UsuarioAperturaId.Value)
+				.Select(g => new UsuarioConNombre
+				{
+					UsuarioId = g.Key,
+					NombreOperario = g.First().UsuarioAperturaNombre ?? ""
+				})
+				.OrderBy(u => u.NombreOperario)
+				.ToList();
+
+			System.Diagnostics.Debug.WriteLine($"🔷 Usuarios únicos encontrados: {usuariosUnicos.Count}");
+
+			foreach (var u in usuariosUnicos)
+			{
+				System.Diagnostics.Debug.WriteLine($"➡️ UsuarioId: {u.UsuarioId} | Nombre: {u.NombreOperario}");
+				UsuariosDisponibles.Add(u);
+			}
+
+			System.Diagnostics.Debug.WriteLine($"🔷 UsuariosDisponibles final: {UsuariosDisponibles.Count}");
+
+			UsuarioAperturaSeleccionado = UsuariosDisponibles.FirstOrDefault();
+			UsuarioCierreSeleccionado = UsuariosDisponibles.FirstOrDefault();
+		}
+
+
 	}
 }

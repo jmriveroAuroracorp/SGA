@@ -22,13 +22,20 @@ namespace SGA_Desktop.Dialog
 	/// </summary>
 	public partial class PaletFilterDialog : Window
 	{
-		private readonly PaletFilterDialogViewModel _vm;   // ← Declara aquí
+		private readonly PaletFilterDialogViewModel _vm;
+
 		public PaletFilterDialog()
 		{
 			InitializeComponent();
-			_vm = new PaletFilterDialogViewModel(new PaletService());
+
+			// Instancia servicios con sus constructores por defecto
+			var paletService = new PaletService();
+
+			// Crea el ViewModel pasando ambos servicios
+			_vm = new PaletFilterDialogViewModel(paletService);
 			DataContext = _vm;
 
+			// Al cargar la ventana, inicializa asincrónicamente
 			Loaded += async (_, __) => await _vm.InitializeAsync();
 		}
 	}

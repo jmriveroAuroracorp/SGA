@@ -75,11 +75,36 @@
 
             <!-- Usuario Apertura -->
             <TextBlock Grid.Row="8" Grid.Column="0" Text="Usuario Apertura:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <TextBox   Grid.Row="8" Grid.Column="1" Text="{Binding UsuarioApertura}" Style="{StaticResource EstiloCajaTexto}" Width="200"/>
+            <ComboBox
+    Grid.Row="8" Grid.Column="1"
+    ItemsSource="{Binding UsuariosDisponibles}"
+SelectedItem="{Binding UsuarioAperturaSeleccionado}"
 
-            <!-- Usuario Cierre -->
+    DisplayMemberPath="NombreOperario"
+    SelectedValuePath="UsuarioId"
+    Style="{StaticResource EstiloComboBox}"
+    Width="200"
+
+                IsEditable="True"
+    IsTextSearchEnabled="True"
+    StaysOpenOnEdit="True"
+/>
+
+                <!-- Usuario Cierre -->
             <TextBlock Grid.Row="9" Grid.Column="0" Text="Usuario Cierre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <TextBox   Grid.Row="9" Grid.Column="1" Text="{Binding UsuarioCierre}" Style="{StaticResource EstiloCajaTexto}" Width="200"/>
+            <ComboBox
+    Grid.Row="9" Grid.Column="1"
+    ItemsSource="{Binding UsuariosDisponibles}"
+SelectedItem="{Binding UsuarioCierreSeleccionado}"
+    DisplayMemberPath="NombreOperario"
+    SelectedValuePath="UsuarioId"
+    Style="{StaticResource EstiloComboBox}"
+    Width="200"
+
+    IsEditable="True"
+    IsTextSearchEnabled="True"
+    StaysOpenOnEdit="True"
+/>
 
             <!-- Botones -->
             <StackPanel Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">

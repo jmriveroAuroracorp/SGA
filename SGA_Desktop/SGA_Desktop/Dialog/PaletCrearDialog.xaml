@@ -1,48 +1,69 @@
 ﻿<Window x:Class="SGA_Desktop.Dialog.PaletCrearDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Crear Palet"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize">
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
 
-        <!-- Código -->
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="Código:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Codigo, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EstiloCajaTexto}"/>
+    <!-- 1) Carga de Estilos generales -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
-        <!-- Tipo de palet -->
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Tipo de palet:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-        <ComboBox Grid.Row="1" Grid.Column="1"
-              ItemsSource="{Binding TiposPaletDisponibles}"
-              SelectedItem="{Binding TipoPaletSeleccionado}"
-              DisplayMemberPath="Descripcion"
-              Style="{StaticResource EstiloComboBox}"/>
+    <!-- 2) Marco redondeado con fondo y bordes -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20">
 
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- TipoPalet -->
+                <RowDefinition Height="Auto"/>
+                <!-- OrdenTrabajo -->
+                <RowDefinition Height="Auto"/>
+                <!-- Espacio -->
+                <RowDefinition Height="Auto"/>
+                <!-- Botones -->
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <!-- Altura -->
-        <TextBlock Grid.Row="3" Grid.Column="0" Text="Altura (cm):" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Altura}" Style="{StaticResource EstiloCajaTexto}"/>
+            <!-- Tipo de palet -->
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Tipo de palet:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding TiposPaletDisponibles}"
+                      SelectedItem="{Binding TipoPaletSeleccionado}"
+                      DisplayMemberPath="Descripcion"
+                      Style="{StaticResource EstiloComboBox}"/>
 
-        <!-- Peso -->
-        <TextBlock Grid.Row="4" Grid.Column="0" Text="Peso (kg):" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-        <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding Peso}" Style="{StaticResource EstiloCajaTexto}"/>
+            <!-- Orden de trabajo -->
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Orden de trabajo:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,10,10,0"/>
+            <TextBox   Grid.Row="1" Grid.Column="1"
+                       Text="{Binding OrdenTrabajoId, UpdateSourceTrigger=PropertyChanged}"
+                       Style="{StaticResource EstiloCajaTexto}" Margin="0,10,0,0"/>
 
-        <!-- Botones -->
-        <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="Cancelar" Width="100" Margin="0,0,8,0" IsCancel="True" Style="{StaticResource EstiloBotonPrincipal}"/>
-            <Button Content="Crear" Width="100" IsDefault="True" Command="{Binding CrearCommand}" Style="{StaticResource EstiloBotonPrincipal}"/>
-        </StackPanel>
-    </Grid>
+            <!-- Espacio -->
+            <Rectangle Grid.Row="2" Grid.ColumnSpan="2" Height="1" Fill="{StaticResource BrushPrincipal}" Margin="0,20" />
+
+            <!-- Botones -->
+            <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Cancelar" Width="90" Margin="0,0,10,0" IsCancel="True" Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Crear"   Width="90" IsDefault="True" Command="{Binding CrearCommand}" Style="{StaticResource EstiloBotonPrincipal}"/>
+            </StackPanel>
+        </Grid>
+
+    </Border>
 </Window>

@@ -11,6 +11,7 @@
     <Page.Resources>
         <helpers:NullToBoolConverter x:Key="NotNullToBoolConverter"/>
         <helpers:BoolToYesNoConverter x:Key="BoolToYesNoConverter"/>
+        <helpers:OperarioIdANombreConverter x:Key="OperarioIdANombreConverter"/>
     </Page.Resources>
 
     <Grid>
@@ -45,15 +46,14 @@
                 IsReadOnly="True"
                 HeadersVisibility="Column">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="ID"                 Binding="{Binding Id}" Width="200"/>
-                    <DataGridTextColumn Header="Código"             Binding="{Binding Codigo}" Width="*"/>
+                    <DataGridTextColumn Header="Código"             Binding="{Binding Codigo}" Width="Auto"/>
                     <DataGridTextColumn Header="Estado"             Binding="{Binding Estado}" Width="Auto"/>
                     <DataGridTextColumn Header="Tipo"               Binding="{Binding TipoPaletCodigo}" Width="Auto"/>
-                    <DataGridTextColumn Header="Fecha creación"     Binding="{Binding FechaApertura, StringFormat=g}" Width="Auto"/>
-                    <DataGridTextColumn Header="Fecha cierre"       Binding="{Binding FechaCierre, StringFormat=g}" Width="Auto"/>
-                    <DataGridTextColumn Header="Usuario crea"       Binding="{Binding UsuarioAperturaId}" Width="Auto"/>
+                    <DataGridTextColumn Header="Fecha creación"     Binding="{Binding FechaApertura, StringFormat={}{0:dd/MM/yyyy}}" Width="Auto"/>
+                    <DataGridTextColumn Header="Fecha cierre"       Binding="{Binding FechaCierre, StringFormat={}{0:dd/MM/yyyy}}" Width="Auto"/>
+                    <DataGridTextColumn Header="Usuario crea"       Binding="{Binding UsuarioAperturaNombre}" Width="Auto"/>
                     <DataGridTextColumn Header="Usuario cierra"     Binding="{Binding UsuarioCierreId}" Width="Auto"/>
-                    <DataGridTextColumn Header="Altura (cm)"        Binding="{Binding Altura}" Width="Auto"/>
+                    <DataGridTextColumn Header="Altura (m)"        Binding="{Binding Altura}" Width="Auto"/>
                     <DataGridTextColumn Header="Peso (kg)"          Binding="{Binding Peso}" Width="Auto"/>
                     <DataGridTextColumn Header="Etiqueta generada"  Binding="{Binding EtiquetaGenerada, Converter={StaticResource BoolToYesNoConverter}}" Width="Auto"/>
                 </DataGrid.Columns>

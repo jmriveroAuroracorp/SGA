@@ -6,5 +6,6 @@
         public string? IdEmpresa { get; set; }
         public string? Impresora { get; set; }
         public string? Etiqueta { get; set; }
+
     }
 }

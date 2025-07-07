@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;         // Asegúrate de que PaletDto y TipoPaletDto están aquí
 namespace SGA_Desktop.Services
 {
@@ -83,6 +84,21 @@ namespace SGA_Desktop.Services
 		}
 
 		/// <summary>
+		/// Trae todos los usuarios que han abierto o cerrado pallets
+		/// en la empresa seleccionada.
+		/// </summary>
+		public async Task<List<UsuarioDto>> ObtenerUsuariosAsync()
+		{
+			var empresa = SessionManager.EmpresaSeleccionada!.Value;
+			var uri = $"palet/operarios?codigoEmpresa={empresa}";
+
+			return await _httpClient
+				.GetFromJsonAsync<List<UsuarioDto>>(uri)
+				?? new List<UsuarioDto>();
+		}
+
+
+		/// <summary>
 		/// Obtiene las líneas de un pallet específico.
 		/// </summary>
 		public async Task<List<LineaPaletDto>> ObtenerLineasAsync(Guid paletId)
@@ -100,5 +116,7 @@ namespace SGA_Desktop.Services
 			var resp = await _httpClient.PostAsync($"palet/{paletId}/imprimir", null);
 			resp.EnsureSuccessStatusCode();
 		}
+
+		
 	}
 }

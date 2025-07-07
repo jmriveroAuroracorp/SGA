@@ -28,6 +28,7 @@ namespace SGA_Api.Data
 		public DbSet<TipoPalet> TipoPalets { get; set; }
 		public DbSet<Palet> Palets { get; set; }
 		public DbSet<TipoEstadoPalet> TipoEstadoPalet { get; set; }
+		public DbSet<UsuarioConNombre> vUsuariosConNombre { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
@@ -206,6 +207,11 @@ namespace SGA_Api.Data
 				  .HasConstraintName("FK_Palets_TipoEstadoPalet");
 			});
 
+			modelBuilder.Entity<UsuarioConNombre>(ent =>
+			{
+				ent.HasNoKey();
+				ent.ToView("vUsuariosConNombre");
+			});
 		}
 	}
 }

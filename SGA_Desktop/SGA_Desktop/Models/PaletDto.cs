@@ -11,12 +11,15 @@ namespace SGA_Desktop.Models
 		public string? TipoPaletCodigo { get; set; }
 		public DateTime FechaApertura { get; set; }
 		public DateTime? FechaCierre { get; set; }
-		public int UsuarioAperturaId { get; set; }
+		public int? UsuarioAperturaId { get; set; }
+		public string UsuarioAperturaNombre { get; set; }
 		public int? UsuarioCierreId { get; set; }
+		public string UsuarioCierreNombre { get; set; }
 		public decimal? Altura { get; set; }
 		public decimal? Peso { get; set; }
 		public bool EtiquetaGenerada { get; set; }
 		public bool IsVaciado { get; set; }
 		public DateTime? FechaVaciado { get; set; }
+		public string? OrdenTrabajoId { get; set; }
 	}
 }

@@ -43,6 +43,8 @@ namespace SGA_Api.Models.Palet
 
 		public DateTime? FechaVaciado { get; set; }
 
+		public string? OrdenTrabajoId { get; set; }
+
 		// relaciones a PaletLineas y log_palet quedan aparte...
 	}
 }

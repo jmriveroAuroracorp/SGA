@@ -10,64 +10,77 @@ using SGA_Desktop.Helpers;
 
 namespace SGA_Desktop.ViewModels
 {
-	public partial class PaletCrearDialogViewModel : ObservableObject
-	{
-		private readonly PaletService _paletService;
+    public partial class PaletCrearDialogViewModel : ObservableObject
+    {
+        private readonly PaletService _paletService;
 
-		public PaletCrearDialogViewModel(PaletService paletService)
-		{
-			_paletService = paletService;
-			// cargar catálogos
-			TiposPaletDisponibles = new ObservableCollection<TipoPaletDto>();
-			CrearCommand = new AsyncRelayCommand(CrearAsync);
+        // Para devolver el resultado al padre
+        public PaletDto? CreatedPalet { get; private set; }
 
-			// initializer
-			_ = InitializeAsync();
-		}
-		public ObservableCollection<TipoPaletDto> TiposPaletDisponibles { get; }
+        public PaletCrearDialogViewModel(PaletService paletService)
+        {
+            _paletService = paletService;
+            TiposPaletDisponibles = new ObservableCollection<TipoPaletDto>();
+            CrearCommand = new AsyncRelayCommand(CrearAsync);
 
-		[ObservableProperty] private string? codigo;
-		[ObservableProperty] private TipoPaletDto? tipoPaletSeleccionado;
-		[ObservableProperty] private decimal altura;
-		[ObservableProperty] private decimal peso;
+            _ = InitializeAsync();
+        }
 
-		public IAsyncRelayCommand CrearCommand { get; }
+        public ObservableCollection<TipoPaletDto> TiposPaletDisponibles { get; }
 
-		private async Task InitializeAsync()
-		{
-			// 1) Tipos de palet
-			var tipos = await _paletService.ObtenerTiposPaletAsync();
-			await Application.Current.Dispatcher.InvokeAsync(() =>
-			{
-				TiposPaletDisponibles.Clear();
-				foreach (var t in tipos) TiposPaletDisponibles.Add(t);
-			});
+        // La orden de trabajo (antes no existía)
+        [ObservableProperty]
+        private string? ordenTrabajoId;
 
-			
-		}
+        [ObservableProperty]
+        private TipoPaletDto? tipoPaletSeleccionado;
 
-		private async Task CrearAsync()
-		{
-			// Aquí rellenamos el DTO con SessionManager
-			var dto = new PaletCrearDto
-			{
-				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-				UsuarioAperturaId = SessionManager.Operario,
-				Codigo = this.Codigo!,
-				TipoPaletCodigo = this.TipoPaletSeleccionado!.CodigoPalet,
-				Altura = this.Altura,
-				Peso = this.Peso
-			};
+        public IAsyncRelayCommand CrearCommand { get; }
 
-			// Llamada al API
-			var creado = await _paletService.PaletCrearAsync(dto);
+        private async Task InitializeAsync()
+        {
+            var tipos = await _paletService.ObtenerTiposPaletAsync();
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                TiposPaletDisponibles.Clear();
+                foreach (var t in tipos)
+                    TiposPaletDisponibles.Add(t);
+            });
+        }
 
-			// Cerramos el diálogo
-			var window = Application.Current.Windows
-								.OfType<Window>()
-								.FirstOrDefault(w => w.DataContext == this);
-			if (window != null)
-				window.DialogResult = true;
-		}
-	}
+        private async Task CrearAsync()
+        {
+            // 1) Construye el DTO mínimo que espera la API
+            var dto = new PaletCrearDto
+            {
+                CodigoEmpresa     = SessionManager.EmpresaSeleccionada!.Value,
+                UsuarioAperturaId = SessionManager.Operario,
+                TipoPaletCodigo   = TipoPaletSeleccionado!.CodigoPalet,
+                OrdenTrabajoId    = string.IsNullOrWhiteSpace(OrdenTrabajoId)
+                                        ? null
+                                        : OrdenTrabajoId
+            };
+
+            try
+            {
+                // 2) Llamada al API y recogida del Palet completo
+                CreatedPalet = await _paletService.PaletCrearAsync(dto);
+            }
+            catch (Exception ex)
+            {
+                // Muestra el error en la UI
+                // (puedes añadir un ErrorMessage con ObservableProperty si quieres)
+                MessageBox.Show($"Error creando palet:\n{ex.Message}",
+                                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // 3) Cerramos el diálogo con éxito
+            var window = Application.Current.Windows
+                                .OfType<Window>()
+                                .FirstOrDefault(w => w.DataContext == this);
+            if (window != null)
+                window.DialogResult = true;
+        }
+    }
 }

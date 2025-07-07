@@ -4,9 +4,7 @@
 	{
 		public short CodigoEmpresa { get; set; }
 		public int UsuarioAperturaId { get; set; }
-		public string Codigo { get; set; } = "";
 		public string TipoPaletCodigo { get; set; } = "";
-		public decimal Altura { get; set; }
-		public decimal Peso { get; set; }
+		public string? OrdenTrabajoId { get; set; }
 	}
 }
