@@ -16,14 +16,33 @@ namespace SGA_Desktop.ViewModels
 		private readonly PaletService _paletService;
 
 		[ObservableProperty] private string? errorMessage;
+		[ObservableProperty]
+		private LineaPaletDto? lineaSeleccionada;
+		partial void OnLineaSeleccionadaChanged(LineaPaletDto? value)
+		{
+			EliminarLineaSeleccionadaCommand.NotifyCanExecuteChanged();
+		}
 		public ObservableCollection<PaletDto> PaletsView { get; } = new();
 		[ObservableProperty] private PaletDto? paletSeleccionado;
+		partial void OnPaletSeleccionadoChanged(PaletDto? value)
+		{
+			AbrirPaletLineasCommand.NotifyCanExecuteChanged();
+			CerrarPaletCommand.NotifyCanExecuteChanged();
+			ReabrirPaletCommand.NotifyCanExecuteChanged();
+
+			OnPropertyChanged(nameof(PuedeCerrarPalet));
+			OnPropertyChanged(nameof(PuedeReabrirPalet));
+
+			_ = LoadLineasPaletAsync();
+		}
 		public ObservableCollection<LineaPaletDto> LineasPalet { get; } = new();
 
 		public IAsyncRelayCommand LoadPaletsCommand { get; }
 		public IRelayCommand AbrirFiltrosCommand { get; }
 		public IAsyncRelayCommand LoadLineasCommand { get; }
 		public IRelayCommand CrearPaletCommand { get; }
+		public IRelayCommand AbrirPaletLineasCommand { get; }
+
 
 		public PaletizacionViewModel(PaletService paletService)
 		{
@@ -34,6 +53,8 @@ namespace SGA_Desktop.ViewModels
 			AbrirFiltrosCommand = new RelayCommand(OpenFiltros);
 			CrearPaletCommand = new RelayCommand(AbrirPaletCrearDialog);
 			LoadLineasCommand = new AsyncRelayCommand(LoadLineasPaletAsync);
+			AbrirPaletLineasCommand = new RelayCommand(AbrirPaletLineas, PuedeAbrirPaletLineas);
+
 
 			// Inicialización común
 			_ = InitializeAsync();
@@ -139,5 +160,116 @@ namespace SGA_Desktop.ViewModels
 			if (dlg.ShowDialog() == true && dlgVm.CreatedPalet != null)
 				PaletsView.Add(dlgVm.CreatedPalet);
 		}
+
+		private bool PuedeAbrirPaletLineas()
+		{
+			return PaletSeleccionado != null;
+		}
+
+		private async void AbrirPaletLineas()
+		{
+			if (PaletSeleccionado is null) return;
+
+			var dlgVm = new PaletLineasDialogViewModel(
+				PaletSeleccionado.Id,
+				PaletSeleccionado.Codigo,
+				PaletSeleccionado.TipoPaletCodigo,
+				PaletSeleccionado.Estado,
+				_paletService);
+
+			var dlg = new PaletLineasDialog
+			{
+				Owner = Application.Current.MainWindow,
+				DataContext = dlgVm
+			};
+
+			dlg.ShowDialog();
+
+			// 🔷 al cerrar el diálogo, recarga las líneas
+			await LoadLineasPaletAsync();
+		}
+
+		[RelayCommand(CanExecute = nameof(CanEliminarLinea))]
+		private async Task EliminarLineaSeleccionadaAsync()
+		{
+			if (lineaSeleccionada == null) return;
+
+			string detalle =
+				$"""
+		Artículo: {lineaSeleccionada.DescripcionArticulo}
+		Cantidad: {lineaSeleccionada.Cantidad}
+		Ubicación: {lineaSeleccionada.Ubicacion}
+		Lote: {lineaSeleccionada.Lote}
+		""";
+
+			var dlg = new ConfirmationDialog(
+				"Confirmar eliminación",
+				$"¿Estás seguro de que quieres eliminar esta línea?\n\n{detalle}",
+				"\uE74D" // icono de papelera
+			)
+			{
+				Owner = Application.Current.MainWindow
+			};
+
+			if (dlg.ShowDialog() != true) return;
+
+			var ok = await _paletService.EliminarLineaPaletAsync(lineaSeleccionada.Id);
+			if (ok)
+				LineasPalet.Remove(lineaSeleccionada);
+			else
+				ErrorMessage = "No se pudo eliminar la línea";
+		}
+
+		private bool CanEliminarLinea() => lineaSeleccionada != null;
+
+		[RelayCommand(CanExecute = nameof(CanCerrar))]
+		private async Task CerrarPaletAsync()
+		{
+			if (PaletSeleccionado == null) return;
+
+			var confirm = new ConfirmationDialog(
+				"Cerrar palet",
+				$"¿Estás seguro de cerrar el palet {PaletSeleccionado.Codigo}?\nNo se podrán añadir más líneas.");
+			if (confirm.ShowDialog() != true) return;
+
+			var ok = await _paletService.CerrarPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
+			if (ok)
+			{
+				PaletSeleccionado.Estado = "Cerrado";
+				ErrorMessage = null;
+			}
+			else
+			{
+				ErrorMessage = "No se pudo cerrar el palet.";
+			}
+		}
+
+		[RelayCommand(CanExecute = nameof(CanReabrir))]
+		private async Task ReabrirPaletAsync()
+		{
+			if (PaletSeleccionado == null) return;
+
+			var confirm = new ConfirmationDialog(
+				"Reabrir palet",
+				$"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\nPodrás añadir o eliminar líneas.");
+			if (confirm.ShowDialog() != true) return;
+
+			var ok = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id);
+			if (ok)
+			{
+				PaletSeleccionado.Estado = "Abierto";
+				ErrorMessage = null;
+			}
+			else
+			{
+				ErrorMessage = "No se pudo reabrir el palet.";
+			}
+		}
+
+		private bool CanCerrar() => PaletSeleccionado?.Estado == "Abierto";
+		private bool CanReabrir() => PaletSeleccionado?.Estado == "Cerrado";
+
+		public bool PuedeCerrarPalet => PaletSeleccionado?.Estado == "Abierto";
+		public bool PuedeReabrirPalet => PaletSeleccionado?.Estado == "Cerrado";
 	}
 }

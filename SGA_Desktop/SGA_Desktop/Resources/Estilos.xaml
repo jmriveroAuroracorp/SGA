@@ -296,7 +296,14 @@
         </Setter>
     </Style>
 
-
+    <Style x:Key="EstiloTarjeta" TargetType="Border">
+        <Setter Property="Padding" Value="10"/>
+        <Setter Property="Margin" Value="4"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="BorderBrush" Value="#CCC"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background" Value="White"/>
+    </Style>
 
 
 

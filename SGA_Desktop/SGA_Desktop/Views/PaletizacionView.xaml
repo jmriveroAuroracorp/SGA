@@ -1,67 +1,80 @@
-﻿<!-- PaletizacionView.xaml -->
-<Page x:Class="SGA_Desktop.Views.PaletizacionView"
+﻿<Page x:Class="SGA_Desktop.Views.PaletizacionView"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
-      
       Background="{StaticResource BrushFondo}">
-    <!--Loaded="PaletizacionView_Loaded"-->
 
-    
     <Page.Resources>
         <helpers:NullToBoolConverter x:Key="NotNullToBoolConverter"/>
         <helpers:BoolToYesNoConverter x:Key="BoolToYesNoConverter"/>
         <helpers:OperarioIdANombreConverter x:Key="OperarioIdANombreConverter"/>
+        <helpers:EstaAbiertoConverter x:Key="EstaAbiertoConverter"/>
+        <helpers:EstaCerradoConverter x:Key="EstaCerradoConverter"/>
+        <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
     </Page.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="3*" />
-            <RowDefinition Height="2*" />
-        </Grid.RowDefinitions>
+    <Grid Margin="8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="5*" />
+        </Grid.ColumnDefinitions>
 
-        <!-- 1) Filtros + DataGrid de Palets abiertos -->
-        <DockPanel Grid.Row="0" LastChildFill="True">
+        <!-- 📦 Palets -->
+        <DockPanel Grid.Column="0" LastChildFill="True" Margin="0,0,8,0">
             <StackPanel Orientation="Horizontal"
-                  DockPanel.Dock="Top"
-                  Margin="0,0,0,8"
-                  VerticalAlignment="Center" Cursor="">
-                <Button Content="Filtros"
-                Style="{StaticResource EstiloBotonPrincipal}"
-                Command="{Binding AbrirFiltrosCommand}"
-                Width="100"
-                Margin="0,0,8,0"/>
-                <Button Content="Nuevo palet"
-          Style="{StaticResource EstiloBotonPrincipal}"
-          Command="{Binding CrearPaletCommand}"
-          Width="100"
-          Margin="20,0,8,0"/>
-               
-            </StackPanel>
-            <DataGrid Style="{StaticResource EstiloDataGrid}"
-                ItemsSource="{Binding PaletsView}"              
-                SelectedItem="{Binding PaletSeleccionado, Mode=TwoWay}"
-                AutoGenerateColumns="False"
-                CanUserAddRows="False"
-                IsReadOnly="True"
-                HeadersVisibility="Column">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Código"             Binding="{Binding Codigo}" Width="Auto"/>
-                    <DataGridTextColumn Header="Estado"             Binding="{Binding Estado}" Width="Auto"/>
-                    <DataGridTextColumn Header="Tipo"               Binding="{Binding TipoPaletCodigo}" Width="Auto"/>
-                    <DataGridTextColumn Header="Fecha creación"     Binding="{Binding FechaApertura, StringFormat={}{0:dd/MM/yyyy}}" Width="Auto"/>
-                    <DataGridTextColumn Header="Fecha cierre"       Binding="{Binding FechaCierre, StringFormat={}{0:dd/MM/yyyy}}" Width="Auto"/>
-                    <DataGridTextColumn Header="Usuario crea"       Binding="{Binding UsuarioAperturaNombre}" Width="Auto"/>
-                    <DataGridTextColumn Header="Usuario cierra"     Binding="{Binding UsuarioCierreId}" Width="Auto"/>
-                    <DataGridTextColumn Header="Altura (m)"        Binding="{Binding Altura}" Width="Auto"/>
-                    <DataGridTextColumn Header="Peso (kg)"          Binding="{Binding Peso}" Width="Auto"/>
-                    <DataGridTextColumn Header="Etiqueta generada"  Binding="{Binding EtiquetaGenerada, Converter={StaticResource BoolToYesNoConverter}}" Width="Auto"/>
-                </DataGrid.Columns>
-            </DataGrid>
-        </DockPanel>
+                        DockPanel.Dock="Top"
+                        Margin="0,0,0,8"
+                        VerticalAlignment="Center">
 
-        <!-- 2) Detalle del palet seleccionado (líneas + imprimir) -->
-        <Grid Grid.Row="1" Cursor="">
+                <Button Content="🔍 Filtros"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding AbrirFiltrosCommand}"
+                        Width="110"
+                        Margin="0,0,8,0"/>
+                <Button Content="➕ Nuevo"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding CrearPaletCommand}"
+                        Width="100"
+                        Margin="0,0,8,0"/>
+            </StackPanel>
+            <ListView ItemsSource="{Binding PaletsView}"
+          SelectedItem="{Binding PaletSeleccionado, Mode=TwoWay}"
+          Margin="10"
+          HorizontalContentAlignment="Stretch">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource EstiloTarjeta}" Margin="4" Padding="8">
+                            <StackPanel>
+                                <!-- Código + Estado -->
+                                <TextBlock Margin="0,0,0,4">
+                    <Run Text="{Binding Codigo}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource BrushPrincipal}" />
+                    <Run Text=" - " />
+                    <Run Text="{Binding Estado}" Foreground="{Binding Estado, Converter={StaticResource EstadoColorConverter}}" FontSize="16"/>
+                                </TextBlock>
+
+                                <!-- Apertura + Abre -->
+                                <TextBlock Margin="0,2,0,0">
+                    <Run Text="Apertura: " FontWeight="Bold"/>
+                    <Run Text="{Binding FechaApertura, StringFormat={}{0:dd/MM/yyyy}}"/>
+                    <Run Text=" - Abre: " FontWeight="Bold" />
+                    <Run Text="{Binding UsuarioAperturaNombre}"/>
+                                </TextBlock>
+
+                                <!-- Cierre + Cierra -->
+                                <TextBlock Margin="0,2,0,0">
+                    <Run Text="Cierre: " FontWeight="Bold"/>
+                    <Run Text="{Binding FechaCierre, StringFormat={}{0:dd/MM/yyyy}}"/>
+                    <Run Text=" - Cierra: " FontWeight="Bold" />
+                    <Run Text="{Binding UsuarioCierreNombre}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </DockPanel>
+        <!-- 📋 Líneas + acciones -->
+        <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -69,34 +82,65 @@
             </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0"
-                 Text="{Binding PaletSeleccionado.Codigo, StringFormat=Contenido del palet: {0}}"
-                 Style="{StaticResource LabelStyle}"
-                 FontSize="16"
-                 Margin="0,0,0,8"/>
+                       Text="{Binding PaletSeleccionado.Codigo, StringFormat=Contenido del palet: {0}}"
+                       Style="{StaticResource LabelStyle}"
+                       FontSize="16"
+                       Margin="0,0,0,8"/>
 
             <DataGrid Grid.Row="1"
-                Style="{StaticResource EstiloDataGrid}"
-                ItemsSource="{Binding LineasPalet}"
-                AutoGenerateColumns="False"
-                CanUserAddRows="False">
+                      SelectedItem="{Binding LineaSeleccionada, Mode=TwoWay}"
+                      Style="{StaticResource EstiloDataGrid}"
+                      ItemsSource="{Binding LineasPalet}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False">
+
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Artículo"    Binding="{Binding DescripcionArticulo}" Width="2*" />
-                    <DataGridTextColumn Header="Cantidad"    Binding="{Binding Cantidad}"              Width="Auto" />
-                    <DataGridTextColumn Header="Ubicación"   Binding="{Binding UbicacionOrigenId}"    Width="*" />
+                    <DataGridTextColumn Header="Artículo" Width="2*" Binding="{Binding DescripcionArticulo}" />
+                    <DataGridTextColumn Header="Cantidad" Width="80" Binding="{Binding Cantidad}" />
+                    <DataGridTextColumn Header="Ubicación" Width="150" Binding="{Binding Ubicacion}" />
+                    <DataGridTextColumn Header="Lote" Width="100" Binding="{Binding Lote}" />
+                    <DataGridTextColumn Header="Caducidad" Width="100" Binding="{Binding FechaCaducidad, StringFormat={}{0:dd/MM/yyyy}}" />
+                    <DataGridTextColumn Header="Almacén" Width="80" Binding="{Binding CodigoAlmacen}" />
                 </DataGrid.Columns>
             </DataGrid>
-            
-            <Button Grid.Row="2"
-              Content="Imprimir etiqueta"
-              Style="{StaticResource EstiloBotonPrincipal}"
-              Command="{Binding ImprimirEtiquetaCommand}"
-              IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}"
-              HorizontalAlignment="Right"
-              Margin="0,8,0,0"/>
+
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Margin="0,8,0,0">
+
+                <!-- Acciones de palet -->
+                <Button Content="📦 Añadir stock"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding AbrirPaletLineasCommand}"
+                        IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}" />
+
+                <Button Content="🔒 Cerrar"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding CerrarPaletCommand}"
+                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
+
+                <Button Content="🔓 Reabrir"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding ReabrirPaletCommand}"
+                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaCerradoConverter}}" />
+
+                <!-- Acciones de línea -->
+                <Button Content="🖨 Imprimir"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding ImprimirEtiquetaCommand}"
+                        IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}" />
+
+                <Button Content="🗑 Eliminar línea"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding EliminarLineaSeleccionadaCommand}"
+                        IsEnabled="{Binding LineaSeleccionada, Converter={StaticResource NotNullToBoolConverter}}" />
+            </StackPanel>
 
             <TextBlock Text="{Binding ErrorMessage}"
-           Foreground="Red"
-           Margin="0,4"/>
+                       Foreground="Red"
+                       Margin="0,4"
+                       FontWeight="Bold"/>
         </Grid>
     </Grid>
 </Page>

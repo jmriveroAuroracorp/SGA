@@ -2,52 +2,67 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
-using SGA_Api.Models.Alergenos;
 using SGA_Api.Models.Palet;
+using SGA_Api.Models.UsuarioConf;
 using System.Data;
-using System.Security.Claims;
 
-namespace SGA_Api.Controllers.Palet
+namespace SGA_Api.Controllers.Palet;
+
+[ApiController]
+[Route("api/[controller]")]
+public class PaletController : ControllerBase
 {
-	[ApiController]
-	[Route("api/[controller]")]
-	public class PaletController : ControllerBase
-	{
-		private readonly AuroraSgaDbContext _auroraSgaContext;
-		public PaletController(AuroraSgaDbContext auroraSgaContext)
-		{
-			_auroraSgaContext = auroraSgaContext;
-		}
-		/// <summary>
-		/// GET api/palets/maestros
-		/// Devuelve el catálogo completo de palets (código + descripción).
-		/// </summary>
-		[HttpGet("maestros")]
-		public async Task<ActionResult<List<TipoPaletDto>>> GetTipoPalets()
-		{
-			var lista = await _auroraSgaContext.TipoPalets
-				.Select(p => new TipoPaletDto
-				{
-					CodigoPalet = p.CodigoPalet,
-					Descripcion = p.Descripcion
-				})
-				.ToListAsync();
-			return Ok(lista);
-		}
+	private readonly AuroraSgaDbContext _auroraSgaContext;
+	private readonly SageDbContext _sageContext;
+	private readonly StorageControlDbContext _storageContext;
 
-		/// <summary>
-		/// GET api/palet
-		/// Filtra por:
-		///  • id (GUID)
-		///  • codigo
-		///  • estado
-		///  • fechaCreacion (igual) y opcionalmente sólo sin cierre
-		///  • rango fechaCreacionDesde – fechaCierreHasta
-		///  • usuarioCreacion
-		///  • usuarioCierre
-		/// </summary>
-		[HttpGet("filtros")]
-		public async Task<ActionResult<List<PaletDto>>> GetPalets(
+	public PaletController(
+		AuroraSgaDbContext auroraSgaContext,
+		SageDbContext sageContext,
+		StorageControlDbContext storageContext)
+	{
+		_auroraSgaContext = auroraSgaContext;
+		_sageContext = sageContext;
+		_storageContext = storageContext;
+	}
+
+	#region GET: Catálogo de tipos
+	[HttpGet("maestros")]
+	public async Task<ActionResult<List<TipoPaletDto>>> GetTipoPalets()
+	{
+		var lista = await _auroraSgaContext.TipoPalets
+			.Select(p => new TipoPaletDto
+			{
+				CodigoPalet = p.CodigoPalet,
+				Descripcion = p.Descripcion
+			})
+			.ToListAsync();
+
+		return Ok(lista);
+	}
+	#endregion
+
+	#region GET: Estados posibles de un palet
+	[HttpGet("estados")]
+	public async Task<ActionResult<List<EstadoPaletDto>>> GetEstadosPalet()
+	{
+		var lista = await _auroraSgaContext.TipoEstadoPalet
+			.OrderBy(e => e.Orden)
+			.Select(e => new EstadoPaletDto
+			{
+				CodigoEstado = e.CodigoEstado,
+				Descripcion = e.Descripcion,
+				Orden = e.Orden
+			})
+			.ToListAsync();
+
+		return Ok(lista);
+	}
+	#endregion
+
+	#region GET: Listado filtrado
+	[HttpGet("filtros")]
+	public async Task<ActionResult<List<PaletDto>>> GetPalets(
 		[FromQuery] short codigoEmpresa,
 		[FromQuery] string? codigo = null,
 		[FromQuery] string? estado = null,
@@ -58,106 +73,125 @@ namespace SGA_Api.Controllers.Palet
 		[FromQuery] DateTime? fechaHasta = null,
 		[FromQuery] int? usuarioApertura = null,
 		[FromQuery] int? usuarioCierre = null,
-		[FromQuery] bool sinCierre = false
-)
-		{
-			// Traemos el diccionario de nombres desde la vista
-			var nombreDict = await _auroraSgaContext.vUsuariosConNombre
-				.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+		[FromQuery] bool sinCierre = false)
+	{
+		var nombreDict = await _auroraSgaContext.vUsuariosConNombre
+			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
 
-			var q = _auroraSgaContext.Palets
-				.Where(p =>
-					p.CodigoEmpresa == codigoEmpresa &&
-					p.FechaVaciado == null
-				)
-				.AsQueryable();
+		var q = _auroraSgaContext.Palets
+			.Where(p => p.CodigoEmpresa == codigoEmpresa && p.FechaVaciado == null);
 
-			// Aplicamos los filtros opcionales
-			if (!string.IsNullOrWhiteSpace(codigo))
-				q = q.Where(p => p.Codigo == codigo);
+		if (!string.IsNullOrWhiteSpace(codigo))
+			q = q.Where(p => p.Codigo == codigo);
 
-			if (!string.IsNullOrWhiteSpace(estado))
-				q = q.Where(p => p.Estado == estado);
+		if (!string.IsNullOrWhiteSpace(estado))
+			q = q.Where(p => p.Estado == estado);
 
-			if (!string.IsNullOrWhiteSpace(tipoPaletCodigo))
-				q = q.Where(p => p.TipoPaletCodigo == tipoPaletCodigo);
+		if (!string.IsNullOrWhiteSpace(tipoPaletCodigo))
+			q = q.Where(p => p.TipoPaletCodigo == tipoPaletCodigo);
 
-			if (fechaApertura.HasValue)
-				q = q.Where(p => p.FechaApertura.Date == fechaApertura.Value.Date);
+		if (fechaApertura.HasValue)
+			q = q.Where(p => p.FechaApertura.Date == fechaApertura.Value.Date);
 
-			if (fechaCierre.HasValue)
-				q = q.Where(p =>
-					p.FechaCierre.HasValue &&
-					p.FechaCierre.Value.Date == fechaCierre.Value.Date
-				);
+		if (fechaCierre.HasValue)
+			q = q.Where(p => p.FechaCierre.HasValue && p.FechaCierre.Value.Date == fechaCierre.Value.Date);
 
-			if (sinCierre)
-				q = q.Where(p => p.FechaCierre == null);
+		if (sinCierre)
+			q = q.Where(p => p.FechaCierre == null);
 
-			if (fechaDesde.HasValue && fechaHasta.HasValue)
-				q = q.Where(p =>
-					p.FechaApertura >= fechaDesde.Value &&
-					p.FechaCierre <= fechaHasta.Value
-				);
+		if (fechaDesde.HasValue && fechaHasta.HasValue)
+			q = q.Where(p => p.FechaApertura >= fechaDesde && p.FechaCierre <= fechaHasta);
 
-			if (usuarioApertura.HasValue)
-				q = q.Where(p => p.UsuarioAperturaId == usuarioApertura.Value);
+		if (usuarioApertura.HasValue)
+			q = q.Where(p => p.UsuarioAperturaId == usuarioApertura);
 
-			if (usuarioCierre.HasValue)
-				q = q.Where(p => p.UsuarioCierreId == usuarioCierre.Value);
+		if (usuarioCierre.HasValue)
+			q = q.Where(p => p.UsuarioCierreId == usuarioCierre);
 
-			// Proyección a DTO
-			var lista = await q
-				.OrderBy(p => p.FechaApertura)
-				.Select(p => new PaletDto
-				{
-					CodigoEmpresa = p.CodigoEmpresa,
-					Id = p.Id,
-					Codigo = p.Codigo,
-					Estado = p.Estado,
-					TipoPaletCodigo = p.TipoPaletCodigo,
-					FechaApertura = p.FechaApertura,
-					FechaCierre = p.FechaCierre,
-					UsuarioAperturaId = p.UsuarioAperturaId,
-					UsuarioCierreId = p.UsuarioCierreId,
-					Altura = p.Altura,
-					Peso = p.Peso,
-					EtiquetaGenerada = p.EtiquetaGenerada,
-					IsVaciado = p.IsVaciado,
-					FechaVaciado = p.FechaVaciado
-				})
-				.ToListAsync();
-
-			// Enriquecer con los nombres
-			foreach (var palet in lista)
+		var lista = await q.OrderBy(p => p.FechaApertura)
+			.Select(p => new PaletDto
 			{
-				if (palet.UsuarioAperturaId.HasValue &&
-					nombreDict.TryGetValue(palet.UsuarioAperturaId.Value, out var nombreApertura))
-				{
-					palet.UsuarioAperturaNombre = nombreApertura;
-				}
+				CodigoEmpresa = p.CodigoEmpresa,
+				Id = p.Id,
+				Codigo = p.Codigo,
+				Estado = p.Estado,
+				TipoPaletCodigo = p.TipoPaletCodigo,
+				FechaApertura = p.FechaApertura,
+				FechaCierre = p.FechaCierre,
+				UsuarioAperturaId = p.UsuarioAperturaId,
+				UsuarioCierreId = p.UsuarioCierreId,
+				Altura = p.Altura,
+				Peso = p.Peso,
+				EtiquetaGenerada = p.EtiquetaGenerada,
+				IsVaciado = p.IsVaciado,
+				FechaVaciado = p.FechaVaciado
+			})
+			.ToListAsync();
 
-				if (palet.UsuarioCierreId.HasValue &&
-					nombreDict.TryGetValue(palet.UsuarioCierreId.Value, out var nombreCierre))
-				{
-					palet.UsuarioCierreNombre = nombreCierre;
-				}
-			}
+		foreach (var palet in lista)
+		{
+			if (palet.UsuarioAperturaId.HasValue && nombreDict.TryGetValue(palet.UsuarioAperturaId.Value, out var nombreA))
+				palet.UsuarioAperturaNombre = nombreA;
 
-			return Ok(lista);
+			if (palet.UsuarioCierreId.HasValue && nombreDict.TryGetValue(palet.UsuarioCierreId.Value, out var nombreC))
+				palet.UsuarioCierreNombre = nombreC;
 		}
 
+		return Ok(lista);
+	}
+	#endregion
 
+	#region GET: Por Id
+	[HttpGet("{id:guid}", Name = "GetPaletById")]
+	public async Task<ActionResult<PaletDto>> GetPaletById(Guid id)
+	{
+		var palet = await _auroraSgaContext.Palets.FindAsync(id);
+		if (palet == null) return NotFound();
 
-
-		// GET api/palet/{id}
-		[HttpGet("{id:guid}", Name = "GetPaletById")]
-		public async Task<ActionResult<PaletDto>> GetPaletById(Guid id)
+		return Ok(new PaletDto
 		{
-			var palet = await _auroraSgaContext.Palets.FindAsync(id);
-			if (palet == null) return NotFound();
+			Id = palet.Id,
+			CodigoEmpresa = palet.CodigoEmpresa,
+			Codigo = palet.Codigo,
+			Estado = palet.Estado,
+			TipoPaletCodigo = palet.TipoPaletCodigo,
+			FechaApertura = palet.FechaApertura,
+			FechaCierre = palet.FechaCierre,
+			UsuarioAperturaId = palet.UsuarioAperturaId,
+			UsuarioCierreId = palet.UsuarioCierreId,
+			OrdenTrabajoId = palet.OrdenTrabajoId,
+			Altura = palet.Altura,
+			Peso = palet.Peso,
+			EtiquetaGenerada = palet.EtiquetaGenerada,
+			IsVaciado = palet.IsVaciado,
+			FechaVaciado = palet.FechaVaciado
+		});
+	}
+	#endregion
 
-			return Ok(new PaletDto
+	#region POST: Crear palet
+	[HttpPost]
+	public async Task<ActionResult<PaletDto>> CrearPalet([FromBody] PaletCrearDto dto)
+	{
+		try
+		{
+			var pCanal = new SqlParameter("@Canal", SqlDbType.VarChar, 10) { Value = "" };
+			var pSerie = new SqlParameter("@Serie", SqlDbType.Int) { Value = 0 };
+			var pCodigoEmpresa = new SqlParameter("@CodigoEmpresa", SqlDbType.SmallInt) { Value = dto.CodigoEmpresa };
+			var pEstado = new SqlParameter("@Estado", SqlDbType.NVarChar, 50) { Value = "Abierto" };
+			var pTipoPaletCodigo = new SqlParameter("@TipoPaletCodigo", SqlDbType.NVarChar, 10) { Value = (object)dto.TipoPaletCodigo ?? DBNull.Value };
+			var pUsuarioAperturaId = new SqlParameter("@UsuarioAperturaId", SqlDbType.Int) { Value = dto.UsuarioAperturaId };
+			var pOrdenTrabajoId = new SqlParameter("@OrdenTrabajoId", SqlDbType.VarChar, 50) { Value = string.IsNullOrWhiteSpace(dto.OrdenTrabajoId) ? "" : dto.OrdenTrabajoId! };
+			var pNuevoCodigo = new SqlParameter("@NuevoCodigo", SqlDbType.VarChar, 20) { Direction = ParameterDirection.Output };
+
+			await _auroraSgaContext.Database.ExecuteSqlRawAsync(
+				"EXEC dbo.CrearPalet @Canal, @Serie, @CodigoEmpresa, @Estado, @TipoPaletCodigo, @UsuarioAperturaId, @OrdenTrabajoId, @NuevoCodigo OUTPUT",
+				pCanal, pSerie, pCodigoEmpresa, pEstado, pTipoPaletCodigo, pUsuarioAperturaId, pOrdenTrabajoId, pNuevoCodigo);
+
+			var codigoGenerado = (string)pNuevoCodigo.Value!;
+			var palet = await _auroraSgaContext.Palets.SingleAsync(x => x.Codigo == codigoGenerado);
+
+			var resultado = new PaletDto
 			{
 				Id = palet.Id,
 				CodigoEmpresa = palet.CodigoEmpresa,
@@ -174,76 +208,154 @@ namespace SGA_Api.Controllers.Palet
 				EtiquetaGenerada = palet.EtiquetaGenerada,
 				IsVaciado = palet.IsVaciado,
 				FechaVaciado = palet.FechaVaciado
-			});
+			};
+
+			return CreatedAtRoute("GetPaletById", new { id = palet.Id }, resultado);
 		}
-
-		// GET api/palet/estados
-		[HttpGet("estados")]
-		public async Task<ActionResult<List<EstadoPaletDto>>> GetEstadosPalet()
+		catch (Exception ex)
 		{
-			var lista = await _auroraSgaContext.TipoEstadoPalet
-				.OrderBy(e => e.Orden)
-				.Select(e => new EstadoPaletDto
-				{
-					CodigoEstado = e.CodigoEstado,
-					Descripcion = e.Descripcion,
-					Orden = e.Orden
-				})
-				.ToListAsync();
-
-			return Ok(lista);  // <— Aquí faltaba el return
-		}
-
-
-		// POST api/palet
-		[HttpPost]
-		public async Task<ActionResult<PaletDto>> CrearPalet([FromBody] PaletCrearDto dto)
-		{
-			try
-			{
-				var pCanal = new SqlParameter("@Canal", SqlDbType.VarChar, 10) { Value = "" };
-				var pSerie = new SqlParameter("@Serie", SqlDbType.Int) { Value = 0 };
-				var pCodigoEmpresa = new SqlParameter("@CodigoEmpresa", SqlDbType.SmallInt) { Value = dto.CodigoEmpresa };
-				var pEstado = new SqlParameter("@Estado", SqlDbType.NVarChar, 50) { Value = "Abierto" };
-				var pTipoPaletCodigo = new SqlParameter("@TipoPaletCodigo", SqlDbType.NVarChar, 10) { Value = (object)dto.TipoPaletCodigo ?? DBNull.Value };
-				var pUsuarioAperturaId = new SqlParameter("@UsuarioAperturaId", SqlDbType.Int) { Value = dto.UsuarioAperturaId };
-				var pOrdenTrabajoId = new SqlParameter("@OrdenTrabajoId", SqlDbType.VarChar, 50) { Value = string.IsNullOrWhiteSpace(dto.OrdenTrabajoId) ? "" : (object)dto.OrdenTrabajoId! };
-				var pNuevoCodigo = new SqlParameter("@NuevoCodigo", SqlDbType.VarChar, 20) { Direction = ParameterDirection.Output };
-
-				await _auroraSgaContext.Database.ExecuteSqlRawAsync(
-					"EXEC dbo.CrearPalet @Canal, @Serie, @CodigoEmpresa, @Estado, @TipoPaletCodigo, @UsuarioAperturaId, @OrdenTrabajoId, @NuevoCodigo OUTPUT",
-					pCanal, pSerie, pCodigoEmpresa, pEstado, pTipoPaletCodigo, pUsuarioAperturaId, pOrdenTrabajoId, pNuevoCodigo);
-
-				var codigoGenerado = (string)pNuevoCodigo.Value!;
-				var palet = await _auroraSgaContext.Palets.SingleAsync(x => x.Codigo == codigoGenerado);
-				var resultado = new PaletDto
-				{
-					Id = palet.Id,
-					CodigoEmpresa = palet.CodigoEmpresa,
-					Codigo = palet.Codigo,
-					Estado = palet.Estado,
-					TipoPaletCodigo = palet.TipoPaletCodigo,
-					FechaApertura = palet.FechaApertura,
-					FechaCierre = palet.FechaCierre,
-					UsuarioAperturaId = palet.UsuarioAperturaId,
-					UsuarioCierreId = palet.UsuarioCierreId,
-					OrdenTrabajoId = palet.OrdenTrabajoId,
-					Altura = palet.Altura,
-					Peso = palet.Peso,
-					EtiquetaGenerada = palet.EtiquetaGenerada,
-					IsVaciado = palet.IsVaciado,
-					FechaVaciado = palet.FechaVaciado
-				};
-
-				return CreatedAtRoute("GetPaletById", new { id = palet.Id }, resultado);
-			}
-			catch (Exception ex)
-			{
-				return Problem(detail: ex.ToString(), statusCode: 500, title: "Error creando palet");
-			}
+			return Problem(detail: ex.ToString(), statusCode: 500, title: "Error creando palet");
 		}
 	}
+	#endregion
+
+	#region POST: Añadir línea a palet
+	[HttpPost("{id}/lineas")]
+	public async Task<IActionResult> AñadirLineaPalet(Guid id, [FromBody] LineaPaletCrearDto dto)
+	{
+		var palet = await _auroraSgaContext.Palets.FindAsync(id);
+		if (palet == null)
+			return NotFound("Palet no encontrado");
+
+		var ejercicio = await _sageContext.Periodos
+			.Where(p => p.CodigoEmpresa == dto.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+			.OrderByDescending(p => p.Fechainicio)
+			.Select(p => p.Ejercicio)
+			.FirstOrDefaultAsync();
+
+		if (ejercicio == 0)
+			return BadRequest("No se encontró ejercicio válido");
+
+		var stock = await _storageContext.AcumuladoStockUbicacion
+			.FirstOrDefaultAsync(s =>
+				s.CodigoEmpresa == dto.CodigoEmpresa &&
+				s.Ejercicio == ejercicio &&
+				s.CodigoArticulo == dto.CodigoArticulo &&
+				s.Partida == dto.Lote &&
+				s.CodigoAlmacen == dto.CodigoAlmacen &&
+				s.Ubicacion == dto.Ubicacion);
+
+		if (stock == null || stock.UnidadSaldo < dto.Cantidad)
+			return BadRequest($"Stock insuficiente o inexistente. Disponible: {stock?.UnidadSaldo ?? 0}");
+
+		var linea = new PaletLinea
+		{
+			PaletId = palet.Id,
+			CodigoEmpresa = dto.CodigoEmpresa,
+			CodigoArticulo = dto.CodigoArticulo,
+			DescripcionArticulo = dto.DescripcionArticulo,
+			Cantidad = dto.Cantidad,
+			Lote = dto.Lote,
+			FechaCaducidad = dto.FechaCaducidad,
+			CodigoAlmacen = dto.CodigoAlmacen,
+			Ubicacion = dto.Ubicacion,
+			UsuarioId = dto.UsuarioId,
+			Observaciones = dto.Observaciones,
+			FechaAgregado = DateTime.Now
+		};
+
+		_auroraSgaContext.PaletLineas.Add(linea);
+		await _auroraSgaContext.SaveChangesAsync();
+
+		return Ok(new { message = "Línea registrada correctamente", linea.Id });
+	}
+	#endregion
+
+	#region GET: Líneas de un palet
+	[HttpGet("{id}/lineas")]
+	public async Task<ActionResult<List<LineaPaletDto>>> GetLineasPalet(Guid id)
+	{
+		var lineas = await _auroraSgaContext.PaletLineas
+			.Where(l => l.PaletId == id)
+			.Select(l => new LineaPaletDto
+			{
+				Id = l.Id,
+				PaletId = l.PaletId,
+				CodigoEmpresa = l.CodigoEmpresa,
+				CodigoArticulo = l.CodigoArticulo,
+				DescripcionArticulo = l.DescripcionArticulo,
+				Cantidad = l.Cantidad,
+				UnidadMedida = l.UnidadMedida,
+				Lote = l.Lote,
+				FechaCaducidad = l.FechaCaducidad,
+				CodigoAlmacen = l.CodigoAlmacen,
+				Ubicacion = l.Ubicacion,
+				UsuarioId = l.UsuarioId,
+				FechaAgregado = l.FechaAgregado,
+				Observaciones = l.Observaciones
+			})
+			.ToListAsync();
+
+		return Ok(lineas);
+	}
+	#endregion
+
+	#region DELETE: Eliminar línea de palet
+	[HttpDelete("lineas/{lineaId}")]
+	public async Task<IActionResult> EliminarLineaPalet(Guid lineaId)
+	{
+		var linea = await _auroraSgaContext.PaletLineas.FindAsync(lineaId);
+		if (linea == null)
+			return NotFound();
+
+		_auroraSgaContext.PaletLineas.Remove(linea);
+		await _auroraSgaContext.SaveChangesAsync();
+
+		return Ok(new { message = "Línea eliminada correctamente" });
+	}
+	#endregion
+
+	#region POST: Cerrar palet
+	[HttpPost("{id}/cerrar")]
+	public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
+	{
+		var palet = await _auroraSgaContext.Palets.FindAsync(id);
+		if (palet == null)
+			return NotFound("Palet no encontrado");
+
+		if (palet.Estado == "Cerrado")
+			return BadRequest("El palet ya está cerrado.");
+
+		palet.Estado = "Cerrado";
+		palet.FechaCierre = DateTime.Now;
+		palet.UsuarioCierreId = usuarioId;
+
+		_auroraSgaContext.Palets.Update(palet);
+		await _auroraSgaContext.SaveChangesAsync();
+
+		return Ok(new { message = $"Palet {palet.Codigo} cerrado correctamente." });
+	}
+	#endregion
+
+	#region POST: Reabrir palet
+	[HttpPost("{id}/reabrir")]
+	public async Task<IActionResult> ReabrirPalet(Guid id)
+	{
+		var palet = await _auroraSgaContext.Palets.FindAsync(id);
+		if (palet == null)
+			return NotFound("Palet no encontrado");
+
+		if (palet.Estado == "Abierto")
+			return BadRequest("El palet ya está abierto.");
+
+		palet.Estado = "Abierto";
+		palet.FechaCierre = null;
+
+		_auroraSgaContext.Palets.Update(palet);
+		await _auroraSgaContext.SaveChangesAsync();
+
+		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente." });
+	}
+	#endregion
+
 }
-
-
-

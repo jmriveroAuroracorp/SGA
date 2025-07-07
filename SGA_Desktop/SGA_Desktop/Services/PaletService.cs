@@ -117,6 +117,60 @@ namespace SGA_Desktop.Services
 			resp.EnsureSuccessStatusCode();
 		}
 
-		
+		public async Task<List<StockDisponibleDto>> BuscarStockAsync(string articulo)
+		{
+			var empresa = SessionManager.EmpresaSeleccionada!.Value;
+
+			// puedes mejorar pasando también filtros opcionales aquí
+			var uri = $"stock/articulo?codigoEmpresa={empresa}&codigoArticulo={articulo}";
+
+			var resultado = await _httpClient.GetFromJsonAsync<List<StockDisponibleDto>>(uri)
+						   ?? new List<StockDisponibleDto>();
+
+			return resultado;
+		}
+
+		public async Task<bool> AnhadirLineaPaletAsync(Guid paletId, StockDisponibleDto dto)
+		{
+			var payload = new
+			{
+				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+				CodigoArticulo = dto.CodigoArticulo,
+				DescripcionArticulo = dto.DescripcionArticulo,
+				Cantidad = dto.CantidadAMover,
+				Lote = dto.Partida,
+				FechaCaducidad = dto.FechaCaducidad,
+				CodigoAlmacen = dto.CodigoAlmacen,
+				Ubicacion = dto.Ubicacion,
+				UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
+				Observaciones = "" // opcional
+			};
+
+			var resp = await _httpClient.PostAsJsonAsync($"palet/{paletId}/lineas", payload);
+
+			return resp.IsSuccessStatusCode;
+		}
+
+		public async Task<bool> EliminarLineaPaletAsync(Guid lineaId)
+		{
+			var resp = await _httpClient.DeleteAsync($"palet/lineas/{lineaId}");
+			return resp.IsSuccessStatusCode;
+		}
+
+		public async Task<bool> CerrarPaletAsync(Guid paletId, int usuarioId)
+		{
+			var resp = await _httpClient.PostAsync(
+				$"palet/{paletId}/cerrar?usuarioId={usuarioId}", null);
+
+			return resp.IsSuccessStatusCode;
+		}
+
+
+		public async Task<bool> ReabrirPaletAsync(Guid paletId)
+		{
+			var resp = await _httpClient.PostAsync($"palet/{paletId}/reabrir", null);
+			return resp.IsSuccessStatusCode;
+		}
+
 	}
 }

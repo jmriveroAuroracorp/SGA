@@ -29,6 +29,8 @@ namespace SGA_Api.Data
 		public DbSet<Palet> Palets { get; set; }
 		public DbSet<TipoEstadoPalet> TipoEstadoPalet { get; set; }
 		public DbSet<UsuarioConNombre> vUsuariosConNombre { get; set; }
+		public DbSet<PaletLinea> PaletLineas { get; set; }
+
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
