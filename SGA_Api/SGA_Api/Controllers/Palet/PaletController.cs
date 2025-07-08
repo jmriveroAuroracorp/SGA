@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Mysqlx.Cursor;
 using SGA_Api.Data;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.UsuarioConf;
+using System;
 using System.Data;
 
 namespace SGA_Api.Controllers.Palet;
@@ -124,7 +126,8 @@ public class PaletController : ControllerBase
 				Peso = p.Peso,
 				EtiquetaGenerada = p.EtiquetaGenerada,
 				IsVaciado = p.IsVaciado,
-				FechaVaciado = p.FechaVaciado
+				FechaVaciado = p.FechaVaciado,
+				OrdenTrabajoId = p.OrdenTrabajoId
 			})
 			.ToListAsync();
 
@@ -148,7 +151,10 @@ public class PaletController : ControllerBase
 		var palet = await _auroraSgaContext.Palets.FindAsync(id);
 		if (palet == null) return NotFound();
 
-		return Ok(new PaletDto
+		var nombreDict = await _auroraSgaContext.vUsuariosConNombre
+			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
+		var dto = new PaletDto
 		{
 			Id = palet.Id,
 			CodigoEmpresa = palet.CodigoEmpresa,
@@ -159,14 +165,23 @@ public class PaletController : ControllerBase
 			FechaCierre = palet.FechaCierre,
 			UsuarioAperturaId = palet.UsuarioAperturaId,
 			UsuarioCierreId = palet.UsuarioCierreId,
-			OrdenTrabajoId = palet.OrdenTrabajoId,
 			Altura = palet.Altura,
 			Peso = palet.Peso,
 			EtiquetaGenerada = palet.EtiquetaGenerada,
 			IsVaciado = palet.IsVaciado,
-			FechaVaciado = palet.FechaVaciado
-		});
+			FechaVaciado = palet.FechaVaciado,
+			OrdenTrabajoId = palet.OrdenTrabajoId
+		};
+
+		if (dto.UsuarioAperturaId.HasValue && nombreDict.TryGetValue(dto.UsuarioAperturaId.Value, out var nombreA))
+			dto.UsuarioAperturaNombre = nombreA;
+
+		if (dto.UsuarioCierreId.HasValue && nombreDict.TryGetValue(dto.UsuarioCierreId.Value, out var nombreC))
+			dto.UsuarioCierreNombre = nombreC;
+
+		return Ok(dto);
 	}
+
 	#endregion
 
 	#region POST: Crear palet
@@ -190,6 +205,14 @@ public class PaletController : ControllerBase
 
 			var codigoGenerado = (string)pNuevoCodigo.Value!;
 			var palet = await _auroraSgaContext.Palets.SingleAsync(x => x.Codigo == codigoGenerado);
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
+				PaletId = palet.Id,
+				Fecha = DateTime.Now,
+				IdUsuario = dto.UsuarioAperturaId,
+				Accion = "Crear",
+				Detalle = $"Palet creado por el usuario: {dto.UsuarioAperturaId}"
+			});
 
 			var resultado = new PaletDto
 			{
@@ -226,6 +249,9 @@ public class PaletController : ControllerBase
 		var palet = await _auroraSgaContext.Palets.FindAsync(id);
 		if (palet == null)
 			return NotFound("Palet no encontrado");
+
+		if (palet.Estado == "Cerrado")
+			return BadRequest("No se pueden añadir líneas a un palet cerrado.");
 
 		var ejercicio = await _sageContext.Periodos
 			.Where(p => p.CodigoEmpresa == dto.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
@@ -265,6 +291,15 @@ public class PaletController : ControllerBase
 		};
 
 		_auroraSgaContext.PaletLineas.Add(linea);
+		//await _auroraSgaContext.SaveChangesAsync();
+		_auroraSgaContext.LogPalet.Add(new LogPalet
+		{
+			PaletId = palet.Id,
+			Fecha = DateTime.Now,
+			IdUsuario = dto.UsuarioId,
+			Accion = "AñadirLínea",
+			Detalle = $"Artículo: {dto.CodigoArticulo}, Cantidad: {dto.Cantidad}, Almacen: {dto.CodigoAlmacen}, Ubicación: {dto.Ubicacion}, Lote: {dto.Lote}"
+		});
 		await _auroraSgaContext.SaveChangesAsync();
 
 		return Ok(new { message = "Línea registrada correctamente", linea.Id });
@@ -302,18 +337,41 @@ public class PaletController : ControllerBase
 
 	#region DELETE: Eliminar línea de palet
 	[HttpDelete("lineas/{lineaId}")]
-	public async Task<IActionResult> EliminarLineaPalet(Guid lineaId)
+	public async Task<IActionResult> EliminarLineaPalet(Guid lineaId, [FromQuery] int usuarioId)
 	{
 		var linea = await _auroraSgaContext.PaletLineas.FindAsync(lineaId);
 		if (linea == null)
 			return NotFound();
 
+		// Primero obtenemos el palet asociado
+		var palet = await _auroraSgaContext.Palets.FindAsync(linea.PaletId);
+		if (palet == null)
+			return NotFound("Palet no encontrado");
+
+		// Si está cerrado, no se puede eliminar la línea
+		if (palet.Estado == "Cerrado")
+			return BadRequest("No se pueden eliminar líneas de un palet cerrado.");
+
+		// Eliminamos la línea
 		_auroraSgaContext.PaletLineas.Remove(linea);
+
+		// Log de la eliminación
+		_auroraSgaContext.LogPalet.Add(new LogPalet
+		{
+			PaletId = palet.Id,
+			Fecha = DateTime.Now,
+			IdUsuario = usuarioId,
+			Accion = "EliminarLinea",
+			Detalle = $"Línea eliminada: Artículo={linea.CodigoArticulo}, Cantidad={linea.Cantidad}, Ubicación={linea.Ubicacion}"
+		});
+
 		await _auroraSgaContext.SaveChangesAsync();
 
 		return Ok(new { message = "Línea eliminada correctamente" });
 	}
+
 	#endregion
+
 
 	#region POST: Cerrar palet
 	[HttpPost("{id}/cerrar")]
@@ -330,6 +388,16 @@ public class PaletController : ControllerBase
 		palet.FechaCierre = DateTime.Now;
 		palet.UsuarioCierreId = usuarioId;
 
+		_auroraSgaContext.LogPalet.Add(new LogPalet
+		{
+			PaletId = palet.Id,
+			Fecha = DateTime.Now,
+			IdUsuario = usuarioId,
+			Accion = "Cerrar",
+			Detalle = "Palet Cerrado por el usuario: " + usuarioId
+		});
+
+
 		_auroraSgaContext.Palets.Update(palet);
 		await _auroraSgaContext.SaveChangesAsync();
 
@@ -339,7 +407,7 @@ public class PaletController : ControllerBase
 
 	#region POST: Reabrir palet
 	[HttpPost("{id}/reabrir")]
-	public async Task<IActionResult> ReabrirPalet(Guid id)
+	public async Task<IActionResult> ReabrirPalet(Guid id, [FromQuery] int usuarioId)
 	{
 		var palet = await _auroraSgaContext.Palets.FindAsync(id);
 		if (palet == null)
@@ -349,7 +417,19 @@ public class PaletController : ControllerBase
 			return BadRequest("El palet ya está abierto.");
 
 		palet.Estado = "Abierto";
+		palet.FechaApertura = DateTime.Now;  // 👈 nueva fecha de apertura
+		palet.UsuarioAperturaId = usuarioId;
 		palet.FechaCierre = null;
+		palet.UsuarioCierreId = null;
+
+		_auroraSgaContext.LogPalet.Add(new LogPalet
+		{
+			PaletId = palet.Id,
+			Fecha = DateTime.Now,
+			IdUsuario = usuarioId,
+			Accion = "Reabrir",
+			Detalle = "Palet reabierto por el usuario: " + usuarioId
+		});
 
 		_auroraSgaContext.Palets.Update(palet);
 		await _auroraSgaContext.SaveChangesAsync();
@@ -357,5 +437,6 @@ public class PaletController : ControllerBase
 		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente." });
 	}
 	#endregion
+
 
 }

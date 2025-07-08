@@ -11,6 +11,7 @@
         <helpers:EstaAbiertoConverter x:Key="EstaAbiertoConverter"/>
         <helpers:EstaCerradoConverter x:Key="EstaCerradoConverter"/>
         <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
+        <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
     </Page.Resources>
 
     <Grid Margin="8">
@@ -47,25 +48,34 @@
                             <StackPanel>
                                 <!-- Código + Estado -->
                                 <TextBlock Margin="0,0,0,4">
-                    <Run Text="{Binding Codigo}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource BrushPrincipal}" />
-                    <Run Text=" - " />
-                    <Run Text="{Binding Estado}" Foreground="{Binding Estado, Converter={StaticResource EstadoColorConverter}}" FontSize="16"/>
+        <Run Text="{Binding Codigo}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource BrushPrincipal}" />
+        <Run Text=" - " />
+        <Run Text="{Binding Estado}" Foreground="{Binding Estado, Converter={StaticResource EstadoColorConverter}}" FontSize="16"/>
                                 </TextBlock>
 
                                 <!-- Apertura + Abre -->
                                 <TextBlock Margin="0,2,0,0">
-                    <Run Text="Apertura: " FontWeight="Bold"/>
-                    <Run Text="{Binding FechaApertura, StringFormat={}{0:dd/MM/yyyy}}"/>
-                    <Run Text=" - Abre: " FontWeight="Bold" />
-                    <Run Text="{Binding UsuarioAperturaNombre}"/>
+        <Run Text="Apertura: " FontWeight="Bold"/>
+        <Run Text="{Binding FechaApertura, StringFormat={}{0:dd/MM/yyyy}}"/>
+        <Run Text=" - Abre: " FontWeight="Bold" />
+        <Run Text="{Binding UsuarioAperturaNombre}"/>
                                 </TextBlock>
 
                                 <!-- Cierre + Cierra -->
-                                <TextBlock Margin="0,2,0,0">
-                    <Run Text="Cierre: " FontWeight="Bold"/>
-                    <Run Text="{Binding FechaCierre, StringFormat={}{0:dd/MM/yyyy}}"/>
-                    <Run Text=" - Cierra: " FontWeight="Bold" />
-                    <Run Text="{Binding UsuarioCierreNombre}"/>
+                                <TextBlock Margin="0,2,0,0"
+                                           Visibility="{Binding UsuarioCierreNombre, Converter={StaticResource NullToVisibilityConverter}}">
+        <Run Text="Cierre: " FontWeight="Bold"/>
+        <Run Text="{Binding FechaCierre, StringFormat={}{0:dd/MM/yyyy}}"/>
+        <Run Text=" - Cierra: " FontWeight="Bold" />
+        <Run Text="{Binding UsuarioCierreNombre}"/>
+                                </TextBlock>
+
+                                <!-- Orden de trabajo -->
+                                <TextBlock Margin="0,2,0,0"
+           Visibility="{Binding OrdenTrabajoId, Converter={StaticResource NullToVisibilityConverter}}">
+      <Run Text="📄 " />
+    <Run Text="Orden trabajo: " FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" />
+    <Run Text="{Binding OrdenTrabajoId}" Foreground="Black"/>
                                 </TextBlock>
                             </StackPanel>
                         </Border>
@@ -110,31 +120,36 @@
                         Margin="0,8,0,0">
 
                 <!-- Acciones de palet -->
+                
                 <Button Content="📦 Añadir stock"
+                        Margin="0,0,20,0"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding AbrirPaletLineasCommand}"
-                        IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}" />
+                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
+
+                <Button Content="🗑 Eliminar línea"
+                        Margin="0,0,20,0"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding EliminarLineaSeleccionadaCommand}"
+                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
 
                 <Button Content="🔒 Cerrar"
+                        Margin="0,0,360,0"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding CerrarPaletCommand}"
                         IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
 
                 <Button Content="🔓 Reabrir"
+                        Margin="0,0,20,0"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding ReabrirPaletCommand}"
                         IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaCerradoConverter}}" />
-
                 <!-- Acciones de línea -->
                 <Button Content="🖨 Imprimir"
+                        Margin="0,0,20,0"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding ImprimirEtiquetaCommand}"
-                        IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}" />
-
-                <Button Content="🗑 Eliminar línea"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding EliminarLineaSeleccionadaCommand}"
-                        IsEnabled="{Binding LineaSeleccionada, Converter={StaticResource NotNullToBoolConverter}}" />
+                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaCerradoConverter}}" />
             </StackPanel>
 
             <TextBlock Text="{Binding ErrorMessage}"

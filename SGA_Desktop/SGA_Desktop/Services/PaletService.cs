@@ -151,12 +151,11 @@ namespace SGA_Desktop.Services
 			return resp.IsSuccessStatusCode;
 		}
 
-		public async Task<bool> EliminarLineaPaletAsync(Guid lineaId)
+		public async Task<bool> EliminarLineaPaletAsync(Guid lineaId, int usuarioId)
 		{
-			var resp = await _httpClient.DeleteAsync($"palet/lineas/{lineaId}");
+			var resp = await _httpClient.DeleteAsync($"palet/lineas/{lineaId}?usuarioId={usuarioId}");
 			return resp.IsSuccessStatusCode;
 		}
-
 		public async Task<bool> CerrarPaletAsync(Guid paletId, int usuarioId)
 		{
 			var resp = await _httpClient.PostAsync(
@@ -165,12 +164,20 @@ namespace SGA_Desktop.Services
 			return resp.IsSuccessStatusCode;
 		}
 
-
-		public async Task<bool> ReabrirPaletAsync(Guid paletId)
+		public async Task<bool> ReabrirPaletAsync(Guid paletId, int usuarioId)
 		{
-			var resp = await _httpClient.PostAsync($"palet/{paletId}/reabrir", null);
+			var resp = await _httpClient.PostAsync($"palet/{paletId}/reabrir?usuarioId={usuarioId}", null);
 			return resp.IsSuccessStatusCode;
 		}
 
+		public async Task<PaletDto?> ObtenerPaletPorIdAsync(Guid id)
+		{
+			var resp = await _httpClient.GetAsync($"palet/{id}");
+			if (!resp.IsSuccessStatusCode) return null;
+
+			var text = await resp.Content.ReadAsStringAsync();
+			return JsonSerializer.Deserialize<PaletDto>(text,
+				new JsonSerializerOptions(JsonSerializerDefaults.Web));
+		}
 	}
 }

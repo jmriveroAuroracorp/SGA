@@ -101,11 +101,16 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="hoverOverlay" Property="Opacity" Value="0.2"/>
                         </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="border" Property="Background" Value="{StaticResource BrushSecundario1}" />
+                            <Setter Property="Foreground" Value="#DDDDDD"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
+
 
     <!-- 🔖 Estilo para etiquetas (labels) -->
     <Style x:Key="LabelStyle" TargetType="TextBlock">

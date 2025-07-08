@@ -213,7 +213,7 @@ namespace SGA_Desktop.ViewModels
 
 			if (dlg.ShowDialog() != true) return;
 
-			var ok = await _paletService.EliminarLineaPaletAsync(lineaSeleccionada.Id);
+			var ok = await _paletService.EliminarLineaPaletAsync(lineaSeleccionada.Id, SessionManager.UsuarioActual.operario);
 			if (ok)
 				LineasPalet.Remove(lineaSeleccionada);
 			else
@@ -233,16 +233,28 @@ namespace SGA_Desktop.ViewModels
 			if (confirm.ShowDialog() != true) return;
 
 			var ok = await _paletService.CerrarPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
-			if (ok)
-			{
-				PaletSeleccionado.Estado = "Cerrado";
-				ErrorMessage = null;
-			}
-			else
+			if (!ok)
 			{
 				ErrorMessage = "No se pudo cerrar el palet.";
+				return;
 			}
+
+			// 🔷 Trae el palet completo actualizado
+			var actualizado = await _paletService.ObtenerPaletPorIdAsync(PaletSeleccionado.Id);
+			if (actualizado != null)
+			{
+				// Reemplaza el seleccionado
+				PaletSeleccionado = actualizado;
+
+				// Y actualiza la lista
+				var idx = PaletsView.IndexOf(PaletsView.First(p => p.Id == actualizado.Id));
+				if (idx >= 0)
+					PaletsView[idx] = actualizado;
+			}
+
+			ErrorMessage = null;
 		}
+
 
 		[RelayCommand(CanExecute = nameof(CanReabrir))]
 		private async Task ReabrirPaletAsync()
@@ -254,22 +266,38 @@ namespace SGA_Desktop.ViewModels
 				$"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\nPodrás añadir o eliminar líneas.");
 			if (confirm.ShowDialog() != true) return;
 
-			var ok = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id);
-			if (ok)
-			{
-				PaletSeleccionado.Estado = "Abierto";
-				ErrorMessage = null;
-			}
-			else
+			var ok = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
+			if (!ok)
 			{
 				ErrorMessage = "No se pudo reabrir el palet.";
+				return;
 			}
+
+			// 🔷 Trae el palet completo actualizado
+			var actualizado = await _paletService.ObtenerPaletPorIdAsync(PaletSeleccionado.Id);
+			if (actualizado != null)
+			{
+				// Reemplaza el seleccionado
+				PaletSeleccionado = actualizado;
+
+				// Y actualiza la lista
+				var idx = PaletsView.IndexOf(PaletsView.First(p => p.Id == actualizado.Id));
+				if (idx >= 0)
+					PaletsView[idx] = actualizado;
+			}
+
+			ErrorMessage = null;
 		}
+
+
 
 		private bool CanCerrar() => PaletSeleccionado?.Estado == "Abierto";
 		private bool CanReabrir() => PaletSeleccionado?.Estado == "Cerrado";
 
 		public bool PuedeCerrarPalet => PaletSeleccionado?.Estado == "Abierto";
 		public bool PuedeReabrirPalet => PaletSeleccionado?.Estado == "Cerrado";
+
+
+
 	}
 }
