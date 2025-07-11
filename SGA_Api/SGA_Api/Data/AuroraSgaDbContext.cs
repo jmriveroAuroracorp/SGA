@@ -3,6 +3,7 @@ using SGA_Api.Models.Alergenos;
 using SGA_Api.Models.Impresion;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Registro;
+using SGA_Api.Models.Stock;
 using SGA_Api.Models.Ubicacion;
 using SGA_Api.Models.UsuarioConf;
 
@@ -32,6 +33,7 @@ namespace SGA_Api.Data
 		public DbSet<PaletLinea> PaletLineas { get; set; }
 		public DbSet<TempPaletLinea> TempPaletLineas { get; set; }
 		public DbSet<LogPalet> LogPalet { get; set; } = null!;
+		public DbSet<StockDisponible> StockDisponible => Set<StockDisponible>();
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -215,6 +217,16 @@ namespace SGA_Api.Data
 			{
 				ent.HasNoKey();
 				ent.ToView("vUsuariosConNombre");
+			});
+
+			modelBuilder.Entity<StockDisponible>()
+				.ToView("vStockDisponible")
+				.HasNoKey();
+
+			modelBuilder.Entity<TempPaletLinea>(eb =>
+			{
+				eb.Property(e => e.Cantidad)
+				  .HasColumnType("decimal(18,4)");
 			});
 		}
 	}

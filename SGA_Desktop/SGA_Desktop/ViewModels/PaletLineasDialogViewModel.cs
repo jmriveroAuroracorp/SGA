@@ -8,6 +8,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using SGA_Desktop.Helpers;
+using SGA_Desktop.Dialog;
+using System.Windows.Data;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -91,9 +93,9 @@ namespace SGA_Desktop.ViewModels
 		{
 			try
 			{
-				var resultados = await _paletService.BuscarStockAsync(ArticuloBuscado, ArticuloDescripcion);
+				var resultados = await _paletService.BuscarStockDisponibleAsync(ArticuloBuscado, ArticuloDescripcion);
 
-			
+
 
 				List<string> permisos = SessionManager.UsuarioActual.codigosAlmacen?.ToList() ?? new();
 
@@ -135,34 +137,48 @@ namespace SGA_Desktop.ViewModels
 		private bool CanBuscarStock()
 			=> !string.IsNullOrWhiteSpace(articuloBuscado) || !string.IsNullOrWhiteSpace(articuloDescripcion);
 
-		// === Comando: Confirmar todas las líneas ===
 		[RelayCommand]
 		private async Task ConfirmarAsync()
 		{
 			if (!LineasPendientes.Any())
 			{
-				MessageBox.Show("No hay líneas para confirmar.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+				new WarningDialog("Aviso", "No hay líneas para confirmar.").ShowDialog();
 				return;
 			}
 
+			bool todoOk = true;
+
 			foreach (var dto in LineasPendientes)
 			{
-				var ok = await _paletService.AnhadirLineaPaletAsync(PaletId, dto);
+				MessageBox.Show(dto.CantidadAMover.ToString());
+				var (ok, mensaje) = await _paletService.AnhadirLineaPaletAsync(PaletId, dto);
 
 				if (!ok)
 				{
-					MessageBox.Show(
-						$"Error al mover el artículo {dto.CodigoArticulo} desde {dto.Ubicacion}.",
-						"Error", MessageBoxButton.OK, MessageBoxImage.Error);
+					todoOk = false;
+					dto.TieneError = true;
+				}
+				else
+				{
+					dto.TieneError = false;
 				}
 			}
 
-			MessageBox.Show("Movimientos realizados correctamente.", "Éxito",
-				MessageBoxButton.OK, MessageBoxImage.Information);
+			if (todoOk)
+			{
+				MessageBox.Show("Movimientos realizados correctamente.", "Éxito",
+					MessageBoxButton.OK, MessageBoxImage.Information);
 
-			// opcional: cerrar ventana
-			Application.Current.Windows.OfType<Window>()
-				.FirstOrDefault(w => w.DataContext == this)?.Close();
+				// cerrar ventana
+				Application.Current.Windows.OfType<Window>()
+					.FirstOrDefault(w => w.DataContext == this)?.Close();
+			}
+			else
+			{
+				new WarningDialog("Aviso", "Algunas líneas no se pudieron mover. Revisa los errores mostrados.").ShowDialog();
+				// Aquí NO cerramos la ventana, para que el usuario pueda corregir.
+			}
+			CollectionViewSource.GetDefaultView(LineasPendientes).Refresh();
 		}
 
 
@@ -171,14 +187,13 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (dto.CantidadAMoverDecimal is not decimal cantidad || cantidad <= 0)
 			{
-				MessageBox.Show("Indica una cantidad mayor que 0", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+				new WarningDialog("Aviso", "Indica una cantidad mayor que 0").ShowDialog();
 				return;
 			}
 
 			if (cantidad > dto.UnidadSaldo)
 			{
-				MessageBox.Show($"La cantidad a mover ({cantidad}) es mayor que la disponible ({dto.UnidadSaldo}).",
-					"Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+				new WarningDialog("Aviso", $"La cantidad a mover ({cantidad}) es mayor que la disponible ({dto.UnidadSaldo}).").ShowDialog();
 				return;
 			}
 
@@ -186,20 +201,20 @@ namespace SGA_Desktop.ViewModels
 
 			// 🚫 comprobar duplicado
 			bool yaExiste = LineasPendientes.Any(x =>
-	x.CodigoArticulo == dto.CodigoArticulo &&
-	x.Partida == dto.Partida &&
-	x.Ubicacion == dto.Ubicacion &&
-	x.CodigoAlmacen == dto.CodigoAlmacen);
-
+				x.CodigoArticulo == dto.CodigoArticulo &&
+				x.Partida == dto.Partida &&
+				x.Ubicacion == dto.Ubicacion &&
+				x.CodigoAlmacen == dto.CodigoAlmacen);
 
 			if (yaExiste)
 			{
-				MessageBox.Show("Ya has añadido esta línea antes.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+				new WarningDialog("Aviso", "Ya has añadido esta línea antes.").ShowDialog();
 				return;
 			}
 
 			LineasPendientes.Add(dto);
 		}
+
 
 
 

@@ -16,9 +16,13 @@ public class StockDisponibleDto : INotifyPropertyChanged
 	public string Partida { get; set; }
 	public DateTime? FechaCaducidad { get; set; }
 	public decimal UnidadSaldo { get; set; }
+	public decimal Reservado { get; set; }
+	public decimal Disponible { get; set; }
 
 	public string CodigoArticulo { get; set; }
 	public string DescripcionArticulo { get; set; }
+
+	public bool TieneError { get; set; }
 
 	// editable
 	public decimal CantidadAMover { get; set; }

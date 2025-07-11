@@ -339,8 +339,9 @@ public class PaletController : ControllerBase
 
 	#region POST: Añadir línea a palet
 	[HttpPost("{id}/lineas")]
-	public async Task<IActionResult> AñadirLineaPalet(Guid id, [FromBody] LineaPaletCrearDto dto)
+	public async Task<IActionResult> AnhadirLineaPalet(Guid id, [FromBody] LineaPaletCrearDto dto)
 	{
+		// 🟥 Verificar que el palet existe y está abierto
 		var palet = await _auroraSgaContext.Palets.FindAsync(id);
 		if (palet == null)
 			return NotFound("Palet no encontrado");
@@ -357,49 +358,77 @@ public class PaletController : ControllerBase
 		if (ejercicio == 0)
 			return BadRequest("No se encontró ejercicio válido");
 
-		var stock = await _storageContext.AcumuladoStockUbicacion
-			.FirstOrDefaultAsync(s =>
-				s.CodigoEmpresa == dto.CodigoEmpresa &&
-				s.Ejercicio == ejercicio &&
-				s.CodigoArticulo == dto.CodigoArticulo &&
-				s.Partida == dto.Lote &&
-				s.CodigoAlmacen == dto.CodigoAlmacen &&
-				s.Ubicacion == dto.Ubicacion);
+		// 🟦 Aquí comienza la transacción
+		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
-		if (stock == null || stock.UnidadSaldo < dto.Cantidad)
-			return BadRequest($"Stock insuficiente o inexistente. Disponible: {stock?.UnidadSaldo ?? 0}");
-
-		var linea = new TempPaletLinea
+		try
 		{
-			PaletId = palet.Id,
-			CodigoEmpresa = dto.CodigoEmpresa,
-			CodigoArticulo = dto.CodigoArticulo,
-			DescripcionArticulo = dto.DescripcionArticulo,
-			Cantidad = dto.Cantidad,
-			Lote = dto.Lote,
-			FechaCaducidad = dto.FechaCaducidad,
-			CodigoAlmacen = dto.CodigoAlmacen,
-			Ubicacion = dto.Ubicacion,
-			UsuarioId = dto.UsuarioId,
-			Observaciones = dto.Observaciones,
-			FechaAgregado = DateTime.Now
-		};
+			// 🔷 Leer stock actual dentro de la transacción
+			var stock = await _auroraSgaContext.StockDisponible
+				.FirstOrDefaultAsync(s =>
+					s.CodigoEmpresa == dto.CodigoEmpresa &&
+					s.CodigoArticulo == dto.CodigoArticulo &&
+					s.CodigoAlmacen == dto.CodigoAlmacen &&
+					s.Ubicacion == dto.Ubicacion &&
+					s.Partida == dto.Lote);
 
-		_auroraSgaContext.TempPaletLineas.Add(linea);
-		//await _auroraSgaContext.SaveChangesAsync();
-		_auroraSgaContext.LogPalet.Add(new LogPalet
+			if (stock == null)
+				return BadRequest("No se encontró stock para el artículo, almacén y ubicación especificados.");
+
+			if (dto.Cantidad > stock.Disponible)
+				return BadRequest($"No puedes reservar más de lo disponible: {stock.Disponible:N2} unidades.");
+
+			// 🔷 Crear la línea temporal
+			var linea = new TempPaletLinea
+			{
+				PaletId = palet.Id,
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoArticulo = dto.CodigoArticulo,
+				DescripcionArticulo = dto.DescripcionArticulo,
+				Cantidad = dto.Cantidad,
+				Lote = dto.Lote,
+				FechaCaducidad = dto.FechaCaducidad,
+				CodigoAlmacen = dto.CodigoAlmacen,
+				Ubicacion = dto.Ubicacion,
+				UsuarioId = dto.UsuarioId,
+				Observaciones = dto.Observaciones,
+				FechaAgregado = DateTime.Now
+			};
+
+			_auroraSgaContext.TempPaletLineas.Add(linea);
+
+			// 🔷 Registrar en log
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
+				PaletId = palet.Id,
+				Fecha = DateTime.Now,
+				IdUsuario = dto.UsuarioId,
+				Accion = "AñadirLínea",
+				Detalle = $"Artículo: {dto.CodigoArticulo}, Cantidad: {dto.Cantidad}, Almacén: {dto.CodigoAlmacen}, Ubicación: {dto.Ubicacion}, Lote: {dto.Lote}"
+			});
+
+			// 🔷 Guardar cambios
+			await _auroraSgaContext.SaveChangesAsync();
+
+			// 🔷 Confirmar la transacción
+			await transaction.CommitAsync();
+
+			return Ok(new { message = "Línea registrada correctamente", linea.Id });
+		}
+		catch (Exception ex)
 		{
-			PaletId = palet.Id,
-			Fecha = DateTime.Now,
-			IdUsuario = dto.UsuarioId,
-			Accion = "AñadirLínea",
-			Detalle = $"Artículo: {dto.CodigoArticulo}, Cantidad: {dto.Cantidad}, Almacen: {dto.CodigoAlmacen}, Ubicación: {dto.Ubicacion}, Lote: {dto.Lote}"
-		});
-		await _auroraSgaContext.SaveChangesAsync();
+			// 🔷 Si falla algo, deshacer la transacción
+			await transaction.RollbackAsync();
 
-		return Ok(new { message = "Línea registrada correctamente", linea.Id });
+			// opcional: loggear error
+			// _logger.LogError(ex, "Error al añadir línea al palet.");
+
+			return StatusCode(500, $"Error al registrar la línea: {ex.Message}");
+		}
 	}
 	#endregion
+
+
 
 	#region GET: Líneas de un palet
 	[HttpGet("{id}/lineas")]

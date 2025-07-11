@@ -1,6 +1,7 @@
 ﻿<Window x:Class="SGA_Desktop.Dialog.PaletLineasDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
         Title="Añadir líneas al palet"
         Width="1000"
         Height="700"
@@ -19,6 +20,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <Helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -82,11 +84,11 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border BorderBrush="LightGray"
-                    BorderThickness="1"
-                    CornerRadius="6"
-                    Background="#FAFAFA"
-                    Padding="10"
-                    Margin="5">
+                                                            BorderThickness="1"
+                                                            CornerRadius="6"
+                                                            Background="#FAFAFA"
+                                                            Padding="10"
+                                                            Margin="5">
                                                         <Grid>
                                                             <Grid.RowDefinitions>
                                                                 <RowDefinition/>
@@ -119,9 +121,17 @@
                                                                 </StackPanel>
 
                                                                 <StackPanel Grid.Column="2">
-                                                                    <TextBlock Text="Disponible:" FontWeight="Bold"/>
-                                                                    <TextBlock Text="{Binding UnidadSaldo}"/>
+                                                                    <TextBlock Text="Total:" FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}"/>
+
+                                                                    <StackPanel Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}">
+                                                                        <TextBlock Text="Reservado:" FontWeight="Bold"/>
+                                                                        <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="5,0"/>
+                                                                        <TextBlock Text="Disponible:" FontWeight="Bold"/>
+                                                                        <TextBlock Text="{Binding Disponible, StringFormat=F4}" Margin="5,0"/>
+                                                                    </StackPanel>
                                                                 </StackPanel>
+
 
                                                                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                                                     <TextBox Width="50"
@@ -153,8 +163,17 @@
                     <ItemsControl ItemsSource="{Binding LineasPendientes}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource EstiloTarjeta}">
-                                    <Grid>
+                                    <Border>
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource EstiloTarjeta}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding TieneError}" Value="True">
+                                                        <Setter Property="Background" Value="LightCoral"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />

@@ -7,8 +7,10 @@
     <Color x:Key="ColorSecundario1">#5FB4DD</Color>
     <Color x:Key="ColorSecundario2">#6fc4fa</Color>
     <Color x:Key="ColorFondo">#f3f6fb</Color>
-
+    <Color x:Key="ColorIntermedio">#3A94C9</Color>
+    
     <SolidColorBrush x:Key="BrushPrincipal" Color="{StaticResource ColorPrincipal}"/>
+    <SolidColorBrush x:Key="BrushIntermedio" Color="{StaticResource ColorIntermedio}"/>
     <SolidColorBrush x:Key="BrushSecundario1" Color="{StaticResource ColorSecundario1}"/>
     <SolidColorBrush x:Key="BrushSecundario2" Color="{StaticResource ColorSecundario2}"/>
     <SolidColorBrush x:Key="BrushFondo" Color="{StaticResource ColorFondo}"/>

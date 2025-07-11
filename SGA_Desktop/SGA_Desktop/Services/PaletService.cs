@@ -131,7 +131,29 @@ namespace SGA_Desktop.Services
 			return resultado;
 		}
 
-		public async Task<List<StockDisponibleDto>> BuscarStockAsync(string codigoArticulo, string descripcion)
+		//public async Task<List<StockDisponibleDto>> BuscarStockAsync(string codigoArticulo, string descripcion)
+		//{
+		//	var queryParams = new Dictionary<string, string>();
+
+		//	if (!string.IsNullOrWhiteSpace(codigoArticulo))
+		//		queryParams["codigoArticulo"] = codigoArticulo;
+
+		//	if (!string.IsNullOrWhiteSpace(descripcion))
+		//		queryParams["descripcion"] = descripcion;
+
+		//	// si necesitas empresa, añade también:
+		//	queryParams["codigoEmpresa"] = SessionManager.EmpresaSeleccionada.ToString();
+
+		//	var queryString = string.Join("&", queryParams.Select(kv => $"{kv.Key}={HttpUtility.UrlEncode(kv.Value)}"));
+		//	var url = $"/api/stock/articulo?{queryString}";
+
+		//	var response = await _httpClient.GetAsync(url);
+		//	response.EnsureSuccessStatusCode();
+
+		//	return await response.Content.ReadFromJsonAsync<List<StockDisponibleDto>>() ?? new();
+		//}
+
+		public async Task<List<StockDisponibleDto>> BuscarStockDisponibleAsync(string codigoArticulo, string descripcion)
 		{
 			var queryParams = new Dictionary<string, string>();
 
@@ -142,10 +164,10 @@ namespace SGA_Desktop.Services
 				queryParams["descripcion"] = descripcion;
 
 			// si necesitas empresa, añade también:
-			queryParams["codigoEmpresa"] = "1";
+			queryParams["codigoEmpresa"] = SessionManager.EmpresaSeleccionada.ToString();
 
 			var queryString = string.Join("&", queryParams.Select(kv => $"{kv.Key}={HttpUtility.UrlEncode(kv.Value)}"));
-			var url = $"/api/stock/articulo?{queryString}";
+			var url = $"/api/stock/articulo/disponible?{queryString}";
 
 			var response = await _httpClient.GetAsync(url);
 			response.EnsureSuccessStatusCode();
@@ -154,7 +176,7 @@ namespace SGA_Desktop.Services
 		}
 
 
-		public async Task<bool> AnhadirLineaPaletAsync(Guid paletId, StockDisponibleDto dto)
+		public async Task<(bool exito, string? mensaje)> AnhadirLineaPaletAsync(Guid paletId, StockDisponibleDto dto)
 		{
 			var payload = new
 			{
@@ -167,12 +189,23 @@ namespace SGA_Desktop.Services
 				CodigoAlmacen = dto.CodigoAlmacen,
 				Ubicacion = dto.Ubicacion,
 				UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
-				Observaciones = "" // opcional
+				Observaciones = ""
 			};
 
 			var resp = await _httpClient.PostAsJsonAsync($"palet/{paletId}/lineas", payload);
 
-			return resp.IsSuccessStatusCode;
+			if (resp.IsSuccessStatusCode)
+			{
+				return (true, null);
+			}
+
+			// lee el mensaje de error que envía el servidor
+			var mensaje = await resp.Content.ReadAsStringAsync();
+
+			if (string.IsNullOrWhiteSpace(mensaje))
+				mensaje = $"Error desconocido al mover el artículo {dto.CodigoArticulo} desde {dto.Ubicacion}.";
+
+			return (false, mensaje);
 		}
 
 		public async Task<bool> EliminarLineaPaletAsync(Guid lineaId, int usuarioId)

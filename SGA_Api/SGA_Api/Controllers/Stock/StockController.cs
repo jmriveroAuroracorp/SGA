@@ -12,11 +12,13 @@ namespace SGA_Api.Controllers.Stock
 	{
 		private readonly SageDbContext _sageContext;
 		private readonly StorageControlDbContext _storageContext;
+		private readonly AuroraSgaDbContext _auroraSgaContext;
 
-		public StockController(SageDbContext sageContext, StorageControlDbContext storageContext)
+		public StockController(SageDbContext sageContext, StorageControlDbContext storageContext, AuroraSgaDbContext auroraSgaContext)
 		{
 			_sageContext = sageContext;
 			_storageContext = storageContext;
+			_auroraSgaContext = auroraSgaContext;
 		}
 
 		//// 1.a) Buscar por artículo (+ opcional partida + opcional almacén + opcional ubicación)
@@ -391,6 +393,58 @@ namespace SGA_Api.Controllers.Stock
 
 			return Ok(new { alergenos = alerg });
 		}
+
+		/// <summary>
+		/// GET api/Stock/articulo/disponible
+		/// Devuelve el stock disponible con la reserva de stock de los palets
+		/// </summary>
+		[HttpGet("articulo/disponible")]
+		public async Task<IActionResult> PorArticuloDisponible(
+			[FromQuery] short codigoEmpresa,
+			[FromQuery] string? codigoArticulo = null,
+			[FromQuery] string? descripcion = null,
+			[FromQuery] string? partida = null,
+			[FromQuery] string? codigoAlmacen = null,
+			[FromQuery] string? codigoUbicacion = null)
+		{
+			if (string.IsNullOrWhiteSpace(codigoArticulo) && string.IsNullOrWhiteSpace(descripcion))
+				return BadRequest("Falta codigoArticulo o descripción");
+
+			var q = _auroraSgaContext.StockDisponible
+				.Where(a => a.CodigoEmpresa == codigoEmpresa);
+
+			// Filtro por código o descripción
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+			{
+				q = q.Where(a => a.CodigoArticulo == codigoArticulo);
+			}
+			else if (!string.IsNullOrWhiteSpace(descripcion))
+			{
+				var codigosArticulos = await ObtenerCodigosArticulosPorDescripcion(descripcion, codigoEmpresa);
+				if (!codigosArticulos.Any())
+					return Ok(new List<StockDisponible>());
+				q = q.Where(a => codigosArticulos.Contains(a.CodigoArticulo));
+			}
+
+			// Filtros adicionales opcionales
+			if (!string.IsNullOrWhiteSpace(partida))
+				q = q.Where(a => a.Partida == partida);
+
+			if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+				q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
+
+			if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+				q = q.Where(a => a.Ubicacion == codigoUbicacion);
+
+			// 🔷 aquí filtramos solo los registros con disponible > 0
+			q = q.Where(a => a.Disponible > 0);
+
+			var datos = await q.ToListAsync();
+			return Ok(datos);
+		}
+
+
+
 
 
 
