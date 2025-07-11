@@ -14,6 +14,7 @@ namespace SGA_Desktop.ViewModels
 	public partial class PaletizacionViewModel : ObservableObject
 	{
 		private readonly PaletService _paletService;
+		private readonly StockService _stockService;
 
 		[ObservableProperty] private string? errorMessage;
 		[ObservableProperty]
@@ -47,6 +48,7 @@ namespace SGA_Desktop.ViewModels
 		public PaletizacionViewModel(PaletService paletService)
 		{
 			_paletService = paletService;
+			_stockService = new StockService();
 
 			// Inicializa comandos
 			LoadPaletsCommand = new AsyncRelayCommand(LoadPaletsAsync);
@@ -175,7 +177,8 @@ namespace SGA_Desktop.ViewModels
 				PaletSeleccionado.Codigo,
 				PaletSeleccionado.TipoPaletCodigo,
 				PaletSeleccionado.Estado,
-				_paletService);
+				_paletService,
+				_stockService);
 
 			var dlg = new PaletLineasDialog
 			{

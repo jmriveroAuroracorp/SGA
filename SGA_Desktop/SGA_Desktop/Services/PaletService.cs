@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Web;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;         // Asegúrate de que PaletDto y TipoPaletDto están aquí
 namespace SGA_Desktop.Services
@@ -129,6 +130,29 @@ namespace SGA_Desktop.Services
 
 			return resultado;
 		}
+
+		public async Task<List<StockDisponibleDto>> BuscarStockAsync(string codigoArticulo, string descripcion)
+		{
+			var queryParams = new Dictionary<string, string>();
+
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+				queryParams["codigoArticulo"] = codigoArticulo;
+
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				queryParams["descripcion"] = descripcion;
+
+			// si necesitas empresa, añade también:
+			queryParams["codigoEmpresa"] = "1";
+
+			var queryString = string.Join("&", queryParams.Select(kv => $"{kv.Key}={HttpUtility.UrlEncode(kv.Value)}"));
+			var url = $"/api/stock/articulo?{queryString}";
+
+			var response = await _httpClient.GetAsync(url);
+			response.EnsureSuccessStatusCode();
+
+			return await response.Content.ReadFromJsonAsync<List<StockDisponibleDto>>() ?? new();
+		}
+
 
 		public async Task<bool> AnhadirLineaPaletAsync(Guid paletId, StockDisponibleDto dto)
 		{

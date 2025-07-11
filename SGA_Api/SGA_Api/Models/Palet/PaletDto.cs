@@ -21,5 +21,7 @@ namespace SGA_Api.Models.Palet
 		public bool IsVaciado { get; set; }
 		public DateTime? FechaVaciado { get; set; }
 		public string? OrdenTrabajoId { get; set; } = "";
+
+		public string? CodigoGS1 { get; set; }
 	}
 }

@@ -30,6 +30,7 @@ namespace SGA_Api.Data
 		public DbSet<TipoEstadoPalet> TipoEstadoPalet { get; set; }
 		public DbSet<UsuarioConNombre> vUsuariosConNombre { get; set; }
 		public DbSet<PaletLinea> PaletLineas { get; set; }
+		public DbSet<TempPaletLinea> TempPaletLineas { get; set; }
 		public DbSet<LogPalet> LogPalet { get; set; } = null!;
 
 

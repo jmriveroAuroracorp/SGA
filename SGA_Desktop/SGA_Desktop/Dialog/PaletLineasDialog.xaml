@@ -43,58 +43,163 @@
             <!-- BUSCADOR DE ARTÍCULO -->
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,10">
                 <TextBlock Text="Artículo:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-                <TextBox Width="150" Text="{Binding ArticuloBuscado}" Style="{StaticResource EstiloCajaTexto}" Margin="5,0"/>
-                <Button Content="Buscar stock" Command="{Binding BuscarStockCommand}" Style="{StaticResource EstiloBotonPrincipal}" Margin="10,0"/>
+                <TextBox Width="150"
+             Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}"
+             Style="{StaticResource EstiloCajaTexto}"
+             Margin="5,0"/>
+                <TextBlock Text="Nombre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <TextBox Width="150"
+             Text="{Binding ArticuloDescripcion, UpdateSourceTrigger=PropertyChanged}"
+             Style="{StaticResource EstiloCajaTexto}"
+             Margin="5,0"/>
+                <Button Content="Buscar stock"
+            Command="{Binding BuscarStockCommand}"
+            Style="{StaticResource EstiloBotonPrincipal}"
+            Margin="10,0"/>
             </StackPanel>
 
-            <!-- CUERPO: DataGrid + Botón cerrar -->
+            <!-- CUERPO: cards + carrito -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- DATAGRID CON SCROLL -->
-                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
-                    <DataGrid ItemsSource="{Binding StockDisponible}"
-                              AutoGenerateColumns="False"
-                              MinWidth="500"
-                              HeadersVisibility="Column"
-                              CanUserAddRows="False"
-                              Style="{StaticResource EstiloDataGrid}"
-                              Margin="0,0,0,10">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Almacén" Binding="{Binding CodigoAlmacen}" Width="*" />
-                            <DataGridTextColumn Header="Ubicación" Binding="{Binding Ubicacion}" Width="*" />
-                            <DataGridTextColumn Header="Lote" Binding="{Binding Partida}" Width="*" />
-                            <DataGridTextColumn Header="Caducidad" Binding="{Binding FechaCaducidad, StringFormat=d}" Width="*" />
-                            <DataGridTextColumn Header="Disponible" Binding="{Binding UnidadSaldo}" Width="*" />
-                            <DataGridTemplateColumn Header="Cantidad a mover" Width="120">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBox Width="80"
-                                                 HorizontalAlignment="Center"
-                                                 Text="{Binding CantidadAMover, UpdateSourceTrigger=PropertyChanged}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Content="Añadir"
-                                                Command="{Binding DataContext.AñadirLineaCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                CommandParameter="{Binding}"
-                                                Width="70"
-                                                Style="{StaticResource EstiloBotonPrincipal}"/>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="2*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- CARDS -->
+                <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding ArticulosConStock}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Expander Header="{Binding DescripcionArticulo}" IsExpanded="False" Margin="0,0,0,10">
+                                    <StackPanel Margin="10">
+                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" Margin="0,0,0,5"/>
+                                        <ItemsControl ItemsSource="{Binding Ubicaciones}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border BorderBrush="LightGray"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Background="#FAFAFA"
+                    Padding="10"
+                    Margin="5">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition/>
+                                                                <RowDefinition/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,5">
+                                                                <TextBlock Text="Almacén:" FontWeight="Bold" />
+                                                                <TextBlock Text="{Binding CodigoAlmacen}" Margin="5,0"/>
+                                                                <TextBlock Text=" | Ubicación:" FontWeight="Bold" Margin="10,0"/>
+                                                                <TextBlock Text="{Binding Ubicacion}" Margin="5,0"/>
+                                                            </StackPanel>
+
+                                                            <Grid Grid.Row="1">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0">
+                                                                    <TextBlock Text="Lote:" FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding Partida}"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="1">
+                                                                    <TextBlock Text="Caducidad:" FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="2">
+                                                                    <TextBlock Text="Disponible:" FontWeight="Bold"/>
+                                                                    <TextBlock Text="{Binding UnidadSaldo}"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBox Width="50"
+                                                                             Margin="0,0,5,0"
+                                                                             Text="{Binding CantidadAMoverTexto, UpdateSourceTrigger=PropertyChanged}" />
+                                                                    <Button Content="Añadir"
+                                                                        Command="{Binding DataContext.AnhadirLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}" />
+
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                    </StackPanel>
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </ScrollViewer>
 
-                <!-- BOTÓN CERRAR -->
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <!-- CARRITO -->
+                <StackPanel Grid.Row="0" Grid.Column="1" Margin="10">
+                    <TextBlock Text="Líneas añadidas:" FontWeight="Bold" Margin="0,0,0,10"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="450">
+                    <ItemsControl ItemsSource="{Binding LineasPendientes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource EstiloTarjeta}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <!-- Artículo -->
+                                            <TextBlock Text="{Binding DescripcionArticulo}"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,5"/>
+
+                                            <TextBlock>
+                            <Run Text="Cantidad: " FontWeight="Bold"/>
+                            <Run Text="{Binding CantidadAMover}"/>
+                                            </TextBlock>
+
+                                            <TextBlock>
+                            <Run Text="Almacén: " FontWeight="Bold"/>
+                            <Run Text="{Binding CodigoAlmacen}"/>
+                                            </TextBlock>
+
+                                            <TextBlock>
+                            <Run Text="Ubicación: " FontWeight="Bold"/>
+                            <Run Text="{Binding Ubicacion}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+
+                                        <Button Content="Quitar"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Command="{Binding DataContext.EliminarLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    </ScrollViewer>
+
+                </StackPanel>
+                
+                <!-- BOTONES ABAJO -->
+                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
                     <Button Content="Confirmar"
             Width="90"
             Margin="0,0,10,0"

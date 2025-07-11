@@ -45,6 +45,8 @@ namespace SGA_Api.Models.Palet
 
 		public string? OrdenTrabajoId { get; set; }
 
+		public string? CodigoGS1 { get; set; }
+
 		// relaciones a PaletLineas y log_palet quedan aparte...
 	}
 }
