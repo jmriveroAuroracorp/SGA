@@ -14,5 +14,8 @@ namespace SGA_Desktop.Models
 
 		[JsonProperty("ubicacion")]
 		public string Ubicacion { get; set; } = "";
+
+		public string UbicacionMostrada => string.IsNullOrWhiteSpace(Ubicacion) ? "SIN UBICAR" : Ubicacion;
+
 	}
 }

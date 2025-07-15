@@ -1,5 +1,4 @@
-﻿// Helpers/TraspasosNavigationStore.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows.Controls;
 using SGA_Desktop.Views;
@@ -18,7 +17,7 @@ namespace SGA_Desktop.Helpers
 				page = pageKey switch
 				{
 					"Paletizacion" => new PaletizacionView(),
-					//"Clasico" => new TraspasosClasicoView(),
+					"GestionTraspasos" => new GestionTraspasosView(), // 👈 aquí añadimos tu vista nueva
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};
 				_cache[pageKey] = page;

@@ -83,4 +83,7 @@ public class UbicacionDetalladaDto
 		= new ObservableCollection<AlergenoDto>();
 	public ObservableCollection<AlergenoDto> AlergenosPresentesList { get; }
 		= new ObservableCollection<AlergenoDto>();
+
+	public string TextoMostrado
+		=> string.IsNullOrWhiteSpace(Ubicacion) ? "SIN UBICACIÓN" : Ubicacion;
 }

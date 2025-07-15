@@ -1,0 +1,53 @@
+﻿<Window x:Class="SGA_Desktop.Dialog.TraspasoFilterDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Filtros de Traspaso"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Estado -->
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Estado:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding EstadosDisponibles}"
+                      SelectedItem="{Binding EstadoSeleccionado}"
+                      DisplayMemberPath="Descripcion"
+                      SelectedValuePath="CodigoEstado"
+                      Style="{StaticResource EstiloComboBox}"
+                      Width="200"/>
+
+            <!-- Botones -->
+            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Cancelar" Width="90" Margin="0,0,10,0" IsCancel="True" Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Aplicar"   Width="90" IsDefault="True" Command="{Binding AplicarFiltrosCommand}" Style="{StaticResource EstiloBotonPrincipal}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -4,6 +4,7 @@ using SGA_Api.Data;
 using SGA_Api.Models.Ubicacion;
 using SGA_Api.Models.Alergenos;
 using System;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace SGA_Api.Controllers.Ubicacion
 {
@@ -11,11 +12,15 @@ namespace SGA_Api.Controllers.Ubicacion
 	[ApiController]
 	public class UbicacionesController : ControllerBase
 	{
+		private readonly SageDbContext _sageContext;
+		private readonly StorageControlDbContext _storageContext;
 		private readonly AuroraSgaDbContext _auroraSgaContext;
 
-		public UbicacionesController(AuroraSgaDbContext context)
+		public UbicacionesController(SageDbContext sageContext, StorageControlDbContext storageContext, AuroraSgaDbContext auroraSgaContext)
 		{
-			_auroraSgaContext = context;
+			_sageContext = sageContext;
+			_storageContext = storageContext;
+			_auroraSgaContext = auroraSgaContext;
 		}
 
 		[HttpGet]
@@ -522,6 +527,50 @@ namespace SGA_Api.Controllers.Ubicacion
 			}
 		}
 
+
+		[HttpGet("vacias-o-especiales")]
+		public async Task<IActionResult> UbicacionesVaciasOEsp(
+	[FromQuery] short codigoEmpresa,
+	[FromQuery] string codigoAlmacen)
+		{
+			var ejercicio = await _sageContext.Periodos
+				.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+				.OrderByDescending(p => p.Fechainicio)
+				.Select(p => p.Ejercicio)
+				.FirstOrDefaultAsync();
+
+			if (ejercicio == 0)
+				return BadRequest("Sin ejercicio");
+
+			var vaciasOEsp = await _storageContext.Ubicaciones
+				.Where(u =>
+					u.CodigoEmpresa == codigoEmpresa &&
+					u.CodigoAlmacen == codigoAlmacen &&
+					(
+						// las que NO empiezan por UB (las queremos siempre)
+						!EF.Functions.Like(u.Ubicacion, "UB%")
+						||
+						// o las que sí empiezan por UB pero están vacías
+						(
+							EF.Functions.Like(u.Ubicacion, "UB%") &&
+							!_storageContext.AcumuladoStockUbicacion.Any(a =>
+								a.CodigoEmpresa == codigoEmpresa &&
+								a.Ejercicio == ejercicio &&
+								a.CodigoAlmacen == codigoAlmacen &&
+								a.Ubicacion == u.Ubicacion &&
+								a.UnidadSaldo != 0)
+						)
+					)
+				)
+				.Select(u => new {
+					u.CodigoEmpresa,
+					u.CodigoAlmacen,
+					u.Ubicacion
+				})
+				.ToListAsync();
+
+			return Ok(vaciasOEsp);
+		}
 
 
 	}

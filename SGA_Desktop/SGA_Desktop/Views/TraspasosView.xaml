@@ -10,7 +10,7 @@
                 Style="{StaticResource EstiloTabControl}"
                 ItemContainerStyle="{StaticResource EstiloTabItem}">
             <TabItem Header="Paletización" Tag="Paletizacion" Margin="0,0,-10,0" />
-            <TabItem Header="Traspasos"     Tag="Clasico"   Margin="0,0,-10,0"  IsEnabled="False"/>
+            <TabItem Header="Traspasos"     Tag="GestionTraspasos"   Margin="0,0,-10,0"/>
         </TabControl>
 
         <!-- Border solo alrededor del Frame -->

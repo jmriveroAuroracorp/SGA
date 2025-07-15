@@ -16,14 +16,18 @@ namespace SGA_Desktop.Models
 		public int? Copias { get; set; }
 
 		// Datos del artículo
-		public string CodigoArticulo { get; set; } = string.Empty;
-		public string DescripcionArticulo { get; set; } = string.Empty;
-		public string CodigoAlternativo { get; set; } = string.Empty;
+		public string? CodigoArticulo { get; set; } = string.Empty;
+		public string? DescripcionArticulo { get; set; } = string.Empty;
+		public string? CodigoAlternativo { get; set; } = string.Empty;
 		public DateTime? FechaCaducidad { get; set; }
-		public string Partida { get; set; } = string.Empty;
-		public string Alergenos { get; set; } = string.Empty;
+		public string? Partida { get; set; } = string.Empty;
+		public string? Alergenos { get; set; } = string.Empty;
 
 		// Ruta de la etiqueta (template)
 		public string PathEtiqueta { get; set; } = string.Empty;
+
+		public int TipoEtiqueta { get; set; }
+		public string? CodigoGS1 { get; set; }
+		public string? CodigoPalet { get; set; }
 	}
 }

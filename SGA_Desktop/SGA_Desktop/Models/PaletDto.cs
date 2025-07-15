@@ -21,5 +21,9 @@ namespace SGA_Desktop.Models
 		public bool IsVaciado { get; set; }
 		public DateTime? FechaVaciado { get; set; }
 		public string? OrdenTrabajoId { get; set; }
+
+
+		public string? CodigoGS1 { get; set; }
+		public string? CodigoPalet { get; set; }
 	}
 }

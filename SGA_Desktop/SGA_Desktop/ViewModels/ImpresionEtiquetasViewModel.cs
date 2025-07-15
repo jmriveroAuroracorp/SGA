@@ -228,7 +228,7 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		{
 			Usuario = SessionManager.Operario.ToString(),
 			Dispositivo = Environment.MachineName,
-			IdImpresora = 2, // Asegúrate de que este ID sea correcto
+			IdImpresora = ImpresoraSeleccionada?.Id, 
 			EtiquetaImpresa = 0,
 			Copias = null,
 			CodigoArticulo = SelectedArticulo.CodigoArticulo,
@@ -237,7 +237,10 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 			FechaCaducidad = SelectedArticulo.FechaCaducidad,
 			Partida = SelectedArticulo.Partida,
 			Alergenos = alergenos,
-			PathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl"
+			PathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
+			TipoEtiqueta = 1, // o 2 si quieres imprimir palet
+			CodigoGS1 = null, // o el valor cuando sea tipo 2
+			CodigoPalet = null // o el valor cuando sea tipo 2
 		};
 		
 		try

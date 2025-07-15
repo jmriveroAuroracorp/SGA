@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Web;
+using System.Windows;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;         // Asegúrate de que PaletDto y TipoPaletDto están aquí
 namespace SGA_Desktop.Services
@@ -213,13 +214,45 @@ namespace SGA_Desktop.Services
 			var resp = await _httpClient.DeleteAsync($"palet/lineas/{lineaId}?usuarioId={usuarioId}");
 			return resp.IsSuccessStatusCode;
 		}
-		public async Task<bool> CerrarPaletAsync(Guid paletId, int usuarioId)
+		//public async Task<bool> CerrarPaletAsync(Guid paletId, int usuarioId)
+		//{
+		//	var resp = await _httpClient.PostAsync(
+		//		$"palet/{paletId}/cerrar?usuarioId={usuarioId}", null);
+
+		//	return resp.IsSuccessStatusCode;
+		//}
+		public async Task<bool> CerrarPaletAsync(
+			Guid paletId,
+			int usuarioId,
+			string codigoAlmacen,             // origen (de las líneas)
+			string codigoAlmacenDestino,
+			string ubicacionDestino)
 		{
-			var resp = await _httpClient.PostAsync(
-				$"palet/{paletId}/cerrar?usuarioId={usuarioId}", null);
+			var dto = new
+			{
+				UsuarioId = usuarioId,
+				CodigoAlmacen = codigoAlmacen,
+				CodigoAlmacenDestino = codigoAlmacenDestino,
+				UbicacionDestino = ubicacionDestino
+			};
+
+			var resp = await _httpClient.PostAsJsonAsync(
+				$"palet/{paletId}/cerrar", dto);
+
+			var content = await resp.Content.ReadAsStringAsync();
+
+			if (!resp.IsSuccessStatusCode)
+			{
+				MessageBox.Show($"Error al cerrar palet: {resp.StatusCode}");
+				MessageBox.Show($"Respuesta: {content}");
+			}
 
 			return resp.IsSuccessStatusCode;
 		}
+
+
+
+
 
 		public async Task<bool> ReabrirPaletAsync(Guid paletId, int usuarioId)
 		{

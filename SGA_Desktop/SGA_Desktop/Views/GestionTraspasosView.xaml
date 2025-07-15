@@ -1,0 +1,128 @@
+﻿<Page x:Class="SGA_Desktop.Views.GestionTraspasosView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      Background="{StaticResource BrushFondo}">
+
+    <Page.Resources>
+        <helpers:NullToBoolConverter x:Key="NotNullToBoolConverter"/>
+        <helpers:BoolToYesNoConverter x:Key="BoolToYesNoConverter"/>
+        <helpers:OperarioIdANombreConverter x:Key="OperarioIdANombreConverter"/>
+        <helpers:EstaAbiertoConverter x:Key="EstaAbiertoConverter"/>
+        <helpers:EstaCerradoConverter x:Key="EstaCerradoConverter"/>
+        <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
+        <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        <helpers:EstaPendienteConverter x:Key="EstaPendienteConverter"/>
+    </Page.Resources>
+
+    <Grid Margin="8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="5*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- 📋 Lista de traspasos -->
+        <DockPanel Grid.Column="0" LastChildFill="True" Margin="0,0,8,0">
+            <StackPanel Orientation="Horizontal"
+                        DockPanel.Dock="Top"
+                        Margin="0,0,0,8"
+                        VerticalAlignment="Center">
+
+                <Button Content="🔍 Filtros"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding AbrirFiltrosCommand}"
+                        Width="110"
+                        Margin="0,0,8,0"/>
+                <Button Content="➕ Nuevo"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding NuevoTraspasoCommand}"
+                        Width="100"
+                        Margin="0,0,8,0"/>
+            </StackPanel>
+
+            <ListView ItemsSource="{Binding Traspasos}"
+                      SelectedItem="{Binding TraspasoSeleccionado, Mode=TwoWay}"
+                      Margin="10"
+                      HorizontalContentAlignment="Stretch">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource EstiloTarjeta}" Margin="4" Padding="8">
+                            <StackPanel>
+                                <TextBlock>
+                                    <Run Text="{Binding PaletCodigo}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource BrushPrincipal}" />
+                                    <Run Text=" - " />
+                                    <Run Text="{Binding Estado}" FontSize="16"/>
+                                </TextBlock>
+
+                                <TextBlock Margin="0,2,0,0">
+                                    <Run Text="Origen: " FontWeight="Bold"/>
+                                    <Run Text="{Binding AlmacenOrigen}"/>
+                                    <Run Text=" → Destino: " FontWeight="Bold"/>
+                                    <Run Text="{Binding AlmacenDestino}"/>
+                                </TextBlock>
+
+                                <TextBlock Margin="0,2,0,0">
+                                    <Run Text="Iniciado por: " FontWeight="Bold"/>
+                                    <Run Text="{Binding UsuarioInicio}"/>
+                                    <Run Text=" el " />
+                                    <Run Text="{Binding FechaInicio, StringFormat={}{0:dd/MM/yyyy HH:mm}}"/>
+                                </TextBlock>
+
+                                <TextBlock Margin="0,2,0,0" Visibility="{Binding FechaFinalizacion, Converter={StaticResource NullToVisibilityConverter}}">
+                                    <Run Text="Finalizado por: " FontWeight="Bold"/>
+                                    <Run Text="{Binding UsuarioFinalizacion}"/>
+                                    <Run Text=" el " />
+                                    <Run Text="{Binding FechaFinalizacion, StringFormat={}{0:dd/MM/yyyy HH:mm}}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </DockPanel>
+
+        <!-- 📄 Detalle del traspaso -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       Text="{Binding TraspasoSeleccionado.PaletCodigo, StringFormat=Detalle del Traspaso: {0}}"
+                       Style="{StaticResource LabelStyle}"
+                       FontSize="16"
+                       Margin="0,0,0,8"/>
+
+            <StackPanel Grid.Row="1" Margin="10">
+                <TextBlock Text="{Binding TraspasoSeleccionado.Estado}" FontWeight="Bold" FontSize="14" />
+                <TextBlock Text="{Binding TraspasoSeleccionado.AlmacenOrigen, StringFormat=Origen: {0}}" />
+                <TextBlock Text="{Binding TraspasoSeleccionado.AlmacenDestino, StringFormat=Destino: {0}}" />
+                <TextBlock Text="{Binding TraspasoSeleccionado.UbicacionDestino, StringFormat=Ubicación destino: {0}}" />
+                <TextBlock Text="{Binding TraspasoSeleccionado.UsuarioInicio, StringFormat=Iniciado por: {0}}" />
+                <TextBlock Text="{Binding TraspasoSeleccionado.FechaInicio, StringFormat=Fecha inicio: {0:dd/MM/yyyy HH:mm}}" />
+                <TextBlock Text="{Binding TraspasoSeleccionado.UsuarioFinalizacion, StringFormat=Finalizado por: {0}}" Visibility="{Binding TraspasoSeleccionado.UsuarioFinalizacion, Converter={StaticResource NullToVisibilityConverter}}"/>
+                <TextBlock Text="{Binding TraspasoSeleccionado.FechaFinalizacion, StringFormat=Fecha fin: {0:dd/MM/yyyy HH:mm}}" Visibility="{Binding TraspasoSeleccionado.FechaFinalizacion, Converter={StaticResource NullToVisibilityConverter}}"/>
+            </StackPanel>
+
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Margin="0,8,0,0">
+                <Button Content="✅ Finalizar"
+                        Margin="0,0,20,0"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding FinalizarTraspasoCommand}"
+                        IsEnabled="{Binding TraspasoSeleccionado.Estado, Converter={StaticResource EstaPendienteConverter}}" />
+                <Button Content="❌ Cancelar"
+                        Margin="0,0,20,0"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding CancelarTraspasoCommand}"
+                        IsEnabled="{Binding TraspasoSeleccionado.Estado, Converter={StaticResource EstaPendienteConverter}}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" Margin="0,4" FontWeight="Bold"/>
+        </Grid>
+    </Grid>
+</Page>

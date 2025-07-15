@@ -21,6 +21,13 @@ namespace SGA_Api.Controllers.Impresion
 		{
 			try
 			{
+				// Validación: si es etiqueta de palet (2), los dos campos extra son obligatorios
+				if (dto.TipoEtiqueta == 2 &&
+					(string.IsNullOrWhiteSpace(dto.CodigoGS1) || string.IsNullOrWhiteSpace(dto.CodigoPalet)))
+				{
+					return BadRequest("Para etiquetas de tipo 2 (palet), debe enviar CodigoGS1 y CodigoPalet.");
+				}
+
 				var log = new LogImpresion
 				{
 					Usuario = dto.Usuario,
@@ -35,7 +42,11 @@ namespace SGA_Api.Controllers.Impresion
 					Partida = dto.Partida,
 					Alergenos = dto.Alergenos,
 					PathEtiqueta = dto.PathEtiqueta,
-					FechaRegistro = DateTime.Now 
+					FechaRegistro = DateTime.Now,
+
+					TipoEtiqueta = dto.TipoEtiqueta,
+					CodigoGS1 = dto.CodigoGS1,
+					CodigoPalet = dto.CodigoPalet
 				};
 
 				_context.LogImpresiones.Add(log);

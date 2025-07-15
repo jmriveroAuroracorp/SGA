@@ -1,0 +1,207 @@
+﻿using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using SGA_Desktop.Dialog;
+using SGA_Desktop.Helpers;
+using SGA_Desktop.Models;
+using SGA_Desktop.Services;
+
+namespace SGA_Desktop.ViewModels
+{
+	public partial class GestionTraspasosViewModel : ObservableObject
+	{
+		private readonly TraspasosService _traspasosService;
+
+		[ObservableProperty] private string? errorMessage;
+
+		public ObservableCollection<TraspasoDto> Traspasos { get; } = new();
+
+		[ObservableProperty] private TraspasoDto? traspasoSeleccionado;
+
+		//partial void OnTraspasoSeleccionadoChanged(TraspasoDto? value)
+		//{
+		//	FinalizarTraspasoCommand.NotifyCanExecuteChanged();
+		//	CancelarTraspasoCommand.NotifyCanExecuteChanged();
+		//}
+
+		public IAsyncRelayCommand LoadTraspasosCommand { get; }
+		public IRelayCommand AbrirFiltrosCommand { get; }
+		public IRelayCommand NuevoTraspasoCommand { get; }
+		public IAsyncRelayCommand FinalizarTraspasoCommand { get; }
+		public IAsyncRelayCommand CancelarTraspasoCommand { get; }
+
+		public GestionTraspasosViewModel(TraspasosService traspasosService)
+		{
+			_traspasosService = traspasosService;
+
+			LoadTraspasosCommand = new AsyncRelayCommand(LoadTraspasosAsync);
+			AbrirFiltrosCommand = new RelayCommand(AbrirFiltros);
+			//NuevoTraspasoCommand = new RelayCommand(AbrirNuevoTraspasoDialog);
+			//FinalizarTraspasoCommand = new AsyncRelayCommand(FinalizarTraspasoAsync, PuedeFinalizarTraspaso);
+			CancelarTraspasoCommand = new AsyncRelayCommand(CancelarTraspasoAsync, PuedeCancelarTraspaso);
+
+			_ = InitializeAsync();
+		}
+
+		public GestionTraspasosViewModel() : this(new TraspasosService()) { }
+
+		private async Task InitializeAsync()
+		{
+			SessionManager.EmpresaCambiada += (s, e) => Traspasos.Clear();
+			await Task.CompletedTask;
+		}
+
+		private async Task LoadTraspasosAsync()
+		{
+			try
+			{
+				var lista = await _traspasosService.ObtenerTraspasosAsync();
+				Traspasos.Clear();
+				foreach (var t in lista)
+					Traspasos.Add(t);
+
+				ErrorMessage = null;
+			}
+			catch (Exception ex)
+			{
+				ErrorMessage = ex.Message;
+			}
+		}
+
+		private void AbrirFiltros()
+		{
+			var dlgVm = new TraspasoFilterDialogViewModel(_traspasosService);
+			var dlg = new TraspasoFilterDialog
+			{
+				Owner = Application.Current.MainWindow,
+				DataContext = dlgVm
+			};
+
+			// Inicializa los estados en segundo plano
+			dlg.Loaded += async (s, e) => await dlgVm.InitializeAsync();
+
+			if (dlg.ShowDialog() == true)
+			{
+				var estado = dlgVm.EstadoSeleccionado?.CodigoEstado;
+			
+
+				_ = AplicarFiltrosAsync(estado);
+			}
+		}
+
+		private async Task AplicarFiltrosAsync(string? estado)
+		{
+			var filtrados = await _traspasosService.ObtenerTraspasosFiltradosAsync(estado);
+
+			Traspasos.Clear();
+			foreach (var t in filtrados)
+				Traspasos.Add(t);
+		}
+
+
+		//private void AbrirNuevoTraspasoDialog()
+		//{
+		//	var dlgVm = new TraspasosNuevoDialogViewModel(_traspasosService);
+		//	var dlg = new TraspasosNuevoDialog
+		//	{
+		//		Owner = Application.Current.MainWindow,
+		//		DataContext = dlgVm
+		//	};
+
+		//	if (dlg.ShowDialog() == true && dlgVm.CreatedTraspaso != null)
+		//	{
+		//		Traspasos.Add(dlgVm.CreatedTraspaso);
+		//		TraspasoSeleccionado = dlgVm.CreatedTraspaso;
+		//	}
+		//}
+
+		private bool PuedeFinalizarTraspaso()
+		{
+			return TraspasoSeleccionado != null &&
+				   TraspasoSeleccionado.CodigoEstado?.Equals("PENDIENTE", StringComparison.OrdinalIgnoreCase) == true;
+		}
+
+		//private async Task FinalizarTraspasoAsync()
+		//{
+		//	if (TraspasoSeleccionado is null) return;
+
+		//	var dlgVm = new TraspasosFinalizarDialogViewModel(TraspasoSeleccionado, _traspasosService);
+		//	var dlg = new TraspasosFinalizarDialog
+		//	{
+		//		Owner = Application.Current.MainWindow,
+		//		DataContext = dlgVm
+		//	};
+
+		//	if (dlg.ShowDialog() != true) return;
+
+		//	try
+		//	{
+		//		var dto = dlgVm.GetFinalizarDto();
+
+		//		await _traspasosService.FinalizarTraspasoAsync(TraspasoSeleccionado.Id, dto);
+
+		//		await ActualizarTraspasoEnLista(TraspasoSeleccionado.Id);
+
+		//		ErrorMessage = null;
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		ErrorMessage = ex.Message;
+		//	}
+		//}
+
+		private bool PuedeCancelarTraspaso()
+		{
+			return TraspasoSeleccionado != null &&
+				   TraspasoSeleccionado.CodigoEstado?.Equals("PENDIENTE", StringComparison.OrdinalIgnoreCase) == true;
+		}
+
+		private async Task CancelarTraspasoAsync()
+		{
+			if (TraspasoSeleccionado is null) return;
+
+			var confirm = new ConfirmationDialog(
+				"Cancelar traspaso",
+				$"¿Estás seguro de cancelar el traspaso del palet {TraspasoSeleccionado.PaletId}?");
+			if (confirm.ShowDialog() != true) return;
+
+			try
+			{
+				var dto = new FinalizarTraspasoDto
+				{
+					UbicacionDestino = "CANCELADO",
+					UsuarioFinalizacionId = SessionManager.UsuarioActual?.operario ?? 0,
+					FechaFinalizacion = DateTime.Now
+				};
+
+				await _traspasosService.FinalizarTraspasoAsync(TraspasoSeleccionado.Id, dto);
+
+				await ActualizarTraspasoEnLista(TraspasoSeleccionado.Id);
+
+				ErrorMessage = null;
+			}
+			catch (Exception ex)
+			{
+				ErrorMessage = ex.Message;
+			}
+		}
+
+		private async Task ActualizarTraspasoEnLista(Guid traspasoId)
+		{
+			var actualizado = await _traspasosService.ObtenerTraspasoPorIdAsync(traspasoId);
+
+			if (actualizado != null)
+			{
+				var idx = Traspasos.IndexOf(Traspasos.First(t => t.Id == actualizado.Id));
+				if (idx >= 0)
+					Traspasos[idx] = actualizado;
+
+				TraspasoSeleccionado = actualizado;
+			}
+		}
+	}
+}

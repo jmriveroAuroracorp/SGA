@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Mysqlx.Cursor;
 using SGA_Api.Data;
 using SGA_Api.Models.Palet;
+using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.UsuarioConf;
 using System;
 using System.Data;
@@ -127,7 +128,10 @@ public class PaletController : ControllerBase
 				EtiquetaGenerada = p.EtiquetaGenerada,
 				IsVaciado = p.IsVaciado,
 				FechaVaciado = p.FechaVaciado,
-				OrdenTrabajoId = p.OrdenTrabajoId
+				OrdenTrabajoId = p.OrdenTrabajoId,
+				// 👇 añade esto
+				CodigoGS1 = p.CodigoGS1,
+				CodigoPalet = p.Codigo // si CódigoPalet es en realidad el mismo que Codig
 			})
 			.ToListAsync();
 
@@ -497,9 +501,180 @@ public class PaletController : ControllerBase
 	#endregion
 
 
-	#region POST: Cerrar palet
+	//#region POST: Cerrar palet
+	//[HttpPost("{id}/cerrar")]
+	//public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
+	//{
+	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
+	//	if (palet == null)
+	//		return NotFound("Palet no encontrado");
+
+	//	if (palet.Estado == "Cerrado")
+	//		return BadRequest("El palet ya está cerrado.");
+
+	//	palet.Estado = "Cerrado";
+	//	palet.FechaCierre = DateTime.Now;
+	//	palet.UsuarioCierreId = usuarioId;
+
+	//	_auroraSgaContext.LogPalet.Add(new LogPalet
+	//	{
+	//		PaletId = palet.Id,
+	//		Fecha = DateTime.Now,
+	//		IdUsuario = usuarioId,
+	//		Accion = "Cerrar",
+	//		Detalle = "Palet Cerrado por el usuario: " + usuarioId
+	//	});
+
+
+	//	_auroraSgaContext.Palets.Update(palet);
+	//	await _auroraSgaContext.SaveChangesAsync();
+
+	//	return Ok(new { message = $"Palet {palet.Codigo} cerrado correctamente." });
+	//}
+	//#endregion
+	//#region POST: Cerrar palet
+	//[HttpPost("{id}/cerrar")]
+	//public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
+	//{
+	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
+	//	if (palet == null)
+	//		return NotFound("Palet no encontrado");
+
+	//	if (palet.Estado == "Cerrado")
+	//		return BadRequest("El palet ya está cerrado.");
+
+	//	// 🔷 Validamos que tenga al menos una línea
+	//	bool tieneLineas = await _auroraSgaContext.TempPaletLineas
+	//		.AnyAsync(l => l.PaletId == id);
+
+	//	if (!tieneLineas)
+	//		return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+
+	//	// 🔷 Cerramos el palet
+	//	palet.Estado = "Cerrado";
+	//	palet.FechaCierre = DateTime.Now;
+	//	palet.UsuarioCierreId = usuarioId;
+
+	//	_auroraSgaContext.LogPalet.Add(new LogPalet
+	//	{
+	//		PaletId = palet.Id,
+	//		Fecha = DateTime.Now,
+	//		IdUsuario = usuarioId,
+	//		Accion = "Cerrar",
+	//		Detalle = "Palet Cerrado por el usuario: " + usuarioId
+	//	});
+
+	//	// 🔷 Creamos el traspaso mínimo
+	//	var traspaso = new Traspaso
+	//	{
+	//		PaletId = palet.Id,
+	//		CodigoEstado = "PENDIENTE"
+	//	};
+
+	//	_auroraSgaContext.Traspasos.Add(traspaso);
+
+	//	await _auroraSgaContext.SaveChangesAsync();
+
+	//	return Ok(new
+	//	{
+	//		message = $"Palet {palet.Codigo} cerrado correctamente y traspaso creado.",
+	//		traspasoId = traspaso.Id
+	//	});
+	//}
+	//#endregion
+
+
+
+	//#region POST: Reabrir palet
+	//[HttpPost("{id}/reabrir")]
+	//public async Task<IActionResult> ReabrirPalet(Guid id, [FromQuery] int usuarioId)
+	//{
+	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
+	//	if (palet == null)
+	//		return NotFound("Palet no encontrado");
+
+	//	if (palet.Estado == "Abierto")
+	//		return BadRequest("El palet ya está abierto.");
+
+	//	palet.Estado = "Abierto";
+	//	palet.FechaApertura = DateTime.Now;  // 👈 nueva fecha de apertura
+	//	palet.UsuarioAperturaId = usuarioId;
+	//	palet.FechaCierre = null;
+	//	palet.UsuarioCierreId = null;
+
+	//	_auroraSgaContext.LogPalet.Add(new LogPalet
+	//	{
+	//		PaletId = palet.Id,
+	//		Fecha = DateTime.Now,
+	//		IdUsuario = usuarioId,
+	//		Accion = "Reabrir",
+	//		Detalle = "Palet reabierto por el usuario: " + usuarioId
+	//	});
+
+	//	_auroraSgaContext.Palets.Update(palet);
+	//	await _auroraSgaContext.SaveChangesAsync();
+
+	//	return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente." });
+	//}
+	//#endregion
+
+	//#region POST: Cerrar palet
+	//[HttpPost("{id}/cerrar")]
+	//public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
+	//{
+	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
+	//	if (palet == null)
+	//		return NotFound("Palet no encontrado");
+
+	//	if (palet.Estado == "Cerrado")
+	//		return BadRequest("El palet ya está cerrado.");
+
+	//	// 🔷 Validamos que tenga al menos una línea
+	//	bool tieneLineas = await _auroraSgaContext.TempPaletLineas
+	//		.AnyAsync(l => l.PaletId == id);
+
+	//	if (!tieneLineas)
+	//		return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+
+	//	// 🔷 Cerramos el palet
+	//	palet.Estado = "Cerrado";
+	//	palet.FechaCierre = DateTime.Now;
+	//	palet.UsuarioCierreId = usuarioId;
+
+	//	_auroraSgaContext.LogPalet.Add(new LogPalet
+	//	{
+	//		PaletId = palet.Id,
+	//		Fecha = DateTime.Now,
+	//		IdUsuario = usuarioId,
+	//		Accion = "Cerrar",
+	//		Detalle = "Palet Cerrado por el usuario: " + usuarioId
+	//	});
+
+	//	// 🔷 Creamos el traspaso mínimo
+	//	var traspaso = new Traspaso
+	//	{
+	//		PaletId = palet.Id,
+	//		CodigoEstado = "PENDIENTE",
+	//		FechaInicio = DateTime.Now,
+	//		UsuarioInicioId = usuarioId,
+	//		 AlmacenOrigen = "N/A",
+	//		AlmacenDestino = "N/A"
+	//	};
+
+	//	_auroraSgaContext.Traspasos.Add(traspaso);
+
+	//	await _auroraSgaContext.SaveChangesAsync();
+
+	//	return Ok(new
+	//	{
+	//		message = $"Palet {palet.Codigo} cerrado correctamente y traspaso creado.",
+	//		traspasoId = traspaso.Id
+	//	});
+	//}
+	//#endregion
+
 	[HttpPost("{id}/cerrar")]
-	public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
+	public async Task<IActionResult> CerrarPalet(Guid id, [FromBody] CerrarPaletDto dto)
 	{
 		var palet = await _auroraSgaContext.Palets.FindAsync(id);
 		if (palet == null)
@@ -508,26 +683,69 @@ public class PaletController : ControllerBase
 		if (palet.Estado == "Cerrado")
 			return BadRequest("El palet ya está cerrado.");
 
+		// Verifica que tenga al menos una línea
+		bool tieneLineas = await _auroraSgaContext.TempPaletLineas
+			.AnyAsync(l => l.PaletId == id);
+
+		if (!tieneLineas)
+			return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+
+		// Valida que la ubicación destino exista en ese almacén destino
+		var ubicacionDestino = await _auroraSgaContext.Ubicaciones
+			.FirstOrDefaultAsync(u =>
+				u.CodigoAlmacen == dto.CodigoAlmacenDestino &&
+				u.CodigoUbicacion == dto.UbicacionDestino);
+
+		if (ubicacionDestino == null)
+			return BadRequest($"La ubicación '{dto.UbicacionDestino}' no existe en el almacén destino '{dto.CodigoAlmacenDestino}'.");
+
+		// Cierra el palet
 		palet.Estado = "Cerrado";
 		palet.FechaCierre = DateTime.Now;
-		palet.UsuarioCierreId = usuarioId;
+		palet.UsuarioCierreId = dto.UsuarioId;
 
 		_auroraSgaContext.LogPalet.Add(new LogPalet
 		{
 			PaletId = palet.Id,
 			Fecha = DateTime.Now,
-			IdUsuario = usuarioId,
+			IdUsuario = dto.UsuarioId,
 			Accion = "Cerrar",
-			Detalle = "Palet Cerrado por el usuario: " + usuarioId
+			Detalle = $"Palet cerrado en almacén destino {dto.CodigoAlmacenDestino} - ubicación destino {dto.UbicacionDestino} por usuario {dto.UsuarioId}"
 		});
 
+		var estadoTraspaso = (dto.CodigoAlmacen == dto.CodigoAlmacenDestino) ? "COMPLETADO" : "PENDIENTE";
 
-		_auroraSgaContext.Palets.Update(palet);
+		// Crea el traspaso
+		var traspaso = new Traspaso
+		{
+			PaletId = palet.Id,
+			CodigoPalet = palet.Codigo,
+			CodigoEstado = estadoTraspaso,
+			FechaInicio = DateTime.Now,
+			UsuarioInicioId = dto.UsuarioId,
+			AlmacenOrigen = dto.CodigoAlmacen,                 // origen: lo que determinaste al revisar las líneas
+			AlmacenDestino = dto.CodigoAlmacenDestino,
+			UbicacionDestino = dto.UbicacionDestino
+		};
+
+		if (estadoTraspaso == "COMPLETADO")
+		{
+			traspaso.FechaFinalizacion = DateTime.Now;
+			traspaso.UsuarioFinalizacionId = dto.UsuarioId;
+		}
+
+		_auroraSgaContext.Traspasos.Add(traspaso);
+
 		await _auroraSgaContext.SaveChangesAsync();
 
-		return Ok(new { message = $"Palet {palet.Codigo} cerrado correctamente." });
+		return Ok(new
+		{
+			message = $"Palet {palet.Codigo} cerrado correctamente y traspaso creado.",
+			traspasoId = traspaso.Id
+		});
 	}
-	#endregion
+
+
 
 	#region POST: Reabrir palet
 	[HttpPost("{id}/reabrir")]
@@ -555,12 +773,77 @@ public class PaletController : ControllerBase
 			Detalle = "Palet reabierto por el usuario: " + usuarioId
 		});
 
+		// 🔷 Busca el traspaso pendiente y márcalo como CANCELADO
+		var traspaso = await _auroraSgaContext.Traspasos
+			.Where(t => t.PaletId == id && t.CodigoEstado == "PENDIENTE")
+			.FirstOrDefaultAsync();
+
+		if (traspaso != null)
+		{
+			traspaso.CodigoEstado = "CANCELADO";
+			traspaso.FechaFinalizacion = DateTime.Now;
+			traspaso.UsuarioFinalizacionId = usuarioId;
+			traspaso.UbicacionDestino = "N/A";
+			_auroraSgaContext.Traspasos.Update(traspaso);
+
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
+				PaletId = palet.Id,
+				Fecha = DateTime.Now,
+				IdUsuario = usuarioId,
+				Accion = "CancelarTraspaso",
+				Detalle = $"Traspaso {traspaso.Id} cancelado al reabrir el palet"
+			});
+		}
+
 		_auroraSgaContext.Palets.Update(palet);
 		await _auroraSgaContext.SaveChangesAsync();
 
-		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente." });
+		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente. Traspaso pendiente cancelado." });
 	}
 	#endregion
 
+	#region GET: Por CódigoGS1
+	[HttpGet("by-gs1/{codigoGS1}", Name = "GetPaletByGS1")]
+	public async Task<ActionResult<PaletDto>> GetPaletByCodigoGS1(string codigoGS1)
+	{
+		var palet = await _auroraSgaContext.Palets
+			.FirstOrDefaultAsync(p => p.CodigoGS1 == codigoGS1);
+
+		if (palet == null)
+			return NotFound();
+
+		var nombreDict = await _auroraSgaContext.vUsuariosConNombre
+			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
+		var dto = new PaletDto
+		{
+			Id = palet.Id,
+			CodigoEmpresa = palet.CodigoEmpresa,
+			Codigo = palet.Codigo,
+			Estado = palet.Estado,
+			TipoPaletCodigo = palet.TipoPaletCodigo,
+			FechaApertura = palet.FechaApertura,
+			FechaCierre = palet.FechaCierre,
+			UsuarioAperturaId = palet.UsuarioAperturaId,
+			UsuarioCierreId = palet.UsuarioCierreId,
+			Altura = palet.Altura,
+			Peso = palet.Peso,
+			EtiquetaGenerada = palet.EtiquetaGenerada,
+			IsVaciado = palet.IsVaciado,
+			FechaVaciado = palet.FechaVaciado,
+			OrdenTrabajoId = palet.OrdenTrabajoId,
+			CodigoGS1 = palet.CodigoGS1
+		};
+
+		if (dto.UsuarioAperturaId.HasValue && nombreDict.TryGetValue(dto.UsuarioAperturaId.Value, out var nombreA))
+			dto.UsuarioAperturaNombre = nombreA;
+
+		if (dto.UsuarioCierreId.HasValue && nombreDict.TryGetValue(dto.UsuarioCierreId.Value, out var nombreC))
+			dto.UsuarioCierreNombre = nombreC;
+
+		return Ok(dto);
+	}
+	#endregion
 
 }

@@ -137,6 +137,20 @@ namespace SGA_Desktop.Services
 			return resp.IsSuccessStatusCode;
 		}
 
+
+		public async Task<List<UbicacionDetalladaDto>> ObtenerUbicacionesVaciasOEspAsync(
+	short codigoEmpresa, string codigoAlmacen)
+		{
+			var url = $"ubicaciones/vacias-o-especiales"
+					+ $"?codigoEmpresa={codigoEmpresa}"
+					+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+
+			var lista = await _httpClient
+				.GetFromJsonAsync<List<UbicacionDetalladaDto>>(url);
+
+			return lista ?? new List<UbicacionDetalladaDto>();
+		}
+
 	}
 }
 

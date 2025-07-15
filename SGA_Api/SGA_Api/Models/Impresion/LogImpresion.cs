@@ -16,5 +16,10 @@
 		public string Partida { get; set; }
 		public string Alergenos { get; set; }
 		public string PathEtiqueta { get; set; }
+		
+		// 👇 NUEVO
+		public int TipoEtiqueta { get; set; }
+		public string CodigoGS1 { get; set; }
+		public string CodigoPalet { get; set; }
 	}
 }

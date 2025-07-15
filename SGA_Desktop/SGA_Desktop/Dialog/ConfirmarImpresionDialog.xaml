@@ -1,0 +1,90 @@
+﻿<Window x:Class="SGA_Desktop.Dialog.ConfirmarImpresionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Confirmar impresión"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+
+    <!-- 1️⃣ Cargar Estilos generales -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- 2️⃣ Marco con fondo y borde -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20"
+            SnapsToDevicePixels="True">
+
+        <StackPanel>
+            <!-- Icono -->
+            <TextBlock Text="🖨️"
+                       FontSize="48"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,16"
+                       Foreground="{StaticResource BrushPrincipal}"/>
+                       
+            <!-- Título -->
+            <TextBlock Text="Confirmar impresión"
+                       FontSize="24"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource BrushPrincipal}"
+                       TextAlignment="Center"
+                       Margin="0,0,0,12"/>
+
+            <!-- Mensaje -->
+            <TextBlock Text="Selecciona la impresora y el número de copias:"
+                       TextWrapping="Wrap"
+                       Style="{StaticResource LabelStyle}"
+                       Margin="0,0,0,20"/>
+
+            <!-- Impresora -->
+            <TextBlock Text="Impresora:"
+                       Style="{StaticResource LabelStyle}"
+                       Margin="0,4,0,0"/>
+            <ComboBox ItemsSource="{Binding Impresoras}"
+                      SelectedItem="{Binding ImpresoraSeleccionada}"
+                      DisplayMemberPath="Nombre"
+                      Width="200"
+                      Margin="0,4,0,12"
+                      Style="{StaticResource EstiloComboBox}"/>
+
+            <!-- Copias -->
+            <TextBlock Text="Número de copias:"
+                       Style="{StaticResource LabelStyle}"
+                       Margin="0,4,0,0"/>
+            <TextBox Text="{Binding NumeroCopias}"
+                     Width="60"
+                     Margin="0,4,0,12"
+                     HorizontalAlignment="Center"
+                     Style="{StaticResource EstiloCajaTexto}"/>
+
+            <!-- Botones -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        Margin="0,10,0,0">
+                <Button Content="Cancelar"
+                        Width="90"
+                        Margin="0,0,20,0"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        IsCancel="True"/>
+                <Button Content="Imprimir"
+                        Width="90"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        IsDefault="True"
+                        Click="Aceptar_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>
