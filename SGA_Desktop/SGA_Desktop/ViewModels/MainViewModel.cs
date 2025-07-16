@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Runtime.InteropServices;
 using SGA_Desktop.Dialog;
+using System.Windows.Input;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -93,6 +94,13 @@ namespace SGA_Desktop.ViewModels
 		{
 			NavigationStore.Navigate("SeleccionEmpresa");
 			CurrentHeader = "SELECCIÓN DE EMPRESA";
+		}
+
+		[RelayCommand]
+		public void IrATraspasosStock()
+		{
+			NavigationStore.Navigate("TraspasosStock");
+			CurrentHeader = "TRASPASOS DE STOCK";
 		}
 
 		[RelayCommand]

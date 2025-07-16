@@ -22,7 +22,16 @@ namespace SGA_Api.Models.Traspasos
 		public string? UbicacionOrigen{ get; set; }
 
 		public string? CodigoPalet { get; set; }
+		public string? CodigoArticulo { get; set; }
+		public decimal? Cantidad { get; set; }
+		public string? TipoTraspaso { get; set; }
 		public Palet.Palet Palet { get; set; }
+
+		public DateTime? FechaCaducidad { get; set; }
+		public string Partida { get; set; }
+
+		public Guid MovPosicionOrigen { get; set; } = Guid.Empty;
+		public Guid MovPosicionDestino { get; set; } = Guid.Empty;
 
 		// Opcional: navegación a Palet y Estado
 		// public Palet Palet { get; set; }

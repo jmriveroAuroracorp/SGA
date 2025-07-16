@@ -107,7 +107,13 @@
                 Command="{Binding IrAUbicacionesCommand}"
                 Style="{StaticResource EstiloBotonPrincipal}"
                 Margin="10,5"/>
-                <Button Content="Traspasos"
+                <!-- Nuevo botón para traspasos de stock -->
+                <Button Content="Traspasos de Stock"
+                Command="{Binding IrATraspasosStockCommand}"
+                Style="{StaticResource EstiloBotonPrincipal}"
+                Margin="10,5"/>
+                <!-- Renombrar el botón de traspasos actual -->
+                <Button Content="Traspasos de Palet"
                 Command="{Binding IrATraspasosCommand}"
                 Style="{StaticResource EstiloBotonPrincipal}"
                 Margin="10,5"/>

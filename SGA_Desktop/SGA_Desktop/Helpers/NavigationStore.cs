@@ -26,6 +26,7 @@ namespace SGA_Desktop.Helpers
 					"Etiquetas" => new ImpresionEtiquetasView(),
 					"SeleccionEmpresa" => new EmpresaView(),
 					"Paletizacion" => new PaletizacionView(),
+					"TraspasosStock" => new TraspasosStockView(),
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};
 

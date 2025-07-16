@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using SGA_Desktop.Models;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Net.Http;
 
 namespace SGA_Desktop.Services
 {
@@ -88,6 +89,32 @@ namespace SGA_Desktop.Services
 			return resp ?? new List<TraspasoDto>();
 		}
 
+        public async Task<ApiResult> CrearTraspasoArticuloAsync(CrearTraspasoArticuloDto dto)
+        {
+            var resp = await _httpClient.PostAsJsonAsync("traspasos/articulo", dto);
+            var text = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+            {
+                return new ApiResult { Success = false, ErrorMessage = text };
+            }
+            return new ApiResult { Success = true };
+        }
+
+        public async Task<List<TraspasoArticuloDto>> GetUltimosTraspasosArticulosAsync()
+        {
+            var resp = await _httpClient.GetAsync("traspasos/articulos");
+            if (!resp.IsSuccessStatusCode)
+                return new List<TraspasoArticuloDto>();
+            var text = await resp.Content.ReadAsStringAsync();
+            return System.Text.Json.JsonSerializer.Deserialize<List<TraspasoArticuloDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<TraspasoArticuloDto>();
+        }
+
 	}
+
+    public class ApiResult
+    {
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
 
 }

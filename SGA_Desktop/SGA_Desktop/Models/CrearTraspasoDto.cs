@@ -12,6 +12,8 @@ namespace SGA_Desktop.Models
 		public string AlmacenDestino { get; set; }
 		public Guid PaletId { get; set; }
 		public int UsuarioInicioId { get; set; }
+		public string ArticuloId { get; set; }
+		public decimal Cantidad { get; set; }
 	}
 
 }

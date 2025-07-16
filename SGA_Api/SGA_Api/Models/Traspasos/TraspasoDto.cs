@@ -17,6 +17,7 @@
 		public DateTime? FechaFinalizacion { get; set; }
 		public int? UsuarioFinalizacionId { get; set; }
 		public string? UbicacionDestino { get; set; }
+		public string? UbicacionOrigen { get; set; }
 
 		public string? CodigoPalet { get; set; }
 	}

@@ -1,0 +1,131 @@
+<Page x:Class="SGA_Desktop.Views.TraspasosStockView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      mc:Ignorable="d"
+      Title="Traspasos de Stock">
+    <Grid Background="{StaticResource BrushFondo}" Margin="20">
+        <Grid.Resources>
+            <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+            <helpers:NullToBoolConverter x:Key="NullToBoolConverter" />
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Buscador -->
+            <RowDefinition Height="Auto"/> <!-- Tabla de stock -->
+            <RowDefinition Height="Auto"/> <!-- Formulario -->
+            <RowDefinition Height="*"/>   <!-- Últimos traspasos -->
+        </Grid.RowDefinitions>
+
+        <!-- Buscador de artículo -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16" Grid.Row="0">
+            <TextBlock Text="Buscar artículo:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <TextBox Width="200" Margin="8,0,0,0" Style="{StaticResource EstiloCajaTexto}"
+                     Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}"/>
+            <Button Content="🔍" Width="40" Height="40" Margin="8,0,0,0" Style="{StaticResource EstiloBotonPrincipal}"
+                    Command="{Binding BuscarStockCommand}"/>
+        </StackPanel>
+
+        <!-- Stock disponible: agrupado o clásico -->
+        <GroupBox Header="Stock disponible" Margin="0,0,0,16" Grid.Row="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="300">
+                <Grid>
+                    <!-- Cards agrupados por artículo (expandibles) -->
+                    <ItemsControl ItemsSource="{Binding ArticulosConUbicaciones}" Visibility="{Binding MostrarCardsAgrupados, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Expander Header="{Binding HeaderArticulo}" Margin="0,0,0,8">
+                                    <ItemsControl ItemsSource="{Binding Ubicaciones}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="6" Padding="12" CornerRadius="8" BorderBrush="#0067C3" BorderThickness="1" Background="White">
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="Almacén: " FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding CodigoAlmacen}"/>
+                                                            <TextBlock Text="   Ubicación: " FontWeight="SemiBold" Margin="12,0,0,0"/>
+                                                            <TextBlock Text="{Binding Ubicacion}"/>
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                            <TextBlock Text="Lote: " FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding Partida}"/>
+                                                            <TextBlock Text="   Cantidad: " FontWeight="SemiBold" Margin="12,0,0,0"/>
+                                                            <TextBlock Text="{Binding UnidadSaldo}"/>
+                                                        </StackPanel>
+                                                        <Button Content="Seleccionar" Margin="0,8,0,0" Width="120"
+                                                                Command="{Binding DataContext.SeleccionarStockCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                                CommandParameter="{Binding}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- ListView clásico para búsqueda directa por código -->
+                    <ListView ItemsSource="{Binding StockDisponible}"
+                              SelectedItem="{Binding StockSeleccionado, Mode=TwoWay}"
+                              Margin="0,0,0,0"
+                              Height="250"
+                              Visibility="{Binding MostrarCardsAgrupados, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="6" Padding="12" CornerRadius="8" BorderBrush="#0067C3" BorderThickness="1" Background="White">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" FontSize="16"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock Text="Almacén: " FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding CodigoAlmacen}"/>
+                                            <TextBlock Text="   Ubicación: " FontWeight="SemiBold" Margin="12,0,0,0"/>
+                                            <TextBlock Text="{Binding Ubicacion}"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <TextBlock Text="Lote: " FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Partida}"/>
+                                            <TextBlock Text="   Cantidad: " FontWeight="SemiBold" Margin="12,0,0,0"/>
+                                            <TextBlock Text="{Binding UnidadSaldo}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </ScrollViewer>
+        </GroupBox>
+
+        <!-- Formulario de traspaso -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,16">
+            <Button Content="Traspasar" Width="140" Height="40" Style="{StaticResource EstiloBotonPrincipal}"
+                    IsEnabled="{Binding StockSeleccionado, Converter={StaticResource NullToBoolConverter}}"
+                    Command="{Binding AbrirDialogoTraspasoCommand}"/>
+        </StackPanel>
+
+        <!-- Feedback y últimos traspasos -->
+        <StackPanel Grid.Row="3">
+            <TextBlock Foreground="Red" FontWeight="Bold" Margin="0,0,0,8"
+                       Text="{Binding Feedback}"/>
+            <GroupBox Header="Últimos traspasos realizados">
+                <DataGrid ItemsSource="{Binding UltimosTraspasos}"
+                          AutoGenerateColumns="False"
+                          Style="{StaticResource EstiloDataGrid}"
+                          ColumnHeaderStyle="{StaticResource EstiloDataGridHeader}"
+                          Height="120">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Fecha" Binding="{Binding Fecha}"/>
+                        <DataGridTextColumn Header="Artículo" Binding="{Binding CodigoArticulo}"/>
+                        <DataGridTextColumn Header="Origen" Binding="{Binding Origen}"/>
+                        <DataGridTextColumn Header="Destino" Binding="{Binding Destino}"/>
+                        <DataGridTextColumn Header="Cantidad" Binding="{Binding Cantidad}"/>
+                        <DataGridTextColumn Header="Estado" Binding="{Binding Estado}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+        </StackPanel>
+    </Grid>
+</Page> 
