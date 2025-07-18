@@ -47,7 +47,7 @@ public class TraspasosController : ControllerBase
 				UsuarioInicioId = dto.UsuarioInicioId,
 				PaletId = dto.PaletId,
 				CodigoPalet = dto.CodigoPalet,
-				FechaInicio = DateTime.UtcNow,
+				FechaInicio = DateTime.Now,
 				CodigoEstado = "PENDIENTE"
 			};
 
@@ -81,7 +81,7 @@ public class TraspasosController : ControllerBase
 		traspaso.AlmacenDestino = dto.AlmacenDestino;
 		traspaso.UbicacionDestino = dto.UbicacionDestino;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
-		traspaso.FechaFinalizacion = DateTime.UtcNow;
+		traspaso.FechaFinalizacion = DateTime.Now;
 		traspaso.CodigoEstado = "COMPLETADO";
 
 		await _context.SaveChangesAsync();
@@ -112,7 +112,9 @@ public class TraspasosController : ControllerBase
 			UsuarioFinalizacionId = traspaso.UsuarioFinalizacionId,
 			UbicacionDestino = traspaso.UbicacionDestino,
 			UbicacionOrigen = traspaso.UbicacionOrigen,
-			CodigoPalet = traspaso.CodigoPalet
+			CodigoPalet = traspaso.CodigoPalet,
+			CodigoArticulo = traspaso.CodigoArticulo,
+			TipoTraspaso = traspaso.TipoTraspaso
 		};
 		return Ok(dto);
 	}
@@ -154,7 +156,9 @@ public class TraspasosController : ControllerBase
 				UsuarioFinalizacionId = t.UsuarioFinalizacionId,
 				UbicacionDestino = t.UbicacionDestino,
 				UbicacionOrigen = t.UbicacionOrigen,
-				CodigoPalet = t.CodigoPalet
+				CodigoPalet = t.CodigoPalet,
+				CodigoArticulo = t.CodigoArticulo,
+				TipoTraspaso = t.TipoTraspaso
 			})
 			.ToListAsync();
 
@@ -184,7 +188,9 @@ public class TraspasosController : ControllerBase
 				UsuarioFinalizacionId = t.UsuarioFinalizacionId,
 				UbicacionDestino = t.UbicacionDestino,
 				UbicacionOrigen = t.UbicacionOrigen,
-				CodigoPalet = t.CodigoPalet
+				CodigoPalet = t.CodigoPalet,
+				CodigoArticulo = t.CodigoArticulo,
+				TipoTraspaso = t.TipoTraspaso
 			})
 			.ToListAsync();
 		return Ok(lista);
@@ -293,7 +299,7 @@ public class TraspasosController : ControllerBase
         traspaso.AlmacenDestino = dto.AlmacenDestino;
         traspaso.UbicacionDestino = dto.UbicacionDestino;
         traspaso.UsuarioFinalizacionId = dto.UsuarioId;
-        traspaso.FechaFinalizacion = DateTime.UtcNow;
+        traspaso.FechaFinalizacion = DateTime.Now;
         traspaso.CodigoEstado = "COMPLETADO";
 
         await _context.SaveChangesAsync();
@@ -357,7 +363,7 @@ public class TraspasosController : ControllerBase
 		var palet = await _context.Palets.FindAsync(dto.PaletId);
 		if (palet == null)
 			return NotFound("Palet no encontrado.");
-		if (palet.Estado != "CERRADO")
+		if (!string.Equals(palet.Estado, "CERRADO", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El palet debe estar cerrado para poder moverlo.");
 
 		// 2. Buscar el último traspaso COMPLETADO para ese palet
@@ -379,11 +385,11 @@ public class TraspasosController : ControllerBase
 		{
 			Id = Guid.NewGuid(),
 			AlmacenOrigen = ultimoTraspaso.AlmacenDestino,
-			UbicacionOrigen = ultimoTraspaso.UbicacionDestino,
+			UbicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "",
 			UsuarioInicioId = dto.UsuarioId,
 			PaletId = dto.PaletId,
 			CodigoPalet = dto.CodigoPalet,
-			FechaInicio = DateTime.UtcNow,
+			FechaInicio = DateTime.Now,
 			CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
 			AlmacenDestino = dto.AlmacenDestino,
 			UbicacionDestino = dto.UbicacionDestino,
@@ -414,7 +420,7 @@ public class TraspasosController : ControllerBase
 		traspaso.AlmacenDestino = dto.AlmacenDestino;
 		traspaso.UbicacionDestino = dto.UbicacionDestino;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
-		traspaso.FechaFinalizacion = DateTime.UtcNow;
+		traspaso.FechaFinalizacion = DateTime.Now;
 		traspaso.CodigoEstado = dto.CodigoEstado;
 
 		await _context.SaveChangesAsync();
@@ -435,4 +441,78 @@ public class TraspasosController : ControllerBase
 
 		return Ok(traspaso);
 	}
+
+	[HttpGet("palets-cerrados-movibles")]
+	public async Task<IActionResult> GetPaletsCerradosMovibles()
+	{
+		// 1. Buscar palets cerrados
+		var paletsCerrados = await _context.Palets
+			.Where(p => p.Estado == "CERRADO")
+			.ToListAsync();
+
+		// 2. Buscar traspasos completados agrupados por palet
+		var traspasosCompletados = await _context.Traspasos
+			.Where(t => t.CodigoEstado == "COMPLETADO")
+			.OrderByDescending(t => t.FechaFinalizacion)
+			.ToListAsync();
+
+		var ultimosTraspasosPorPalet = traspasosCompletados
+			.GroupBy(t => t.PaletId)
+			.Select(g => g.First())
+			.ToDictionary(t => t.PaletId, t => t);
+
+		// 3. Solo palets que tengan al menos un traspaso completado
+		var resultado = paletsCerrados
+			.Where(p => ultimosTraspasosPorPalet.ContainsKey(p.Id))
+			.Select(p => new
+			{
+				p.Id,
+				p.Codigo,
+				p.Estado,
+				AlmacenOrigen = ultimosTraspasosPorPalet[p.Id].AlmacenDestino ?? "",
+				UbicacionOrigen = ultimosTraspasosPorPalet[p.Id].UbicacionDestino ?? "",
+				FechaUltimoTraspaso = ultimosTraspasosPorPalet[p.Id].FechaFinalizacion,
+				UsuarioUltimoTraspaso = ultimosTraspasosPorPalet[p.Id].UsuarioFinalizacionId
+			})
+			.ToList();
+
+		return Ok(resultado);
+	}
+
+    [HttpGet("palets-movibles")]
+    public async Task<IActionResult> GetPaletsMovibles()
+    {
+        // 1. Buscar palets abiertos o cerrados
+        var paletsMovibles = await _context.Palets
+            .Where(p => p.Estado == "CERRADO" || p.Estado == "ABIERTO")
+            .ToListAsync();
+
+        // 2. Buscar traspasos completados agrupados por palet
+        var traspasosCompletados = await _context.Traspasos
+            .Where(t => t.CodigoEstado == "COMPLETADO")
+            .OrderByDescending(t => t.FechaFinalizacion)
+            .ToListAsync();
+
+        var ultimosTraspasosPorPalet = traspasosCompletados
+            .GroupBy(t => t.PaletId)
+            .Select(g => g.First())
+            .ToDictionary(t => t.PaletId, t => t);
+
+        // 3. Solo palets que tengan al menos un traspaso completado
+        var resultado = paletsMovibles
+            .Where(p => ultimosTraspasosPorPalet.ContainsKey(p.Id))
+            .Select(p => new
+            {
+                p.Id,
+                p.Codigo,
+                p.Estado,
+                AlmacenOrigen = ultimosTraspasosPorPalet[p.Id].AlmacenDestino ?? "",
+                UbicacionOrigen = ultimosTraspasosPorPalet[p.Id].UbicacionDestino ?? "",
+                FechaUltimoTraspaso = ultimosTraspasosPorPalet[p.Id].FechaFinalizacion,
+                UsuarioUltimoTraspaso = ultimosTraspasosPorPalet[p.Id].UsuarioFinalizacionId
+            })
+            .ToList();
+
+        return Ok(resultado);
+    }
 }

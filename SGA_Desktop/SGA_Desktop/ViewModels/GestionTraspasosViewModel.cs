@@ -40,7 +40,7 @@ namespace SGA_Desktop.ViewModels
 
 			LoadTraspasosCommand = new AsyncRelayCommand(LoadTraspasosAsync);
 			AbrirFiltrosCommand = new RelayCommand(AbrirFiltros);
-			//NuevoTraspasoCommand = new RelayCommand(AbrirNuevoTraspasoDialog);
+			NuevoTraspasoCommand = new RelayCommand(AbrirTraspasoPaletDialog);
 			//FinalizarTraspasoCommand = new AsyncRelayCommand(FinalizarTraspasoAsync, PuedeFinalizarTraspaso);
 			CancelarTraspasoCommand = new AsyncRelayCommand(CancelarTraspasoAsync, PuedeCancelarTraspaso);
 
@@ -103,21 +103,18 @@ namespace SGA_Desktop.ViewModels
 		}
 
 
-		//private void AbrirNuevoTraspasoDialog()
-		//{
-		//	var dlgVm = new TraspasosNuevoDialogViewModel(_traspasosService);
-		//	var dlg = new TraspasosNuevoDialog
-		//	{
-		//		Owner = Application.Current.MainWindow,
-		//		DataContext = dlgVm
-		//	};
 
-		//	if (dlg.ShowDialog() == true && dlgVm.CreatedTraspaso != null)
-		//	{
-		//		Traspasos.Add(dlgVm.CreatedTraspaso);
-		//		TraspasoSeleccionado = dlgVm.CreatedTraspaso;
-		//	}
-		//}
+		private void AbrirTraspasoPaletDialog()
+		{
+			var dlgVm = new TraspasoPaletDialogViewModel(); // Añade servicios si es necesario
+			var dlg = new TraspasoPaletDialog
+			{
+				DataContext = dlgVm,
+				Owner = Application.Current.MainWindow
+			};
+			dlg.ShowDialog();
+			// Si quieres refrescar la lista tras cerrar el diálogo, hazlo aquí
+		}
 
 		private bool PuedeFinalizarTraspaso()
 		{

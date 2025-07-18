@@ -20,6 +20,8 @@
 		public string? UbicacionOrigen { get; set; }
 
 		public string? CodigoPalet { get; set; }
+		public string? CodigoArticulo { get; set; }
+		public string? TipoTraspaso { get; set; }
 	}
 
 

@@ -233,7 +233,12 @@ namespace SGA_Desktop.Services
 				UsuarioId = usuarioId,
 				CodigoAlmacen = codigoAlmacen,
 				CodigoAlmacenDestino = codigoAlmacenDestino,
-				UbicacionDestino = ubicacionDestino
+				UbicacionDestino = ubicacionDestino,
+				TipoTraspaso = "PALET",
+				CodigoEstado = "PENDIENTE_ERP",
+				FechaFinalizacion = DateTime.Now,
+				UsuarioFinalizacionId = usuarioId,
+				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
 			};
 
 			var resp = await _httpClient.PostAsJsonAsync(

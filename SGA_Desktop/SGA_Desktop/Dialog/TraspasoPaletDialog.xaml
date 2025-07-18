@@ -1,0 +1,123 @@
+﻿<Window x:Class="SGA_Desktop.Dialog.TraspasoPaletDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Traspaso de palet"
+        Width="1100" Height="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- CONTENIDO PRINCIPAL -->
+            <StackPanel Grid.Row="0">
+                <!-- CABECERA -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Text="Traspaso de palet" Style="{StaticResource LabelStyle}" FontWeight="Bold" FontSize="18"/>
+                </StackPanel>
+
+                <!-- BUSCADOR DE PALETS -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Text="Buscar palet:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+                    <TextBox Width="180" Margin="5,0"
+                             Text="{Binding PaletBuscado, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EstiloCajaTexto}"/>
+                    <Button Content="Buscar"
+                            Command="{Binding BuscarPaletCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Margin="10,0"/>
+                </StackPanel>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- LISTA DE PALETS -->
+                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding PaletsCerrados}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource EstiloTarjeta}"
+                                            BorderBrush="{StaticResource BrushPrincipal}"
+                                            BorderThickness="2"
+                                            Background="White"
+                                            CornerRadius="8"
+                                            Padding="10"
+                                            Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Codigo}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource BrushPrincipal}"/>
+                                            <TextBlock Text="{Binding Estado}" FontWeight="Bold" Foreground="Gray"/>
+                                            <TextBlock Text="{Binding AlmacenOrigen, StringFormat=Almacén: {0}}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                                            <TextBlock Text="{Binding UbicacionOrigen, StringFormat=Ubicación: {0}}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                                            <TextBlock Text="{Binding FechaUltimoTraspaso, StringFormat=Último traspaso: {0:dd/MM/yyyy HH:mm}}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                                            <Button Content="Seleccionar"
+                                                    Command="{Binding DataContext.SeleccionarPaletCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                                    Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- PANEL DE ACCIÓN PARA EL PALET SELECCIONADO -->
+                    <StackPanel Grid.Column="1" Margin="20,0,0,0">
+                        <TextBlock Text="Palet seleccionado:" Style="{StaticResource LabelStyle}" FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding PaletSeleccionado.Codigo}" FontWeight="Bold" FontSize="15" Foreground="{StaticResource BrushPrincipal}"/>
+                        <TextBlock Text="{Binding PaletSeleccionado.Estado}" FontWeight="Bold" Foreground="Gray"/>
+                        <TextBlock Text="{Binding PaletSeleccionado.AlmacenOrigen, StringFormat=Almacén: {0}}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                        <TextBlock Text="{Binding PaletSeleccionado.UbicacionOrigen, StringFormat=Ubicación: {0}}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                        <TextBlock Text="{Binding PaletSeleccionado.FechaUltimoTraspaso, StringFormat=Último traspaso: {0:dd/MM/yyyy HH:mm}}" Foreground="{StaticResource BrushGrisOscuro}"/>
+
+                        <!-- Selección de destino -->
+                        <TextBlock Text="Destino:" Style="{StaticResource LabelStyle}" Margin="0,16,0,4"/>
+                        <ComboBox ItemsSource="{Binding AlmacenesDestino}"
+                                  SelectedItem="{Binding AlmacenDestinoSeleccionado}"
+                                  DisplayMemberPath="NombreAlmacen"
+                                  Style="{StaticResource EstiloComboBox}"/>
+                        <ComboBox ItemsSource="{Binding UbicacionesDestino}"
+                                  SelectedItem="{Binding UbicacionDestinoSeleccionada}"
+                                  DisplayMemberPath="Ubicacion"
+                                  Style="{StaticResource EstiloComboBox}" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+
+            <!-- Botones abajo a la derecha -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Confirmar"
+                        Command="{Binding MoverPaletCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="0,0,10,0"
+                        IsEnabled="{Binding PuedeMoverPalet}"/>
+                <Button Content="Cerrar"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Click="Cerrar_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -713,22 +713,28 @@ public class PaletController : ControllerBase
 			Detalle = $"Palet cerrado en almacén destino {dto.CodigoAlmacenDestino} - ubicación destino {dto.UbicacionDestino} por usuario {dto.UsuarioId}"
 		});
 
+		// Determina el estado del traspaso por defecto
 		var estadoTraspaso = (dto.CodigoAlmacen == dto.CodigoAlmacenDestino) ? "COMPLETADO" : "PENDIENTE";
 
-		// Crea el traspaso
+		// Crea el traspaso usando los valores recibidos si existen, o los valores por defecto
 		var traspaso = new Traspaso
 		{
 			PaletId = palet.Id,
 			CodigoPalet = palet.Codigo,
-			CodigoEstado = estadoTraspaso,
+			TipoTraspaso = dto.TipoTraspaso ?? "PALET",
+			CodigoEstado = dto.CodigoEstado ?? estadoTraspaso,
 			FechaInicio = DateTime.Now,
 			UsuarioInicioId = dto.UsuarioId,
-			AlmacenOrigen = dto.CodigoAlmacen,                 // origen: lo que determinaste al revisar las líneas
+			AlmacenOrigen = dto.CodigoAlmacen,
 			AlmacenDestino = dto.CodigoAlmacenDestino,
-			UbicacionDestino = dto.UbicacionDestino
+			UbicacionDestino = dto.UbicacionDestino,
+			FechaFinalizacion = dto.FechaFinalizacion,
+			UsuarioFinalizacionId = dto.UsuarioFinalizacionId,
+			CodigoEmpresa = dto.CodigoEmpresa
 		};
 
-		if (estadoTraspaso == "COMPLETADO")
+		// Si no viene FechaFinalizacion y el estado es COMPLETADO, ponla por defecto
+		if (traspaso.CodigoEstado == "COMPLETADO" && traspaso.FechaFinalizacion == null)
 		{
 			traspaso.FechaFinalizacion = DateTime.Now;
 			traspaso.UsuarioFinalizacionId = dto.UsuarioId;
@@ -845,5 +851,82 @@ public class PaletController : ControllerBase
 		return Ok(dto);
 	}
 	#endregion
+
+    [HttpPost("{id}/cerrar-mobility")]
+    public async Task<IActionResult> CerrarPaletMobility(Guid id, [FromBody] CerrarPaletMobilityDto dto)
+    {
+        var palet = await _auroraSgaContext.Palets.FindAsync(id);
+        if (palet == null)
+            return NotFound("Palet no encontrado");
+
+        if (palet.Estado == "Cerrado")
+            return BadRequest("El palet ya está cerrado.");
+
+        // Verifica que tenga al menos una línea
+        bool tieneLineas = await _auroraSgaContext.TempPaletLineas
+            .AnyAsync(l => l.PaletId == id);
+
+        if (!tieneLineas)
+            return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+
+        // Cierra el palet
+        palet.Estado = "Cerrado";
+        palet.FechaCierre = DateTime.Now;
+        palet.UsuarioCierreId = dto.UsuarioId;
+
+        _auroraSgaContext.LogPalet.Add(new LogPalet
+        {
+            PaletId = palet.Id,
+            Fecha = DateTime.Now,
+            IdUsuario = dto.UsuarioId,
+            Accion = "CerrarMobility",
+            Detalle = $"Palet cerrado por usuario {dto.UsuarioId} desde Mobility"
+        });
+
+        // Crea el traspaso en estado PENDIENTE, sin datos de destino ni finalización
+        var traspaso = new Traspaso
+        {
+            PaletId = palet.Id,
+            CodigoPalet = palet.Codigo,
+            TipoTraspaso = "PALET",
+            CodigoEstado = "PENDIENTE",
+            FechaInicio = DateTime.Now,
+            UsuarioInicioId = dto.UsuarioId,
+            AlmacenOrigen = dto.CodigoAlmacen,
+            CodigoEmpresa = dto.CodigoEmpresa
+        };
+        _auroraSgaContext.Traspasos.Add(traspaso);
+
+        await _auroraSgaContext.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = $"Palet {palet.Codigo} cerrado correctamente y traspaso pendiente creado.",
+            traspasoId = traspaso.Id
+        });
+    }
+
+    [HttpPost("{id}/completar-traspaso")]
+    public async Task<IActionResult> CompletarTraspaso(Guid id, [FromBody] CompletarTraspasoDto dto)
+    {
+        var traspaso = await _auroraSgaContext.Traspasos.FindAsync(id);
+        if (traspaso == null)
+            return NotFound("Traspaso no encontrado");
+
+        if (traspaso.CodigoEstado != "PENDIENTE")
+            return BadRequest("Solo se pueden completar traspasos en estado PENDIENTE.");
+
+        // Actualiza los datos de destino y finalización
+        traspaso.AlmacenDestino = dto.CodigoAlmacenDestino;
+        traspaso.UbicacionDestino = dto.UbicacionDestino;
+        traspaso.FechaFinalizacion = dto.FechaFinalizacion;
+        traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
+        traspaso.CodigoEstado = "COMPLETADO";
+
+        _auroraSgaContext.Traspasos.Update(traspaso);
+        await _auroraSgaContext.SaveChangesAsync();
+
+        return Ok(new { message = "Traspaso completado correctamente." });
+    }
 
 }

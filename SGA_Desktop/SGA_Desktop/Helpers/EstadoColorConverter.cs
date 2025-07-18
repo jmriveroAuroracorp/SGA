@@ -19,6 +19,11 @@ namespace SGA_Desktop.Helpers
 				{
 					"Abierto" => Brushes.Green,
 					"Cerrado" => Brushes.Red,
+					"PENDIENTE" => Brushes.Orange,
+					"PENDIENTE_ERP" => Brushes.Goldenrod,
+					"COMPLETADO" => Brushes.SeaGreen,
+					"CANCELADO" => Brushes.Gray,
+					"EN_TRANSITO" => Brushes.DodgerBlue,
 					_ => Brushes.Black
 				};
 			}

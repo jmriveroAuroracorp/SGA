@@ -6,7 +6,7 @@ namespace SGA_Api.Models.Traspasos
 	{
 		public Guid Id { get; set; }
 
-		public string AlmacenOrigen { get; set; }
+		public string? AlmacenOrigen { get; set; }
 		public string? AlmacenDestino { get; set; }
 
 		public string CodigoEstado { get; set; }  
@@ -28,7 +28,7 @@ namespace SGA_Api.Models.Traspasos
 		public Palet.Palet Palet { get; set; }
 
 		public DateTime? FechaCaducidad { get; set; }
-		public string Partida { get; set; }
+		public string? Partida { get; set; }
 
 		public short CodigoEmpresa { get; set; }
 

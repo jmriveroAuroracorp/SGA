@@ -32,8 +32,18 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string? ordenTrabajoId;
 
-        [ObservableProperty]
-        private TipoPaletDto? tipoPaletSeleccionado;
+        private TipoPaletDto _tipoPaletSeleccionado;
+        public TipoPaletDto TipoPaletSeleccionado
+        {
+            get => _tipoPaletSeleccionado;
+            set
+            {
+                SetProperty(ref _tipoPaletSeleccionado, value);
+                OnPropertyChanged(nameof(PuedeCrear));
+            }
+        }
+
+        public bool PuedeCrear => TipoPaletSeleccionado != null;
 
         public IAsyncRelayCommand CrearCommand { get; }
 

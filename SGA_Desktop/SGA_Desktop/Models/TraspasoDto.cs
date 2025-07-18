@@ -24,6 +24,20 @@ namespace SGA_Desktop.Models
 		public int? UsuarioFinalizacionId { get; set; }
 		public string? UbicacionDestino { get; set; }
 		public string? CodigoPalet { get; set; }
+		public string? TipoTraspaso { get; set; }
+		public string? CodigoArticulo { get; set; }
+		public string CodigoPrincipal
+		{
+			get
+			{
+				if (TipoTraspaso == "PALET" && !string.IsNullOrWhiteSpace(CodigoPalet))
+					return CodigoPalet;
+				if (TipoTraspaso == "ARTICULO" && !string.IsNullOrWhiteSpace(CodigoArticulo))
+					return CodigoArticulo;
+				return "(Sin código)";
+			}
+		}
+		public string CodigoPrincipalAndEstado => $"{CodigoPrincipal} - {CodigoEstado}";
 	}
 
 }

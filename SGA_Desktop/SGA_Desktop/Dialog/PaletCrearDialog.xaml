@@ -61,7 +61,7 @@
             <!-- Botones -->
             <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
                 <Button Content="Cancelar" Width="90" Margin="0,0,10,0" IsCancel="True" Style="{StaticResource EstiloBotonPrincipal}"/>
-                <Button Content="Crear"   Width="90" IsDefault="True" Command="{Binding CrearCommand}" Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Crear"   Width="90" IsDefault="True" Command="{Binding CrearCommand}" Style="{StaticResource EstiloBotonPrincipal}" IsEnabled="{Binding PuedeCrear}"/>
             </StackPanel>
         </Grid>
 

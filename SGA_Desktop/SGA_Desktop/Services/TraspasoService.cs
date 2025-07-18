@@ -109,6 +109,24 @@ namespace SGA_Desktop.Services
             return System.Text.Json.JsonSerializer.Deserialize<List<TraspasoArticuloDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<TraspasoArticuloDto>();
         }
 
+		public async Task<List<PaletMovibleDto>> ObtenerPaletsCerradosMoviblesAsync()
+		{
+			var resp = await _httpClient.GetAsync("traspasos/palets-cerrados-movibles");
+			if (!resp.IsSuccessStatusCode)
+				return new List<PaletMovibleDto>();
+			var text = await resp.Content.ReadAsStringAsync();
+			return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<PaletMovibleDto>();
+		}
+
+        public async Task<ApiResult> MoverPaletAsync(MoverPaletDto dto)
+        {
+            var resp = await _httpClient.PostAsJsonAsync("traspasos/mover-palet", dto);
+            var text = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+                return new ApiResult { Success = false, ErrorMessage = text };
+            return new ApiResult { Success = true };
+        }
+
 	}
 
     public class ApiResult
@@ -116,5 +134,16 @@ namespace SGA_Desktop.Services
         public bool Success { get; set; }
         public string? ErrorMessage { get; set; }
     }
+
+	public class PaletMovibleDto
+	{
+		public Guid Id { get; set; }
+		public string Codigo { get; set; }
+		public string Estado { get; set; }
+		public string? AlmacenOrigen { get; set; }
+		public string? UbicacionOrigen { get; set; }
+		public DateTime? FechaUltimoTraspaso { get; set; }
+		public int? UsuarioUltimoTraspaso { get; set; }
+	}
 
 }
