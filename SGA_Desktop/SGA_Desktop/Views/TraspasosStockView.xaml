@@ -11,6 +11,19 @@
             <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
             <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
             <helpers:NullToBoolConverter x:Key="NullToBoolConverter" />
+            <helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter" />
+            <DataTemplate x:Key="ArticuloExpanderHeaderTemplate">
+                <StackPanel Orientation="Horizontal" Margin="8,2">
+                    <TextBlock Text="{Binding CodigoArticulo}" 
+                               FontWeight="Bold" 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontSize="16"/>
+                    <TextBlock Text=" - " FontSize="16"/>
+                    <TextBlock Text="{Binding DescripcionArticulo}" 
+                               Foreground="#444" 
+                               FontSize="16"/>
+                </StackPanel>
+            </DataTemplate>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Buscador -->
@@ -26,39 +39,98 @@
                      Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}"/>
             <Button Content="🔍" Width="40" Height="40" Margin="8,0,0,0" Style="{StaticResource EstiloBotonPrincipal}"
                     Command="{Binding BuscarStockCommand}"/>
+            <Button Content="Traspaso múltiple"
+                    Width="140" Height="40" Margin="16,0,0,0"
+                    HorizontalAlignment="Right"
+                    Command="{Binding AbrirDialogoRegularizacionMultipleCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"/>
         </StackPanel>
 
         <!-- Stock disponible: agrupado o clásico -->
         <GroupBox Header="Stock disponible" Margin="0,0,0,16" Grid.Row="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Height="300">
                 <Grid>
-                    <!-- Cards agrupados por artículo (expandibles) -->
-                    <ItemsControl ItemsSource="{Binding ArticulosConUbicaciones}" Visibility="{Binding MostrarCardsAgrupados, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ItemsControl ItemsSource="{Binding ArticulosConUbicaciones}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Expander Header="{Binding HeaderArticulo}" Margin="0,0,0,8">
+                                <Expander HeaderTemplate="{StaticResource ArticuloExpanderHeaderTemplate}" Header="{Binding .}" Margin="0,0,0,8">
                                     <ItemsControl ItemsSource="{Binding Ubicaciones}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Margin="6" Padding="12" CornerRadius="8" BorderBrush="#0067C3" BorderThickness="1" Background="White">
-                                                    <StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                            <TextBlock Text="Almacén: " FontWeight="SemiBold"/>
-                                                            <TextBlock Text="{Binding CodigoAlmacen}"/>
-                                                            <TextBlock Text="   Ubicación: " FontWeight="SemiBold" Margin="12,0,0,0"/>
-                                                            <TextBlock Text="{Binding Ubicacion}"/>
-                                                        </StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                                            <TextBlock Text="Lote: " FontWeight="SemiBold"/>
-                                                            <TextBlock Text="{Binding Partida}"/>
-                                                            <TextBlock Text="   Cantidad: " FontWeight="SemiBold" Margin="12,0,0,0"/>
-                                                            <TextBlock Text="{Binding UnidadSaldo}"/>
-                                                        </StackPanel>
-                                                        <Button Content="Seleccionar" Margin="0,8,0,0" Width="120"
-                                                                Command="{Binding DataContext.SeleccionarStockCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                                CommandParameter="{Binding}"/>
-                                                    </StackPanel>
-                                                </Border>
+                                                <Button Command="{Binding DataContext.SeleccionarStockCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Padding="0"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        VerticalContentAlignment="Stretch">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="Button">
+                                                                        <Border x:Name="CardBorder"
+                                                                                Style="{StaticResource EstiloTarjeta}"
+                                                                                BorderBrush="{StaticResource BrushPrincipal}"
+                                                                                BorderThickness="2"
+                                                                                Background="White"
+                                                                                Margin="0,0,0,10">
+                                                                            <Grid Margin="8,4">
+                                                                                <Grid.RowDefinitions>
+                                                                                    <RowDefinition Height="Auto"/>
+                                                                                    <RowDefinition Height="Auto"/>
+                                                                                </Grid.RowDefinitions>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*"/>
+                                                                                    <ColumnDefinition Width="220"/>
+                                                                                </Grid.ColumnDefinitions>
+
+                                                                                <!-- Fila 1: Datos principales -->
+                                                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,0" >
+                                                                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="{Binding CodigoAlmacen}" Margin="2,0,12,0"/>
+                                                                                    <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="{Binding Ubicacion}" Margin="2,0,12,0"/>
+                                                                                    <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
+                                                                                    <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}" Margin="2,0,0,0"/>
+                                                                                </StackPanel>
+
+                                                                                <!-- Fila 2: Total, Reservado -->
+                                                                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
+                                                                                    <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}" Margin="2,0,12,0"/>
+                                                                                    <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+                                                                                    <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="2,0,0,0" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+                                                                                </StackPanel>
+
+                                                                                <!-- Disponible destacado a la derecha -->
+                                                                                <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Background="#F0F6FF" CornerRadius="6" Padding="12,4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                                                    <StackPanel Orientation="Horizontal">
+                                                                                        <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="15" Margin="0,0,4,0"/>
+                                                                                        <TextBlock Text="{Binding Disponible, StringFormat=F4}"  FontWeight="Bold" FontSize="22"/>
+                                                                                    </StackPanel>
+                                                                                </Border>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter TargetName="CardBorder" Property="Background" Value="#E6F0FA"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsPressed" Value="True">
+                                                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#031ca5"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#031ca5"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -66,35 +138,6 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-
-                    <!-- ListView clásico para búsqueda directa por código -->
-                    <ListView ItemsSource="{Binding StockDisponible}"
-                              SelectedItem="{Binding StockSeleccionado, Mode=TwoWay}"
-                              Margin="0,0,0,0"
-                              Height="250"
-                              Visibility="{Binding MostrarCardsAgrupados, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="6" Padding="12" CornerRadius="8" BorderBrush="#0067C3" BorderThickness="1" Background="White">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" FontSize="16"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                            <TextBlock Text="Almacén: " FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding CodigoAlmacen}"/>
-                                            <TextBlock Text="   Ubicación: " FontWeight="SemiBold" Margin="12,0,0,0"/>
-                                            <TextBlock Text="{Binding Ubicacion}"/>
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                            <TextBlock Text="Lote: " FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding Partida}"/>
-                                            <TextBlock Text="   Cantidad: " FontWeight="SemiBold" Margin="12,0,0,0"/>
-                                            <TextBlock Text="{Binding UnidadSaldo}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
                 </Grid>
             </ScrollViewer>
         </GroupBox>

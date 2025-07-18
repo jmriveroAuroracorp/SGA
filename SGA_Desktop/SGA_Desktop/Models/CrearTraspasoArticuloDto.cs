@@ -12,5 +12,7 @@ namespace SGA_Desktop.Models
         public bool? Finalizar { get; set; }
         public DateTime? FechaCaducidad { get; set; }
         public string Partida { get; set; }
+        public short CodigoEmpresa { get; set; }
+        public DateTime? FechaInicio { get; set; }
     }
 } 

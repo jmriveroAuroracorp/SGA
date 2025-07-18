@@ -6,6 +6,7 @@ using System;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Collections.Generic;
+using SGA_Api.Models.Stock;
 
 namespace SGA_Api.Controllers.Traspasos;
 
@@ -214,12 +215,26 @@ public class TraspasosController : ControllerBase
                 return BadRequest("Debe indicar el código de artículo.");
             if (dto.Cantidad == null || dto.Cantidad <= 0)
                 return BadRequest("Debe indicar una cantidad válida.");
-            if (string.IsNullOrWhiteSpace(dto.AlmacenOrigen) || dto.UbicacionOrigen == null)
-                return BadRequest("Debe indicar almacén y ubicación de origen.");
+			//if (string.IsNullOrWhiteSpace(dto.AlmacenOrigen) || dto.UbicacionOrigen == null)
+			//    return BadRequest("Debe indicar almacén y ubicación de origen.");
+			if ((dto.Finalizar ?? true) && string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+				return BadRequest("Debe indicar el almacén de destino para finalizar el traspaso.");
+            // UbicacionDestino puede ser null o vacío (sin ubicar)
 
-            // Si es escritorio o se indica finalizar, se requiere destino
-            if ((dto.Finalizar ?? true) && (string.IsNullOrWhiteSpace(dto.AlmacenDestino) || string.IsNullOrWhiteSpace(dto.UbicacionDestino)))
-                return BadRequest("Debe indicar almacén y ubicación de destino para finalizar el traspaso.");
+            // Comprobación de stock disponible usando la vista vStockDisponible
+            var stock = await _context.Set<StockDisponible>()
+                .FirstOrDefaultAsync(s =>
+                    s.CodigoEmpresa == dto.CodigoEmpresa &&
+                    s.CodigoArticulo == dto.CodigoArticulo &&
+                    s.CodigoAlmacen == dto.AlmacenOrigen &&
+                    s.Ubicacion == dto.UbicacionOrigen &&
+                    s.Partida == dto.Partida);
+
+            if (stock == null)
+                return BadRequest("No se encontró stock para el artículo, almacén y ubicación especificados.");
+
+            if (dto.Cantidad > stock.Disponible)
+                return BadRequest($"No puedes traspasar más de lo disponible: {stock.Disponible:N2} unidades.");
 
             var traspaso = new Traspaso
             {
@@ -227,19 +242,23 @@ public class TraspasosController : ControllerBase
                 AlmacenOrigen = dto.AlmacenOrigen,
                 UbicacionOrigen = dto.UbicacionOrigen,
                 UsuarioInicioId = dto.UsuarioId,
-                FechaInicio = DateTime.UtcNow,
+                FechaInicio = dto.FechaInicio ?? DateTime.Now,
                 CodigoArticulo = dto.CodigoArticulo,
                 Cantidad = dto.Cantidad,
                 TipoTraspaso = "ARTICULO",
-                CodigoEstado = "PENDIENTE_ERP",
-                AlmacenDestino = (dto.Finalizar ?? true) ? dto.AlmacenDestino : null,
+				//CodigoEstado = "PENDIENTE_ERP",
+
+				CodigoEstado = (dto.Finalizar ?? true) ? "PENDIENTE_ERP" : "PENDIENTE",
+
+				AlmacenDestino = (dto.Finalizar ?? true) ? dto.AlmacenDestino : null,
                 UbicacionDestino = (dto.Finalizar ?? true) ? dto.UbicacionDestino : null,
-                FechaFinalizacion = (dto.Finalizar ?? true) ? DateTime.UtcNow : null,
+                FechaFinalizacion = (dto.Finalizar ?? true) ? DateTime.Now : null,
                 UsuarioFinalizacionId = (dto.Finalizar ?? true) ? dto.UsuarioId : null,
                 FechaCaducidad = dto.FechaCaducidad,
                 Partida = dto.Partida,
                 MovPosicionOrigen = dto.MovPosicionOrigen ?? Guid.Empty,
-                MovPosicionDestino = dto.MovPosicionDestino ?? Guid.Empty
+                MovPosicionDestino = dto.MovPosicionDestino ?? Guid.Empty,
+                CodigoEmpresa = dto.CodigoEmpresa
             };
 
             _context.Traspasos.Add(traspaso);
@@ -327,4 +346,93 @@ public class TraspasosController : ControllerBase
 
         return Ok(lista);
     }
+
+	/// <summary>
+	/// Mover un palet de una ubicación a otra usando la última ubicación destino como origen.
+	/// </summary>
+	[HttpPost("mover-palet")]
+	public async Task<IActionResult> MoverPalet([FromBody] MoverPaletDto dto)
+	{
+		// 1. Validar que el palet existe y está cerrado
+		var palet = await _context.Palets.FindAsync(dto.PaletId);
+		if (palet == null)
+			return NotFound("Palet no encontrado.");
+		if (palet.Estado != "CERRADO")
+			return BadRequest("El palet debe estar cerrado para poder moverlo.");
+
+		// 2. Buscar el último traspaso COMPLETADO para ese palet
+		var ultimoTraspaso = await _context.Traspasos
+			.Where(t => t.PaletId == dto.PaletId && t.CodigoEstado == "COMPLETADO")
+			.OrderByDescending(t => t.FechaFinalizacion)
+			.FirstOrDefaultAsync();
+
+		if (ultimoTraspaso == null)
+			return BadRequest("No hay traspasos completados para este palet.");
+
+		// 3. Soportar ambos flujos: desktop (todo de una) y mobility (dos fases)
+		bool esFinalizado = !string.IsNullOrWhiteSpace(dto.AlmacenDestino)
+			&& !string.IsNullOrWhiteSpace(dto.UbicacionDestino)
+			&& !string.IsNullOrWhiteSpace(dto.CodigoEstado)
+			&& dto.CodigoEstado == "PENDIENTE_ERP";
+
+		var nuevoTraspaso = new Traspaso
+		{
+			Id = Guid.NewGuid(),
+			AlmacenOrigen = ultimoTraspaso.AlmacenDestino,
+			UbicacionOrigen = ultimoTraspaso.UbicacionDestino,
+			UsuarioInicioId = dto.UsuarioId,
+			PaletId = dto.PaletId,
+			CodigoPalet = dto.CodigoPalet,
+			FechaInicio = DateTime.UtcNow,
+			CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
+			AlmacenDestino = dto.AlmacenDestino,
+			UbicacionDestino = dto.UbicacionDestino,
+			FechaFinalizacion = null,
+			UsuarioFinalizacionId = null
+		};
+
+		_context.Traspasos.Add(nuevoTraspaso);
+		await _context.SaveChangesAsync();
+
+		return Ok(new { message = esFinalizado ? "Traspaso de palet creado y finalizado correctamente" : "Traspaso de palet creado correctamente", nuevoTraspaso.Id, nuevoTraspaso.CodigoEstado });
+	}
+
+	/// <summary>
+	/// Finalizar traspaso de palet (segunda fase, mobility).
+	/// </summary>
+	[HttpPut("{id}/finalizar-palet")]
+	public async Task<IActionResult> FinalizarTraspasoPalet(Guid id, [FromBody] FinalizarTraspasoPaletDto dto)
+	{
+		var traspaso = await _context.Traspasos.FindAsync(id);
+		if (traspaso == null)
+			return NotFound();
+		if (traspaso.CodigoEstado == "COMPLETADO")
+			return BadRequest("El traspaso ya está finalizado.");
+		if (traspaso.CodigoEstado != "PENDIENTE" && traspaso.CodigoEstado != "EN_TRANSITO")
+			return BadRequest("El traspaso no está en un estado válido para ser finalizado.");
+
+		traspaso.AlmacenDestino = dto.AlmacenDestino;
+		traspaso.UbicacionDestino = dto.UbicacionDestino;
+		traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
+		traspaso.FechaFinalizacion = DateTime.UtcNow;
+		traspaso.CodigoEstado = dto.CodigoEstado;
+
+		await _context.SaveChangesAsync();
+
+		return Ok(new { message = "Traspaso de palet finalizado correctamente", traspaso.Id, traspaso.CodigoEstado });
+	}
+
+	[HttpGet("pendiente-usuario")]
+	public async Task<IActionResult> GetTraspasoPendientePorUsuario([FromQuery] int usuarioId)
+	{
+		var traspaso = await _context.Traspasos
+			.Where(t => t.UsuarioInicioId == usuarioId && t.CodigoEstado == "PENDIENTE")
+			.Select(t => new { t.Id, t.CodigoEstado })
+			.FirstOrDefaultAsync();
+
+		if (traspaso == null)
+			return NotFound("No hay traspasos pendientes para este usuario.");
+
+		return Ok(traspaso);
+	}
 }

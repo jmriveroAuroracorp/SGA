@@ -178,5 +178,35 @@ namespace SGA_Desktop.Services
 			[JsonProperty("alergenos")]       // coincide con la clave JSON
 			public string Alergenos { get; set; }
 		}
+
+	
+
+		/// <summary>
+		/// Obtiene el stock disponible (con Reservado y Disponible) por artículo y/o descripción.
+		/// Llama a /api/stock/articulo/disponible
+		/// </summary>
+		public async Task<List<StockDisponibleDto>> ObtenerStockDisponibleAsync(string codigoArticulo, string descripcion)
+		{
+			var queryParams = new Dictionary<string, string>();
+
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+				queryParams["codigoArticulo"] = codigoArticulo;
+
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				queryParams["descripcion"] = descripcion;
+
+			// Añade empresa actual
+			queryParams["codigoEmpresa"] = SessionManager.EmpresaSeleccionada.ToString();
+
+			var queryString = string.Join("&", queryParams.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
+			var url = $"/api/stock/articulo/disponible?{queryString}";
+
+			var response = await _httpClient.GetAsync(url);
+			response.EnsureSuccessStatusCode();
+
+			var json = await response.Content.ReadAsStringAsync();
+			return JsonConvert.DeserializeObject<List<StockDisponibleDto>>(json) ?? new List<StockDisponibleDto>();
+		}
+		// ... existing code ...
 	}
 }

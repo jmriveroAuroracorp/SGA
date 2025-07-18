@@ -1,7 +1,8 @@
 ﻿using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-
+using System.Collections.ObjectModel;
+using SGA_Desktop.Models;
 public class StockDisponibleDto : INotifyPropertyChanged
 {
 	public event PropertyChangedEventHandler PropertyChanged;
@@ -23,6 +24,8 @@ public class StockDisponibleDto : INotifyPropertyChanged
 	public string DescripcionArticulo { get; set; }
 
 	public bool TieneError { get; set; }
+
+	public string ErrorMessage { get; set; }
 
 	// editable
 	public decimal CantidadAMover { get; set; }
@@ -52,5 +55,35 @@ public class StockDisponibleDto : INotifyPropertyChanged
 			return null;
 		}
 	}
+
+    public event EventHandler AlmacenDestinoChanged;
+    private string _almacenDestino;
+    public string AlmacenDestino
+    {
+        get => _almacenDestino;
+        set
+        {
+            if (_almacenDestino != value)
+            {
+                _almacenDestino = value;
+                OnPropertyChanged(nameof(AlmacenDestino));
+                AlmacenDestinoChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    private string _ubicacionDestino;
+    public string UbicacionDestino
+    {
+        get => _ubicacionDestino;
+        set
+        {
+            _ubicacionDestino = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public ObservableCollection<UbicacionDto> UbicacionesDestino { get; set; } = new();
+
 
 }

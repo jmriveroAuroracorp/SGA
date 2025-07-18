@@ -63,6 +63,8 @@ namespace SGA_Desktop.ViewModels
 
         public string CodigoArticulo { get; set; }
         public string UbicacionOrigen => _stockSeleccionado.Ubicacion;
+        public decimal Reservado => _stockSeleccionado.Reservado;
+        public decimal Disponible => _stockSeleccionado.Disponible;
 
         // Eliminar las propiedades y la inicialización manual de los comandos
         // Comandos generados automáticamente por [RelayCommand]
@@ -71,17 +73,19 @@ namespace SGA_Desktop.ViewModels
         public event Action<bool> RequestClose;
 
         private readonly TraspasosService _traspasoService;
-        private readonly StockDto _stockSeleccionado;
+        private readonly StockDisponibleDto _stockSeleccionado;
+        private DateTime? _fechaBusqueda = null;
 
-        public TraspasoStockDialogViewModel(StockDto stockSeleccionado, TraspasosService traspasoService)
+        public TraspasoStockDialogViewModel(StockDisponibleDto stockSeleccionado, TraspasosService traspasoService, DateTime? fechaBusqueda)
         {
             _stockSeleccionado = stockSeleccionado;
             CodigoArticulo = stockSeleccionado.CodigoArticulo;
             ArticuloDescripcion = stockSeleccionado.DescripcionArticulo;
-            AlmacenOrigenNombre = stockSeleccionado.Almacen;
-            CantidadDisponible = stockSeleccionado.UnidadSaldo;
+            AlmacenOrigenNombre = stockSeleccionado.CodigoAlmacen;
+            CantidadDisponible = stockSeleccionado.Disponible;
             AlmacenesDestino = new ObservableCollection<AlmacenDto>();
             _traspasoService = traspasoService;
+            _fechaBusqueda = fechaBusqueda;
             _ = InitializeAsync();
         }
 
@@ -108,14 +112,20 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
+        // Método que se llama al pulsar Buscar
+        public void RegistrarBusqueda()
+        {
+            _fechaBusqueda = DateTime.UtcNow;
+        }
+
         [ObservableProperty]
         private string? feedback;
 
         [RelayCommand(CanExecute = nameof(PuedeConfirmar))]
         private async Task ConfirmarAsync()
         {
-            // Depuración: mostrar valores de stock seleccionado
-            System.Windows.MessageBox.Show($"FechaCaducidad: {_stockSeleccionado.FechaCaducidad}\nPartida: {_stockSeleccionado.Partida}");
+            // Depuración: mostrar valores clave antes de llamar al servicio
+            System.Windows.MessageBox.Show($"Traspaso:\nCantidad: {CantidadATraspasarTexto}\nAlmacén destino: {AlmacenDestinoSeleccionado?.CodigoAlmacen}\nUbicación destino: {UbicacionDestinoSeleccionada?.Ubicacion}", "Debug traspaso");
 
             if (!decimal.TryParse(CantidadATraspasarTexto.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var cantidad) || cantidad <= 0)
             {
@@ -127,11 +137,7 @@ namespace SGA_Desktop.ViewModels
                 Feedback = "Selecciona un almacén destino.";
                 return;
             }
-            if (string.IsNullOrWhiteSpace(UbicacionDestinoSeleccionada?.Ubicacion))
-            {
-                Feedback = "Selecciona una ubicación destino.";
-                return;
-            }
+            // Ya no exigimos ubicación destino, puede ser null o vacío (sin ubicar)
             var dto = new CrearTraspasoArticuloDto
             {
                 AlmacenOrigen = _stockSeleccionado.CodigoAlmacen,
@@ -140,10 +146,12 @@ namespace SGA_Desktop.ViewModels
                 Cantidad = cantidad,
                 UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
                 AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
-                UbicacionDestino = UbicacionDestinoSeleccionada?.Ubicacion,
+                UbicacionDestino = string.IsNullOrWhiteSpace(UbicacionDestinoSeleccionada?.Ubicacion) ? "" : UbicacionDestinoSeleccionada.Ubicacion,
                 FechaCaducidad = _stockSeleccionado.FechaCaducidad,
                 Partida = _stockSeleccionado.Partida,
-                Finalizar = true
+                Finalizar = true,
+                CodigoEmpresa = SessionManager.EmpresaSeleccionada.Value,
+                FechaInicio = _fechaBusqueda
             };
 
             // Depuración: mostrar valores en el DTO
@@ -162,7 +170,7 @@ namespace SGA_Desktop.ViewModels
 
         private bool PuedeConfirmar()
         {
-            if (string.IsNullOrWhiteSpace(CantidadATraspasarTexto) || AlmacenDestinoSeleccionado == null || UbicacionDestinoSeleccionada == null)
+            if (string.IsNullOrWhiteSpace(CantidadATraspasarTexto) || AlmacenDestinoSeleccionado == null)
                 return false;
 
             // Permitir tanto coma como punto

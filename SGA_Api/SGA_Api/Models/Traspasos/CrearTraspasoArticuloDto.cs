@@ -7,6 +7,7 @@ namespace SGA_Api.Models.Traspasos
         public string CodigoArticulo { get; set; }
         public decimal? Cantidad { get; set; }
         public int UsuarioId { get; set; }
+        public short CodigoEmpresa { get; set; }
         // Para escritorio (finalización en una fase)
         public string? AlmacenDestino { get; set; }
         public string? UbicacionDestino { get; set; }
@@ -16,5 +17,6 @@ namespace SGA_Api.Models.Traspasos
         public string Partida { get; set; }
         public Guid? MovPosicionOrigen { get; set; } = null;
         public Guid? MovPosicionDestino { get; set; } = null;
+        public DateTime? FechaInicio { get; set; }
     }
 } 

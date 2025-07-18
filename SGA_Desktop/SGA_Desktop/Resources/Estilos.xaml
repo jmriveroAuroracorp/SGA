@@ -16,6 +16,7 @@
     <SolidColorBrush x:Key="BrushFondo" Color="{StaticResource ColorFondo}"/>
     <SolidColorBrush x:Key="BrushInputBorde" Color="#ccc"/>
     <SolidColorBrush x:Key="BrushHoverBoton" Color="#031ca5"/>
+    <SolidColorBrush x:Key="BrushGrisOscuro" Color="#444"/>
 
     <!-- 🅰 Tipografía -->
     <FontFamily x:Key="FuentePrincipal">Open Sans</FontFamily>

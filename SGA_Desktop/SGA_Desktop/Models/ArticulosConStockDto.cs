@@ -12,5 +12,6 @@ namespace SGA_Desktop.Models
 		public string CodigoArticulo { get; set; }
 		public string DescripcionArticulo { get; set; }
 		public ObservableCollection<StockDisponibleDto> Ubicaciones { get; set; } = new();
+		public string HeaderArticulo => $"{CodigoArticulo} - {DescripcionArticulo}";
 	}
 }

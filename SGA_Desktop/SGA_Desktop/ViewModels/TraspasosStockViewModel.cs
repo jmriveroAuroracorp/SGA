@@ -17,7 +17,7 @@ namespace SGA_Desktop.ViewModels
     {
         public string CodigoArticulo { get; set; } = string.Empty;
         public string DescripcionArticulo { get; set; } = string.Empty;
-        public ObservableCollection<StockDto> Ubicaciones { get; set; } = new();
+        public ObservableCollection<StockDisponibleDto> Ubicaciones { get; set; } = new();
         public string HeaderArticulo => $"{CodigoArticulo} - {DescripcionArticulo}";
     }
 
@@ -25,13 +25,13 @@ namespace SGA_Desktop.ViewModels
     {
         private readonly StockService _stockService;
         private readonly TraspasosService _traspasosService;
+        private DateTime? _fechaUltimaBusqueda;
 
         public TraspasosStockViewModel(StockService stockService, TraspasosService traspasosService)
         {
             _stockService = stockService;
             _traspasosService = traspasosService;
             ArticulosConUbicaciones = new ObservableCollection<ArticuloStockGroup>();
-            StockDisponible = new ObservableCollection<StockDto>();
             UltimosTraspasos = new ObservableCollection<TraspasoArticuloDto>();
             AlmacenesDestino = new ObservableCollection<string>();
             UbicacionesDestino = new ObservableCollection<string>();
@@ -41,12 +41,10 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string articuloBuscado;
 
-        // Para cards agrupados
-        public ObservableCollection<ArticuloStockGroup> ArticulosConUbicaciones { get; }
-        // Para el caso de búsqueda directa por código
-        public ObservableCollection<StockDto> StockDisponible { get; }
+        // Siempre usaremos los cards agrupados
+        public ObservableCollection<ArticuloStockGroup> ArticulosConUbicaciones { get; } = new();
         [ObservableProperty]
-        private StockDto? stockSeleccionado;
+        private StockDisponibleDto? stockSeleccionado;
 
         // Formulario de traspaso
         [ObservableProperty]
@@ -69,9 +67,8 @@ namespace SGA_Desktop.ViewModels
         [RelayCommand]
         public async Task BuscarStockAsync()
         {
-            StockDisponible.Clear();
+            _fechaUltimaBusqueda = DateTime.Now;
             ArticulosConUbicaciones.Clear();
-            MostrarCardsAgrupados = false;
             if (string.IsNullOrWhiteSpace(ArticuloBuscado))
             {
                 Feedback = "Introduce un código o descripción de artículo.";
@@ -79,19 +76,13 @@ namespace SGA_Desktop.ViewModels
             }
             try
             {
-                // 1) Intentar buscar por código
-                var stock = await _stockService.ObtenerPorArticuloAsync(
-                    SessionManager.EmpresaSeleccionada!.Value,
-                    codigoArticulo: ArticuloBuscado,
-                    descripcion: null);
+                // Nuevo: buscar stock disponible con Reservado y Disponible
+                var stock = await _stockService.ObtenerStockDisponibleAsync(ArticuloBuscado, null);
 
-                // 2) Si no hay resultados, buscar por descripción
+                // Si no hay resultados, buscar por descripción
                 if (stock == null || stock.Count == 0)
                 {
-                    stock = await _stockService.ObtenerPorArticuloAsync(
-                        SessionManager.EmpresaSeleccionada!.Value,
-                        codigoArticulo: null,
-                        descripcion: ArticuloBuscado);
+                    stock = await _stockService.ObtenerStockDisponibleAsync(null, ArticuloBuscado);
                 }
 
                 if (stock.Count == 0)
@@ -107,28 +98,18 @@ namespace SGA_Desktop.ViewModels
                     permisos = await _stockService.ObtenerAlmacenesAsync(centro);
                 }
                 stock = stock.Where(x => permisos.Contains(x.CodigoAlmacen)).ToList();
-                // ¿La búsqueda es por descripción y hay varios artículos distintos?
+                // Siempre agrupa por artículo
                 var grupos = stock.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
                                   .Select(g => new ArticuloStockGroup
                                   {
                                       CodigoArticulo = g.Key.CodigoArticulo,
                                       DescripcionArticulo = g.Key.DescripcionArticulo,
-                                      Ubicaciones = new ObservableCollection<StockDto>(g.ToList())
+                                      Ubicaciones = new ObservableCollection<StockDisponibleDto>(g.ToList())
                                   })
                                   .OrderBy(a => a.CodigoArticulo)
                                   .ToList();
-                if (grupos.Count > 1)
-                {
-                    foreach (var g in grupos)
-                        ArticulosConUbicaciones.Add(g);
-                    MostrarCardsAgrupados = true;
-                }
-                else
-                {
-                    foreach (var s in stock)
-                        StockDisponible.Add(s);
-                    MostrarCardsAgrupados = false;
-                }
+                foreach (var g in grupos)
+                    ArticulosConUbicaciones.Add(g);
                 Feedback = string.Empty;
             }
             catch (Exception ex)
@@ -138,7 +119,7 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
-        public void SeleccionarStock(StockDto? seleccionado)
+        public void SeleccionarStock(StockDisponibleDto? seleccionado)
         {
             StockSeleccionado = seleccionado;
         }
@@ -157,9 +138,9 @@ namespace SGA_Desktop.ViewModels
                 Feedback = "Selecciona almacén y ubicación destino.";
                 return;
             }
-            if (CantidadMover <= 0 || CantidadMover > StockSeleccionado.UnidadSaldo)
+            if (CantidadMover <= 0 || CantidadMover > StockSeleccionado.Disponible)
             {
-                Feedback = "Cantidad a mover no válida.";
+                Feedback = $"Cantidad a mover no válida. Disponible real: {StockSeleccionado.Disponible}";
                 return;
             }
             var resultado = await _traspasosService.CrearTraspasoArticuloAsync(new CrearTraspasoArticuloDto
@@ -205,7 +186,7 @@ namespace SGA_Desktop.ViewModels
             // Aquí deberías poblar almacenesDestino según tu lógica de permisos, etc.
             // Por simplicidad, se deja vacío, pero deberías rellenarlo como en ConsultaStockViewModel
 
-            var vm = new TraspasoStockDialogViewModel(StockSeleccionado, _traspasosService);
+            var vm = new TraspasoStockDialogViewModel(StockSeleccionado, _traspasosService, _fechaUltimaBusqueda);
             var dlg = new TraspasoStockDialog(vm)
             {
                 Owner = Application.Current.MainWindow
@@ -223,5 +204,18 @@ namespace SGA_Desktop.ViewModels
             };
             dlg.ShowDialog();
         }
-    }
+
+		[RelayCommand]
+		public async Task AbrirDialogoRegularizacionMultipleAsync()
+		{
+			var vm = new RegularizacionMultipleDialogViewModel(_traspasosService, _stockService);
+			await vm.InitializeAsync(); // <- Espera a que cargue datos antes de abrir la ventana
+
+			var dlg = new SGA_Desktop.Dialog.RegularizacionMultipleDialog(vm)
+			{
+				Owner = System.Windows.Application.Current.MainWindow
+			};
+			dlg.ShowDialog();
+		}
+	}
 } 

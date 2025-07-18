@@ -1,6 +1,7 @@
 <Window x:Class="SGA_Desktop.Dialog.TraspasoStockDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
         Title="Traspaso de Stock"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
@@ -15,6 +16,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <Helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -53,7 +55,17 @@
                 <TextBlock Text="{Binding UbicacionOrigen}" Margin="0,0,0,12"/>
 
                 <TextBlock Text="Cantidad disponible:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-                <TextBlock Text="{Binding CantidadDisponible}" Margin="0,0,0,0"/>
+                <TextBlock Text="{Binding CantidadDisponible}" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Reservado:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+                <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="0,0,0,12" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+
+                <Border Background="#F0F6FF" CornerRadius="6" Padding="12,4" Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="15" Margin="0,0,4,0"/>
+                        <TextBlock Text="{Binding Disponible, StringFormat=F4}" Foreground="{StaticResource BrushPrincipal}" FontWeight="Bold" FontSize="22"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
 
             <!-- Columna derecha: Destino -->

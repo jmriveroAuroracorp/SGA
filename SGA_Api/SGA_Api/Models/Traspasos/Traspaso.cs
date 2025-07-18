@@ -7,7 +7,7 @@ namespace SGA_Api.Models.Traspasos
 		public Guid Id { get; set; }
 
 		public string AlmacenOrigen { get; set; }
-		public string AlmacenDestino { get; set; }
+		public string? AlmacenDestino { get; set; }
 
 		public string CodigoEstado { get; set; }  
 
@@ -29,6 +29,8 @@ namespace SGA_Api.Models.Traspasos
 
 		public DateTime? FechaCaducidad { get; set; }
 		public string Partida { get; set; }
+
+		public short CodigoEmpresa { get; set; }
 
 		public Guid MovPosicionOrigen { get; set; } = Guid.Empty;
 		public Guid MovPosicionDestino { get; set; } = Guid.Empty;

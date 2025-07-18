@@ -21,6 +21,19 @@
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <Helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
+            <!-- Header atractivo para Expander de artículos -->
+            <DataTemplate x:Key="ArticuloExpanderHeaderTemplate">
+                <StackPanel Orientation="Horizontal" Margin="8,2">
+                    <TextBlock Text="{Binding CodigoArticulo}" 
+                               FontWeight="Bold" 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontSize="16"/>
+                    <TextBlock Text=" - " FontSize="16"/>
+                    <TextBlock Text="{Binding DescripcionArticulo}" 
+                               Foreground="#444" 
+                               FontSize="16"/>
+                </StackPanel>
+            </DataTemplate>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -77,70 +90,75 @@
                     <ItemsControl ItemsSource="{Binding ArticulosConStock}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Expander Header="{Binding DescripcionArticulo}" IsExpanded="False" Margin="0,0,0,10">
+                                <Expander HeaderTemplate="{StaticResource ArticuloExpanderHeaderTemplate}" Header="{Binding .}" IsExpanded="False" Margin="0,0,0,10">
                                     <StackPanel Margin="10">
-                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" Margin="0,0,0,5"/>
                                         <ItemsControl ItemsSource="{Binding Ubicaciones}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border BorderBrush="LightGray"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6"
-                                                            Background="#FAFAFA"
+                                                    <Border Style="{StaticResource EstiloTarjeta}"
+                                                            BorderBrush="{StaticResource BrushPrincipal}"
+                                                            BorderThickness="2"
+                                                            Background="White"
+                                                            CornerRadius="8"
                                                             Padding="10"
-                                                            Margin="5">
+                                                            Margin="0,0,0,10">
                                                         <Grid>
                                                             <Grid.RowDefinitions>
                                                                 <RowDefinition/>
                                                                 <RowDefinition/>
                                                             </Grid.RowDefinitions>
-
                                                             <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,5">
-                                                                <TextBlock Text="Almacén:" FontWeight="Bold" />
-                                                                <TextBlock Text="{Binding CodigoAlmacen}" Margin="5,0"/>
-                                                                <TextBlock Text=" | Ubicación:" FontWeight="Bold" Margin="10,0"/>
-                                                                <TextBlock Text="{Binding Ubicacion}" Margin="5,0"/>
+                                                                <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                <TextBlock Text="{Binding CodigoAlmacen}" Margin="5,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                <TextBlock Text=" | " FontWeight="Bold" Margin="5,0"/>
+                                                                <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                <TextBlock Text="{Binding Ubicacion}" Margin="5,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                             </StackPanel>
-
                                                             <Grid Grid.Row="1">
                                                                 <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*" />
-                                                                    <ColumnDefinition Width="*" />
-                                                                    <ColumnDefinition Width="*" />
-                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" /> <!-- Lote -->
+                                                                    <ColumnDefinition Width="*" /> <!-- Caducidad -->
+                                                                    <ColumnDefinition Width="*" /> <!-- Total -->
+                                                                    <ColumnDefinition Width="180" /> <!-- Reservado/Disponible, más ancho -->
+                                                                    <ColumnDefinition Width="Auto" /> <!-- Cantidad/Botón -->
                                                                 </Grid.ColumnDefinitions>
-
                                                                 <StackPanel Grid.Column="0">
-                                                                    <TextBlock Text="Lote:" FontWeight="Bold"/>
-                                                                    <TextBlock Text="{Binding Partida}"/>
+                                                                    <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                    <TextBlock Text="{Binding Partida}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                 </StackPanel>
-
                                                                 <StackPanel Grid.Column="1">
-                                                                    <TextBlock Text="Caducidad:" FontWeight="Bold"/>
-                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}"/>
+                                                                    <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                 </StackPanel>
-
                                                                 <StackPanel Grid.Column="2">
-                                                                    <TextBlock Text="Total:" FontWeight="Bold"/>
-                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}"/>
-
-                                                                    <StackPanel Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}">
-                                                                        <TextBlock Text="Reservado:" FontWeight="Bold"/>
-                                                                        <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="5,0"/>
-                                                                        <TextBlock Text="Disponible:" FontWeight="Bold"/>
-                                                                        <TextBlock Text="{Binding Disponible, StringFormat=F4}" Margin="5,0"/>
+                                                                    <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,16,0">
+                                                                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                                                        <StackPanel Orientation="Vertical" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}" HorizontalAlignment="Center">
+                                                                            <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding Reservado, StringFormat=F4}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13" HorizontalAlignment="Center"/>
+                                                                        </StackPanel>
+                                                                        <StackPanel Orientation="Vertical" Margin="0,8,0,0" HorizontalAlignment="Center">
+                                                                            <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding Disponible, StringFormat=F4}" FontWeight="Bold" Foreground="Black" FontSize="18" HorizontalAlignment="Center"/>
+                                                                        </StackPanel>
                                                                     </StackPanel>
                                                                 </StackPanel>
-
-
-                                                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                                                                    <TextBox Width="50"
-                                                                             Margin="0,0,5,0"
+                                                                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
+                                                                    <TextBox Width="48"
+                                                                             Margin="0,0,6,0"
+                                                                             FontSize="13"
                                                                              Text="{Binding CantidadAMoverTexto, UpdateSourceTrigger=PropertyChanged}" />
                                                                     <Button Content="Añadir"
                                                                         Command="{Binding DataContext.AnhadirLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        CommandParameter="{Binding}" />
-
+                                                                        CommandParameter="{Binding}"
+                                                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                                                        FontSize="13"
+                                                                        Padding="8,2"
+                                                                        Width="60"
+                                                                        Height="28"/>
                                                                 </StackPanel>
                                                             </Grid>
                                                         </Grid>
@@ -148,7 +166,6 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-
                                     </StackPanel>
                                 </Expander>
                             </DataTemplate>
