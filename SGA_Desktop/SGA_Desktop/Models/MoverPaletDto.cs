@@ -8,5 +8,10 @@ namespace SGA_Desktop.Models
         public string AlmacenDestino { get; set; }
         public string UbicacionDestino { get; set; }
         public string CodigoEstado { get; set; }
+        public DateTime FechaFinalizacion { get; set; }
+        public int UsuarioFinalizacionId { get; set; }
+        public short CodigoEmpresa { get; set; }
+        public DateTime FechaInicio { get; set; }
+        public string TipoTraspaso { get; set; }
     }
 } 

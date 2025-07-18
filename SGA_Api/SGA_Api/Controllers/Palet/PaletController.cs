@@ -921,7 +921,7 @@ public class PaletController : ControllerBase
         traspaso.UbicacionDestino = dto.UbicacionDestino;
         traspaso.FechaFinalizacion = dto.FechaFinalizacion;
         traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
-        traspaso.CodigoEstado = "COMPLETADO";
+        traspaso.CodigoEstado = "PENDIENTE_ERP";
 
         _auroraSgaContext.Traspasos.Update(traspaso);
         await _auroraSgaContext.SaveChangesAsync();

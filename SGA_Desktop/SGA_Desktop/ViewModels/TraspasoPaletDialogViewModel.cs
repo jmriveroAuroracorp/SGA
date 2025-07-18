@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 
@@ -33,6 +34,9 @@ namespace SGA_Desktop.ViewModels
         public IRelayCommand MoverPaletCommand { get; }
 
         public bool PuedeMoverPalet => PaletSeleccionado != null && AlmacenDestinoSeleccionado != null && UbicacionDestinoSeleccionada != null;
+
+        // Fecha de inicio del traspaso
+        private readonly DateTime _fechaInicioTraspaso = DateTime.Now;
 
         public TraspasoPaletDialogViewModel()
         {
@@ -133,6 +137,8 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 var usuarioId = Helpers.SessionManager.UsuarioActual?.operario ?? 0;
+                var empresa = Helpers.SessionManager.EmpresaSeleccionada.Value;
+                var ahora = DateTime.Now;
                 var dto = new SGA_Desktop.Models.MoverPaletDto
                 {
                     PaletId = PaletSeleccionado.Id,
@@ -140,7 +146,12 @@ namespace SGA_Desktop.ViewModels
                     UsuarioId = usuarioId,
                     AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
                     UbicacionDestino = UbicacionDestinoSeleccionada.Ubicacion, // Puede ser ""
-                    CodigoEstado = "PENDIENTE_ERP"
+                    CodigoEstado = "PENDIENTE_ERP",
+                    FechaFinalizacion = ahora,
+                    UsuarioFinalizacionId = usuarioId,
+                    CodigoEmpresa = empresa,
+                    FechaInicio = _fechaInicioTraspaso,
+                    TipoTraspaso = "PALET"
                 };
                 var resp = await _traspasosService.MoverPaletAsync(dto);
                 if (resp.Success)

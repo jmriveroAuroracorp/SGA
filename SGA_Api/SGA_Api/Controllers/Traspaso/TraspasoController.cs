@@ -377,7 +377,6 @@ public class TraspasosController : ControllerBase
 
 		// 3. Soportar ambos flujos: desktop (todo de una) y mobility (dos fases)
 		bool esFinalizado = !string.IsNullOrWhiteSpace(dto.AlmacenDestino)
-			&& !string.IsNullOrWhiteSpace(dto.UbicacionDestino)
 			&& !string.IsNullOrWhiteSpace(dto.CodigoEstado)
 			&& dto.CodigoEstado == "PENDIENTE_ERP";
 
@@ -389,12 +388,14 @@ public class TraspasosController : ControllerBase
 			UsuarioInicioId = dto.UsuarioId,
 			PaletId = dto.PaletId,
 			CodigoPalet = dto.CodigoPalet,
-			FechaInicio = DateTime.Now,
+			FechaInicio = dto.FechaInicio,
 			CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
 			AlmacenDestino = dto.AlmacenDestino,
 			UbicacionDestino = dto.UbicacionDestino,
-			FechaFinalizacion = null,
-			UsuarioFinalizacionId = null
+			FechaFinalizacion = esFinalizado ? dto.FechaFinalizacion : (DateTime?)null,
+			UsuarioFinalizacionId = esFinalizado ? dto.UsuarioFinalizacionId : (int?)null,
+			CodigoEmpresa = dto.CodigoEmpresa,
+			TipoTraspaso = dto.TipoTraspaso
 		};
 
 		_context.Traspasos.Add(nuevoTraspaso);
