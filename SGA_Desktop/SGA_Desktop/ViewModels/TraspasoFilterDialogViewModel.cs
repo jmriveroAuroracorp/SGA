@@ -21,6 +21,11 @@ namespace SGA_Desktop.ViewModels
 			= new ObservableCollection<EstadoTraspasoDto>();
 
 		[ObservableProperty] private EstadoTraspasoDto? _estadoSeleccionado;
+		[ObservableProperty] private string? codigoPalet;
+		[ObservableProperty] private string? almacenOrigen;
+		[ObservableProperty] private string? almacenDestino;
+		[ObservableProperty] private DateTime? fechaInicioDesde;
+		[ObservableProperty] private DateTime? fechaInicioHasta;
 
 		// ▶️ Comando para “Aplicar”
 		public IRelayCommand AplicarFiltrosCommand { get; }
@@ -32,8 +37,27 @@ namespace SGA_Desktop.ViewModels
 			AplicarFiltrosCommand = new AsyncRelayCommand(async () =>
 			{
 				// Llama a la API con el estado seleccionado
-				var estado = EstadoSeleccionado?.CodigoEstado;
-				Filtrados = await _traspasoService.ObtenerTraspasosFiltradosAsync(estado);
+				var filtrados = await _traspasoService.ObtenerTraspasosFiltradosAsync(
+					EstadoSeleccionado?.CodigoEstado,
+					CodigoPalet,
+					AlmacenOrigen,
+					AlmacenDestino,
+					FechaInicioDesde,
+					FechaInicioHasta
+				);
+
+				// Agrupa por movimiento de palet
+				Filtrados = filtrados
+					.Where(x => x.TipoTraspaso == "PALET")
+					.GroupBy(x => new {
+						x.PaletId,
+						x.FechaInicio,
+						x.CodigoEstado,
+						x.AlmacenDestino,
+						x.UbicacionDestino
+					})
+					.Select(g => g.First())
+					.ToList();
 
 				// Cierra el diálogo
 				var dlg = Application.Current.Windows

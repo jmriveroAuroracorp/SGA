@@ -83,23 +83,42 @@ namespace SGA_Desktop.Services
 				?? new List<EstadoTraspasoDto>();
 		}
 
-		public async Task<List<TraspasoDto>> ObtenerTraspasosFiltradosAsync(string? estado)
+		public async Task<List<TraspasoDto>> ObtenerTraspasosFiltradosAsync(
+	string? estado,
+	string? codigoPalet,
+	string? almacenOrigen,
+	string? almacenDestino,
+	DateTime? fechaInicioDesde,
+	DateTime? fechaInicioHasta)
 		{
-			var url = $"traspasos";
-
+			var query = new List<string>();
 			if (!string.IsNullOrWhiteSpace(estado))
-				url += $"?codigoEstado={estado}";
+				query.Add($"codigoEstado={estado}");
+			if (!string.IsNullOrWhiteSpace(codigoPalet))
+				query.Add($"codigoPalet={codigoPalet}");
+			if (!string.IsNullOrWhiteSpace(almacenOrigen))
+				query.Add($"almacenOrigen={almacenOrigen}");
+			if (!string.IsNullOrWhiteSpace(almacenDestino))
+				query.Add($"almacenDestino={almacenDestino}");
+			if (fechaInicioDesde.HasValue)
+				query.Add($"fechaInicioDesde={fechaInicioDesde:yyyy-MM-dd}");
+			if (fechaInicioHasta.HasValue)
+				query.Add($"fechaInicioHasta={fechaInicioHasta:yyyy-MM-dd}");
+
+			var url = "traspasos";
+			if (query.Count > 0)
+				url += "?" + string.Join("&", query);
 
 			var resp = await _httpClient.GetAsync(url);
 			if (!resp.IsSuccessStatusCode)
 				return new List<TraspasoDto>();
 
 			var text = await resp.Content.ReadAsStringAsync();
-			return JsonSerializer.Deserialize<List<TraspasoDto>>(text, 
+			return JsonSerializer.Deserialize<List<TraspasoDto>>(text,
 				new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new List<TraspasoDto>();
 		}
 
-        public async Task<ApiResult> CrearTraspasoArticuloAsync(CrearTraspasoArticuloDto dto)
+		public async Task<ApiResult> CrearTraspasoArticuloAsync(CrearTraspasoArticuloDto dto)
         {
             var resp = await _httpClient.PostAsJsonAsync("traspasos/articulo", dto);
             var text = await resp.Content.ReadAsStringAsync();

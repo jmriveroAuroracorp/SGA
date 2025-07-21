@@ -34,8 +34,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IPesajeService, PesajeLogic>();
+builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
 
-// CORS aquí
+// CORS aqu
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -55,7 +56,7 @@ var app = builder.Build();
 //}
 app.UseStaticFiles(); // Para wwwroot (si lo usas, opcional)
 
-// Añadir esta configuración personalizada para /actualizaciones
+// Aï¿½adir esta configuraciï¿½n personalizada para /actualizaciones
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(@"C:\wamp64\www\SGA_Api\actualizaciones"),

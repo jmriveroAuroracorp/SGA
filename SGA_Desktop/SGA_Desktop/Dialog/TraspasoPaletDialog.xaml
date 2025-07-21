@@ -42,7 +42,7 @@
                     <TextBox Width="180" Margin="5,0"
                              Text="{Binding PaletBuscado, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource EstiloCajaTexto}"/>
-                    <Button Content="Buscar"
+                    <Button Content="Buscar" IsDefault="True"
                             Command="{Binding BuscarPaletCommand}"
                             Style="{StaticResource EstiloBotonPrincipal}"
                             Margin="10,0"/>

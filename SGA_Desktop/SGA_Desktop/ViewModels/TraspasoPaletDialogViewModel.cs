@@ -114,12 +114,11 @@ namespace SGA_Desktop.ViewModels
             PaletsCerrados.Clear();
             var lista = await _traspasosService.ObtenerPaletsCerradosMoviblesAsync();
 
-            var filtro = PaletBuscado?.Replace("-", "").Replace(" ", "").ToUpperInvariant() ?? "";
-            var filtrados = string.IsNullOrWhiteSpace(filtro)
+            var filtrados = string.IsNullOrWhiteSpace(PaletBuscado)
                 ? lista
                 : lista.Where(p =>
                     !string.IsNullOrEmpty(p.Codigo) &&
-                    p.Codigo.Replace("-", "").Replace(" ", "").ToUpperInvariant().Contains(filtro)
+                    p.Codigo.Contains(PaletBuscado)
                 ).ToList();
 
             foreach (var palet in filtrados)

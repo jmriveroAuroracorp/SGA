@@ -27,6 +27,10 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -43,8 +47,28 @@
                       Style="{StaticResource EstiloComboBox}"
                       Width="200"/>
 
+            <!-- Código de palet -->
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Código de palet:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding CodigoPalet, UpdateSourceTrigger=PropertyChanged}" Width="200" Margin="0,8,0,0"/>
+
+            <!-- Almacén origen -->
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Almacén origen:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AlmacenOrigen, UpdateSourceTrigger=PropertyChanged}" Width="200" Margin="0,8,0,0"/>
+
+            <!-- Almacén destino -->
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Almacén destino:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding AlmacenDestino, UpdateSourceTrigger=PropertyChanged}" Width="200" Margin="0,8,0,0"/>
+
+            <!-- Fecha inicio desde -->
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Fecha desde:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+            <DatePicker Grid.Row="4" Grid.Column="1" SelectedDate="{Binding FechaInicioDesde, Mode=TwoWay}" Width="200" Margin="0,8,0,0"/>
+
+            <!-- Fecha inicio hasta -->
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Fecha hasta:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+            <DatePicker Grid.Row="5" Grid.Column="1" SelectedDate="{Binding FechaInicioHasta, Mode=TwoWay}" Width="200" Margin="0,8,0,0"/>
+
             <!-- Botones -->
-            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
                 <Button Content="Cancelar" Width="90" Margin="0,0,10,0" IsCancel="True" Style="{StaticResource EstiloBotonPrincipal}"/>
                 <Button Content="Aplicar"   Width="90" IsDefault="True" Command="{Binding AplicarFiltrosCommand}" Style="{StaticResource EstiloBotonPrincipal}"/>
             </StackPanel>

@@ -438,7 +438,8 @@ public class PaletController : ControllerBase
 	[HttpGet("{id}/lineas")]
 	public async Task<ActionResult<List<LineaPaletDto>>> GetLineasPalet(Guid id)
 	{
-		var lineas = await _auroraSgaContext.TempPaletLineas
+		// Primero busca en PaletLineas (definitivas)
+		var lineas = await _auroraSgaContext.PaletLineas
 			.Where(l => l.PaletId == id)
 			.Select(l => new LineaPaletDto
 			{
@@ -458,6 +459,31 @@ public class PaletController : ControllerBase
 				Observaciones = l.Observaciones
 			})
 			.ToListAsync();
+
+		// Si no hay líneas definitivas, busca en temporales
+		if (lineas.Count == 0)
+		{
+			lineas = await _auroraSgaContext.TempPaletLineas
+				.Where(l => l.PaletId == id)
+				.Select(l => new LineaPaletDto
+				{
+					Id = l.Id,
+					PaletId = l.PaletId,
+					CodigoEmpresa = l.CodigoEmpresa,
+					CodigoArticulo = l.CodigoArticulo,
+					DescripcionArticulo = l.DescripcionArticulo,
+					Cantidad = l.Cantidad,
+					UnidadMedida = l.UnidadMedida,
+					Lote = l.Lote,
+					FechaCaducidad = l.FechaCaducidad,
+					CodigoAlmacen = l.CodigoAlmacen,
+					Ubicacion = l.Ubicacion,
+					UsuarioId = l.UsuarioId,
+					FechaAgregado = l.FechaAgregado,
+					Observaciones = l.Observaciones
+				})
+				.ToListAsync();
+		}
 
 		return Ok(lineas);
 	}

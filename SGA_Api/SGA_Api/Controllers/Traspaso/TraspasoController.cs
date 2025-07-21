@@ -190,7 +190,10 @@ public class TraspasosController : ControllerBase
 		[FromQuery] string? codigoEstado = null,
 		[FromQuery] DateTime? fechaDesde = null,
 		[FromQuery] DateTime? fechaHasta = null,
-		[FromQuery] int? usuarioId = null)
+		[FromQuery] int? usuarioId = null,
+		[FromQuery] string? codigoPalet = null,
+		[FromQuery] string? almacenOrigen = null,
+		[FromQuery] string? almacenDestino = null)
 	{
 		var q = _context.Traspasos.AsQueryable();
 		if (paletId.HasValue)
@@ -203,6 +206,12 @@ public class TraspasosController : ControllerBase
 			q = q.Where(t => t.FechaInicio <= fechaHasta.Value);
 		if (usuarioId.HasValue)
 			q = q.Where(t => t.UsuarioInicioId == usuarioId.Value || t.UsuarioFinalizacionId == usuarioId.Value);
+		if (!string.IsNullOrWhiteSpace(codigoPalet))
+			q = q.Where(t => t.CodigoPalet.Contains(codigoPalet));
+		if (!string.IsNullOrWhiteSpace(almacenOrigen))
+			q = q.Where(t => t.AlmacenOrigen == almacenOrigen);
+		if (!string.IsNullOrWhiteSpace(almacenDestino))
+			q = q.Where(t => t.AlmacenDestino == almacenDestino);
 
 		var nombreDict = await _context.vUsuariosConNombre
 			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
@@ -511,6 +520,13 @@ public class TraspasosController : ControllerBase
 			return NotFound("Palet no encontrado.");
 		if (!string.Equals(palet.Estado, "CERRADO", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El palet debe estar cerrado para poder moverlo.");
+
+		// NUEVA VALIDACIÓN: Impedir mover si hay traspasos pendientes
+		var traspasoPendiente = await _context.Traspasos.AnyAsync(
+			t => t.PaletId == dto.PaletId && t.CodigoEstado != "COMPLETADO"
+		);
+		if (traspasoPendiente)
+			return BadRequest("No se puede mover el palet porque tiene un traspaso pendiente de completar.");
 
 		// 2. Buscar el último traspaso COMPLETADO para ese palet
 		var ultimoTraspaso = await _context.Traspasos

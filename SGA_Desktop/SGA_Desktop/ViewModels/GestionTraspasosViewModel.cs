@@ -62,7 +62,20 @@ namespace SGA_Desktop.ViewModels
 			{
 				var lista = await _traspasosService.ObtenerTraspasosAsync();
 				Traspasos.Clear();
-				foreach (var t in lista.Where(x => x.TipoTraspaso == "PALET"))
+
+				// Agrupa por movimiento de palet y toma solo el primero de cada grupo
+				var unicos = lista
+					.Where(x => x.TipoTraspaso == "PALET")
+					.GroupBy(x => new {
+						x.PaletId,
+						x.CodigoEstado,
+						x.AlmacenDestino,
+						x.UbicacionDestino
+					})
+					.Select(g => g.First())
+					.ToList();
+
+				foreach (var t in unicos)
 					Traspasos.Add(t);
 
 				ErrorMessage = null;
@@ -87,19 +100,40 @@ namespace SGA_Desktop.ViewModels
 
 			if (dlg.ShowDialog() == true)
 			{
-				var estado = dlgVm.EstadoSeleccionado?.CodigoEstado;
-			
-
-				_ = AplicarFiltrosAsync(estado);
+				_ = AplicarFiltrosAsync(
+					dlgVm.EstadoSeleccionado?.CodigoEstado,
+					dlgVm.CodigoPalet,
+					dlgVm.AlmacenOrigen,
+					dlgVm.AlmacenDestino,
+					dlgVm.FechaInicioDesde,
+					dlgVm.FechaInicioHasta
+				);
 			}
 		}
 
-		private async Task AplicarFiltrosAsync(string? estado)
+		private async Task AplicarFiltrosAsync(string? estado, string? codigoPalet, string? almacenOrigen, string? almacenDestino, DateTime? fechaInicioDesde, DateTime? fechaInicioHasta)
 		{
-			var filtrados = await _traspasosService.ObtenerTraspasosFiltradosAsync(estado);
+			var filtrados = await _traspasosService.ObtenerTraspasosFiltradosAsync(
+				estado,
+				codigoPalet,
+				almacenOrigen,
+				almacenDestino,
+				fechaInicioDesde,
+				fechaInicioHasta);
 
 			Traspasos.Clear();
-			foreach (var t in filtrados.Where(x => x.TipoTraspaso == "PALET"))
+			var unicos = filtrados
+				.Where(x => x.TipoTraspaso == "PALET")
+				.GroupBy(x => new {
+					x.PaletId,
+					x.CodigoEstado,
+					x.AlmacenDestino,
+					x.UbicacionDestino
+				})
+				.Select(g => g.First())
+				.ToList();
+
+			foreach (var t in unicos)
 				Traspasos.Add(t);
 		}
 
@@ -199,6 +233,7 @@ namespace SGA_Desktop.ViewModels
 					Traspasos[idx] = actualizado;
 
 				TraspasoSeleccionado = actualizado;
+				await CargarLineasPaletAsync(actualizado); // Recarga las líneas tras actualizar
 			}
 		}
 
