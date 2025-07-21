@@ -24,6 +24,12 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private string? comentario;
 
+		[ObservableProperty]
+		private decimal? altura = 0;
+
+		[ObservableProperty]
+		private decimal? peso = 0;
+
 		public ConfirmationWithListDialogViewModel(
 			IEnumerable<LineaPaletDto> lineas,
 			IEnumerable<AlmacenDto> almacenes,

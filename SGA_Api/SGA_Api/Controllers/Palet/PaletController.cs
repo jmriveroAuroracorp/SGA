@@ -710,8 +710,8 @@ public class PaletController : ControllerBase
 			return BadRequest("El palet ya está cerrado.");
 
 		// Verifica que tenga al menos una línea
-		bool tieneLineas = await _auroraSgaContext.TempPaletLineas
-			.AnyAsync(l => l.PaletId == id);
+		bool tieneLineas = await _auroraSgaContext.TempPaletLineas.AnyAsync(l => l.PaletId == id)
+			|| await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
 
 		if (!tieneLineas)
 			return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
@@ -729,6 +729,8 @@ public class PaletController : ControllerBase
 		palet.Estado = "Cerrado";
 		palet.FechaCierre = DateTime.Now;
 		palet.UsuarioCierreId = dto.UsuarioId;
+		if (dto.Altura.HasValue) palet.Altura = dto.Altura;
+		if (dto.Peso.HasValue) palet.Peso = dto.Peso;
 
 		_auroraSgaContext.LogPalet.Add(new LogPalet
 		{
@@ -898,8 +900,8 @@ public class PaletController : ControllerBase
             return BadRequest("El palet ya está cerrado.");
 
         // Verifica que tenga al menos una línea
-        bool tieneLineas = await _auroraSgaContext.TempPaletLineas
-            .AnyAsync(l => l.PaletId == id);
+        bool tieneLineas = await _auroraSgaContext.TempPaletLineas.AnyAsync(l => l.PaletId == id)
+            || await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
 
         if (!tieneLineas)
             return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
@@ -908,6 +910,8 @@ public class PaletController : ControllerBase
         palet.Estado = "Cerrado";
         palet.FechaCierre = DateTime.Now;
         palet.UsuarioCierreId = dto.UsuarioId;
+        if (dto.Altura.HasValue) palet.Altura = dto.Altura;
+        if (dto.Peso.HasValue) palet.Peso = dto.Peso;
 
         _auroraSgaContext.LogPalet.Add(new LogPalet
         {

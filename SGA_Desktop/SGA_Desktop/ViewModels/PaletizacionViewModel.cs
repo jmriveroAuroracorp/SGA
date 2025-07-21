@@ -374,14 +374,16 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
-			// 🔷 Llama al servicio para cerrar, pasando destino y comentario
+			// 🔷 Llama al servicio para cerrar, pasando destino, comentario, altura y peso
 			var ok = await _paletService.CerrarPaletAsync(
 				PaletSeleccionado.Id,
 				SessionManager.UsuarioActual.operario,
 				almacenOrigen,
 				almacenDestino.CodigoAlmacen,
 				ubicacionElegida.Ubicacion,
-				dlg.VM.Comentario // Nuevo parámetro
+				dlg.VM.Comentario, // Comentario
+				dlg.VM.Altura,     // Altura
+				dlg.VM.Peso        // Peso
 			);
 
 			if (!ok)

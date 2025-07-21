@@ -100,6 +100,25 @@
                      HorizontalAlignment="Center"
                      Margin="0,0,0,12"/>
           
+            <TextBlock Text="Altura del palet (cm):"
+                       FontFamily="{StaticResource FuentePrincipal}"
+                       FontSize="16"
+                       Margin="0,8,0,4"
+                       Foreground="Black" />
+            <TextBox Text="{Binding Altura, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="100"
+                     HorizontalAlignment="Center"
+                     Margin="0,0,0,12"/>
+            <TextBlock Text="Peso del palet (kg):"
+                       FontFamily="{StaticResource FuentePrincipal}"
+                       FontSize="16"
+                       Margin="0,8,0,4"
+                       Foreground="Black" />
+            <TextBox Text="{Binding Peso, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="100"
+                     HorizontalAlignment="Center"
+                     Margin="0,0,0,12"/>
+          
             <!-- Botones -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <Button Content="Cancelar"

@@ -55,6 +55,15 @@ namespace SGA_Desktop.Dialog
 
 		private void YesButton_Click(object sender, RoutedEventArgs e)
 		{
+			var vm = DataContext as SGA_Desktop.ViewModels.ConfirmationWithListDialogViewModel;
+			if (vm != null)
+			{
+				if (vm.Altura <= 0 || vm.Peso <= 0)
+				{
+					MessageBox.Show("La altura y el peso deben ser mayores que 0.", "Validación", MessageBoxButton.OK, MessageBoxImage.Warning);
+					return;
+				}
+			}
 			if (UbicacionSeleccionada == null)
 			{
 				MessageBox.Show("Por favor selecciona una ubicación.", "Atención", MessageBoxButton.OK, MessageBoxImage.Warning);

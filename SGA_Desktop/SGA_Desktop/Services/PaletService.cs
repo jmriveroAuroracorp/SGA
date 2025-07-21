@@ -227,7 +227,9 @@ namespace SGA_Desktop.Services
 			string codigoAlmacen,             // origen (de las líneas)
 			string codigoAlmacenDestino,
 			string ubicacionDestino,
-			string? comentario = null // Nuevo parámetro opcional
+			string? comentario = null, // Nuevo parámetro opcional
+			decimal? altura = null,
+			decimal? peso = null
 		)
 		{
 			var dto = new
@@ -241,7 +243,9 @@ namespace SGA_Desktop.Services
 				FechaFinalizacion = DateTime.Now,
 				UsuarioFinalizacionId = usuarioId,
 				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-				Comentario = comentario // Nuevo campo
+				Comentario = comentario,
+				Altura = altura,
+				Peso = peso
 			};
 
 			var resp = await _httpClient.PostAsJsonAsync(

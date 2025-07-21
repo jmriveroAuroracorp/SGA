@@ -542,10 +542,13 @@ public class TraspasosController : ControllerBase
 			&& !string.IsNullOrWhiteSpace(dto.CodigoEstado)
 			&& dto.CodigoEstado == "PENDIENTE_ERP";
 
-		// 1. Obtener todas las líneas del palet (temporales)
-		var lineas = await _context.TempPaletLineas
+		// 1. Obtener todas las líneas del palet (solo definitivas)
+		var lineas = await _context.PaletLineas
 			.Where(l => l.PaletId == dto.PaletId)
 			.ToListAsync();
+
+		if (lineas.Count == 0)
+			return BadRequest("No hay líneas definitivas para este palet. No se puede mover.");
 
 		var traspasosCreados = new List<Guid>();
 

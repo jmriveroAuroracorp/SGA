@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Tema base de la app -->
+    <style name="Theme.SGA" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Tema para el splash screen -->
+    <style name="Theme.SGA.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/logo_splash</item>
+        <item name="postSplashScreenTheme">@style/Theme.SGA</item>
+    </style>
+
+</resources>
+

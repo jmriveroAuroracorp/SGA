@@ -12,5 +12,7 @@
 		public int? UsuarioFinalizacionId { get; set; }
 		public short CodigoEmpresa { get; set; }
 		public string? Comentario { get; set; } = null;         // Comentario opcional para el traspaso
+		public decimal? Altura { get; set; }
+		public decimal? Peso { get; set; }
 	}
 }
