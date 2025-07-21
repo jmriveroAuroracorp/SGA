@@ -13,5 +13,7 @@ namespace SGA_Api.Models.Traspasos
         public short CodigoEmpresa { get; set; }
         public DateTime FechaInicio { get; set; }
         public string TipoTraspaso { get; set; }
+        public string? Comentario { get; set; }
+        public string? EstadoErp { get; set; }
     }
 } 

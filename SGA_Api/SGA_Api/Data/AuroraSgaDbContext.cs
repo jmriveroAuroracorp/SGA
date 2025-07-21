@@ -230,6 +230,36 @@ namespace SGA_Api.Data
 				eb.Property(e => e.Cantidad)
 				  .HasColumnType("decimal(18,4)");
 			});
+
+            // Mapeo explícito de la entidad Traspaso
+            modelBuilder.Entity<Traspaso>(ent =>
+            {
+                ent.ToTable("traspasos");
+                ent.HasKey(t => t.Id);
+
+                ent.Property(t => t.Id).HasColumnName("id");
+                ent.Property(t => t.AlmacenOrigen).HasColumnName("AlmacenOrigen");
+                ent.Property(t => t.AlmacenDestino).HasColumnName("AlmacenDestino");
+                ent.Property(t => t.CodigoEstado).HasColumnName("CodigoEstado");
+                ent.Property(t => t.FechaInicio).HasColumnName("FechaInicio");
+                ent.Property(t => t.UsuarioInicioId).HasColumnName("UsuarioInicioId");
+                ent.Property(t => t.PaletId).HasColumnName("PaletId");
+                ent.Property(t => t.FechaFinalizacion).HasColumnName("FechaFinalizacion");
+                ent.Property(t => t.UsuarioFinalizacionId).HasColumnName("UsuarioFinalizacionId");
+                ent.Property(t => t.UbicacionDestino).HasColumnName("UbicacionDestino");
+                ent.Property(t => t.UbicacionOrigen).HasColumnName("UbicacionOrigen");
+                ent.Property(t => t.CodigoPalet).HasColumnName("CodigoPalet");
+                ent.Property(t => t.CodigoArticulo).HasColumnName("CodigoArticulo");
+                ent.Property(t => t.Cantidad).HasColumnName("Cantidad");
+                ent.Property(t => t.TipoTraspaso).HasColumnName("TipoTraspaso");
+                ent.Property(t => t.FechaCaducidad).HasColumnName("FechaCaducidad");
+                ent.Property(t => t.Partida).HasColumnName("Partida");
+                ent.Property(t => t.CodigoEmpresa).HasColumnName("CodigoEmpresa");
+                ent.Property(t => t.MovPosicionOrigen).HasColumnName("MovPosicionOrigen");
+                ent.Property(t => t.MovPosicionDestino).HasColumnName("MovPosicionDestino");
+				ent.Property(t => t.Comentario).HasColumnName("Comentario");
+				ent.Property(t => t.EstadoErp).HasColumnName("EstadoErp");
+			});
 		}
 	}
 }

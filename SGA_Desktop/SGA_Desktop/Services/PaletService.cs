@@ -226,7 +226,9 @@ namespace SGA_Desktop.Services
 			int usuarioId,
 			string codigoAlmacen,             // origen (de las líneas)
 			string codigoAlmacenDestino,
-			string ubicacionDestino)
+			string ubicacionDestino,
+			string? comentario = null // Nuevo parámetro opcional
+		)
 		{
 			var dto = new
 			{
@@ -238,7 +240,8 @@ namespace SGA_Desktop.Services
 				CodigoEstado = "PENDIENTE_ERP",
 				FechaFinalizacion = DateTime.Now,
 				UsuarioFinalizacionId = usuarioId,
-				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+				Comentario = comentario // Nuevo campo
 			};
 
 			var resp = await _httpClient.PostAsJsonAsync(

@@ -35,6 +35,11 @@ namespace SGA_Api.Models.Traspasos
 		public Guid MovPosicionOrigen { get; set; } = Guid.Empty;
 		public Guid MovPosicionDestino { get; set; } = Guid.Empty;
 
+		public string? Comentario { get; set; }
+		public string? EstadoErp { get; set; }
+
+
+
 		// Opcional: navegación a Palet y Estado
 		// public Palet Palet { get; set; }
 		// public EstadoTraspaso Estado { get; set; }

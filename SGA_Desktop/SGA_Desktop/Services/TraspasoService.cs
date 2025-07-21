@@ -67,8 +67,13 @@ namespace SGA_Desktop.Services
 			if (query.Count > 0)
 				uri += "?" + string.Join("&", query);
 
-			return await _httpClient.GetFromJsonAsync<List<TraspasoDto>>(uri)
-				   ?? new List<TraspasoDto>();
+			var resp = await _httpClient.GetAsync(uri);
+			if (!resp.IsSuccessStatusCode)
+				return new List<TraspasoDto>();
+
+			var text = await resp.Content.ReadAsStringAsync();
+			return JsonSerializer.Deserialize<List<TraspasoDto>>(text, 
+				new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new List<TraspasoDto>();
 		}
 
 		public async Task<List<EstadoTraspasoDto>> ObtenerEstadosAsync()
@@ -85,8 +90,13 @@ namespace SGA_Desktop.Services
 			if (!string.IsNullOrWhiteSpace(estado))
 				url += $"?codigoEstado={estado}";
 
-			var resp = await _httpClient.GetFromJsonAsync<List<TraspasoDto>>(url);
-			return resp ?? new List<TraspasoDto>();
+			var resp = await _httpClient.GetAsync(url);
+			if (!resp.IsSuccessStatusCode)
+				return new List<TraspasoDto>();
+
+			var text = await resp.Content.ReadAsStringAsync();
+			return JsonSerializer.Deserialize<List<TraspasoDto>>(text, 
+				new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new List<TraspasoDto>();
 		}
 
         public async Task<ApiResult> CrearTraspasoArticuloAsync(CrearTraspasoArticuloDto dto)

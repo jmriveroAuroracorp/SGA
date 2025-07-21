@@ -13,6 +13,7 @@ namespace SGA_Desktop.Models
 		public string CodigoAlmacenDestino { get; set; } = "";   // almacén destino, seleccionado por el usuario
 		public string UbicacionDestino { get; set; } = "";       // ubicación dentro del destino
 		public short CodigoEmpresa { get; set; }
+		public string? Comentario { get; set; } = null;         // Comentario opcional para el traspaso
 	}
 
 

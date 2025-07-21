@@ -38,6 +38,9 @@ namespace SGA_Desktop.ViewModels
         // Fecha de inicio del traspaso
         private readonly DateTime _fechaInicioTraspaso = DateTime.Now;
 
+        [ObservableProperty]
+        private string? comentario;
+
         public TraspasoPaletDialogViewModel()
         {
             _paletService = new PaletService();
@@ -151,7 +154,8 @@ namespace SGA_Desktop.ViewModels
                     UsuarioFinalizacionId = usuarioId,
                     CodigoEmpresa = empresa,
                     FechaInicio = _fechaInicioTraspaso,
-                    TipoTraspaso = "PALET"
+                    TipoTraspaso = "PALET",
+                    Comentario = Comentario // Nuevo campo
                 };
                 var resp = await _traspasosService.MoverPaletAsync(dto);
                 if (resp.Success)

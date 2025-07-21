@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Traspasos;
+using SGA_Api.Models.Palet;
 using System;
 using System.Threading.Tasks;
 using System.Linq;
@@ -99,6 +100,9 @@ public class TraspasosController : ControllerBase
 		if (traspaso == null)
 			return NotFound();
 
+		var nombreDict = await _context.vUsuariosConNombre
+			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
 		var dto = new TraspasoDto
 		{
 			Id = traspaso.Id,
@@ -116,6 +120,64 @@ public class TraspasosController : ControllerBase
 			CodigoArticulo = traspaso.CodigoArticulo,
 			TipoTraspaso = traspaso.TipoTraspaso
 		};
+
+		if (dto.UsuarioInicioId > 0 && nombreDict.TryGetValue(dto.UsuarioInicioId, out var nombreInicio))
+			dto.UsuarioInicioNombre = nombreInicio;
+
+		if (dto.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(dto.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
+			dto.UsuarioFinalizacionNombre = nombreFinalizacion;
+
+		// Usa el PaletId correcto para buscar las líneas
+		var paletId = dto.PaletId;
+
+		// Cargar líneas del palet (definitivas)
+		var lineas = await _context.PaletLineas
+			.Where(pl => pl.PaletId == paletId)
+			.Select(pl => new LineaPaletDto
+			{
+				Id = pl.Id,
+				PaletId = pl.PaletId,
+				CodigoEmpresa = pl.CodigoEmpresa,
+				CodigoArticulo = pl.CodigoArticulo,
+				DescripcionArticulo = pl.DescripcionArticulo,
+				Cantidad = pl.Cantidad,
+				UnidadMedida = pl.UnidadMedida,
+				Lote = pl.Lote,
+				FechaCaducidad = pl.FechaCaducidad,
+				CodigoAlmacen = pl.CodigoAlmacen,
+				Ubicacion = pl.Ubicacion,
+				UsuarioId = pl.UsuarioId,
+				FechaAgregado = pl.FechaAgregado,
+				Observaciones = pl.Observaciones
+			})
+			.ToListAsync();
+
+		// Si no hay líneas, busca en TempPaletLineas
+		if (lineas.Count == 0)
+		{
+			lineas = await _context.TempPaletLineas
+				.Where(pl => pl.PaletId == paletId)
+				.Select(pl => new LineaPaletDto
+				{
+					Id = pl.Id,
+					PaletId = pl.PaletId,
+					CodigoEmpresa = pl.CodigoEmpresa,
+					CodigoArticulo = pl.CodigoArticulo,
+					DescripcionArticulo = pl.DescripcionArticulo,
+					Cantidad = pl.Cantidad,
+					UnidadMedida = pl.UnidadMedida,
+					Lote = pl.Lote,
+					FechaCaducidad = pl.FechaCaducidad,
+					CodigoAlmacen = pl.CodigoAlmacen,
+					Ubicacion = pl.Ubicacion,
+					UsuarioId = pl.UsuarioId,
+					FechaAgregado = pl.FechaAgregado,
+					Observaciones = pl.Observaciones
+				})
+				.ToListAsync();
+		}
+		dto.LineasPalet = lineas;
+
 		return Ok(dto);
 	}
 
@@ -142,6 +204,9 @@ public class TraspasosController : ControllerBase
 		if (usuarioId.HasValue)
 			q = q.Where(t => t.UsuarioInicioId == usuarioId.Value || t.UsuarioFinalizacionId == usuarioId.Value);
 
+		var nombreDict = await _context.vUsuariosConNombre
+			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
 		var lista = await q.OrderByDescending(t => t.FechaInicio)
 			.Select(t => new TraspasoDto
 			{
@@ -162,6 +227,36 @@ public class TraspasosController : ControllerBase
 			})
 			.ToListAsync();
 
+		foreach (var traspaso in lista)
+		{
+			if (traspaso.UsuarioInicioId > 0 && nombreDict.TryGetValue(traspaso.UsuarioInicioId, out var nombreInicio))
+				traspaso.UsuarioInicioNombre = nombreInicio;
+
+			if (traspaso.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(traspaso.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
+				traspaso.UsuarioFinalizacionNombre = nombreFinalizacion;
+
+			// Cargar líneas del palet
+			if (traspaso.PaletId != Guid.Empty)
+			{
+				var lineas = await _context.PaletLineas
+					.Where(pl => pl.PaletId == traspaso.PaletId)
+					.Select(pl => new LineaPaletDto
+					{
+						Id = pl.Id,
+						CodigoArticulo = pl.CodigoArticulo,
+						DescripcionArticulo = pl.DescripcionArticulo,
+						Cantidad = pl.Cantidad,
+						CodigoAlmacen = pl.CodigoAlmacen,
+						Ubicacion = pl.Ubicacion,
+						Lote = pl.Lote,
+						FechaCaducidad = pl.FechaCaducidad
+					})
+					.ToListAsync();
+				
+				traspaso.LineasPalet = lineas;
+			}
+		}
+
 		return Ok(lista);
 	}
 
@@ -171,6 +266,9 @@ public class TraspasosController : ControllerBase
 	[HttpGet("mis-traspasos")]
 	public async Task<IActionResult> GetMisTraspasos([FromQuery] int usuarioId)
 	{
+		var nombreDict = await _context.vUsuariosConNombre
+			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
 		var lista = await _context.Traspasos
 			.Where(t => (t.UsuarioInicioId == usuarioId || t.UsuarioFinalizacionId == usuarioId)
 						&& (t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "EN_TRANSITO"))
@@ -193,6 +291,36 @@ public class TraspasosController : ControllerBase
 				TipoTraspaso = t.TipoTraspaso
 			})
 			.ToListAsync();
+
+		foreach (var traspaso in lista)
+		{
+			if (traspaso.UsuarioInicioId > 0 && nombreDict.TryGetValue(traspaso.UsuarioInicioId, out var nombreInicio))
+				traspaso.UsuarioInicioNombre = nombreInicio;
+
+			if (traspaso.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(traspaso.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
+				traspaso.UsuarioFinalizacionNombre = nombreFinalizacion;
+
+			// Cargar líneas del palet
+			if (traspaso.PaletId != Guid.Empty)
+			{
+				var lineas = await _context.PaletLineas
+					.Where(pl => pl.PaletId == traspaso.PaletId)
+					.Select(pl => new LineaPaletDto
+					{
+						Id = pl.Id,
+						CodigoArticulo = pl.CodigoArticulo,
+						DescripcionArticulo = pl.DescripcionArticulo,
+						Cantidad = pl.Cantidad,
+						CodigoAlmacen = pl.CodigoAlmacen,
+						Ubicacion = pl.Ubicacion,
+						Lote = pl.Lote,
+						FechaCaducidad = pl.FechaCaducidad
+					})
+					.ToListAsync();
+				
+				traspaso.LineasPalet = lineas;
+			}
+		}
 		return Ok(lista);
 	}
 
@@ -241,6 +369,24 @@ public class TraspasosController : ControllerBase
 
             if (dto.Cantidad > stock.Disponible)
                 return BadRequest($"No puedes traspasar más de lo disponible: {stock.Disponible:N2} unidades.");
+
+            // === NUEVA COMPROBACIÓN: ¿El stock está en un palet? ===
+            var lineaPalet = await _context.PaletLineas
+                .FirstOrDefaultAsync(pl =>
+                    pl.CodigoArticulo == dto.CodigoArticulo &&
+                    pl.CodigoAlmacen == dto.AlmacenOrigen &&
+                    pl.Ubicacion == dto.UbicacionOrigen &&
+                    pl.Lote == dto.Partida);
+
+            if (lineaPalet != null)
+            {
+                var palet = await _context.Palets.FindAsync(lineaPalet.PaletId);
+                if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
+                {
+                    return BadRequest("No se puede extraer stock de un palet cerrado. Debe mover el palet o abrirlo antes de extraer stock.");
+                }
+                // Opcional: podrías registrar el PaletId en el traspaso o log si lo necesitas
+            }
 
             var traspaso = new Traspaso
             {
@@ -380,28 +526,44 @@ public class TraspasosController : ControllerBase
 			&& !string.IsNullOrWhiteSpace(dto.CodigoEstado)
 			&& dto.CodigoEstado == "PENDIENTE_ERP";
 
-		var nuevoTraspaso = new Traspaso
-		{
-			Id = Guid.NewGuid(),
-			AlmacenOrigen = ultimoTraspaso.AlmacenDestino,
-			UbicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "",
-			UsuarioInicioId = dto.UsuarioId,
-			PaletId = dto.PaletId,
-			CodigoPalet = dto.CodigoPalet,
-			FechaInicio = dto.FechaInicio,
-			CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
-			AlmacenDestino = dto.AlmacenDestino,
-			UbicacionDestino = dto.UbicacionDestino,
-			FechaFinalizacion = esFinalizado ? dto.FechaFinalizacion : (DateTime?)null,
-			UsuarioFinalizacionId = esFinalizado ? dto.UsuarioFinalizacionId : (int?)null,
-			CodigoEmpresa = dto.CodigoEmpresa,
-			TipoTraspaso = dto.TipoTraspaso
-		};
+		// 1. Obtener todas las líneas del palet (temporales)
+		var lineas = await _context.TempPaletLineas
+			.Where(l => l.PaletId == dto.PaletId)
+			.ToListAsync();
 
-		_context.Traspasos.Add(nuevoTraspaso);
+		var traspasosCreados = new List<Guid>();
+
+		foreach (var linea in lineas)
+		{
+			var traspasoArticulo = new Traspaso
+			{
+				Id = Guid.NewGuid(),
+				PaletId = dto.PaletId,
+				CodigoPalet = dto.CodigoPalet,
+				TipoTraspaso = "PALET",
+				CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
+				FechaInicio = dto.FechaInicio,
+				UsuarioInicioId = dto.UsuarioId,
+				AlmacenOrigen = ultimoTraspaso.AlmacenDestino,
+				AlmacenDestino = dto.AlmacenDestino,
+				UbicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "",
+				UbicacionDestino = dto.UbicacionDestino,
+				FechaFinalizacion = esFinalizado ? dto.FechaFinalizacion : (DateTime?)null,
+				UsuarioFinalizacionId = esFinalizado ? dto.UsuarioFinalizacionId : (int?)null,
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoArticulo = linea.CodigoArticulo,
+				Cantidad = linea.Cantidad,
+				Partida = linea.Lote,
+				FechaCaducidad = linea.FechaCaducidad,
+				Comentario = dto.Comentario
+			};
+			_context.Traspasos.Add(traspasoArticulo);
+			traspasosCreados.Add(traspasoArticulo.Id);
+		}
+
 		await _context.SaveChangesAsync();
 
-		return Ok(new { message = esFinalizado ? "Traspaso de palet creado y finalizado correctamente" : "Traspaso de palet creado correctamente", nuevoTraspaso.Id, nuevoTraspaso.CodigoEstado });
+		return Ok(new { message = esFinalizado ? "Traspasos de palet creados y finalizados correctamente" : "Traspasos de palet creados correctamente", traspasosIds = traspasosCreados });
 	}
 
 	/// <summary>

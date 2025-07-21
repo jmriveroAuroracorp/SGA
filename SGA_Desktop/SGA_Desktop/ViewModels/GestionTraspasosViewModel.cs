@@ -9,6 +9,7 @@ using SGA_Desktop.Dialog;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
+using System.Collections.Generic;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -61,7 +62,7 @@ namespace SGA_Desktop.ViewModels
 			{
 				var lista = await _traspasosService.ObtenerTraspasosAsync();
 				Traspasos.Clear();
-				foreach (var t in lista)
+				foreach (var t in lista.Where(x => x.TipoTraspaso == "PALET"))
 					Traspasos.Add(t);
 
 				ErrorMessage = null;
@@ -98,7 +99,7 @@ namespace SGA_Desktop.ViewModels
 			var filtrados = await _traspasosService.ObtenerTraspasosFiltradosAsync(estado);
 
 			Traspasos.Clear();
-			foreach (var t in filtrados)
+			foreach (var t in filtrados.Where(x => x.TipoTraspaso == "PALET"))
 				Traspasos.Add(t);
 		}
 
@@ -198,6 +199,33 @@ namespace SGA_Desktop.ViewModels
 					Traspasos[idx] = actualizado;
 
 				TraspasoSeleccionado = actualizado;
+			}
+		}
+
+		partial void OnTraspasoSeleccionadoChanged(TraspasoDto? value)
+		{
+			if (value != null)
+			{
+				_ = CargarLineasPaletAsync(value);
+			}
+		}
+
+		private async Task CargarLineasPaletAsync(TraspasoDto value)
+		{
+			if (value.TipoTraspaso == "PALET" && value.PaletId != Guid.Empty)
+			{
+				var paletService = new Services.PaletService();
+				var lineas = await paletService.ObtenerLineasAsync(value.PaletId);
+				value.LineasPalet = lineas;
+			}
+			else
+			{
+				value.LineasPalet = new List<LineaPaletDto>();
+			}
+
+			if (ReferenceEquals(value, TraspasoSeleccionado))
+			{
+				OnPropertyChanged(nameof(TraspasoSeleccionado));
 			}
 		}
 	}

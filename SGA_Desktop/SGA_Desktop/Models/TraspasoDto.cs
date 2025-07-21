@@ -17,15 +17,21 @@ namespace SGA_Desktop.Models
 
 		public DateTime FechaInicio { get; set; }
 		public int UsuarioInicioId { get; set; }
+		public string UsuarioInicioNombre { get; set; } = "";
 
 		public Guid PaletId { get; set; }
 
 		public DateTime? FechaFinalizacion { get; set; }
 		public int? UsuarioFinalizacionId { get; set; }
+		public string UsuarioFinalizacionNombre { get; set; } = "";
 		public string? UbicacionDestino { get; set; }
 		public string? CodigoPalet { get; set; }
 		public string? TipoTraspaso { get; set; }
 		public string? CodigoArticulo { get; set; }
+		
+		// Líneas del palet
+		public List<LineaPaletDto> LineasPalet { get; set; } = new List<LineaPaletDto>();
+		
 		public string CodigoPrincipal
 		{
 			get

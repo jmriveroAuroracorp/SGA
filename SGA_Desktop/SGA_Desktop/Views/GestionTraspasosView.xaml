@@ -13,6 +13,7 @@
         <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
         <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
         <helpers:EstaPendienteConverter x:Key="EstaPendienteConverter"/>
+        <helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
     </Page.Resources>
 
     <Grid Margin="8">
@@ -72,13 +73,13 @@
                                 </TextBlock>
                                 <TextBlock Margin="0,2,0,0">
                                     <Run Text="Iniciado: " FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                    <Run Text="{Binding UsuarioInicioId}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                                    <Run Text="{Binding UsuarioInicioNombre}" Foreground="{StaticResource BrushGrisOscuro}"/>
                                     <Run Text=" el " Foreground="{StaticResource BrushPrincipal}"/>
                                     <Run Text="{Binding FechaInicio, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Foreground="{StaticResource BrushGrisOscuro}"/>
                                 </TextBlock>
                                 <TextBlock Margin="0,2,0,0" Visibility="{Binding FechaFinalizacion, Converter={StaticResource NullToVisibilityConverter}}">
                                     <Run Text="Finalizado por: " FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                    <Run Text="{Binding UsuarioFinalizacionId}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                                    <Run Text="{Binding UsuarioFinalizacionNombre}" Foreground="{StaticResource BrushGrisOscuro}"/>
                                     <Run Text=" el " Foreground="{StaticResource BrushPrincipal}"/>
                                     <Run Text="{Binding FechaFinalizacion, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Foreground="{StaticResource BrushGrisOscuro}"/>
                                 </TextBlock>
@@ -97,20 +98,224 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <TextBlock Text="{Binding TraspasoSeleccionado.CodigoPalet, StringFormat=Detalle del Traspaso: {0}}"
-                       Style="{StaticResource LabelStyle}" FontSize="18" Margin="0,0,0,8"/>
-
-            <StackPanel Grid.Row="1" Margin="10">
-                <TextBlock Text="{Binding TraspasoSeleccionado.CodigoEstado, StringFormat=Estado: {0}}" FontWeight="Bold"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.CodigoPalet, StringFormat=Palet: {0}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.AlmacenOrigen, StringFormat=Origen: {0}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.AlmacenDestino, StringFormat=Destino: {0}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.UbicacionDestino, StringFormat=Ubicación destino: {0}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.UsuarioInicioId, StringFormat=Iniciado por: {0}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.FechaInicio, StringFormat=Fecha inicio: {0:dd/MM/yyyy HH:mm}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.UsuarioFinalizacionId, StringFormat=Finalizado por: {0}}" Visibility="{Binding TraspasoSeleccionado.UsuarioFinalizacionId, Converter={StaticResource NullToVisibilityConverter}}"/>
-                <TextBlock Text="{Binding TraspasoSeleccionado.FechaFinalizacion, StringFormat=Fecha fin: {0:dd/MM/yyyy HH:mm}}" Visibility="{Binding TraspasoSeleccionado.FechaFinalizacion, Converter={StaticResource NullToVisibilityConverter}}"/>
+            <!-- Título con icono -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16" VerticalAlignment="Center">
+                <TextBlock Text="📋" FontSize="24" Margin="0,0,8,0"/>
+                <TextBlock Text="{Binding TraspasoSeleccionado.CodigoPrincipal, StringFormat=Detalle del Traspaso: {0}}"
+                           Style="{StaticResource LabelStyle}" FontSize="20" VerticalAlignment="Center"/>
             </StackPanel>
+
+            <!-- Contenido del detalle -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="16">
+                    <!-- Estado -->
+                    <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12" 
+                            BorderThickness="1" BorderBrush="{Binding TraspasoSeleccionado.CodigoEstado, Converter={StaticResource EstadoColorConverter}}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="Estado del Traspaso" FontWeight="Bold" FontSize="16" 
+                                       Foreground="{StaticResource BrushPrincipal}" Margin="0,0,0,8"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="12" Height="12" 
+                                         Fill="{Binding TraspasoSeleccionado.CodigoEstado, Converter={StaticResource EstadoColorConverter}}"
+                                         Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding TraspasoSeleccionado.CodigoEstado}" 
+                                           FontWeight="Bold" FontSize="14" 
+                                           Foreground="{Binding TraspasoSeleccionado.CodigoEstado, Converter={StaticResource EstadoColorConverter}}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Información del Palet -->
+                    <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12" 
+                            BorderThickness="1" BorderBrush="{StaticResource BrushIntermedio}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="📦 Información del Palet" FontWeight="Bold" FontSize="16" 
+                                       Foreground="{StaticResource BrushPrincipal}" Margin="0,0,0,12"/>
+                            
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Código:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.CodigoPalet}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Tipo:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.TipoTraspaso}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Ubicaciones -->
+                    <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12" 
+                            BorderThickness="1" BorderBrush="{StaticResource BrushIntermedio}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="📍 Ubicaciones" FontWeight="Bold" FontSize="16" 
+                                       Foreground="{StaticResource BrushPrincipal}" Margin="0,0,0,12"/>
+                            
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Origen:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.AlmacenOrigen}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Destino:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.AlmacenDestino}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,0,0,8" Visibility="{Binding TraspasoSeleccionado.UbicacionDestino, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.UbicacionDestino}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Usuarios y Fechas -->
+                    <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12" 
+                            BorderThickness="1" BorderBrush="{StaticResource BrushIntermedio}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="👥 Usuarios y Fechas" FontWeight="Bold" FontSize="16" 
+                                       Foreground="{StaticResource BrushPrincipal}" Margin="0,0,0,12"/>
+                            
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Iniciado por:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.UsuarioInicioNombre}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Fecha inicio:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.FechaInicio, StringFormat={}{0:dd/MM/yyyy HH:mm}}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,0,0,8" Visibility="{Binding TraspasoSeleccionado.UsuarioFinalizacionId, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Finalizado por:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.UsuarioFinalizacionNombre}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,0,0,8" Visibility="{Binding TraspasoSeleccionado.FechaFinalizacion, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Fecha fin:" FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TraspasoSeleccionado.FechaFinalizacion, StringFormat={}{0:dd/MM/yyyy HH:mm}}" 
+                                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                                                         </Grid>
+                         </StackPanel>
+                     </Border>
+
+                     <!-- Contenido del Palet -->
+                     <Border Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12" 
+                             BorderThickness="1" BorderBrush="{StaticResource BrushIntermedio}">
+                         <Border.Effect>
+                             <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
+                         </Border.Effect>
+                         <StackPanel>
+                             <TextBlock Text="📦 Contenido del Palet" FontWeight="Bold" FontSize="16" 
+                                        Foreground="{StaticResource BrushPrincipal}" Margin="0,0,0,12"/>
+                             
+                             <TextBlock Text="{Binding TraspasoSeleccionado.LineasPalet.Count, StringFormat=Total de artículos: {0}}" 
+                                        FontWeight="Bold" Foreground="{StaticResource BrushIntermedio}" Margin="0,0,0,8"/>
+                             
+                             <ListView ItemsSource="{Binding TraspasoSeleccionado.LineasPalet}" 
+                                       MaxHeight="200" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                       Background="Transparent" BorderThickness="0">
+                                 <ListView.ItemTemplate>
+                                     <DataTemplate>
+                                         <Border Background="#f8f9fa" CornerRadius="6" Padding="12" Margin="0,0,0,8" 
+                                                 BorderThickness="1" BorderBrush="#e9ecef">
+                                             <Grid>
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="*"/>
+                                                     <ColumnDefinition Width="Auto"/>
+                                                 </Grid.ColumnDefinitions>
+                                                 
+                                                 <!-- Información del artículo -->
+                                                 <StackPanel Grid.Column="0">
+                                                     <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" 
+                                                                Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
+                                                     <TextBlock Text="{Binding DescripcionArticulo}" 
+                                                                Foreground="{StaticResource BrushGrisOscuro}" FontSize="12" 
+                                                                TextWrapping="Wrap" Margin="0,2,0,4"/>
+                                                     
+                                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                         <TextBlock Text="Lote: " FontWeight="Bold" FontSize="11" 
+                                                                    Foreground="{StaticResource BrushIntermedio}"/>
+                                                         <TextBlock Text="{Binding Lote}" FontSize="11" 
+                                                                    Foreground="{StaticResource BrushGrisOscuro}"/>
+                                                         <TextBlock Text=" | Cad: " FontWeight="Bold" FontSize="11" 
+                                                                    Foreground="{StaticResource BrushIntermedio}" Margin="8,0,0,0"/>
+                                                         <TextBlock Text="{Binding FechaCaducidad, StringFormat={}{0:dd/MM/yyyy}}" FontSize="11" 
+                                                                    Foreground="{StaticResource BrushGrisOscuro}"/>
+                                                     </StackPanel>
+                                                 </StackPanel>
+                                                 
+                                                 <!-- Cantidad -->
+                                                 <TextBlock Grid.Column="1" Text="{Binding Cantidad}" 
+                                                            FontSize="18" FontWeight="Bold" 
+                                                            Foreground="{StaticResource BrushPrincipal}"
+                                                            VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                            Margin="16,0,0,0"/>
+                                             </Grid>
+                                         </Border>
+                                     </DataTemplate>
+                                 </ListView.ItemTemplate>
+                             </ListView>
+                             
+                         </StackPanel>
+                     </Border>
+                 </StackPanel>
+             </ScrollViewer>
 
             <StackPanel Grid.Row="2"
                         Orientation="Horizontal"

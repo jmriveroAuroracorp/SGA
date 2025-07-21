@@ -21,6 +21,9 @@ namespace SGA_Desktop.ViewModels
 
 		public UbicacionDto? UbicacionSeleccionada { get; set; }
 
+		[ObservableProperty]
+		private string? comentario;
+
 		public ConfirmationWithListDialogViewModel(
 			IEnumerable<LineaPaletDto> lineas,
 			IEnumerable<AlmacenDto> almacenes,

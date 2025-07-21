@@ -716,38 +716,47 @@ public class PaletController : ControllerBase
 		// Determina el estado del traspaso por defecto
 		var estadoTraspaso = (dto.CodigoAlmacen == dto.CodigoAlmacenDestino) ? "COMPLETADO" : "PENDIENTE";
 
-		// Crea el traspaso usando los valores recibidos si existen, o los valores por defecto
-		var traspaso = new Traspaso
-		{
-			PaletId = palet.Id,
-			CodigoPalet = palet.Codigo,
-			TipoTraspaso = dto.TipoTraspaso ?? "PALET",
-			CodigoEstado = dto.CodigoEstado ?? estadoTraspaso,
-			FechaInicio = DateTime.Now,
-			UsuarioInicioId = dto.UsuarioId,
-			AlmacenOrigen = dto.CodigoAlmacen,
-			AlmacenDestino = dto.CodigoAlmacenDestino,
-			UbicacionDestino = dto.UbicacionDestino,
-			FechaFinalizacion = dto.FechaFinalizacion,
-			UsuarioFinalizacionId = dto.UsuarioFinalizacionId,
-			CodigoEmpresa = dto.CodigoEmpresa
-		};
+		// Obtener todas las líneas del palet
+		var lineas = await _auroraSgaContext.TempPaletLineas
+			.Where(l => l.PaletId == palet.Id)
+			.ToListAsync();
 
-		// Si no viene FechaFinalizacion y el estado es COMPLETADO, ponla por defecto
-		if (traspaso.CodigoEstado == "COMPLETADO" && traspaso.FechaFinalizacion == null)
+		var traspasosCreados = new List<Guid>();
+
+		foreach (var linea in lineas)
 		{
-			traspaso.FechaFinalizacion = DateTime.Now;
-			traspaso.UsuarioFinalizacionId = dto.UsuarioId;
+			var traspasoArticulo = new Traspaso
+			{
+				Id = Guid.NewGuid(),
+				PaletId = palet.Id,
+				CodigoPalet = palet.Codigo,
+				TipoTraspaso = "PALET", // Siempre PALET
+				CodigoEstado = dto.CodigoEstado ?? estadoTraspaso,
+				FechaInicio = DateTime.Now,
+				UsuarioInicioId = dto.UsuarioId,
+				AlmacenOrigen = dto.CodigoAlmacen,
+				AlmacenDestino = dto.CodigoAlmacenDestino,
+				UbicacionOrigen = linea.Ubicacion,
+				UbicacionDestino = dto.UbicacionDestino, // Siempre se asigna
+				FechaFinalizacion = dto.FechaFinalizacion, // Siempre se asigna
+				UsuarioFinalizacionId = dto.UsuarioFinalizacionId, // Siempre se asigna
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoArticulo = linea.CodigoArticulo,
+				Cantidad = linea.Cantidad,
+				Partida = linea.Lote,
+				FechaCaducidad = linea.FechaCaducidad,
+				Comentario = dto.Comentario,
+			};
+			_auroraSgaContext.Traspasos.Add(traspasoArticulo);
+			traspasosCreados.Add(traspasoArticulo.Id);
 		}
-
-		_auroraSgaContext.Traspasos.Add(traspaso);
 
 		await _auroraSgaContext.SaveChangesAsync();
 
 		return Ok(new
 		{
-			message = $"Palet {palet.Codigo} cerrado correctamente y traspaso creado.",
-			traspasoId = traspaso.Id
+			message = $"Palet {palet.Codigo} cerrado correctamente y traspasos de artículos creados.",
+			traspasosIds = traspasosCreados
 		});
 	}
 
@@ -893,7 +902,8 @@ public class PaletController : ControllerBase
             FechaInicio = DateTime.Now,
             UsuarioInicioId = dto.UsuarioId,
             AlmacenOrigen = dto.CodigoAlmacen,
-            CodigoEmpresa = dto.CodigoEmpresa
+            CodigoEmpresa = dto.CodigoEmpresa,
+            Comentario = dto.Comentario // Nuevo campo
         };
         _auroraSgaContext.Traspasos.Add(traspaso);
 

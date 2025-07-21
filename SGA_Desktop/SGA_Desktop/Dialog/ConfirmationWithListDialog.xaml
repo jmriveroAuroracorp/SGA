@@ -86,6 +86,19 @@
           Width="200"
           HorizontalAlignment="Center"
           Margin="0,0,0,12"/>
+
+            <TextBlock Text="Comentario (opcional):"
+                       FontFamily="{StaticResource FuentePrincipal}"
+                       FontSize="16"
+                       Margin="0,8,0,4"
+                       Foreground="Black" />
+
+            <TextBox Text="{Binding Comentario, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Width="300"
+                     Height="60"
+                     AcceptsReturn="True"
+                     HorizontalAlignment="Center"
+                     Margin="0,0,0,12"/>
           
             <!-- Botones -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
