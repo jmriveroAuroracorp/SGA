@@ -11,6 +11,8 @@ using System.Windows;
 using System.Runtime.InteropServices;
 using SGA_Desktop.Dialog;
 using System.Windows.Input;
+using System;
+using System.Threading;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -106,52 +108,57 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		private async Task CerrarSesion()
 		{
-			// 1) Muestra tu diálogo personalizado
 			var dialog = new ConfirmationDialog(
 				"Confirmar salida",
 				"¿Estás seguro de que quieres salir de la aplicación?")
 			{
-				Owner = Application.Current.MainWindow
+				Owner = System.Windows.Application.Current.MainWindow
 			};
 			if (dialog.ShowDialog() != true)
-				return;  // si pulsa “No”, salimos sin cerrar
+				return;
 
-			// 2) Intentos de logout en segundo plano (no bloquea la salida)
-			try
+			var logoutTask = Task.Run(async () =>
 			{
-				if (!string.IsNullOrWhiteSpace(SessionManager.Token))
+				try
 				{
-					using var http = new HttpClient();
-					http.DefaultRequestHeaders.Authorization =
-						new AuthenticationHeaderValue("Bearer", SessionManager.Token);
-
-					var evento = new
+					if (!string.IsNullOrWhiteSpace(SessionManager.Token))
 					{
-						fecha = DateTime.Now,
-						idUsuario = SessionManager.UsuarioActual?.operario ?? 0,
-						tipo = "LOGOUT",
-						origen = "MainWindow",
-						descripcion = "Sesión Cerrada",
-						detalle = $"El usuario cerró sesión.",
-						idDispositivo = Environment.MachineName
-					};
+						using var http = new HttpClient();
+						http.Timeout = TimeSpan.FromSeconds(2); // Timeout de 2 segundos
+						http.DefaultRequestHeaders.Authorization =
+							new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SessionManager.Token);
 
-					var json = JsonConvert.SerializeObject(evento);
-					var content = new StringContent(json, Encoding.UTF8, "application/json");
-					await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
+						var evento = new
+						{
+							fecha = DateTime.Now,
+							idUsuario = SessionManager.UsuarioActual?.operario ?? 0,
+							tipo = "LOGOUT",
+							origen = "MainWindow",
+							descripcion = "Sesión Cerrada",
+							detalle = $"El usuario cerró sesión.",
+							idDispositivo = Environment.MachineName
+						};
 
-					// Desactivar dispositivo en tu servicio
-					await _login.DesactivarDispositivoAsync(
-						evento.idDispositivo!, GetTipoSO(), evento.idUsuario);
+						var json = Newtonsoft.Json.JsonConvert.SerializeObject(evento);
+						var content = new StringContent(json, Encoding.UTF8, "application/json");
+						await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
+
+						// Desactivar dispositivo en tu servicio
+						var login = new Services.LoginService();
+						await login.DesactivarDispositivoAsync(
+							evento.idDispositivo!, GetTipoSO(), evento.idUsuario);
+					}
 				}
-			}
-			catch
-			{
-				// ignoramos errores en logout, vamos a cerrar de todas formas
-			}
+				catch
+				{
+					// Ignora errores, no bloquea el cierre
+				}
+			});
 
-			// 3) Cierra la aplicación
-			Application.Current.Shutdown();
+			// Espera hasta 2 segundos a que termine el logout, pero no bloquees más
+			await Task.WhenAny(logoutTask, Task.Delay(2000));
+
+			System.Windows.Application.Current.Shutdown();
 		}
 		private string GetTipoSO()
 		{

@@ -16,6 +16,9 @@
 		public int UsuarioId { get; set; }
 		public DateTime FechaAgregado { get; set; }
 		public string? Observaciones { get; set; }
+		public bool Procesada { get; set; } = false;
+		public Guid? TraspasoId { get; set; }
+		public bool EsHeredada { get; set; } = false;
 
 		//navegacion
 		public Palet? Palet { get; set; }

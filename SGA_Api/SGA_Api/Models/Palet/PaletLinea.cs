@@ -16,6 +16,7 @@
 		public int UsuarioId { get; set; }
 		public DateTime FechaAgregado { get; set; }
 		public string? Observaciones { get; set; }
+		public Guid? TraspasoId { get; set; }
 
 		//navegacion
 		public Palet? Palet { get; set; } 

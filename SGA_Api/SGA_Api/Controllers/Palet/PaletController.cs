@@ -8,6 +8,7 @@ using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.UsuarioConf;
 using System;
 using System.Data;
+using System.Linq;
 
 namespace SGA_Api.Controllers.Palet;
 
@@ -438,8 +439,8 @@ public class PaletController : ControllerBase
 	[HttpGet("{id}/lineas")]
 	public async Task<ActionResult<List<LineaPaletDto>>> GetLineasPalet(Guid id)
 	{
-		// Primero busca en PaletLineas (definitivas)
-		var lineas = await _auroraSgaContext.PaletLineas
+		// Obtener líneas definitivas
+		var definitivas = await _auroraSgaContext.PaletLineas
 			.Where(l => l.PaletId == id)
 			.Select(l => new LineaPaletDto
 			{
@@ -460,30 +461,30 @@ public class PaletController : ControllerBase
 			})
 			.ToListAsync();
 
-		// Si no hay líneas definitivas, busca en temporales
-		if (lineas.Count == 0)
-		{
-			lineas = await _auroraSgaContext.TempPaletLineas
-				.Where(l => l.PaletId == id)
-				.Select(l => new LineaPaletDto
-				{
-					Id = l.Id,
-					PaletId = l.PaletId,
-					CodigoEmpresa = l.CodigoEmpresa,
-					CodigoArticulo = l.CodigoArticulo,
-					DescripcionArticulo = l.DescripcionArticulo,
-					Cantidad = l.Cantidad,
-					UnidadMedida = l.UnidadMedida,
-					Lote = l.Lote,
-					FechaCaducidad = l.FechaCaducidad,
-					CodigoAlmacen = l.CodigoAlmacen,
-					Ubicacion = l.Ubicacion,
-					UsuarioId = l.UsuarioId,
-					FechaAgregado = l.FechaAgregado,
-					Observaciones = l.Observaciones
-				})
-				.ToListAsync();
-		}
+		// Obtener líneas temporales NO PROCESADAS
+		var temporales = await _auroraSgaContext.TempPaletLineas
+			.Where(l => l.PaletId == id && l.Procesada == false)
+			.Select(l => new LineaPaletDto
+			{
+				Id = l.Id,
+				PaletId = l.PaletId,
+				CodigoEmpresa = l.CodigoEmpresa,
+				CodigoArticulo = l.CodigoArticulo,
+				DescripcionArticulo = l.DescripcionArticulo,
+				Cantidad = l.Cantidad,
+				UnidadMedida = l.UnidadMedida,
+				Lote = l.Lote,
+				FechaCaducidad = l.FechaCaducidad,
+				CodigoAlmacen = l.CodigoAlmacen,
+				Ubicacion = l.Ubicacion,
+				UsuarioId = l.UsuarioId,
+				FechaAgregado = l.FechaAgregado,
+				Observaciones = l.Observaciones
+			})
+			.ToListAsync();
+
+		// Unir ambas listas
+		var lineas = definitivas.Concat(temporales).ToList();
 
 		return Ok(lineas);
 	}
@@ -744,14 +745,65 @@ public class PaletController : ControllerBase
 		// Determina el estado del traspaso por defecto
 		var estadoTraspaso = (dto.CodigoAlmacen == dto.CodigoAlmacenDestino) ? "COMPLETADO" : "PENDIENTE";
 
-		// Obtener todas las líneas del palet
-		var lineas = await _auroraSgaContext.TempPaletLineas
+		// 1. Obtén las definitivas
+		var lineasDefinitivas = await _auroraSgaContext.PaletLineas
 			.Where(l => l.PaletId == palet.Id)
 			.ToListAsync();
 
+		// 2. Compara con la ubicación/almacén destino
+		bool ubicacionCambiada = lineasDefinitivas.Any() &&
+			(lineasDefinitivas.Any(l => l.CodigoAlmacen != dto.CodigoAlmacenDestino || l.Ubicacion != dto.UbicacionDestino));
+
+		List<TempPaletLinea> lineasParaTraspaso;
+
+		if (ubicacionCambiada)
+		{
+			// Traspasar todas: definitivas (convertidas a temporales) + nuevas temporales no procesadas
+			foreach (var def in lineasDefinitivas)
+			{
+				var yaExiste = await _auroraSgaContext.TempPaletLineas
+					.AnyAsync(t => t.PaletId == palet.Id && t.CodigoArticulo == def.CodigoArticulo && t.Lote == def.Lote && t.Procesada == false);
+				if (!yaExiste)
+				{
+					var temp = new TempPaletLinea
+					{
+						PaletId = def.PaletId,
+						CodigoEmpresa = def.CodigoEmpresa,
+						CodigoArticulo = def.CodigoArticulo,
+						DescripcionArticulo = def.DescripcionArticulo,
+						Cantidad = def.Cantidad,
+						UnidadMedida = def.UnidadMedida,
+						Lote = def.Lote,
+						FechaCaducidad = def.FechaCaducidad,
+						CodigoAlmacen = def.CodigoAlmacen,
+						Ubicacion = def.Ubicacion,
+						UsuarioId = def.UsuarioId,
+						FechaAgregado = DateTime.Now,
+						Observaciones = def.Observaciones,
+						Procesada = false,
+						EsHeredada = true // Marcar como heredada
+					};
+					_auroraSgaContext.TempPaletLineas.Add(temp);
+				}
+			}
+			await _auroraSgaContext.SaveChangesAsync();
+
+			// Selecciona todas las temporales no procesadas
+			lineasParaTraspaso = await _auroraSgaContext.TempPaletLineas
+				.Where(l => l.PaletId == palet.Id && l.Procesada == false)
+				.ToListAsync();
+		}
+		else
+		{
+			// Solo las nuevas temporales no procesadas
+			lineasParaTraspaso = await _auroraSgaContext.TempPaletLineas
+				.Where(l => l.PaletId == palet.Id && l.Procesada == false)
+				.ToListAsync();
+		}
+
 		var traspasosCreados = new List<Guid>();
 
-		foreach (var linea in lineas)
+		foreach (var linea in lineasParaTraspaso)
 		{
 			var traspasoArticulo = new Traspaso
 			{
@@ -762,7 +814,7 @@ public class PaletController : ControllerBase
 				CodigoEstado = dto.CodigoEstado ?? estadoTraspaso,
 				FechaInicio = DateTime.Now,
 				UsuarioInicioId = dto.UsuarioId,
-				AlmacenOrigen = dto.CodigoAlmacen,
+				AlmacenOrigen = linea.CodigoAlmacen,
 				AlmacenDestino = dto.CodigoAlmacenDestino,
 				UbicacionOrigen = linea.Ubicacion,
 				UbicacionDestino = dto.UbicacionDestino, // Siempre se asigna
@@ -777,6 +829,10 @@ public class PaletController : ControllerBase
 			};
 			_auroraSgaContext.Traspasos.Add(traspasoArticulo);
 			traspasosCreados.Add(traspasoArticulo.Id);
+
+			// Asociar el TraspasoId a la línea temporal correspondiente
+			linea.TraspasoId = traspasoArticulo.Id;
+			_auroraSgaContext.TempPaletLineas.Update(linea);
 		}
 
 		await _auroraSgaContext.SaveChangesAsync();

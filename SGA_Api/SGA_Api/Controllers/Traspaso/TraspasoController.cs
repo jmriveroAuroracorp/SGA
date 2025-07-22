@@ -578,6 +578,28 @@ public class TraspasosController : ControllerBase
 			};
 			_context.Traspasos.Add(traspasoArticulo);
 			traspasosCreados.Add(traspasoArticulo.Id);
+
+			// Crear la línea temporal asociada al traspaso
+			var tempLinea = new TempPaletLinea
+			{
+				PaletId = dto.PaletId,
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoArticulo = linea.CodigoArticulo,
+				DescripcionArticulo = linea.DescripcionArticulo,
+				Cantidad = linea.Cantidad,
+				UnidadMedida = linea.UnidadMedida,
+				Lote = linea.Lote,
+				FechaCaducidad = linea.FechaCaducidad,
+				CodigoAlmacen = ultimoTraspaso.AlmacenDestino,
+				Ubicacion = ultimoTraspaso.UbicacionDestino ?? "",
+				UsuarioId = dto.UsuarioId,
+				FechaAgregado = DateTime.Now,
+				Observaciones = linea.Observaciones,
+				Procesada = false,
+				TraspasoId = traspasoArticulo.Id,
+				EsHeredada = true // Marcar como heredada
+			};
+			_context.TempPaletLineas.Add(tempLinea);
 		}
 
 		await _context.SaveChangesAsync();
@@ -697,4 +719,16 @@ public class TraspasosController : ControllerBase
 
         return Ok(resultado);
     }
+	public async Task<IActionResult> GetEstadosTraspasosPorUsuario([FromQuery] int usuarioId)
+	{
+		var traspasos = await _context.Traspasos
+			.Where(t =>
+				t.UsuarioInicioId == usuarioId &&
+				(t.CodigoEstado == "PENDIENTE_ERP" || t.CodigoEstado == "COMPLETADO" || t.CodigoEstado == "ERROR_ERP")
+			)
+			.Select(t => new { t.Id, t.CodigoEstado })
+			.ToListAsync();
+
+		return Ok(traspasos);
+	}
 }

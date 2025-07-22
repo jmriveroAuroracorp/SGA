@@ -281,5 +281,5 @@ namespace SGA_Desktop.Services
 			return JsonSerializer.Deserialize<PaletDto>(text,
 				new JsonSerializerOptions(JsonSerializerDefaults.Web));
 		}
-	}
+	} 
 }
