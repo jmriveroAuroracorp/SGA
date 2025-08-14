@@ -27,24 +27,27 @@ class LoginViewModel : ViewModel() {
 
     sealed interface Destino {
         object Home : Destino
-        data class Traspasos(val esPalet: Boolean) : Destino
+        data class Traspasos(
+            val esPalet: Boolean,
+            val directoDesdePaletCerrado: Boolean = false
+        ) : Destino
     }
-    private val _navigate = MutableSharedFlow<Destino>(replay = 1) // <--- replay de 1
+
+    private val _navigate = MutableSharedFlow<Destino>(replay = 0) // <--- replay de 1
     val navigate = _navigate.asSharedFlow()
 
     fun emitirDestino(pendiente: Boolean) {
         viewModelScope.launch {
             if (pendiente) {
                 val esPalet = traspasoEsDePalet.value
-                _navigate.emit(Destino.Traspasos(esPalet))
+                val directo = traspasoDirectoDesdePaletCerrado.value
+                _navigate.emit(Destino.Traspasos(esPalet, directo))
             } else {
                 _navigate.emit(Destino.Home)
             }
-
-            _navigate.resetReplayCache() // 🔐 Limpia el valor después de usarlo
+            _navigate.resetReplayCache()
         }
     }
-
 
     private val _traspasoEsDePalet = MutableStateFlow(false)
     val traspasoEsDePalet: StateFlow<Boolean> = _traspasoEsDePalet
@@ -52,5 +55,9 @@ class LoginViewModel : ViewModel() {
     fun setTraspasoEsDePalet(valor: Boolean) {
         _traspasoEsDePalet.value = valor
     }
-
+    private val _traspasoDirectoDesdePaletCerrado = MutableStateFlow(false)
+    val traspasoDirectoDesdePaletCerrado: StateFlow<Boolean> = _traspasoDirectoDesdePaletCerrado
+    fun setTraspasoDirectoDesdePaletCerrado(valor: Boolean) {
+        _traspasoDirectoDesdePaletCerrado.value = valor
+    }
 }

@@ -5,7 +5,7 @@ import com.google.gson.annotations.SerializedName
 data class LineaPaletCrearDto(
     val codigoEmpresa: Short,
     val codigoArticulo: String,
-    @SerializedName("DescripcionArticulo")
+    @SerializedName("descripcionArticulo")
     val descripcion: String? = null,
     val lote: String? = null,
     val fechaCaducidad: String? = null,

@@ -34,17 +34,16 @@ class ImpresionLogic(private val onToast: (String) -> Unit) {
                 usuario             = usuario,
                 dispositivo = dispositivoId,
                 idImpresora         = idImpresora,
-                etiquetaImpresa     = idEtiqueta,
+                etiquetaImpresa     = 0,
                 codigoArticulo      = stock.codigoArticulo,
                 descripcionArticulo = stock.descripcionArticulo ?: "",
                 copias              = copias,
                 codigoAlternativo   = ean13,
-                fechaCaducidad      = stock.fechaCaducidad
-                    ?.take(10)
-                    ?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                fechaCaducidad      = stock.fechaCaducidad?.take(10),
                 partida             = stock.partida?.takeIf { it.isNotBlank() },
                 alergenos           = alergenos?.takeIf { it.isNotBlank() } ?: "",
-                pathEtiqueta        = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl"
+                pathEtiqueta        = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
+                tipoEtiqueta = 1
             )
 
             Log.i("IMPRESION", "Payload → $dto")

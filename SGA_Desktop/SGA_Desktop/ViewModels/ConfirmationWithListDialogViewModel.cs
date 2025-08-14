@@ -50,21 +50,54 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
+		//private async Task CargarUbicacionesParaAlmacen(string codigoAlmacen)
+		//{
+		//	try
+		//	{
+		//		var lista = await _ubicacionesService.ObtenerUbicacionesVaciasOEspAsync(
+		//			SessionManager.EmpresaSeleccionada.Value, codigoAlmacen);
+
+		//		if (lista == null || !lista.Any())
+		//		{
+		//			MessageBox.Show("El servicio devolvió vacío.");
+		//		}
+		//		else
+		//		{
+		//			MessageBox.Show($"El servicio devolvió {lista.Count} ubicaciones.");
+		//		}
+
+		//		Ubicaciones = lista
+		//			.Select(u => new UbicacionDto
+		//			{
+		//				CodigoAlmacen = u.CodigoAlmacen,
+		//				Ubicacion = u.Ubicacion
+		//			}).ToList();
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		MessageBox.Show($"Error al cargar ubicaciones: {ex.Message}");
+		//		Ubicaciones = new List<UbicacionDto>();
+		//	}
+		//}
 		private async Task CargarUbicacionesParaAlmacen(string codigoAlmacen)
 		{
 			try
 			{
-				var lista = await _ubicacionesService.ObtenerUbicacionesVaciasOEspAsync(
-					SessionManager.EmpresaSeleccionada.Value, codigoAlmacen);
+				// Obtén las ubicaciones actuales de las líneas del palet
+				var ubicacionesActuales = Lineas
+					.Where(l => l.CodigoAlmacen == codigoAlmacen && !string.IsNullOrEmpty(l.Ubicacion))
+					.Select(l => l.Ubicacion)
+					.Distinct()
+					.ToList();
 
-				if (lista == null || !lista.Any())
-				{
-					MessageBox.Show("El servicio devolvió vacío.");
-				}
-				else
-				{
-					MessageBox.Show($"El servicio devolvió {lista.Count} ubicaciones.");
-				}
+				// Mensaje de depuración: ubicaciones actuales enviadas
+				MessageBox.Show(string.Join(", ", ubicacionesActuales), "Ubicaciones actuales enviadas al backend");
+
+				var lista = await _ubicacionesService.ObtenerUbicacionesVaciasOEspAsync(
+					SessionManager.EmpresaSeleccionada.Value, codigoAlmacen, ubicacionesActuales);
+
+				// Mensaje de depuración: ubicaciones recibidas del backend
+				MessageBox.Show(string.Join(", ", lista.Select(u => u.Ubicacion)), "Ubicaciones recibidas del backend");
 
 				Ubicaciones = lista
 					.Select(u => new UbicacionDto
@@ -79,6 +112,5 @@ namespace SGA_Desktop.ViewModels
 				Ubicaciones = new List<UbicacionDto>();
 			}
 		}
-
 	}
 }

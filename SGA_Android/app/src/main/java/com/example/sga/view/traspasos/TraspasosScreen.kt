@@ -54,6 +54,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoPaletDto
 import java.time.LocalDateTime
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.focus.onFocusChanged
 
 
 @Composable
@@ -129,6 +131,7 @@ fun TraspasosScreen(
     sessionViewModel: SessionViewModel,
     viewModel: TraspasosViewModel = viewModel(),
     esPalet: Boolean,
+    directoDesdePaletCerrado: Boolean = false
 ) {
     /* ------------------  State que ya tenías  ------------------ */
     val empresa   = sessionViewModel.empresaSeleccionada.collectAsState().value?.codigo?.toShort() ?: return
@@ -161,6 +164,10 @@ fun TraspasosScreen(
     LaunchedEffect(Unit) {
         viewModel.setTraspasoEsDePalet(esPalet)
     }
+    LaunchedEffect(Unit) {
+        viewModel.setTraspasoDirectoDesdePaletCerrado(directoDesdePaletCerrado)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.comprobarTraspasoPendiente(
             usuarioId = usuarioId,
@@ -219,7 +226,7 @@ fun TraspasosScreen(
     var mostrarDialogoExito by remember { mutableStateOf(false) }
     var mostrarDialogoErrorFinalizar by remember { mutableStateOf<String?>(null) }
     var mostrarDialogoTraspasoDirecto by remember { mutableStateOf(false) }
-    var traspasoMoverPaletPendiente by remember { mutableStateOf(false) }
+    //var traspasoMoverPaletPendiente by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.cargarAlmacenesPermitidos(
@@ -230,11 +237,13 @@ fun TraspasosScreen(
 
     Scaffold(
         topBar = {
-            AppTopBar(
-                sessionViewModel = sessionViewModel,
-                navController = navController,
-                title = ""
-            )
+            Box(Modifier.fillMaxWidth()) {
+                AppTopBar(
+                    sessionViewModel = sessionViewModel,
+                    navController = navController,
+                    title = ""
+                )
+            }
         }
     ) { padding ->
         if (DeviceUtils.isHoneywell) {
@@ -360,6 +369,7 @@ fun TraspasosScreen(
                         codigoUbicacion  = codUbi,
                         almacenesPermitidos = viewModel.almacenesPermitidos.value
                     )
+
                     articuloPendiente = null
                     triggerLineaPendiente = false
                 }
@@ -759,6 +769,10 @@ fun TraspasosScreen(
             if (mostrarDialogoCerrarPalet && idPaletParaCerrar != null) {
                 val lineasDelPalet = lineasPalet[idPaletParaCerrar] ?: emptyList()
 
+                // Campos para peso y altura
+                var peso by remember { mutableStateOf("0") }
+                var altura by remember { mutableStateOf("0") }
+
                 AlertDialog(
                     onDismissRequest = { mostrarDialogoCerrarPalet = false },
 
@@ -770,6 +784,24 @@ fun TraspasosScreen(
                                 "Antes de cerrar el palet, compruebe que los artículos y cantidades " +
                                         "mostradas coinciden con las reales.\n",
                                 style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(Modifier.height(8.dp))
+
+                            // Campos de peso y altura
+                            OutlinedTextField(
+                                value = peso,
+                                onValueChange = { peso = it.filter { c -> c.isDigit() || c == '.' } },
+                                label = { Text("Peso (kg) [opcional]") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = altura,
+                                onValueChange = { altura = it.filter { c -> c.isDigit() || c == '.' } },
+                                label = { Text("Altura (cm) [opcional]") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
                             )
                             Spacer(Modifier.height(8.dp))
 
@@ -794,14 +826,33 @@ fun TraspasosScreen(
 
                     confirmButton = {
                         TextButton(onClick = {
+                            Log.d("CERRAR_PALET", "✅ Botón 'Sí' pulsado para cerrar palet")
+
                             mostrarDialogoCerrarPalet = false
+
+                            val (codigoAlmacen, ubicacion) = ubicacionEscaneada
+                                ?: run {
+                                    Log.e("CERRAR_PALET", "❌ ubicacionEscaneada es null, no se puede cerrar el palet")
+                                    return@TextButton
+                                }
+
+                            Log.d("CERRAR_PALET", """
+        📤 Enviando datos a cerrarPalet:
+        - Palet ID: $idPaletParaCerrar
+        - Usuario ID: $usuarioId
+        - Empresa: $empresa
+        - Código Almacén: $codigoAlmacen
+        - Ubicación Origen: $ubicacion
+    """.trimIndent())
+
                             viewModel.cerrarPalet(
                                 id = idPaletParaCerrar!!,
                                 usuarioId = usuarioId,
-                                codigoAlmacen = ubicacionEscaneada?.first ?: return@TextButton,
+                                codigoAlmacen = codigoAlmacen,
                                 codigoEmpresa = empresa,
-                                ubicacionOrigen = ubicacionEscaneada?.second,
+                                ubicacionOrigen = ubicacion,
                                 onSuccess = { traspasoId ->
+                                    Log.d("CERRAR_PALET", "✅ Palet cerrado correctamente. Traspaso ID: $traspasoId")
                                     traspasoPendienteId = traspasoId
                                     viewModel.setTraspasoEsDePalet(true)
                                     esperandoUbicacionDestino = true
@@ -809,10 +860,11 @@ fun TraspasosScreen(
                                     idPaletParaCerrar = null
                                 },
                                 onError = {
+                                    Log.e("CERRAR_PALET", "❌ Error al cerrar palet: $it")
                                     mostrarDialogoErrorFinalizar = it
                                 }
                             )
-                        }) {
+                        }){
                             Text("Sí")
                         }
                     },
@@ -1264,7 +1316,7 @@ fun TraspasosScreen(
                                 val parts = trimmed.split('$')
                                 if (parts.size == 2) parts[0] to parts[1] else return@onPreviewKeyEvent false
                             } else {
-                                "201" to trimmed
+                                "PR" to trimmed
                             }
 
                             Log.d("ESCANEO_DESTINO", "✅ Interpretado -> Almacén: $almacenDestino | Ubicación: $ubicacionDestino")
@@ -1284,7 +1336,7 @@ fun TraspasosScreen(
                                     )
                                     Log.d("ESCANEO_DESTINO", "🚚 $dto")
                                     viewModel.finalizarTraspasoPalet(
-                                        traspasoId = traspasoPendienteId ?: return@onPreviewKeyEvent false,
+                                        traspasoId = viewModel.traspasoPendienteId.value ?: return@onPreviewKeyEvent false,
                                         dto = dto,
                                         onSuccess = {
                                             Log.d("ESCANEO_DESTINO", "✅ finalizado correctamente")
@@ -1392,7 +1444,7 @@ fun TraspasosScreen(
                     }
                     if (parts.size == 2) parts[0] to parts[1] else return@QRScannerView
                 } else {
-                    "201" to trimmed
+                    "PR" to trimmed
                 }
                 if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
                     esperandoUbicacionDestino = false
@@ -1516,7 +1568,7 @@ fun TraspasosScreen(
                                 val parts = trimmed.split('$')
                                 if (parts.size == 2) parts[0] to parts[1] else return@onPreviewKeyEvent false
                             } else {
-                                "201" to trimmed
+                                "PR" to trimmed
                             }
 
                             if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
@@ -1558,7 +1610,7 @@ fun TraspasosScreen(
                         val parts = trimmed.split('$')
                         if (parts.size == 2) parts[0] to parts[1] else return@QRScannerView
                     } else {
-                        "201" to trimmed
+                        "PR" to trimmed
                     }
 
                     if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {

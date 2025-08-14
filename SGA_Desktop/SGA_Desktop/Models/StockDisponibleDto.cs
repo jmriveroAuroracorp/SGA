@@ -84,6 +84,6 @@ public class StockDisponibleDto : INotifyPropertyChanged
     }
 
     public ObservableCollection<UbicacionDto> UbicacionesDestino { get; set; } = new();
-
-
+	public string? EstadoPaletDestino { get; set; }
+	public string? EstadoPaletOrigen { get; set; }
 }

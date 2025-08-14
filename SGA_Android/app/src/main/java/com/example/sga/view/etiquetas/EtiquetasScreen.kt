@@ -365,11 +365,13 @@ fun EtiquetasScreen(
                                         copias = copias,
                                         codigoAlternativo = articulo?.codigoAlternativo?.takeIf { it.isNotBlank() }
                                             ?: "",
-                                        fechaCaducidad = stock.fechaCaducidad?.take(10)
-                                            ?.let { LocalDate.parse(it) },
+                                        fechaCaducidad = stock.fechaCaducidad?.take(10),
                                         partida = stock.partida,
                                         alergenos = alergenos,
-                                        pathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl"
+                                        pathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
+                                        tipoEtiqueta = 1,
+                                        codigoGS1 = null,
+                                        codigoPalet = null
                                     )
 
                                     viewModel.enviarLogImpresion(dto)

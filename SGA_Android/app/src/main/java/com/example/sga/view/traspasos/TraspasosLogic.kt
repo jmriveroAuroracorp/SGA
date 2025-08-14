@@ -21,6 +21,7 @@ import com.example.sga.data.dto.traspasos.TraspasoArticuloDto
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoArticuloDto
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoPaletDto
 import com.example.sga.data.dto.traspasos.MoverPaletDto
+import com.example.sga.data.dto.traspasos.MoverPaletResponse
 import com.example.sga.data.dto.traspasos.PaletMovibleDto
 import com.example.sga.data.dto.traspasos.TraspasoCreadoResponse
 import com.example.sga.data.dto.traspasos.TraspasoPendienteDto
@@ -189,11 +190,17 @@ class TraspasosLogic {
                     response: Response<TraspasoCreadoResponse>
                 ) {
                     if (response.isSuccessful) {
-                        val idTraspaso = response.body()?.traspasoId
-                        if (idTraspaso != null) onSuccess(idTraspaso)
+
+                        val paletId = response.body()?.paletId
+
+                        if (paletId != null) onSuccess(paletId)
+
                         else onError("Respuesta inválida del servidor")
+
                     } else {
+
                         onError("Código ${response.code()}: ${response.errorBody()?.string()}")
+
                     }
                 }
 
@@ -433,9 +440,9 @@ class TraspasosLogic {
    4) UBICACIÓN implícita  (sin '$'  y no GTIN / SSCC)
    ───────────────────────────────────────────── */
         if (!trimmed.contains('$')) {
-            val codAlm  = "201"          // almacén fijo
+            val codAlm  = "PR"          // almacén fijo
             val codUbi  = trimmed        // ej. UB001001002002
-            Log.d("ESCANEO", "📍 Ubicación detectada (fijo 201): $codUbi")
+            Log.d("ESCANEO", "📍 Ubicación detectada (fijo PR): $codUbi")
             onUbicacionDetectada(codAlm, codUbi)
             return
         }
@@ -614,6 +621,9 @@ class TraspasosLogic {
         onSuccess: (TraspasoArticuloDto) -> Unit,
         onError: (String) -> Unit
     ) {
+        // Debug: Log para verificar el DTO que se está enviando
+        Log.d("TRASPASOS_LOGIC", "📤 Enviando DTO: descripcionArticulo=${dto.descripcionArticulo}, codigoEmpresa=${dto.codigoEmpresa}")
+        
         ApiManager.traspasosApi.crearTraspasoArticulo(dto)
             .enqueue(object : retrofit2.Callback<TraspasoArticuloDto> {
                 override fun onResponse(
@@ -709,16 +719,22 @@ class TraspasosLogic {
 
     fun moverPalet(
         dto: MoverPaletDto,
-        onSuccess: () -> Unit,
+        onSuccess: (String) -> Unit, // ahora devuelve el ID del traspaso
         onError: (String) -> Unit
     ) {
         Log.d("MOVER_PALET", "📡 Llamando a API moverPalet con: $dto")
         ApiManager.traspasosApi.moverPalet(dto)
-            .enqueue(object : Callback<Void> {
-                override fun onResponse(call: Call<Void>, response: Response<Void>) {
+            .enqueue(object : Callback<MoverPaletResponse> {
+                override fun onResponse(call: Call<MoverPaletResponse>, response: Response<MoverPaletResponse>) {
                     Log.d("MOVER_PALET", "📬 Código HTTP: ${response.code()}")
                     if (response.isSuccessful) {
-                        onSuccess()
+                        val id = response.body()?.traspasosIds?.firstOrNull()
+                        if (id != null) {
+                            Log.d("MOVER_PALET", "✅ Traspaso creado con ID: $id")
+                            onSuccess(id)
+                        } else {
+                            onError("Traspaso creado pero no se recibió ID")
+                        }
                     } else {
                         val msg = response.errorBody()?.string() ?: "Error ${response.code()}"
                         Log.e("MOVER_PALET", "❌ Error moverPalet: $msg")
@@ -726,12 +742,13 @@ class TraspasosLogic {
                     }
                 }
 
-                override fun onFailure(call: Call<Void>, t: Throwable) {
+                override fun onFailure(call: Call<MoverPaletResponse>, t: Throwable) {
                     Log.e("MOVER_PALET", "❌ Error de red moverPalet: ${t.message}")
                     onError("Error de red: ${t.message}")
                 }
             })
     }
+
     fun finalizarTraspasoPalet(
         traspasoId: String,
         dto: FinalizarTraspasoPaletDto,
@@ -755,6 +772,28 @@ class TraspasosLogic {
 
                 override fun onFailure(call: Call<Void>, t: Throwable) {
                     Log.e("FINALIZAR_TRASPASO_PALET", "❌ Error de red: ${t.message}")
+                    onError("Error de red: ${t.message}")
+                }
+            })
+    }
+
+    fun finalizarTraspasoPaletPorPaletId(
+        paletId: String,
+        dto: FinalizarTraspasoPaletDto,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        ApiManager.traspasosApi.finalizarTraspasoPaletPorPaletId(paletId, dto)
+            .enqueue(object : retrofit2.Callback<Void> {
+                override fun onResponse(call: retrofit2.Call<Void>, response: retrofit2.Response<Void>) {
+                    if (response.isSuccessful) {
+                        onSuccess()
+                    } else {
+                        val error = response.errorBody()?.string()
+                        onError("Error ${response.code()}: ${error ?: "desconocido"}")
+                    }
+                }
+                override fun onFailure(call: retrofit2.Call<Void>, t: Throwable) {
                     onError("Error de red: ${t.message}")
                 }
             })

@@ -199,6 +199,7 @@
         <!-- RESULTADOS: MODO POR ARTÍCULO -->
         <ListView Grid.Row="3"
           ItemsSource="{Binding StockFiltrado}"
+          SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
           Visibility="{Binding ListViewVisibility}"
           SelectionMode="Single"
           ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -303,6 +304,7 @@
         <!-- RESULTADOS: MODO POR UBICACIÓN -->
         <ListView Grid.Row="3"
           ItemsSource="{Binding ResultadosStockPorUbicacion}"
+          SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
           Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
           SelectionMode="Single"
           ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -415,6 +417,13 @@
             Width="120"
             Height="30"
             Command="{Binding ExportarExcelCommand}"/>
+            <Button Content="Imprimir etiqueta"
+            Style="{StaticResource EstiloBotonPrincipal}"
+            Width="140"
+            Height="30"
+            Margin="12,0,0,0"
+            Command="{Binding ImprimirEtiquetaStockCommand}"
+            IsEnabled="{Binding ArticuloSeleccionadoParaImprimir, Converter={StaticResource BoolToVis}}"/>
         </StackPanel>
     </Grid>
 </Page>

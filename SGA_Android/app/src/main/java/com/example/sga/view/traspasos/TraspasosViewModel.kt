@@ -459,28 +459,24 @@ class TraspasosViewModel : ViewModel() {
 
     fun moverPalet(
         dto: MoverPaletDto,
-        onSuccess: () -> Unit,
+        onSuccess: (String) -> Unit, // devuelve el ID
         onError: (String) -> Unit
     ) {
-        Log.d("MOVER_PALET", "➡️ Enviando DTO moverPalet: $dto")
         logic.moverPalet(
             dto = dto,
-            onSuccess = {
-                Log.d("MOVER_PALET", "✅ Traspaso creado correctamente")
-                clearTraspasoArticuloPendiente()
-                clearUbicacionOrigen()
-                clearPaletSeleccionado()
-                _paletCreado.value = null
-                _lineasPalet.value = emptyMap()
-                onSuccess()
+            onSuccess = { id ->
+                _traspasoPendienteId.value = id // o _traspasoPendienteId.value = id
+                onSuccess(id)
             },
             onError = {
-                Log.e("MOVER_PALET", "❌ Error moverPalet: $it")
                 _error.value = it
                 onError(it)
             }
         )
     }
+    private val _traspasoPendienteId = MutableStateFlow<String?>(null)
+    val traspasoPendienteId: StateFlow<String?> = _traspasoPendienteId
+
     fun finalizarTraspasoPalet(
         traspasoId: String,
         dto: FinalizarTraspasoPaletDto,
@@ -506,6 +502,27 @@ class TraspasosViewModel : ViewModel() {
 
     fun setTraspasoDirectoDesdePaletCerrado(valor: Boolean) {
         _traspasoDirectoDesdePaletCerrado.value = valor
+    }
+
+    fun finalizarPaletPorPaletId(
+        paletId: String,
+        dto: FinalizarTraspasoPaletDto,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        _cargando.value = true
+        logic.finalizarTraspasoPaletPorPaletId(
+            paletId = paletId,
+            dto = dto,
+            onSuccess = {
+                _cargando.value = false
+                onSuccess()
+            },
+            onError = {
+                _cargando.value = false
+                onError(it)
+            }
+        )
     }
 
 }

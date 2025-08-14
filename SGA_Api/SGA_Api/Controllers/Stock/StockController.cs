@@ -162,12 +162,12 @@ namespace SGA_Api.Controllers.Stock
 
 
 
-		// 1.b) Buscar por ubicación (almacén obligatorio + ubicación obligatoria, que puede ser "")
+		// 1.b) Buscar por ubicación (almacén obligatorio + ubicación opcional)
 		[HttpGet("ubicacion")]
 		public async Task<IActionResult> PorUbicacion(
 			[FromQuery] short codigoEmpresa,
 			[FromQuery] string codigoAlmacen,                  // obligatorio
-			[FromQuery] string codigoUbicacion = ""            // default="" acepta sin parámetro
+			[FromQuery] string? codigoUbicacion = null         // 🔷 MODIFICADO: Ahora es opcional
 		)
 		{
 			var ejercicio = await _sageContext.Periodos
@@ -178,17 +178,38 @@ namespace SGA_Api.Controllers.Stock
 			if (ejercicio == 0)
 				return BadRequest("Sin ejercicio");
 
-			var datos = await _storageContext.AcumuladoStockUbicacion
+			var query = _storageContext.AcumuladoStockUbicacion
 				.Where(a =>
 					a.CodigoEmpresa == codigoEmpresa &&
 					a.Ejercicio == ejercicio &&
 					a.CodigoAlmacen == codigoAlmacen &&
-					a.Ubicacion == codigoUbicacion &&
 					a.UnidadSaldo != 0
-				)
-				.ToListAsync();
+				);
 
-			return Ok(ProjectToDto(datos));
+			// 🔷 LÓGICA FINAL: Diferenciar entre todo el almacén, sin ubicación y ubicación específica
+			var queryString = Request.QueryString.ToString();
+			var tieneParametroUbicacion = queryString.Contains("codigoUbicacion=");
+
+			if (!tieneParametroUbicacion)
+			{
+				// No se envió el parámetro → Todo el almacén (sin filtro de ubicación)
+				// No aplicamos ningún filtro adicional
+			}
+			else if (codigoUbicacion == null || codigoUbicacion == "")
+			{
+				// Se envió el parámetro pero es null o vacío → Solo artículos sin ubicar
+				query = query.Where(a => string.IsNullOrEmpty(a.Ubicacion));
+			}
+			else
+			{
+				// Se envió el parámetro con valor → Ubicación específica
+				query = query.Where(a => a.Ubicacion == codigoUbicacion);
+			}
+
+			var datos = await query.ToListAsync();
+			var resultado = ProjectToDto(datos);
+
+			return Ok(resultado);
 		}
 
 		// 1.c) Buscar por artículo (nuevo endpoint)

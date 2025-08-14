@@ -62,7 +62,7 @@ fun HomeScreen(
                     label = { Text("Traspasos") },
                     selected = false,
                     onClick = {
-                        navController.navigate("traspasos/false")
+                        navController.navigate("traspasos/false/false")
                         scope.launch { drawerState.close() }
                     }
                 )

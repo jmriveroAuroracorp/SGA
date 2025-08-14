@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using SGA_Desktop.Helpers;
+using System.Windows.Input;
 
 namespace SGA_Desktop
 {
@@ -17,6 +18,21 @@ namespace SGA_Desktop
 
 			//// (Opcional) Navega inmediatamente a la vista inicial
 			//NavigationStore.Navigate("ConsultaStock");
+		}
+
+		private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+		{
+			WindowState = WindowState.Minimized;
+		}
+
+		private void CloseButton_Click(object sender, RoutedEventArgs e)
+		{
+			Close();
+		}
+
+		private void CustomTitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+		{
+			DragMove();
 		}
 	}
 }

@@ -21,5 +21,13 @@
 		public int TipoEtiqueta { get; set; }
 		public string CodigoGS1 { get; set; }
 		public string CodigoPalet { get; set; }
+
+		// Campos de ubicación
+		public string? CodAlmacen { get; set; }
+		public string? CodUbicacion { get; set; }
+		public int? Altura { get; set; }
+		public int? Estanteria { get; set; }
+		public int? Pasillo { get; set; }
+		public int? Posicion { get; set; }
 	}
 }

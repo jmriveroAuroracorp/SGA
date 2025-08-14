@@ -80,7 +80,16 @@ namespace SGA_Api.Data
 				.OnDelete(DeleteBehavior.Restrict);
 
 			// PrintCenter
-			modelBuilder.Entity<LogImpresion>().ToTable("log_impresiones");
+			modelBuilder.Entity<LogImpresion>(ent =>
+			{
+				ent.ToTable("log_impresiones");
+				ent.Property(e => e.CodAlmacen).HasColumnName("codAlmacen");
+				ent.Property(e => e.CodUbicacion).HasColumnName("codUbicacion");
+				ent.Property(e => e.Altura).HasColumnName("altura");
+				ent.Property(e => e.Estanteria).HasColumnName("estanteria");
+				ent.Property(e => e.Pasillo).HasColumnName("pasillo");
+				ent.Property(e => e.Posicion).HasColumnName("posicion");
+			});
 
 			//Tabla Usuarios. Configuración por defecto
 			modelBuilder.Entity<Usuario>()

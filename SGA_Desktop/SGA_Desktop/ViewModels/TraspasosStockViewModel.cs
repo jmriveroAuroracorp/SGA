@@ -90,14 +90,13 @@ namespace SGA_Desktop.ViewModels
                     Feedback = "No hay stock para ese artículo.";
                     return;
                 }
-                // Filtrar por almacenes autorizados (igual que en ConsultaStockViewModel)
-                var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-                if (!permisos.Any())
-                {
-                    var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-                    permisos = await _stockService.ObtenerAlmacenesAsync(centro);
-                }
-                stock = stock.Where(x => permisos.Contains(x.CodigoAlmacen)).ToList();
+
+                // 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+                var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
+                
+                // Filtrar por almacenes autorizados
+                stock = stock.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
+
                 // Siempre agrupa por artículo
                 var grupos = stock.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
                                   .Select(g => new ArticuloStockGroup
@@ -176,21 +175,29 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
-        public void AbrirDialogoTraspaso()
+        public async void AbrirDialogoTraspaso()
         {
             if (StockSeleccionado == null)
                 return;
 
-            // Obtener almacenes destino (puedes adaptar según tu lógica)
-            var almacenesDestino = new ObservableCollection<AlmacenDto>();
-            // Aquí deberías poblar almacenesDestino según tu lógica de permisos, etc.
-            // Por simplicidad, se deja vacío, pero deberías rellenarlo como en ConsultaStockViewModel
-
-            var vm = new TraspasoStockDialogViewModel(StockSeleccionado, _traspasosService, _fechaUltimaBusqueda);
-            var dlg = new TraspasoStockDialog(vm)
+            // 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+            var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
+            
+            var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(
+                SessionManager.EmpresaSeleccionada!.Value, 
+                SessionManager.UsuarioActual?.codigoCentro ?? "0", 
+                almacenesAutorizados
+            );
+            
+            var vm = new TraspasoStockDialogViewModel(StockSeleccionado, _traspasosService, _fechaUltimaBusqueda)
             {
-                Owner = Application.Current.MainWindow
+                AlmacenesDestino = new ObservableCollection<AlmacenDto>(almacenesDto)
             };
+            var dlg = new TraspasoStockDialog(vm);
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+            if (owner != null && owner != dlg)
+                dlg.Owner = owner;
             // Suscribirse al cierre para refrescar si fue correcto
             vm.RequestClose += (ok) =>
             {
@@ -211,11 +218,38 @@ namespace SGA_Desktop.ViewModels
 			var vm = new RegularizacionMultipleDialogViewModel(_traspasosService, _stockService);
 			await vm.InitializeAsync(); // <- Espera a que cargue datos antes de abrir la ventana
 
-			var dlg = new SGA_Desktop.Dialog.RegularizacionMultipleDialog(vm)
-			{
-				Owner = System.Windows.Application.Current.MainWindow
-			};
+			var dlg = new SGA_Desktop.Dialog.RegularizacionMultipleDialog(vm);
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			dlg.ShowDialog();
 		}
+
+        //  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
+        private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
+        {
+            var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+            var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+
+            // Si el usuario tiene almacenes individuales, incluir también los del centro
+            if (almacenesIndividuales.Any())
+            {
+                // Obtener almacenes del centro logístico de forma asíncrona
+                var almacenesCentro = await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+                
+                // Combinar almacenes individuales + almacenes del centro
+                var todosLosAlmacenes = new List<string>(almacenesIndividuales);
+                todosLosAlmacenes.AddRange(almacenesCentro);
+                
+                // Eliminar duplicados
+                return todosLosAlmacenes.Distinct().ToList();
+            }
+            else
+            {
+                // Si no tiene almacenes individuales, usar solo los del centro
+                return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+            }
+        }
 	}
 } 

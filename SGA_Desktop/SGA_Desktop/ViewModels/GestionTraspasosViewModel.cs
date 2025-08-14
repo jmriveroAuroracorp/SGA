@@ -91,9 +91,12 @@ namespace SGA_Desktop.ViewModels
 			var dlgVm = new TraspasoFilterDialogViewModel(_traspasosService);
 			var dlg = new TraspasoFilterDialog
 			{
-				Owner = Application.Current.MainWindow,
 				DataContext = dlgVm
 			};
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 
 			// Inicializa los estados en segundo plano
 			dlg.Loaded += async (s, e) => await dlgVm.InitializeAsync();
@@ -144,9 +147,12 @@ namespace SGA_Desktop.ViewModels
 			var dlgVm = new TraspasoPaletDialogViewModel(); // Añade servicios si es necesario
 			var dlg = new TraspasoPaletDialog
 			{
-				DataContext = dlgVm,
-				Owner = Application.Current.MainWindow
+				DataContext = dlgVm
 			};
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			dlg.ShowDialog();
 			// Si quieres refrescar la lista tras cerrar el diálogo, hazlo aquí
 		}

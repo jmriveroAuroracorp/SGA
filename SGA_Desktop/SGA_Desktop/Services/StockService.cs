@@ -53,20 +53,54 @@ namespace SGA_Desktop.Services
 		/// GET /api/Stock/ubicacion
 		/// Búsqueda por almacén + ubicación (-> "" para Sin ubicación)
 		/// </summary>
+		//public async Task<List<StockDto>> ObtenerPorUbicacionAsync(
+		//	int codigoEmpresa,
+		//	string codigoAlmacen,
+		//	string codigoUbicacion)
+		//{
+		//	if (string.IsNullOrWhiteSpace(codigoAlmacen))
+		//		throw new ArgumentException("codigoAlmacen es obligatorio.", nameof(codigoAlmacen));
+		//	if (codigoUbicacion == null)
+		//		throw new ArgumentNullException(nameof(codigoUbicacion));
+
+		//	var qs = $"?codigoEmpresa={codigoEmpresa}"
+		//		   + $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
+		//		   // Siempre incluimos codigoUbicacion, aunque sea cadena vacía:
+		//		   + $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
+
+		//	try
+		//	{
+		//		return await GetAsync<List<StockDto>>($"Stock/ubicacion{qs}");
+		//	}
+		//	catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+		//	{
+		//		// No hay nada en esa ubicación → lista vacía
+		//		return new List<StockDto>();
+		//	}
+		//}
+		/// <summary>
+		/// GET /api/Stock/ubicacion?codigoEmpresa=…&codigoAlmacen=…&codigoUbicacion=…
+		/// Devuelve el stock de una ubicación específica o de todo el almacén si codigoUbicacion es null.
+		/// </summary>
 		public async Task<List<StockDto>> ObtenerPorUbicacionAsync(
 			int codigoEmpresa,
 			string codigoAlmacen,
-			string codigoUbicacion)
+			string? codigoUbicacion) // 🔷 MODIFICADO: Ahora permite null
 		{
 			if (string.IsNullOrWhiteSpace(codigoAlmacen))
 				throw new ArgumentException("codigoAlmacen es obligatorio.", nameof(codigoAlmacen));
-			if (codigoUbicacion == null)
-				throw new ArgumentNullException(nameof(codigoUbicacion));
+
+			// 🔷 MODIFICADO: Ya no validamos que codigoUbicacion sea null
 
 			var qs = $"?codigoEmpresa={codigoEmpresa}"
-				   + $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
-				   // Siempre incluimos codigoUbicacion, aunque sea cadena vacía:
-				   + $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
+				   + $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+
+			// �� CORREGIDO: Siempre incluir codigoUbicacion, incluso si es string.Empty
+			if (codigoUbicacion != null)
+			{
+				qs += $"&codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}";
+			}
+			// Si es null, no se incluye el parámetro (consulta todo el almacén)
 
 			try
 			{

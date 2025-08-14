@@ -8,6 +8,7 @@ using SGA_Desktop.Dialog;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using SGA_Desktop.Helpers;
+using System.Linq;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -135,10 +136,12 @@ namespace SGA_Desktop.ViewModels
 
 			var dlg = new PaletFilterDialog
 			{
-				Owner = Application.Current.MainWindow,
 				DataContext = dlgVm
 			};
-
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			if (dlg.ShowDialog() != true) return;
 
 			var f = (PaletFilterDialogViewModel)dlg.DataContext;
@@ -165,8 +168,11 @@ namespace SGA_Desktop.ViewModels
 		private async void AbrirPaletCrearDialog()
 		{
 			var dlgVm = new PaletCrearDialogViewModel(_paletService);
-			var dlg = new PaletCrearDialog { DataContext = dlgVm, Owner = Application.Current.MainWindow };
-
+			var dlg = new PaletCrearDialog { DataContext = dlgVm };
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			if (dlg.ShowDialog() == true && dlgVm.CreatedPalet != null)
 				PaletsView.Add(dlgVm.CreatedPalet);
 		}
@@ -190,10 +196,12 @@ namespace SGA_Desktop.ViewModels
 
 			var dlg = new PaletLineasDialog
 			{
-				Owner = Application.Current.MainWindow,
 				DataContext = dlgVm
 			};
-
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			dlg.ShowDialog();
 
 			// 🔷 al cerrar el diálogo, recarga las líneas
@@ -217,11 +225,11 @@ namespace SGA_Desktop.ViewModels
 				"Confirmar eliminación",
 				$"¿Estás seguro de que quieres eliminar esta línea?\n\n{detalle}",
 				"\uE74D" // icono de papelera
-			)
-			{
-				Owner = Application.Current.MainWindow
-			};
-
+			);
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			if (dlg.ShowDialog() != true) return;
 
 			var ok = await _paletService.EliminarLineaPaletAsync(lineaSeleccionada.Id, SessionManager.UsuarioActual.operario);
@@ -359,7 +367,8 @@ namespace SGA_Desktop.ViewModels
 				almacenes,
 				_ubicService) // <-- aquí
 			{
-				Owner = Application.Current.MainWindow
+				Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow
 			};
 
 			if (dlg.ShowDialog() != true) return;
@@ -417,20 +426,13 @@ namespace SGA_Desktop.ViewModels
 
 			var confirm = new ConfirmationDialog(
 				"Reabrir palet",
-				$"""
-		¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?
-
-		Al reabrir:
-		• El traspaso pendiente asociado quedará CANCELADO.
-		• Podrás añadir, modificar o eliminar líneas del palet.
-		• Cuando lo cierres de nuevo, se generará un nuevo traspaso.
-
-		¿Deseas continuar?
-		""",
-				"\uE7BA" // icono de advertencia/reapertura
-			)
-			{ Owner = Application.Current.MainWindow };
-
+				$"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\n\nAl reabrir:\n• El traspaso pendiente asociado quedará CANCELADO.\n• Podrás añadir, modificar o eliminar líneas del palet.\n• Cuando lo cierres de nuevo, se generará un nuevo traspaso.\n\n¿Deseas continuar?",
+				"\uE7BA"
+			);
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						 ?? Application.Current.MainWindow;
+			if (owner != null && owner != confirm)
+				confirm.Owner = owner;
 			if (confirm.ShowDialog() != true) return;
 
 			// Llama al servicio para reabrir
@@ -464,15 +466,16 @@ namespace SGA_Desktop.ViewModels
 
 			// Abrimos diálogo de impresión
 			var dlgVm = new ConfirmarImpresionDialogViewModel(
-				ImpresorasDisponibles,  // tienes que tener esta ObservableCollection en tu VM o pasarla
-				ImpresorasDisponibles.FirstOrDefault());  // o la preferida si tienes
-
+				ImpresorasDisponibles,
+				ImpresorasDisponibles.FirstOrDefault());
 			var dlg = new ConfirmarImpresionDialog
 			{
-				Owner = Application.Current.MainWindow,
 				DataContext = dlgVm
 			};
-
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
 			if (dlg.ShowDialog() != true) return;
 
 			try

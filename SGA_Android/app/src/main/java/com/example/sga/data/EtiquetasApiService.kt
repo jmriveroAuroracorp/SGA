@@ -34,7 +34,7 @@ interface EtiquetasApiService {
     @GET("Impresion/impresoras")
     fun getImpresoras(): Call<List<ImpresoraDto>>
 
-    @POST("log")
+    @POST("Impresion/log")
     fun insertarLogImpresion(
         @Body dto: LogImpresionDto
     ): Call<LogImpresionDto>

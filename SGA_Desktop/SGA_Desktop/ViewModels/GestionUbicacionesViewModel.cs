@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Linq;
 
 
 public partial class GestionUbicacionesViewModel : ObservableObject
@@ -17,6 +18,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	private readonly StockService _stockService;
 	private readonly UbicacionesService _ubicService;
 	private readonly PaletService _paletService;
+	private readonly PrintQueueService _printService;
 
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
 		= new ObservableCollection<AlmacenDto>();
@@ -25,6 +27,10 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
 		= new ObservableCollection<UbicacionDetalladaDto>();
 	[ObservableProperty] private UbicacionDetalladaDto? selectedUbicacion;
+
+	public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; } = new();
+
+	[ObservableProperty] private string? errorMessage;
 
 	public GestionUbicacionesViewModel()
 	: this(new StockService(), new UbicacionesService(), new PaletService())
@@ -37,6 +43,82 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public IRelayCommand<UbicacionDetalladaDto> EditarUbicacionCommand { get; }
 	public IRelayCommand<AlmacenDto> OpenMasivoCommand { get; }
 
+	[RelayCommand]
+	private async Task ImprimirUbicacionAsync(UbicacionDetalladaDto ubicacion)
+	{
+		if (ubicacion is null) return;
+
+		// Mostrar confirmación al usuario con los datos que se van a imprimir
+		string detalles =
+$"Almacén: {ubicacion.CodigoAlmacen}\n" +
+$"Ubicación: {ubicacion.Ubicacion}\n" +
+$"Altura: {ubicacion.Altura}\n" +
+$"Estantería: {ubicacion.Estanteria}\n" +
+$"Pasillo: {ubicacion.Pasillo}\n" +
+$"Posición: {ubicacion.Posicion}";
+		var confirm = new ConfirmationDialog(
+			"Confirmar impresión de ubicación",
+			detalles,
+			"\uE946" // icono de información
+		)
+		{ Owner = Application.Current.MainWindow };
+		if (confirm.ShowDialog() != true) return;
+
+		// Abrimos diálogo de impresión
+		var dlgVm = new ConfirmarImpresionDialogViewModel(
+			ImpresorasDisponibles,
+			ImpresorasDisponibles.FirstOrDefault());
+
+		var dlg = new ConfirmarImpresionDialog
+		{
+			DataContext = dlgVm
+		};
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			 ?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+			dlg.Owner = owner;
+
+		if (dlg.ShowDialog() != true) return;
+
+		try
+		{
+			var dto = new LogImpresionDto
+			{
+				Usuario = SessionManager.Operario.ToString(),
+				Dispositivo = System.Environment.MachineName,
+				IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
+				EtiquetaImpresa = 0,
+				Copias = dlgVm.NumeroCopias,
+				CodigoArticulo = null,
+				DescripcionArticulo = null,
+				CodigoAlternativo = null,
+				FechaCaducidad = null,
+				Partida = null,
+				Alergenos = null,
+				PathEtiqueta = @"\\Sage200\mrh\Servicios\PrintCenter\ETIQUETAS\UBICACIONES.nlbl",
+				TipoEtiqueta = 3,
+				CodigoGS1 = null,
+				CodigoPalet = null,
+				CodAlmacen = ubicacion.CodigoAlmacen,
+				CodUbicacion = ubicacion.Ubicacion,
+				Altura = ubicacion.Altura,
+				Estanteria = ubicacion.Estanteria,
+				Pasillo = ubicacion.Pasillo,
+				Posicion = ubicacion.Posicion
+			};
+
+			await _printService.InsertarRegistroImpresionAsync(dto);
+
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(
+				ex.Message,
+				"Error al imprimir",
+				MessageBoxButton.OK,
+				MessageBoxImage.Error);
+		}
+	}
 
 	public GestionUbicacionesViewModel(
 		StockService stockService,
@@ -47,6 +129,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		_stockService = stockService;
 		_ubicService = ubicService;
 		_paletService = paletService;
+		_printService = new PrintQueueService();
 		LoadAlergenosCommand = new AsyncRelayCommand<UbicacionDetalladaDto>(LoadAlergenosAsync);
 		CreateUbicacionCommand = new RelayCommand<AlmacenDto>(
 		OpenCrearUbicacionDialog,
@@ -58,6 +141,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
   );
 		_ = InitializeAsync();
 		OpenMasivoCommand = new RelayCommand<AlmacenDto>(OpenMasivoDialog, alm => alm != null);
+		_ = LoadImpresorasAsync();
 
 	}
 
@@ -161,9 +245,12 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		// 4) Instancia de la ventana
 		var dlg = new UbicacionDialogWindow
 		{
-			DataContext = dialogVm,
-			Owner = Application.Current.MainWindow
+			DataContext = dialogVm
 		};
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+             ?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+			dlg.Owner = owner;
 
 		// 5) Mostrar y, si OK, recargar la lista
 		if (dlg.ShowDialog() == true)
@@ -192,9 +279,12 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		// 2) Ventana del diálogo
 		var dlg = new UbicacionDialogWindow
 		{
-			DataContext = dialogVm,
-			Owner = Application.Current.MainWindow
+			DataContext = dialogVm
 		};
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+             ?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+			dlg.Owner = owner;
 
 		// 3) Mostrar modal y, al volver true, recargar la lista
 		if (dlg.ShowDialog() == true)
@@ -207,15 +297,35 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		if (almacen == null) return;
 
 		// Pasa el CódigoAlmacen al constructor
-		var dlg = new UbicacionMasivoDialog(almacen)
-		{
-			Owner = Application.Current.MainWindow
-		};
+		var dlg = new UbicacionMasivoDialog(almacen);
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+             ?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+			dlg.Owner = owner;
 
 		// Si tu diálogo devuelve true al cerrar, recarga la lista
 		if (dlg.ShowDialog() == true)
 		{
 			_ = LoadUbicacionesAsync(almacen.CodigoAlmacen);
+		}
+	}
+
+	private async Task LoadImpresorasAsync()
+	{
+		try
+		{
+			var lista = await _printService.ObtenerImpresorasAsync();
+			ImpresorasDisponibles.Clear();
+			foreach (var imp in lista.OrderBy(x => x.Nombre))
+				ImpresorasDisponibles.Add(imp);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(
+				$"Error al cargar impresoras: {ex.Message}",
+				"Error de impresoras",
+				MessageBoxButton.OK,
+				MessageBoxImage.Error);
 		}
 	}
 

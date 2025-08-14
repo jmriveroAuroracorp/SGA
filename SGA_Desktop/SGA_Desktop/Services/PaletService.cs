@@ -240,7 +240,6 @@ namespace SGA_Desktop.Services
 				UbicacionDestino = ubicacionDestino,
 				TipoTraspaso = "PALET",
 				CodigoEstado = "PENDIENTE_ERP",
-				FechaFinalizacion = DateTime.Now,
 				UsuarioFinalizacionId = usuarioId,
 				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
 				Comentario = comentario,

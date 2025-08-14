@@ -2,6 +2,7 @@ package com.example.sga.data
 
 import com.example.sga.data.dto.stock.StockDisponibleDto
 import com.example.sga.data.dto.traspasos.*
+import com.example.sga.service.Traspasos.EstadoTraspasosService
 import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.POST
@@ -98,12 +99,21 @@ interface TraspasosApiService {
     ): Call<TraspasoPendienteDto>
 
     @POST("Traspasos/mover-palet")
-    fun moverPalet(@Body dto: MoverPaletDto): Call<Void>
+    fun moverPalet(@Body dto: MoverPaletDto): Call<MoverPaletResponse>
 
     @PUT("Traspasos/{id}/finalizar-palet")
     fun finalizarTraspasoPalet(
         @Path("id") traspasoId: String,
         @Body dto: FinalizarTraspasoPaletDto
     ): Call<Void>
+
+    @PUT("traspasos/palet/{paletId}/finalizar")
+    fun finalizarTraspasoPaletPorPaletId(
+        @Path("paletId") paletId: String,
+        @Body dto: FinalizarTraspasoPaletDto
+    ): Call<Void>
+
+    @GET("Traspaso/estado-usuario")
+    fun obtenerEstadosTraspasosPorUsuario(@Query("usuarioId") usuarioId: Int): Call<List<EstadoTraspasosService.TraspasoEstadoDto>>
 
 }

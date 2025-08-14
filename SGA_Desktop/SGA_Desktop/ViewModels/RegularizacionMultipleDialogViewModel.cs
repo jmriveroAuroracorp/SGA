@@ -69,12 +69,11 @@ namespace SGA_Desktop.ViewModels
 		{
 			var empresa = SessionManager.EmpresaSeleccionada!.Value;
 			var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-			var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-
-			if (!permisos.Any())
-				permisos = await _stockService.ObtenerAlmacenesAsync(centro);
-
-			var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+			
+			// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+			var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
+			
+			var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, almacenesAutorizados);
 
 			AlmacenesDestino.Clear();
 			foreach (var a in almacenes)
@@ -134,16 +133,11 @@ namespace SGA_Desktop.ViewModels
 				// Nuevo: usa el método que trae Reservado y Disponible
 				var resultados = await _stockService.ObtenerStockDisponibleAsync(codigo, descripcion);
 
-				// Filtra por almacenes permitidos
-				var permisos = SessionManager.UsuarioActual?.codigosAlmacen?.ToList() ?? new();
-				if (!permisos.Any())
-				{
-					string centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-					permisos = await _stockService.ObtenerAlmacenesAsync(centro) ?? new();
-				}
+				// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+				var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
 
 				resultados = resultados
-					.Where(x => x?.CodigoAlmacen != null && permisos.Contains(x.CodigoAlmacen))
+					.Where(x => x?.CodigoAlmacen != null && almacenesAutorizados.Contains(x.CodigoAlmacen))
 					.ToList();
 
 				var grupos = resultados
@@ -239,6 +233,126 @@ namespace SGA_Desktop.ViewModels
 			CollectionViewSource.GetDefaultView(LineasPendientes).Refresh();
 		}
 
+		//[RelayCommand]
+		//private async Task ConfirmarAsync()
+		//{
+		//	if (!LineasPendientes.Any())
+		//	{
+		//		new WarningDialog("Aviso", "No hay líneas para confirmar.").ShowDialog();
+		//		return;
+		//	}
+
+		//	// 1. Consultar el estado de palet para cada línea pendiente
+		//	foreach (var dto in LineasPendientes)
+		//	{
+		//		dto.EstadoPaletDestino = await _traspasosService.ConsultarEstadoPaletDestinoAsync(
+		//			SessionManager.EmpresaSeleccionada.Value,
+		//			dto.AlmacenDestino,
+		//			dto.UbicacionDestino
+		//		);
+		//	}
+
+		//	// 2. Agrupar los resultados
+		//	var paletsAbiertos = LineasPendientes
+		//		.Where(x => x.EstadoPaletDestino == "Abierto")
+		//		.Select(x => $"{x.CodigoArticulo} → {x.AlmacenDestino}/{x.UbicacionDestino}")
+		//		.ToList();
+
+		//	var paletsCerrados = LineasPendientes
+		//		.Where(x => x.EstadoPaletDestino == "Cerrado")
+		//		.Select(x => $"{x.CodigoArticulo} → {x.AlmacenDestino}/{x.UbicacionDestino}")
+		//		.ToList();
+
+		//	var sinPalet = LineasPendientes
+		//		.Where(x => x.EstadoPaletDestino == "NINGUNO")
+		//		.Select(x => $"{x.CodigoArticulo} → {x.AlmacenDestino}/{x.UbicacionDestino}")
+		//		.ToList();
+
+		//	// 3. Construir el mensaje resumen
+		//	var mensaje = "";
+		//	if (paletsAbiertos.Any())
+		//		mensaje += "Se agregarán artículos a los siguientes palets ABIERTOS:\n" + string.Join("\n", paletsAbiertos) + "\n\n";
+		//	if (paletsCerrados.Any())
+		//		mensaje += "Se reabrirán los siguientes palets CERRADOS:\n" + string.Join("\n", paletsCerrados) + "\n\n";
+		//	if (sinPalet.Any())
+		//		mensaje += "En las siguientes ubicaciones NO hay palet (el stock quedará sin paletizar):\n" + string.Join("\n", sinPalet);
+		//	mensaje += "\n¿Deseas continuar con la regularización múltiple?";
+
+		//	// 4. Mostrar el diálogo de confirmación
+		//	var confirm = new ConfirmationDialog("Resumen de regularización múltiple", mensaje);
+		//	if (confirm.ShowDialog() != true)
+		//	{
+		//		// El usuario cancela
+		//		return;
+		//	}
+
+		//	bool todoOk = true;
+
+		//	foreach (var dto in LineasPendientes)
+		//	{
+		//		dto.TieneError = false;
+		//		dto.ErrorMessage = null;
+
+		//		if (string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+		//		{
+		//			dto.TieneError = true;
+		//			dto.ErrorMessage = "Selecciona almacén destino.";
+		//			todoOk = false;
+		//			continue;
+		//		}
+		//		// UbicacionDestino puede ser null o vacío (sin ubicar)
+		//		if (dto.CantidadAMover <= 0 || dto.CantidadAMover > dto.UnidadSaldo)
+		//		{
+		//			dto.TieneError = true;
+		//			dto.ErrorMessage = "Cantidad a mover no válida.";
+		//			todoOk = false;
+		//			continue;
+		//		}
+
+		//		var crearDto = new CrearTraspasoArticuloDto
+		//		{
+		//			AlmacenOrigen = dto.CodigoAlmacen,
+		//			UbicacionOrigen = dto.Ubicacion,
+		//			CodigoArticulo = dto.CodigoArticulo,
+		//			Cantidad = dto.CantidadAMover,
+		//			UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
+		//			AlmacenDestino = dto.AlmacenDestino,
+		//			UbicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino,
+		//			FechaCaducidad = dto.FechaCaducidad,
+		//			Partida = dto.Partida,
+		//			CodigoEmpresa = SessionManager.EmpresaSeleccionada.Value,
+		//			FechaInicio = _fechaInicioDialogo,
+		//			Finalizar = true,
+		//			DescripcionArticulo = dto.DescripcionArticulo // Añadido para que se guarde la descripción
+		//		};
+		//		var resultado = await _traspasosService.CrearTraspasoArticuloAsync(crearDto);
+
+		//		if (!resultado.Success)
+		//		{
+		//			todoOk = false;
+		//			dto.TieneError = true;
+		//			dto.ErrorMessage = resultado.ErrorMessage ?? "Error al realizar el traspaso.";
+		//		}
+		//	}
+
+		//	if (todoOk)
+		//	{
+		//		new WarningDialog("Éxito", "Traspasos realizados correctamente.").ShowDialog();
+		//		Application.Current.Windows.OfType<Window>()
+		//			.FirstOrDefault(w => w.DataContext == this)?.Close();
+		//	}
+		//	else
+		//	{
+		//		var errores = LineasPendientes
+		//			.Where(x => x.TieneError)
+		//			.Select(x => $"{x.DescripcionArticulo} ({x.CodigoArticulo}): {x.ErrorMessage}")
+		//			.ToList();
+
+		//		new WarningDialog("Errores en traspasos", string.Join("\n", errores)).ShowDialog();
+		//	}
+
+		//	CollectionViewSource.GetDefaultView(LineasPendientes).Refresh();
+		//}
 		[RelayCommand]
 		private async Task ConfirmarAsync()
 		{
@@ -248,6 +362,69 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
+			var empresa = SessionManager.EmpresaSeleccionada.Value;
+
+			// 1) Consultar estado de palet ORIGEN y DESTINO para cada línea
+			foreach (var dto in LineasPendientes)
+			{
+				// Origen
+				dto.EstadoPaletOrigen = await _traspasosService.ConsultarEstadoPaletOrigenAsync(
+					empresa,
+					dto.CodigoAlmacen,
+					dto.Ubicacion
+				);
+
+				// Destino (puede ser vacío → “NINGUNO”)
+				dto.EstadoPaletDestino = await _traspasosService.ConsultarEstadoPaletDestinoAsync(
+					empresa,
+					dto.AlmacenDestino,
+					dto.UbicacionDestino ?? ""
+				);
+			}
+
+			// 2) Agrupar para el mensaje resumen (usamos capitalización de BD: Abierto/Cerrado)
+			var origenCerrados = LineasPendientes
+				.Where(x => string.Equals(x.EstadoPaletOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase))
+				.Select(x => $"{x.CodigoArticulo} → {x.CodigoAlmacen}/{x.Ubicacion}")
+				.ToList();
+
+			var destinoAbiertos = LineasPendientes
+				.Where(x => string.Equals(x.EstadoPaletDestino, "Abierto", StringComparison.OrdinalIgnoreCase))
+				.Select(x => $"{x.CodigoArticulo} → {x.AlmacenDestino}/{x.UbicacionDestino}")
+				.ToList();
+
+			var destinoCerrados = LineasPendientes
+				.Where(x => string.Equals(x.EstadoPaletDestino, "Cerrado", StringComparison.OrdinalIgnoreCase))
+				.Select(x => $"{x.CodigoArticulo} → {x.AlmacenDestino}/{x.UbicacionDestino}")
+				.ToList();
+
+			var destinoSinPalet = LineasPendientes
+				.Where(x => string.Equals(x.EstadoPaletDestino, "NINGUNO", StringComparison.OrdinalIgnoreCase))
+				.Select(x => $"{x.CodigoArticulo} → {x.AlmacenDestino}/{x.UbicacionDestino}")
+				.ToList();
+
+			// 3) Construir mensaje (incluye aviso explícito del ORIGEN)
+			var msg = "";
+			if (origenCerrados.Any())
+				msg += "Se reabrirán los siguientes palets de ORIGEN (están Cerrados y quedarán Abiertos):\n" +
+					   string.Join("\n", origenCerrados) + "\n\n";
+			if (destinoAbiertos.Any())
+				msg += "Se agregarán artículos a los siguientes palets en DESTINO (Abiertos):\n" +
+					   string.Join("\n", destinoAbiertos) + "\n\n";
+			if (destinoCerrados.Any())
+				msg += "Se reabrirán los siguientes palets en DESTINO (Cerrados → Abiertos):\n" +
+					   string.Join("\n", destinoCerrados) + "\n\n";
+			if (destinoSinPalet.Any())
+				msg += "En las siguientes ubicaciones DESTINO no hay palet (quedará sin paletizar):\n" +
+					   string.Join("\n", destinoSinPalet) + "\n\n";
+
+			msg += "¿Deseas continuar con la regularización múltiple?";
+
+			// 4) Confirmación
+			var confirm = new ConfirmationDialog("Resumen de regularización múltiple", msg);
+			if (confirm.ShowDialog() != true) return;
+
+			// 5) Validaciones por línea y envío
 			bool todoOk = true;
 
 			foreach (var dto in LineasPendientes)
@@ -262,7 +439,8 @@ namespace SGA_Desktop.ViewModels
 					todoOk = false;
 					continue;
 				}
-				// UbicacionDestino puede ser null o vacío (sin ubicar)
+
+				// UbicacionDestino puede ser null/vacía (sin ubicar)
 				if (dto.CantidadAMover <= 0 || dto.CantidadAMover > dto.UnidadSaldo)
 				{
 					dto.TieneError = true;
@@ -282,11 +460,15 @@ namespace SGA_Desktop.ViewModels
 					UbicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino,
 					FechaCaducidad = dto.FechaCaducidad,
 					Partida = dto.Partida,
-					CodigoEmpresa = SessionManager.EmpresaSeleccionada.Value,
+					CodigoEmpresa = empresa,
 					FechaInicio = _fechaInicioDialogo,
-					Finalizar = true
+					Finalizar = true,
+					DescripcionArticulo = dto.DescripcionArticulo,
+
+					// 🔹 clave: si el ORIGEN está Cerrado, pedimos reapertura automática
+					ReabrirSiCerradoOrigen = string.Equals(dto.EstadoPaletOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase)
 				};
-				System.Windows.MessageBox.Show($"Enviando traspaso:\nAlmacenDestino: '{crearDto.AlmacenDestino}'\nUbicacionDestino: '{crearDto.UbicacionDestino}'\nPartida: '{crearDto.Partida}'\nCodigoArticulo: '{crearDto.CodigoArticulo}'\n(longitudes: {crearDto.AlmacenDestino?.Length}, {crearDto.UbicacionDestino?.Length}, {crearDto.Partida?.Length})");
+
 				var resultado = await _traspasosService.CrearTraspasoArticuloAsync(crearDto);
 
 				if (!resultado.Success)
@@ -316,6 +498,33 @@ namespace SGA_Desktop.ViewModels
 			CollectionViewSource.GetDefaultView(LineasPendientes).Refresh();
 		}
 
+
+
+		//  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
+		private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
+		{
+			var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+			var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+
+			// Si el usuario tiene almacenes individuales, incluir también los del centro
+			if (almacenesIndividuales.Any())
+			{
+				// Obtener almacenes del centro logístico de forma asíncrona
+				var almacenesCentro = await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+				
+				// Combinar almacenes individuales + almacenes del centro
+				var todosLosAlmacenes = new List<string>(almacenesIndividuales);
+				todosLosAlmacenes.AddRange(almacenesCentro);
+				
+				// Eliminar duplicados
+				return todosLosAlmacenes.Distinct().ToList();
+			}
+			else
+			{
+				// Si no tiene almacenes individuales, usar solo los del centro
+				return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+			}
+		}
 
 
 	}

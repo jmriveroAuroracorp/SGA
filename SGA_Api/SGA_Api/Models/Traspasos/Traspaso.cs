@@ -1,4 +1,5 @@
 ﻿using SGA_Api.Models.Palet;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.Traspasos
 {
@@ -38,6 +39,7 @@ namespace SGA_Api.Models.Traspasos
 		public string? Comentario { get; set; }
 		public string? EstadoErp { get; set; }
 
+		public bool? EsNotificado { get; set; } = true;
 
 
 		// Opcional: navegación a Palet y Estado

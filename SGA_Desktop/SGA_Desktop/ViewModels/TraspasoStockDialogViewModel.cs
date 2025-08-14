@@ -12,6 +12,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 using System.Collections.Generic;
 using System.Linq;
+using SGA_Desktop.Dialog;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -122,53 +123,136 @@ namespace SGA_Desktop.ViewModels
         private string? feedback;
 
         [RelayCommand(CanExecute = nameof(PuedeConfirmar))]
-        private async Task ConfirmarAsync()
-        {
-            // Depuración: mostrar valores clave antes de llamar al servicio
-            System.Windows.MessageBox.Show($"Traspaso:\nCantidad: {CantidadATraspasarTexto}\nAlmacén destino: {AlmacenDestinoSeleccionado?.CodigoAlmacen}\nUbicación destino: {UbicacionDestinoSeleccionada?.Ubicacion}", "Debug traspaso");
+		private async Task ConfirmarAsync()
+		{
+			// Validación de cantidad
+			if (!decimal.TryParse(CantidadATraspasarTexto.Replace(',', '.'),
+				System.Globalization.NumberStyles.Any,
+				System.Globalization.CultureInfo.InvariantCulture,
+				out var cantidad) || cantidad <= 0)
+			{
+				Feedback = "Cantidad no válida.";
+				return;
+			}
 
-            if (!decimal.TryParse(CantidadATraspasarTexto.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var cantidad) || cantidad <= 0)
-            {
-                Feedback = "Cantidad no válida.";
-                return;
-            }
-            if (AlmacenDestinoSeleccionado == null)
-            {
-                Feedback = "Selecciona un almacén destino.";
-                return;
-            }
-            // Ya no exigimos ubicación destino, puede ser null o vacío (sin ubicar)
-            var dto = new CrearTraspasoArticuloDto
-            {
-                AlmacenOrigen = _stockSeleccionado.CodigoAlmacen,
-                UbicacionOrigen = _stockSeleccionado.Ubicacion ?? string.Empty,
-                CodigoArticulo = _stockSeleccionado.CodigoArticulo,
-                Cantidad = cantidad,
-                UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
-                AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
-                UbicacionDestino = string.IsNullOrWhiteSpace(UbicacionDestinoSeleccionada?.Ubicacion) ? "" : UbicacionDestinoSeleccionada.Ubicacion,
-                FechaCaducidad = _stockSeleccionado.FechaCaducidad,
-                Partida = _stockSeleccionado.Partida,
-                Finalizar = true,
-                CodigoEmpresa = SessionManager.EmpresaSeleccionada.Value,
-                FechaInicio = _fechaBusqueda
-            };
+			// Validación de almacén destino
+			if (AlmacenDestinoSeleccionado == null)
+			{
+				Feedback = "Selecciona un almacén destino.";
+				return;
+			}
 
-            // Depuración: mostrar valores en el DTO
-            System.Windows.MessageBox.Show($"DTO -> FechaCaducidad: {dto.FechaCaducidad}\nPartida: {dto.Partida}");
-            var resultado = await _traspasoService.CrearTraspasoArticuloAsync(dto);
-            if (resultado.Success)
-            {
-                Feedback = "Traspaso realizado correctamente.";
-                RequestClose?.Invoke(true);
-            }
-            else
-            {
-                Feedback = resultado.ErrorMessage ?? "Error al realizar el traspaso.";
-            }
-        }
+			var empresa = SessionManager.EmpresaSeleccionada.Value;
 
-        private bool PuedeConfirmar()
+			// --- ORIGEN ---
+			bool reabrirOrigen = false; // ← se enviará al DTO si el usuario acepta
+			var ubicacionOrigen = _stockSeleccionado.Ubicacion ?? "";
+			if (!string.IsNullOrWhiteSpace(ubicacionOrigen))
+			{
+				var estadoOrigen = await _traspasoService.ConsultarEstadoPaletOrigenAsync(
+					empresa,
+					_stockSeleccionado.CodigoAlmacen,
+					ubicacionOrigen
+				);
+
+				if (string.Equals(estadoOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase))
+				{
+					var confirmOrigen = new ConfirmationDialog(
+						"Palet de origen cerrado",
+						"El palet de ORIGEN está CERRADO. ¿Deseas reabrirlo para poder extraer stock?"
+					);
+
+					if (confirmOrigen.ShowDialog() == true)
+					{
+						reabrirOrigen = true; // ← que lo reabra el backend
+					}
+					else
+					{
+						Feedback = "Operación cancelada: palet de origen cerrado.";
+						return;
+					}
+				}
+			}
+
+			// --- DESTINO ---
+			var ubicacionDestino = UbicacionDestinoSeleccionada?.Ubicacion ?? "";
+			if (!string.IsNullOrWhiteSpace(ubicacionDestino))
+			{
+				var estadoDestino = await _traspasoService.ConsultarEstadoPaletDestinoAsync(
+					empresa,
+					AlmacenDestinoSeleccionado.CodigoAlmacen,
+					ubicacionDestino
+				);
+
+				if (string.Equals(estadoDestino, "Cerrado", StringComparison.OrdinalIgnoreCase))
+				{
+					var confirmDestino = new ConfirmationDialog(
+						"Palet destino cerrado",
+						"Hay un palet CERRADO en la ubicación destino. ¿Deseas reabrirlo y continuar con el traspaso?"
+					);
+
+					if (confirmDestino.ShowDialog() != true)
+					{
+						Feedback = "Operación cancelada: palet destino cerrado.";
+						return;
+					}
+					// No llamamos a nada: el backend ya reabre destino automáticamente.
+				}
+				else if (string.Equals(estadoDestino, "Abierto", StringComparison.OrdinalIgnoreCase))
+				{
+					var infoDestino = new ConfirmationDialog(
+						"Palet destino abierto",
+						"Hay un palet ABIERTO en la ubicación destino. El artículo se agregará a ese palet. ¿Deseas continuar?"
+					);
+
+					if (infoDestino.ShowDialog() != true)
+					{
+						Feedback = "Operación cancelada por el usuario.";
+						return;
+					}
+				}
+			}
+
+			// --- Construir DTO y llamar a API ---
+			var dto = new CrearTraspasoArticuloDto
+			{
+				AlmacenOrigen = _stockSeleccionado.CodigoAlmacen,
+				UbicacionOrigen = _stockSeleccionado.Ubicacion ?? string.Empty,
+				CodigoArticulo = _stockSeleccionado.CodigoArticulo,
+				Cantidad = cantidad,
+				UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
+				AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
+				UbicacionDestino = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino,
+				FechaCaducidad = _stockSeleccionado.FechaCaducidad,
+				Partida = _stockSeleccionado.Partida,
+				Finalizar = true,
+				CodigoEmpresa = empresa,
+				FechaInicio = _fechaBusqueda,
+				DescripcionArticulo = _stockSeleccionado.DescripcionArticulo,
+				UnidadMedida = null,
+				Observaciones = null,
+
+				// 🔹 nuevo flag para que el backend reabra el palet de ORIGEN si estaba cerrado
+				ReabrirSiCerradoOrigen = reabrirOrigen
+			};
+
+			var resultado = await _traspasoService.CrearTraspasoArticuloAsync(dto);
+
+			if (resultado.Success)
+			{
+				Feedback = resultado.PaletInfo ?? "Traspaso realizado correctamente.";
+				RequestClose?.Invoke(true);
+			}
+			else
+			{
+				new WarningDialog("Error al traspasar", resultado.ErrorMessage ?? "Error al realizar el traspaso.").ShowDialog();
+				Feedback = resultado.ErrorMessage ?? "Error al realizar el traspaso.";
+			}
+		}
+
+
+
+		private bool PuedeConfirmar()
         {
             if (string.IsNullOrWhiteSpace(CantidadATraspasarTexto) || AlmacenDestinoSeleccionado == null)
                 return false;

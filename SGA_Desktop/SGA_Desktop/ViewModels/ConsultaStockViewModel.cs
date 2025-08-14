@@ -24,6 +24,7 @@ namespace SGA_Desktop.ViewModels
 		#region Constants
 		private const string SIN_UBICACION = "Sin ubicación";
 		private const string TODAS = "Todas";
+		private const string TODO_ALMACEN = "Todo el almacén";
 
 
 		#endregion
@@ -38,6 +39,9 @@ namespace SGA_Desktop.ViewModels
 
 		#region Fields & Services
 		private readonly StockService _stockService;
+		private readonly PrintQueueService _printService = new PrintQueueService();
+		public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; } = new();
+
 		#endregion
 
 		#region Constructor
@@ -108,7 +112,7 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private string? almacenSeleccionadoUbicacion;
 
-		[ObservableProperty] 
+		[ObservableProperty]
 		private ArticuloResumenDto? articuloSeleccionado;
 
 		[ObservableProperty]
@@ -116,6 +120,10 @@ namespace SGA_Desktop.ViewModels
 
 		[ObservableProperty]
 		private bool filtrarUbicacionesConStock = true;
+
+		[ObservableProperty]
+		private StockDto? articuloSeleccionadoParaImprimir;
+
 		#endregion
 
 		#region Computed Properties
@@ -323,8 +331,11 @@ namespace SGA_Desktop.ViewModels
 						"Buscar artículo",
 						"Debes introducir un código o descripción para buscar.",
 						"\uE814"
-					)
-					{ Owner = Application.Current.MainWindow };
+					);
+					var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+					if (owner != null && owner != advertencia)
+						advertencia.Owner = owner;
 					advertencia.ShowDialog();
 					return;
 				}
@@ -364,14 +375,9 @@ namespace SGA_Desktop.ViewModels
 					);
 				}
 
-				// 3) Filtrar por permisos de almacén
-				var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-				if (!permisos.Any())
-				{
-					var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-					permisos = await _stockService.ObtenerAlmacenesAsync(centro);
-				}
-				lista = lista.Where(x => permisos.Contains(x.CodigoAlmacen)).ToList();
+				// 3) 🔷 NUEVA LÓGICA: Filtrar por permisos de almacén (individuales + centro)
+				var almacenesAutorizados = ObtenerAlmacenesAutorizados();
+				lista = lista.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
 
 				// 4) Guardar todo el stock filtrado para detalle
 				ResultadosStock.Clear();
@@ -412,12 +418,41 @@ namespace SGA_Desktop.ViewModels
 				OnPropertyChanged(nameof(ArticuloMostrado));
 				OnPropertyChanged(nameof(ArticulosUnicosVisibility));
 				OnPropertyChanged(nameof(ListViewVisibility));
+
 			}
 			catch (Exception ex)
 			{
-				MostrarError("Error al consultar por artículo", ex);
+				MessageBox.Show(ex.Message, "Error al consultar por artículo", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
+
+		//[RelayCommand]
+		//private async Task BuscarPorUbicacionAsync()
+		//{
+		//	try
+		//	{
+		//		var almacen = AlmacenSeleccionadoCombo ?? AlmacenesCombo
+		//			.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
+
+		//		if (almacen == null || almacen.CodigoAlmacen == TODAS)
+		//		{
+		//			return;
+		//		}
+
+		//		var lista = await _stockService.ObtenerPorUbicacionAsync(
+		//			SessionManager.EmpresaSeleccionada!.Value,
+		//			almacen.CodigoAlmacen,
+		//			FiltroUbicacion == SIN_UBICACION ? string.Empty : FiltroUbicacion
+		//		);
+
+		//		// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
+		//		LlenarResultados(lista, filterByPermissions: true);
+		//	}
+		//	catch (Exception ex)
+		//	{
+		//		MostrarError("Error al consultar por ubicación", ex);
+		//	}
+		//}
 
 		[RelayCommand]
 		private async Task BuscarPorUbicacionAsync()
@@ -425,32 +460,50 @@ namespace SGA_Desktop.ViewModels
 			try
 			{
 				var almacen = AlmacenSeleccionadoCombo ?? AlmacenesCombo
-	.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
-				
+					.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
 
 				if (almacen == null || almacen.CodigoAlmacen == TODAS)
 				{
 					return;
 				}
 
-				
+				// 🔷 NUEVA LÓGICA: Determinar qué consultar según la selección
+				string? ubicacionParam;
+
+				switch (FiltroUbicacion)
+				{
+					case TODO_ALMACEN:
+						// Consultar todo el almacén (sin especificar ubicación)
+						ubicacionParam = null;
+						break;
+
+					case SIN_UBICACION:
+						// Consultar ubicaciones vacías (artículos sin ubicar)
+						ubicacionParam = string.Empty;
+						break;
+
+					default:
+						// Consultar ubicación específica
+						ubicacionParam = FiltroUbicacion;
+						break;
+				}
+
+
 				var lista = await _stockService.ObtenerPorUbicacionAsync(
 					SessionManager.EmpresaSeleccionada!.Value,
 					almacen.CodigoAlmacen,
-					FiltroUbicacion == SIN_UBICACION ? string.Empty : FiltroUbicacion
+					ubicacionParam
 				);
 
-				
 
-				LlenarResultados(lista, filterByPermissions: false); // ← desactiva permisos para probar
+				// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
+				LlenarResultados(lista, filterByPermissions: true);
 			}
 			catch (Exception ex)
 			{
 				MostrarError("Error al consultar por ubicación", ex);
 			}
 		}
-
-
 
 
 
@@ -468,8 +521,11 @@ namespace SGA_Desktop.ViewModels
 					"Exportar Excel",
 					"No hay datos para exportar.",
 					"\uE814" // ícono de advertencia
-				)
-				{ Owner = Application.Current.MainWindow };
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						 ?? Application.Current.MainWindow;
+				if (owner != null && owner != advertencia)
+					advertencia.Owner = owner;
 				advertencia.ShowDialog();
 				return;
 			}
@@ -479,8 +535,11 @@ namespace SGA_Desktop.ViewModels
 				"Confirmar exportación",
 				$"Se van a exportar {listaActiva.Count} registros.\n¿Deseas continuar?",
 				"\uE11B"    // ícono de pregunta
-			)
-			{ Owner = Application.Current.MainWindow };
+			);
+			var owner2 = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner2 != null && owner2 != confirm)
+				confirm.Owner = owner2;
 			if (confirm.ShowDialog() != true)
 				return;
 
@@ -536,9 +595,66 @@ namespace SGA_Desktop.ViewModels
 				"Exportación completada",
 				$"Datos exportados correctamente a:\n{dlg.FileName}",
 				"\uE946" // ícono de información
-			)
-			{ Owner = Application.Current.MainWindow };
+			);
+			var owner3 = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner3 != null && owner3 != info)
+				info.Owner = owner3;
 			info.ShowDialog();
+		}
+
+		[RelayCommand]
+		private async Task ImprimirEtiquetaStockAsync()
+		{
+			if (ArticuloSeleccionadoParaImprimir == null)
+			{
+				var advertencia = new WarningDialog(
+					"Impresión de etiqueta",
+					"Debes seleccionar un artículo para imprimir la etiqueta.",
+					"\uE814" // icono de advertencia
+				)
+				{ Owner = Application.Current.MainWindow };
+				advertencia.ShowDialog();
+				return;
+			}
+
+			// Cargar impresoras si no están cargadas
+			if (ImpresorasDisponibles.Count == 0)
+			{
+				var impresoras = await _printService.ObtenerImpresorasAsync();
+				ImpresorasDisponibles.Clear();
+				foreach (var imp in impresoras)
+					ImpresorasDisponibles.Add(imp);
+			}
+
+			var dlgVm = new SGA_Desktop.ViewModels.ConfirmarImpresionDialogViewModel(ImpresorasDisponibles, ImpresorasDisponibles.FirstOrDefault());
+			var dlg = new SGA_Desktop.Dialog.ConfirmarImpresionDialog
+			{
+				DataContext = dlgVm,
+				Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow
+			};
+			if (dlg.ShowDialog() != true) return;
+
+			// Construir el DTO para impresión
+			var dto = new LogImpresionDto
+			{
+				Usuario = SessionManager.Operario.ToString(),
+				Dispositivo = Environment.MachineName,
+				IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
+				EtiquetaImpresa = 0,
+				Copias = dlgVm.NumeroCopias,
+				CodigoArticulo = ArticuloSeleccionadoParaImprimir.CodigoArticulo,
+				DescripcionArticulo = ArticuloSeleccionadoParaImprimir.DescripcionArticulo ?? string.Empty,
+				CodigoAlternativo = ArticuloSeleccionadoParaImprimir.CodigoAlternativo,
+				FechaCaducidad = ArticuloSeleccionadoParaImprimir.FechaCaducidad,
+				Partida = ArticuloSeleccionadoParaImprimir.Partida,
+				Alergenos = null, // Puedes obtenerlos si lo necesitas
+				PathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
+				TipoEtiqueta = 1, // Etiqueta de stock
+				CodigoGS1 = null,
+				CodigoPalet = null
+			};
+			await _printService.InsertarRegistroImpresionAsync(dto);
 		}
 
 
@@ -578,7 +694,7 @@ namespace SGA_Desktop.ViewModels
 
 
 				var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
-			
+
 
 				AlmacenesCombo.Clear();
 
@@ -646,23 +762,39 @@ namespace SGA_Desktop.ViewModels
 					return;
 				}
 
+				// 🔷 CORREGIDO: Mantener lógica para ambos modos
 				if (IsArticleMode)
-					Ubicaciones.Add(TODAS);
-
-				foreach (var ubic in lista
-	.OrderBy(u => u.Ubicacion))
 				{
-					Ubicaciones.Add(string.IsNullOrEmpty(ubic.Ubicacion) ? SIN_UBICACION : ubic.Ubicacion);
+					// En modo artículo: "Todas" para consultar sin filtro de ubicación
+					Ubicaciones.Add(TODAS);
+				}
+				else
+				{
+					// En modo ubicación: "Todo el almacén" y "Sin ubicación"
+					Ubicaciones.Add(TODO_ALMACEN);
+					Ubicaciones.Add(SIN_UBICACION);
 				}
 
-				FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
+				// �� SIMPLIFICADO: Solo añadir ubicaciones con valor (sin duplicados)
+				var ubicacionesConValor = lista
+					.Where(u => !string.IsNullOrEmpty(u.Ubicacion))
+					.Select(u => u.Ubicacion)
+					.Distinct()
+					.OrderBy(u => u);
+
+				foreach (var ubic in ubicacionesConValor)
+				{
+					Ubicaciones.Add(ubic);
+				}
+
+				// 🔷 CORREGIDO: Selección por defecto según el modo
+				FiltroUbicacion = IsArticleMode ? TODAS : TODO_ALMACEN;
 			}
 			catch (Exception ex)
 			{
 				MostrarError("Error cargando ubicaciones", ex);
 			}
 		}
-
 
 
 
@@ -725,20 +857,60 @@ namespace SGA_Desktop.ViewModels
 
 		private void LlenarResultados(List<StockDto> lista, bool filterByPermissions)
 		{
-			var basePerm = filterByPermissions
-				? SessionManager.UsuarioActual?.codigosAlmacen
-				: null;
+			List<StockDto> resultadosFiltrados;
 
-			var permitidos = filterByPermissions
-				? (AlmacenSeleccionado == TODAS
-					? Almacenes.Concat(basePerm ?? Enumerable.Empty<string>())
-					: new[] { AlmacenSeleccionado })
-				: lista.Select(s => s.CodigoAlmacen);
+			if (!filterByPermissions)
+			{
+				// Si no se filtran permisos, mostrar todos los resultados
+				resultadosFiltrados = lista.ToList();
+			}
+			else
+			{
+				// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+				var almacenesAutorizados = ObtenerAlmacenesAutorizados();
 
-			var filtrada = lista
-				.Where(s => permitidos.Contains(s.CodigoAlmacen))
+				var almacenesPermitidos = AlmacenSeleccionado == TODAS
+					? almacenesAutorizados
+					: new List<string> { AlmacenSeleccionado };
+
+				resultadosFiltrados = lista
+					.Where(s => almacenesPermitidos.Contains(s.CodigoAlmacen))
+					.ToList();
+			}
+
+			LlenarResultadosSegunModo(resultadosFiltrados);
+		}
+
+		private List<string> ObtenerAlmacenesAutorizados()
+		{
+			var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+			var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+
+			// Si no hay almacenes individuales, usar solo los del centro
+			if (!almacenesIndividuales.Any())
+			{
+				// En este caso, los almacenes del centro ya están en AlmacenesCombo
+				return AlmacenesCombo
+					.Where(a => a.CodigoAlmacen != TODAS)
+					.Select(a => a.CodigoAlmacen)
+					.ToList();
+			}
+
+			// Si hay almacenes individuales, incluir también los del centro
+			var almacenesDelCentro = AlmacenesCombo
+				.Where(a => a.CodigoAlmacen != TODAS && a.EsDelCentro)
+				.Select(a => a.CodigoAlmacen)
 				.ToList();
 
+			// Combinar almacenes individuales + almacenes del centro
+			return almacenesIndividuales
+				.Concat(almacenesDelCentro)
+				.Distinct()
+				.ToList();
+		}
+
+		private void LlenarResultadosSegunModo(List<StockDto> filtrada)
+		{
 			if (IsArticleMode)
 			{
 				// en modo artículo actualiza ArticuloMostrado y clear/fill ResultadosStock
@@ -785,7 +957,7 @@ namespace SGA_Desktop.ViewModels
 		{
 			var code = SessionManager.EmpresaSeleccionada;
 			var dto = SessionManager.UsuarioActual?.empresas
-						.FirstOrDefault(e => e.Codigo == code);
+					 .FirstOrDefault(e => e.Codigo == code);
 			return dto != null ? dto.Nombre : $"[{code}]";
 		}
 

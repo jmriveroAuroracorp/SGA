@@ -46,15 +46,26 @@ fun NavGraph(
                 sessionViewModel = sessionViewModel)
         }
         composable(
-            route = "traspasos/{esPalet}",
-            arguments = listOf(navArgument("esPalet") { type = NavType.BoolType })
+            route = "traspasos/{esPalet}/{directoDesdePaletCerrado}",
+            arguments = listOf(
+                navArgument("esPalet") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
+                navArgument("directoDesdePaletCerrado") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
         ) { backStackEntry ->
             val esPalet = backStackEntry.arguments?.getBoolean("esPalet") ?: false
+            val directo = backStackEntry.arguments?.getBoolean("directoDesdePaletCerrado") ?: false
 
             TraspasosScreen(
                 navController = navController,
                 sessionViewModel = sessionViewModel,
-                esPalet = esPalet
+                esPalet = esPalet,
+                directoDesdePaletCerrado = directo
             )
         }
 

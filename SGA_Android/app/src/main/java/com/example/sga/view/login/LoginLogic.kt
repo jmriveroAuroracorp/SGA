@@ -1,9 +1,12 @@
 package com.example.sga.view.login
+import android.app.Activity
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import com.example.sga.data.ApiManager
 import com.example.sga.data.dto.login.ConfiguracionUsuarioDto
 import com.example.sga.data.dto.login.DispositivoActivoDto
@@ -13,6 +16,7 @@ import com.example.sga.data.dto.login.LoginRequestDto
 import com.example.sga.data.dto.login.LoginResponseDto
 import com.example.sga.data.dto.traspasos.TraspasoPendienteDto
 import com.example.sga.data.mapper.LoginMapper
+import com.example.sga.service.Traspasos.EstadoTraspasosService
 import com.example.sga.view.app.SessionViewModel
 import org.json.JSONObject
 import retrofit2.Call
@@ -105,11 +109,25 @@ class LoginLogic(
                         }
 
                         crearLogEvento(user.id.toInt(), request.idDispositivo)
+                        EstadoTraspasosService.iniciar(user.id.toInt(), context)
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            ActivityCompat.requestPermissions(
+                                context as Activity,
+                                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                                1001
+                            )
+                        }
                         comprobarTraspasoPendiente(
                             usuarioId = user.id.toInt(),
                             onResult = { dto ->
                                 if (dto != null && dto.codigoEstado.equals("PENDIENTE", true)) {
-                                    loginViewModel.setTraspasoEsDePalet(dto.tipoTraspaso.equals("PALET", true))
+                                    val esPalet = dto.tipoTraspaso.equals("PALET", true)
+                                    val esDirecto = dto.paletCerrado
+
+                                    loginViewModel.setTraspasoEsDePalet(esPalet)
+                                    loginViewModel.setTraspasoDirectoDesdePaletCerrado(esDirecto)
+
                                     loginViewModel.emitirDestino(true)
                                 } else {
                                     loginViewModel.emitirDestino(false)

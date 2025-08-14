@@ -179,10 +179,16 @@ namespace SGA_Desktop.ViewModels
 
 			if (!ok)
 			{
-				MessageBox.Show($"Error al {(_isNew ? "crear" : "actualizar")} ubicación:\n{error}",
-								"SGA",
-								MessageBoxButton.OK,
-								MessageBoxImage.Error);
+				var dialog = new SGA_Desktop.Dialog.ConfirmationDialog(
+					$"Error al {(_isNew ? "crear" : "actualizar")} ubicación",
+					error ?? "Error desconocido",
+					"\uE814" // icono de advertencia
+				);
+				var owner = System.Windows.Application.Current.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
+						 ?? System.Windows.Application.Current.MainWindow;
+				if (owner != null && owner != dialog)
+					dialog.Owner = owner;
+				dialog.ShowDialog();
 				return;
 			}
 

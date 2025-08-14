@@ -14,5 +14,10 @@ namespace SGA_Desktop.Models
         public string Partida { get; set; }
         public short CodigoEmpresa { get; set; }
         public DateTime? FechaInicio { get; set; }
-    }
+		public string? DescripcionArticulo { get; set; }
+		public string? UnidadMedida { get; set; }
+		public string? Observaciones { get; set; }
+		public bool? ReabrirSiCerradoOrigen { get; set; }  // default null/false
+
+	}
 } 

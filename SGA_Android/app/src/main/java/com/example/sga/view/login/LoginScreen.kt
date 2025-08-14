@@ -47,11 +47,11 @@ fun LoginScreen(
     LaunchedEffect(Unit) {
         loginViewModel.navigate.collect { destino ->
             when (destino) {
-                is LoginViewModel.Destino.Traspasos -> navController.navigate("traspasos/${destino.esPalet}"){
-                    popUpTo("home") { inclusive = false }
+                is LoginViewModel.Destino.Traspasos -> navController.navigate("traspasos/${destino.esPalet}/${destino.directoDesdePaletCerrado}") {
+                    popUpTo("login") { inclusive = true } // ✅ Elimina Login del backstack
                 }
                 LoginViewModel.Destino.Home -> navController.navigate("home") {
-                    popUpTo("login") { inclusive = true }
+                    popUpTo("login") { inclusive = true } // ✅ Igual aquí
                 }
             }
         }
@@ -66,9 +66,6 @@ fun LoginScreen(
     LaunchedEffect(user) {
         if (user != null) {
             sessionViewModel.setUser(user!!)
-            /*navController.navigate("home") {
-                popUpTo("login") { inclusive = true }
-            }*/
         }
 
     }

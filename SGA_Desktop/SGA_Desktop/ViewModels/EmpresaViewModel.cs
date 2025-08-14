@@ -39,26 +39,29 @@ public partial class EmpresaViewModel : ObservableObject
 	{
 		if (EmpresaSeleccionada is null)
 		{
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
 			var aviso = new WarningDialog(
 				"Aviso",
 				"Selecciona una empresa primero.",
 				"\uE946" // ícono de información
-			)
-			{ Owner = Application.Current.MainWindow };
-
+			);
+			if (owner != null && owner != aviso)
+				aviso.Owner = owner;
 			aviso.ShowDialog();
 			return;
 		}
 
 		// --- Aquí, tu diálogo personalizado ---
+		var owner2 = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
 		var dialog = new ConfirmationDialog(
-	"Confirmar cambio de empresa",
-	$"Vas a cambiar a:\n  {EmpresaSeleccionada.Codigo} – {EmpresaSeleccionada.Nombre}\n\n" +
-	"Esto reiniciará pantallas y perderás filtros no guardados.\n¿Deseas continuar?"
-)
-		{
-			Owner = Application.Current.MainWindow
-		};
+			"Confirmar cambio de empresa",
+			$"Vas a cambiar a:\n  {EmpresaSeleccionada.Codigo} – {EmpresaSeleccionada.Nombre}\n\n" +
+			"Esto reiniciará pantallas y perderás filtros no guardados.\n¿Deseas continuar?"
+		);
+		if (owner2 != null && owner2 != dialog)
+			dialog.Owner = owner2;
 		if (dialog.ShowDialog() != true)
 			return;
 		// ----------------------------------------

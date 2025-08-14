@@ -119,24 +119,33 @@ namespace SGA_Desktop.Services
 		}
 
 		public async Task<ApiResult> CrearTraspasoArticuloAsync(CrearTraspasoArticuloDto dto)
-        {
-            var resp = await _httpClient.PostAsJsonAsync("traspasos/articulo", dto);
-            var text = await resp.Content.ReadAsStringAsync();
-            if (!resp.IsSuccessStatusCode)
-            {
-                return new ApiResult { Success = false, ErrorMessage = text };
-            }
-            return new ApiResult { Success = true };
-        }
+		{
+			var resp = await _httpClient.PostAsJsonAsync("traspasos/articulo", dto);
+			var text = await resp.Content.ReadAsStringAsync();
+			if (!resp.IsSuccessStatusCode)
+			{
+				return new ApiResult { Success = false, ErrorMessage = text };
+			}
+			// Deserializa el JSON para recoger paletInfo y message
+			var json = System.Text.Json.JsonDocument.Parse(text).RootElement;
+			string? paletInfo = json.TryGetProperty("paletInfo", out var pi) ? pi.GetString() : null;
+			string? message = json.TryGetProperty("message", out var m) ? m.GetString() : null;
+			return new ApiResult
+			{
+				Success = true,
+				ErrorMessage = message,
+				PaletInfo = paletInfo
+			};
+		}
 
-        public async Task<List<TraspasoArticuloDto>> GetUltimosTraspasosArticulosAsync()
-        {
-            var resp = await _httpClient.GetAsync("traspasos/articulos");
-            if (!resp.IsSuccessStatusCode)
-                return new List<TraspasoArticuloDto>();
-            var text = await resp.Content.ReadAsStringAsync();
-            return System.Text.Json.JsonSerializer.Deserialize<List<TraspasoArticuloDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<TraspasoArticuloDto>();
-        }
+		public async Task<List<TraspasoArticuloDto>> GetUltimosTraspasosArticulosAsync()
+		{
+			var resp = await _httpClient.GetAsync("traspasos/articulos");
+			if (!resp.IsSuccessStatusCode)
+				return new List<TraspasoArticuloDto>();
+			var text = await resp.Content.ReadAsStringAsync();
+			return System.Text.Json.JsonSerializer.Deserialize<List<TraspasoArticuloDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<TraspasoArticuloDto>();
+		}
 
 		public async Task<List<PaletMovibleDto>> ObtenerPaletsCerradosMoviblesAsync()
 		{
@@ -147,22 +156,57 @@ namespace SGA_Desktop.Services
 			return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<PaletMovibleDto>();
 		}
 
-        public async Task<ApiResult> MoverPaletAsync(MoverPaletDto dto)
-        {
-            var resp = await _httpClient.PostAsJsonAsync("traspasos/mover-palet", dto);
-            var text = await resp.Content.ReadAsStringAsync();
-            if (!resp.IsSuccessStatusCode)
-                return new ApiResult { Success = false, ErrorMessage = text };
-            return new ApiResult { Success = true };
-        }
+		public async Task<ApiResult> MoverPaletAsync(MoverPaletDto dto)
+		{
+			var resp = await _httpClient.PostAsJsonAsync("traspasos/mover-palet", dto);
+			var text = await resp.Content.ReadAsStringAsync();
+			if (!resp.IsSuccessStatusCode)
+				return new ApiResult { Success = false, ErrorMessage = text };
+			return new ApiResult { Success = true };
+		}
+
+
+
+		// Deja solo el helper y dos wrappers públicos
+
+		private async Task<string> ConsultarEstadoPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
+		{
+			if (string.IsNullOrWhiteSpace(ubicacion)) return "NINGUNO";
+
+			var url = $"palet/estado-en-ubicacion?codigoEmpresa={codigoEmpresa}&codigoAlmacen={codigoAlmacen}&ubicacion={ubicacion}";
+			var resp = await _httpClient.GetAsync(url);
+			var text = await resp.Content.ReadAsStringAsync();
+			if (!resp.IsSuccessStatusCode) return "NINGUNO";
+
+			var json = System.Text.Json.JsonDocument.Parse(text).RootElement;
+			return json.TryGetProperty("estado", out var estado)
+				? (estado.GetString() ?? "NINGUNO")
+				: "NINGUNO";
+		}
+
+		public Task<string> ConsultarEstadoPaletDestinoAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
+			=> ConsultarEstadoPaletAsync(codigoEmpresa, codigoAlmacen, ubicacion);
+
+		public Task<string> ConsultarEstadoPaletOrigenAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
+			=> ConsultarEstadoPaletAsync(codigoEmpresa, codigoAlmacen, ubicacion);
+
+		// NUEVO: reabrir palet
+		public async Task<bool> ReabrirPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
+		{
+			var payload = new { codigoEmpresa, codigoAlmacen, ubicacion };
+			var resp = await _httpClient.PostAsJsonAsync("palet/reabrir", payload); // ajusta ruta si hace falta
+			return resp.IsSuccessStatusCode;
+		}
+
 
 	}
 
-    public class ApiResult
-    {
-        public bool Success { get; set; }
-        public string? ErrorMessage { get; set; }
-    }
+	public class ApiResult
+	{
+		public bool Success { get; set; }
+		public string? ErrorMessage { get; set; }
+		public string? PaletInfo { get; set; } 
+	}
 
 	public class PaletMovibleDto
 	{

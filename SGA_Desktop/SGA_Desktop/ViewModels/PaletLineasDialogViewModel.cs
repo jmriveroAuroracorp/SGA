@@ -142,7 +142,16 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (!LineasPendientes.Any())
 			{
-				new WarningDialog("Aviso", "No hay líneas para confirmar.").ShowDialog();
+				var warning = new WarningDialog(
+					"Sin líneas",
+					"No hay líneas para confirmar. Añade al menos una línea antes de confirmar.",
+					"\uE814"
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+				if (owner != null && owner != warning)
+					warning.Owner = owner;
+				warning.ShowDialog();
 				return;
 			}
 
@@ -150,9 +159,7 @@ namespace SGA_Desktop.ViewModels
 
 			foreach (var dto in LineasPendientes)
 			{
-				MessageBox.Show(dto.CantidadAMover.ToString());
 				var (ok, mensaje) = await _paletService.AnhadirLineaPaletAsync(PaletId, dto);
-
 				if (!ok)
 				{
 					todoOk = false;
@@ -166,17 +173,31 @@ namespace SGA_Desktop.ViewModels
 
 			if (todoOk)
 			{
-				MessageBox.Show("Movimientos realizados correctamente.", "Éxito",
-					MessageBoxButton.OK, MessageBoxImage.Information);
-
-				// cerrar ventana
+				var confirm = new ConfirmationDialog(
+					"Artículo añadido",
+					$"El artículo ha sido añadido correctamente al palet {PaletCodigo}.",
+					"\uE8FB"
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+				if (owner != null && owner != confirm)
+					confirm.Owner = owner;
+				confirm.ShowDialog();
 				Application.Current.Windows.OfType<Window>()
 					.FirstOrDefault(w => w.DataContext == this)?.Close();
 			}
 			else
 			{
-				new WarningDialog("Aviso", "Algunas líneas no se pudieron mover. Revisa los errores mostrados.").ShowDialog();
-				// Aquí NO cerramos la ventana, para que el usuario pueda corregir.
+				var warning = new WarningDialog(
+					"Error en traspaso",
+					"Algunas líneas no se pudieron mover. Revisa los errores mostrados.",
+					"\uE814"
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+				if (owner != null && owner != warning)
+					warning.Owner = owner;
+				warning.ShowDialog();
 			}
 			CollectionViewSource.GetDefaultView(LineasPendientes).Refresh();
 		}
@@ -187,13 +208,31 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (dto.CantidadAMoverDecimal is not decimal cantidad || cantidad <= 0)
 			{
-				new WarningDialog("Aviso", "Indica una cantidad mayor que 0").ShowDialog();
+				var warning = new WarningDialog(
+					"Cantidad no válida",
+					"Debes indicar una cantidad mayor que 0 para añadir al palet.",
+					"\uE814"
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+				if (owner != null && owner != warning)
+					warning.Owner = owner;
+				warning.ShowDialog();
 				return;
 			}
 
 			if (cantidad > dto.UnidadSaldo)
 			{
-				new WarningDialog("Aviso", $"La cantidad a mover ({cantidad}) es mayor que la disponible ({dto.UnidadSaldo}).").ShowDialog();
+				var warning = new WarningDialog(
+					"Cantidad excedida",
+					$"La cantidad a mover ({cantidad}) es mayor que la disponible ({dto.UnidadSaldo}).",
+					"\uE814"
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+				if (owner != null && owner != warning)
+					warning.Owner = owner;
+				warning.ShowDialog();
 				return;
 			}
 
@@ -208,7 +247,16 @@ namespace SGA_Desktop.ViewModels
 
 			if (yaExiste)
 			{
-				new WarningDialog("Aviso", "Ya has añadido esta línea antes.").ShowDialog();
+				var warning = new WarningDialog(
+					"Línea duplicada",
+					"Ya has añadido esta línea antes al palet.",
+					"\uE814"
+				);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+				if (owner != null && owner != warning)
+					warning.Owner = owner;
+				warning.ShowDialog();
 				return;
 			}
 

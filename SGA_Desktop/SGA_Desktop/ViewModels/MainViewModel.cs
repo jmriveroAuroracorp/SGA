@@ -13,6 +13,7 @@ using SGA_Desktop.Dialog;
 using System.Windows.Input;
 using System;
 using System.Threading;
+using System.Linq;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -110,10 +111,11 @@ namespace SGA_Desktop.ViewModels
 		{
 			var dialog = new ConfirmationDialog(
 				"Confirmar salida",
-				"¿Estás seguro de que quieres salir de la aplicación?")
-			{
-				Owner = System.Windows.Application.Current.MainWindow
-			};
+				"¿Estás seguro de que quieres salir de la aplicación?");
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dialog)
+				dialog.Owner = owner;
 			if (dialog.ShowDialog() != true)
 				return;
 

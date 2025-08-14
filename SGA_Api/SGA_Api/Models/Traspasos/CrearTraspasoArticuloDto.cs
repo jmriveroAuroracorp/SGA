@@ -18,5 +18,10 @@ namespace SGA_Api.Models.Traspasos
         public Guid? MovPosicionOrigen { get; set; } = null;
         public Guid? MovPosicionDestino { get; set; } = null;
         public DateTime? FechaInicio { get; set; }
-    }
+		public string? DescripcionArticulo { get; set; }
+		public string? UnidadMedida { get; set; }
+		public string? Observaciones { get; set; }
+
+		public bool? ReabrirSiCerradoOrigen { get; set; }  // default null/false
+	}
 } 

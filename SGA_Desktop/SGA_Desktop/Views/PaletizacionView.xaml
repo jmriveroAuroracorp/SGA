@@ -104,7 +104,6 @@
 
                 <ListView.Resources>
                     <Style TargetType="ListViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                         <Setter Property="Margin" Value="0,0,0,10"/>
                         <Setter Property="Template">
                             <Setter.Value>
@@ -341,7 +340,7 @@
                         IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
 
                 <Button Content="🔒 Cerrar"
-                        Margin="0,0,360,0"
+                        Margin="0,0,320,0"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding CerrarPaletCommand}"
                         IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />

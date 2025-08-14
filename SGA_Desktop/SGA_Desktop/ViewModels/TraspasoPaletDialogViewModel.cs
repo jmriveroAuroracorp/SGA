@@ -35,8 +35,8 @@ namespace SGA_Desktop.ViewModels
 
         public bool PuedeMoverPalet => PaletSeleccionado != null && AlmacenDestinoSeleccionado != null && UbicacionDestinoSeleccionada != null;
 
-        // Fecha de inicio del traspaso
-        private readonly DateTime _fechaInicioTraspaso = DateTime.Now;
+        //// Fecha de inicio del traspaso
+        //private readonly DateTime _fechaInicioTraspaso = DateTime.Now;
 
         [ObservableProperty]
         private string? comentario;
@@ -140,7 +140,6 @@ namespace SGA_Desktop.ViewModels
             {
                 var usuarioId = Helpers.SessionManager.UsuarioActual?.operario ?? 0;
                 var empresa = Helpers.SessionManager.EmpresaSeleccionada.Value;
-                var ahora = DateTime.Now;
                 var dto = new SGA_Desktop.Models.MoverPaletDto
                 {
                     PaletId = PaletSeleccionado.Id,
@@ -149,12 +148,11 @@ namespace SGA_Desktop.ViewModels
                     AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
                     UbicacionDestino = UbicacionDestinoSeleccionada.Ubicacion, // Puede ser ""
                     CodigoEstado = "PENDIENTE_ERP",
-                    FechaFinalizacion = ahora,
                     UsuarioFinalizacionId = usuarioId,
                     CodigoEmpresa = empresa,
-                    FechaInicio = _fechaInicioTraspaso,
                     TipoTraspaso = "PALET",
                     Comentario = Comentario // Nuevo campo
+                    
                 };
                 var resp = await _traspasosService.MoverPaletAsync(dto);
                 if (resp.Success)
