@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Almacen;
+using SGA_Api.Models.Palet;
 using SGA_Api.Models.Stock;
 
 namespace SGA_Api.Controllers.Stock
@@ -465,9 +466,15 @@ namespace SGA_Api.Controllers.Stock
 		}
 
 
+		private async Task<List<string>> ObtenerCodigosArticulosPorDescripcion(string descripcion, short codigoEmpresa)
+		{
+			var articulos = await _sageContext.Articulos
+				.Where(a => a.CodigoEmpresa == codigoEmpresa && a.DescripcionArticulo.Contains(descripcion))
+				.Select(a => a.CodigoArticulo)
+				.ToListAsync();
 
-
-
+			return articulos;
+		}
 
 		// helper para proyectar
 		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos)
@@ -484,6 +491,40 @@ namespace SGA_Api.Controllers.Stock
 				.Where(a => a.CodigoEmpresa == empresa)
 				.ToList();
 
+			// 🔹 precargo todas las líneas de palet para esos artículos/lotes
+			var codigosArticulos = datos.Select(d => d.CodigoArticulo).Distinct().ToList();
+			var partidas = datos.Select(d => d.Partida).Distinct().ToList();
+			var ubicaciones = datos.Select(d => d.Ubicacion).Distinct().ToList();
+
+			var lineasPalets = _auroraSgaContext.PaletLineas
+				.Include(l => l.Palet)
+				.Where(l => l.CodigoEmpresa == empresa &&
+							codigosArticulos.Contains(l.CodigoArticulo) &&
+							partidas.Contains(l.Lote) &&
+							ubicaciones.Contains(l.Ubicacion))
+				.ToList();
+
+			// 🔹 total global por artículo (en toda la empresa, independiente del filtro)
+			var totalesGlobales = _auroraSgaContext.StockDisponible
+	.Where(x => x.CodigoEmpresa == empresa &&
+				codigosArticulos.Contains(x.CodigoArticulo) &&
+				x.Partida != null)
+	.AsEnumerable() // 🔑 ejecución en memoria
+	.GroupBy(x => new { x.CodigoArticulo, x.Partida })
+	.ToDictionary(
+		g => (g.Key.CodigoArticulo, g.Key.Partida),
+		g => g.Sum(x => x.UnidadSaldo)
+	);
+
+			// 🔹 total por artículo+almacén (sí depende del filtro actual)
+			var totalesPorArticuloAlmacen = datos
+				.GroupBy(d => new { d.CodigoArticulo, d.Partida, d.CodigoAlmacen })
+				.ToDictionary(
+					g => (g.Key.CodigoArticulo, g.Key.Partida, g.Key.CodigoAlmacen),
+					g => g.Sum(x => x.UnidadSaldo)
+				);
+
+
 			return datos.Select(s =>
 			{
 				var alm = almacenes.FirstOrDefault(x =>
@@ -493,35 +534,53 @@ namespace SGA_Api.Controllers.Stock
 					x.CodigoEmpresa == s.CodigoEmpresa &&
 					x.CodigoArticulo == s.CodigoArticulo);
 
+				var palets = lineasPalets
+					.Where(l =>
+						l.CodigoEmpresa == s.CodigoEmpresa &&
+						l.CodigoArticulo == s.CodigoArticulo &&
+						l.Lote == s.Partida &&
+						l.Ubicacion == s.Ubicacion &&
+						(l.Palet.Estado == "Abierto" || l.Palet.Estado == "Cerrado"))
+					.Select(l => new PaletDetalleDto
+					{
+						PaletId = l.PaletId,
+						CodigoPalet = l.Palet.Codigo,
+						EstadoPalet = l.Palet.Estado,
+						Cantidad = l.Cantidad,
+						Ubicacion = l.Ubicacion,
+						Partida = l.Lote,
+						FechaApertura = l.Palet.FechaApertura,
+						FechaCierre = l.Palet.FechaCierre
+					})
+					.ToList();
+
+				// totales
+				totalesGlobales.TryGetValue((s.CodigoArticulo, s.Partida), out var totalArticuloGlobal);
+				totalesPorArticuloAlmacen.TryGetValue((s.CodigoArticulo, s.Partida, s.CodigoAlmacen), out var totalArticuloAlmacen);
+
 				return new StockUbicacionDto
 				{
 					CodigoEmpresa = s.CodigoEmpresa.ToString(),
 					CodigoArticulo = s.CodigoArticulo,
 					DescripcionArticulo = art?.DescripcionArticulo,
-					CodigoAlternativo = art?.CodigoAlternativo,
-					CodigoAlternativo2 = art?.CodigoAlternativo2,
-					ReferenciaEdi_ = art?.ReferenciaEdi_,
-					MRHCodigoAlternativo3 = art?.MRHCodigoAlternativo3,
-					VCodigoDUN14 = art?.VCodigoDUN14,
+					CodigoAlternativo = art?.CodigoAlternativo ?? "",
 					CodigoAlmacen = s.CodigoAlmacen,
-					Almacen = alm?.Almacen,
+					Almacen = alm?.Almacen ?? "",
 					Ubicacion = s.Ubicacion,
 					Partida = s.Partida,
 					FechaCaducidad = s.FechaCaducidad,
-					UnidadSaldo = s.UnidadSaldo
+
+					// cantidad individual
+					UnidadSaldo = s.UnidadSaldo,
+
+					Palets = palets,
+
+					// 🔹 nuevos campos
+					TotalArticuloGlobal = totalArticuloGlobal,          // total global
+					TotalArticuloAlmacen = totalArticuloAlmacen   // total en este almacén
 				};
 			}).ToList();
 		}
-		private async Task<List<string>> ObtenerCodigosArticulosPorDescripcion(string descripcion, short codigoEmpresa)
-		{
-			var articulos = await _sageContext.Articulos
-				.Where(a => a.CodigoEmpresa == codigoEmpresa && a.DescripcionArticulo.Contains(descripcion))
-				.Select(a => a.CodigoArticulo)
-				.ToListAsync();
-
-			return articulos;
-		}
-
 	}
 
 }

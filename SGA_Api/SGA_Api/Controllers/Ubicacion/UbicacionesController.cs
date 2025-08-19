@@ -686,10 +686,10 @@ namespace SGA_Api.Controllers.Ubicacion
 					on new { t.PaletId, t.FechaFinalizacion }
 					equals new { u.PaletId, FechaFinalizacion = u.MaxFecha }
 				where t.PaletId != paletId
-	&& t.TipoTraspaso == "PALET"
-	&& t.CodigoEstado == "COMPLETADO"
-	&& t.AlmacenDestino == alm
-	&& (t.UbicacionDestino ?? "") == ubi
+					&& t.TipoTraspaso == "PALET"
+					&& t.CodigoEstado == "COMPLETADO"
+					&& t.AlmacenDestino == alm
+					&& (t.UbicacionDestino ?? "") == ubi
 				select 1
 			).AnyAsync();
 

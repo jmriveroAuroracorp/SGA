@@ -1,8 +1,9 @@
-﻿using Newtonsoft.Json;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using Newtonsoft.Json;
 using SGA_Desktop.Models;
 using System.Collections.ObjectModel;
 
-public class UbicacionDetalladaDto
+public partial class UbicacionDetalladaDto : ObservableObject
 {
 	public UbicacionDetalladaDto()
 	{
@@ -43,14 +44,12 @@ public class UbicacionDetalladaDto
 	[JsonProperty("tipoPaletPermitido")]
 	public string TipoPaletPermitido { get; set; } = "";
 
-	// Estas dos reciben los datos reales que manda tu API:
 	[JsonProperty("tipoUbicacionId")]
 	public short? TipoUbicacionId { get; set; }
 
 	[JsonProperty("tipoUbicacionDescripcion")]
 	public string TipoUbicacionDescripcion { get; set; } = "";
-	//public string TipoUbicacion
-	//	=> TipoUbicacionDescripcion;
+
 	[JsonProperty("orden")]
 	public int? Orden { get; set; }
 
@@ -65,6 +64,7 @@ public class UbicacionDetalladaDto
 
 	[JsonProperty("riesgoContaminacion")]
 	public bool RiesgoContaminacion { get; set; }
+
 	[JsonProperty("peso")]
 	public decimal? Peso { get; set; }
 	[JsonProperty("alto")]
@@ -78,12 +78,12 @@ public class UbicacionDetalladaDto
 	[JsonProperty("angulo")]
 	public decimal? Angulo { get; set; }
 
-	// Colecciones para binding de chips
 	public ObservableCollection<AlergenoDto> AlergenosPermitidosList { get; }
-		= new ObservableCollection<AlergenoDto>();
 	public ObservableCollection<AlergenoDto> AlergenosPresentesList { get; }
-		= new ObservableCollection<AlergenoDto>();
 
 	public string TextoMostrado
 		=> string.IsNullOrWhiteSpace(Ubicacion) ? "SIN UBICACIÓN" : Ubicacion;
+
+	[ObservableProperty]
+	private bool isMarcada;
 }

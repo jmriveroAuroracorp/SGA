@@ -1,4 +1,7 @@
-﻿namespace SGA_Api.Models.Stock
+﻿using SGA_Api.Models.Palet;
+using System.Text.Json.Serialization;
+
+namespace SGA_Api.Models.Stock
 {
     public class StockUbicacionDto
     {
@@ -17,6 +20,15 @@
         public string? Partida { get; set; }
         public DateTime? FechaCaducidad { get; set; }
         public decimal?  UnidadSaldo { get; set; }
-    }
+
+		// Campos nuevos para mostrar si los artículos están paletizados en la consulta de stock
+		public Guid? PaletId { get; set; }
+		public string? CodigoPalet { get; set; }
+		public bool EstaPaletizado => !string.IsNullOrEmpty(CodigoPalet);
+		public string? EstadoPalet { get; set; }
+		public List<PaletDetalleDto> Palets { get; set; } = new();
+		public decimal? TotalArticuloGlobal { get; set; }
+		public decimal? TotalArticuloAlmacen { get; set; }
+	}
 
 }

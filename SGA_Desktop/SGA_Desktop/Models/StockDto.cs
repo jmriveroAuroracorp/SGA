@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SGA_Desktop.Services;
+using System;
 using System.Text.Json.Serialization;
 
 namespace SGA_Desktop.Models
@@ -42,5 +43,24 @@ namespace SGA_Desktop.Models
 		// JSON debe venir como "alergenos" o "vNEWAlergenos" según tu API
 		[JsonPropertyName("alergenos")]
 		public string Alergenos { get; set; } = string.Empty;
+
+		// 👇 Nuevo campo
+		[JsonPropertyName("codigoPalet")]
+		public string? CodigoPalet { get; set; }
+
+		// 👇 Propiedad calculada si quieres comodidad en el cliente
+		[JsonIgnore]
+		public bool EstaPaletizado => !string.IsNullOrEmpty(CodigoPalet);
+
+		[JsonPropertyName("estadoPalet")]
+		public string? EstadoPalet { get; set; }
+
+		public List<PaletDetalleDto> Palets { get; set; } = new();
+
+		// 🔹 nueva propiedad
+		public decimal TotalArticuloGlobal { get; set; }
+
+		public decimal TotalArticuloAlmacen { get; set; }
+	
 	}
 }

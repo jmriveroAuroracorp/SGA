@@ -54,11 +54,13 @@
                        Style="{StaticResource LabelStyle}"
                        Margin="0,4,0,0"/>
             <ComboBox ItemsSource="{Binding Impresoras}"
-                      SelectedItem="{Binding ImpresoraSeleccionada}"
-                      DisplayMemberPath="Nombre"
-                      Width="200"
-                      Margin="0,4,0,12"
-                      Style="{StaticResource EstiloComboBox}"/>
+          DisplayMemberPath="Nombre"
+          SelectedValuePath="Nombre"
+          SelectedValue="{Binding ImpresoraSeleccionadaNombre, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+            Width="200"
+          Margin="0,4,0,12"
+          Style="{StaticResource EstiloComboBox}"/>
+
 
             <!-- Copias -->
             <TextBlock Text="Número de copias:"
@@ -71,19 +73,15 @@
                      Style="{StaticResource EstiloCajaTexto}"/>
 
             <!-- Botones -->
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Center"
-                        Margin="0,10,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
                 <Button Content="Cancelar"
-                        Width="90"
-                        Margin="0,0,20,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        IsCancel="True"/>
+          Width="90" Margin="0,0,20,0"
+          Style="{StaticResource EstiloBotonPrincipal}"
+          Command="{Binding CancelarCommand}" />
                 <Button Content="Imprimir"
-                        Width="90"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        IsDefault="True"
-                        Click="Aceptar_Click"/>
+          Width="90"
+          Style="{StaticResource EstiloBotonPrincipal}"
+          Command="{Binding AceptarCommand}" />
             </StackPanel>
         </StackPanel>
     </Border>

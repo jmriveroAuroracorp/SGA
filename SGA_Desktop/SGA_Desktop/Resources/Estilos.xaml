@@ -8,7 +8,7 @@
     <Color x:Key="ColorSecundario2">#6fc4fa</Color>
     <Color x:Key="ColorFondo">#f3f6fb</Color>
     <Color x:Key="ColorIntermedio">#3A94C9</Color>
-    
+
     <SolidColorBrush x:Key="BrushPrincipal" Color="{StaticResource ColorPrincipal}"/>
     <SolidColorBrush x:Key="BrushIntermedio" Color="{StaticResource ColorIntermedio}"/>
     <SolidColorBrush x:Key="BrushSecundario1" Color="{StaticResource ColorSecundario1}"/>
@@ -123,7 +123,7 @@
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Margin" Value="0,0,0,4"/>
     </Style>
-    
+
     <!-- 🔘 Botón flotante redondo -->
     <Style x:Key="EstiloBotonFlotante"
        TargetType="Button"
@@ -312,6 +312,109 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Background" Value="White"/>
     </Style>
+
+
+    <Style x:Key="ComboEstiloPrincipal" TargetType="ComboBox">
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="BorderBrush" Value="#0078D7"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="ComboBoxItem">
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="Background" Value="White"/>
+                    <Setter Property="Padding" Value="8,4"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#E5F1FB"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#0078D7"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Setter.Value>
+        </Setter>
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <!-- Contenedor principal -->
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Texto -->
+                        <Border x:Name="MainBorder"
+                            CornerRadius="6,0,0,6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter Margin="8,0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+                        </Border>
+
+                        <!-- Botón flecha -->
+                        <ToggleButton Grid.Column="1"
+                                  Name="ToggleButton"
+                                  Focusable="false"
+                                  ClickMode="Press"
+                                  Background="#0078D7"
+                                  BorderThickness="0"
+                                  IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <Path HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Data="M 0 0 L 4 4 L 8 0 Z"
+                              Fill="White"/>
+                        </ToggleButton>
+
+                        <!-- Lista desplegable -->
+                        <Popup Name="Popup"
+       Placement="Bottom"
+       IsOpen="{TemplateBinding IsDropDownOpen}"
+       AllowsTransparency="True"
+       Focusable="False"
+       PopupAnimation="Slide">
+                            <Border CornerRadius="6"
+            BorderBrush="#0078D7"
+            BorderThickness="1"
+            Background="White"
+            Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+            SnapsToDevicePixels="True">
+                                <ScrollViewer>
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+
+                    </Grid>
+
+                    <!-- Hover y disabled -->
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="MainBorder" Property="Background" Value="#F0F8FF"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="MainBorder" Property="Background" Value="#EEE"/>
+                            <Setter Property="Foreground" Value="#777"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 
 
 

@@ -1298,4 +1298,37 @@ public class PaletController : ControllerBase
 		return Ok(new { message = $"Palet {palet.Codigo} marcado como Vaciado." });
 	}
 
+
+	// Para mostrar el detalle en la consulta de stock
+	[HttpGet("detalle-palet")]
+	public async Task<ActionResult<List<PaletDetalleDto>>> GetDetallePalet(
+		short codigoEmpresa,
+		string codigoArticulo,
+		string codigoAlmacen,
+		string ubicacion,
+		string partida)
+	{
+		var detalle = await _auroraSgaContext.PaletLineas
+			.Include(l => l.Palet)
+			.Where(l =>
+				l.CodigoEmpresa == codigoEmpresa &&
+				l.CodigoArticulo == codigoArticulo &&
+				l.CodigoAlmacen == codigoAlmacen &&
+				l.Ubicacion == ubicacion &&
+				l.Lote == partida &&
+				(l.Palet.Estado == "Abierto" || l.Palet.Estado == "Cerrado") // 👈 filtro
+			)
+			.OrderByDescending(l => l.Palet.FechaApertura) // 👈 opcional
+			.Select(l => new PaletDetalleDto
+			{
+				PaletId = l.PaletId,
+				CodigoPalet = l.Palet.Codigo,
+				EstadoPalet = l.Palet.Estado,
+				Cantidad = l.Cantidad
+			})
+			.ToListAsync();
+
+		return detalle;
+	}
+
 }

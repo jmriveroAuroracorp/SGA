@@ -742,35 +742,236 @@ public class TraspasosController : ControllerBase
 		}
 	}
 
+
+	[HttpGet("articulo/precheck-finalizar")]
+	public async Task<IActionResult> PrecheckFinalizarArticulo(
+	[FromQuery] short codigoEmpresa,
+	[FromQuery] string almacenDestino,
+	[FromQuery] string ubicacionDestino)
+	{
+		if (string.IsNullOrWhiteSpace(almacenDestino) || string.IsNullOrWhiteSpace(ubicacionDestino))
+			return BadRequest("Debe indicar almacén y ubicación de destino.");
+
+		var almKey = almacenDestino.Trim().ToUpperInvariant();
+		var ubiKey = ubicacionDestino.Trim().ToUpperInvariant();
+
+		// Último PALET COMPLETADO en esa ubicación
+		var palet = await (
+			from t in _context.Traspasos.AsNoTracking()
+			join p in _context.Palets.AsNoTracking() on t.PaletId equals p.Id
+			where t.TipoTraspaso == "PALET"
+			   && t.CodigoEstado == "COMPLETADO"
+			   && (t.AlmacenDestino ?? "").ToUpper() == almKey
+			   && (t.UbicacionDestino ?? "").ToUpper() == ubiKey
+			   && p.CodigoEmpresa == codigoEmpresa
+			orderby t.FechaFinalizacion descending
+			select p
+		).FirstOrDefaultAsync();
+
+		if (palet == null)
+			return Ok(new { existe = false });
+
+		var cerrado = string.Equals(palet.Estado ?? "", "CERRADO", StringComparison.OrdinalIgnoreCase);
+		return Ok(new
+		{
+			existe = true,
+			paletId = palet.Id,
+			codigoPalet = palet.Codigo,
+			cerrado,
+			aviso = cerrado
+				? $"Hay un palet CERRADO en {almacenDestino}-{ubicacionDestino} (Código: {palet.Codigo}). Se abrirá y quedará ABIERTO; el artículo quedará paletizado."
+				: $"Hay un palet ABIERTO en {almacenDestino}-{ubicacionDestino} (Código: {palet.Codigo}). El artículo quedará paletizado."
+		});
+	}
+
 	/// <summary>
 	/// Finalizar traspaso de artículo individual (mobility, segunda fase).
 	/// </summary>
 	[HttpPut("articulo/{id}/finalizar")]
 	public async Task<IActionResult> FinalizarTraspasoArticulo(Guid id, [FromBody] FinalizarTraspasoArticuloDto dto)
 	{
+		// 1) Validaciones básicas
 		var traspaso = await _context.Traspasos.FindAsync(id);
 		if (traspaso == null)
 			return NotFound();
-		if (traspaso.TipoTraspaso != "ARTICULO")
+
+		if (!string.Equals(traspaso.TipoTraspaso, "ARTICULO", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El traspaso no es de tipo ARTICULO.");
-		if (traspaso.CodigoEstado == "COMPLETADO")
+
+		if (string.Equals(traspaso.CodigoEstado, "COMPLETADO", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El traspaso ya está finalizado.");
-		if (traspaso.CodigoEstado != "PENDIENTE")
+
+		if (!string.Equals(traspaso.CodigoEstado, "PENDIENTE", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El traspaso no está en estado pendiente.");
+
 		if (string.IsNullOrWhiteSpace(dto.AlmacenDestino) || string.IsNullOrWhiteSpace(dto.UbicacionDestino))
 			return BadRequest("Debe indicar almacén y ubicación de destino.");
 
-		traspaso.AlmacenDestino = dto.AlmacenDestino;
-		traspaso.UbicacionDestino = dto.UbicacionDestino;
+		// Normalizamos claves de comparación (pero guardamos el valor limpio, no en mayúsculas)
+		var almDestino = dto.AlmacenDestino.Trim();
+		var ubiDestino = dto.UbicacionDestino.Trim();
+		var almKey = almDestino.ToUpperInvariant();
+		var ubiKey = ubiDestino.ToUpperInvariant();
+
+		// ─────────────────────────────────────────────────────────────────────────────
+		// NUEVO (mínimo cambio): si hay palet en destino, pedir confirmación SIEMPRE,
+		// esté ABIERTO o CERRADO. No tocamos nada si no confirman.
+		// ─────────────────────────────────────────────────────────────────────────────
+		Guid? paletDestinoIdPre = await (
+			from t in _context.Traspasos.AsNoTracking()
+			where t.TipoTraspaso == "PALET"
+				  && t.CodigoEstado == "COMPLETADO"
+				  && (t.AlmacenDestino ?? "").ToUpper() == almKey
+				  && ((t.UbicacionDestino ?? "").ToUpper()) == ubiKey
+			orderby t.FechaFinalizacion descending
+			select (Guid?)t.PaletId
+		).FirstOrDefaultAsync();
+
+		bool hayPaletEnDestino = paletDestinoIdPre.HasValue && paletDestinoIdPre.Value != Guid.Empty;
+		if (hayPaletEnDestino)
+		{
+			var paletPre = await _context.Palets.AsNoTracking()
+							.FirstOrDefaultAsync(p => p.Id == paletDestinoIdPre.Value);
+
+			if (paletPre != null && dto.ConfirmarAgregarAPalet != true)
+			{
+				bool cerrado = string.Equals(paletPre.Estado ?? "", "CERRADO", StringComparison.OrdinalIgnoreCase);
+				string estadoTxt = cerrado ? "CERRADO" : "ABIERTO";
+
+				return StatusCode(StatusCodes.Status409Conflict, new
+				{
+					message = $"Hay un palet {estadoTxt} en {almDestino}-{ubiDestino} (Código: {paletPre.Codigo}). " +
+							  $"Si confirmas, el artículo pasará a estar paletizado en ese palet" + (cerrado ? " (y se reabrirá)." : "."),
+					requiereConfirmacion = true,
+					paletDetectado = true,
+					paletCerrado = cerrado,
+					paletId = paletPre.Id,
+					codigoPalet = paletPre.Codigo,
+					almacen = almDestino,
+					ubicacion = ubiDestino
+				});
+			}
+		}
+
+		await using var tx = await _context.Database.BeginTransactionAsync();
+
+		// 2) Finalizamos el traspaso (como ya tenías)
+		traspaso.AlmacenDestino = almDestino;
+		traspaso.UbicacionDestino = ubiDestino;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioId;
 		traspaso.FechaFinalizacion = DateTime.Now;
 		traspaso.MovPosicionDestino = Guid.NewGuid();
 		traspaso.CodigoEstado = "PENDIENTE_ERP";
 
-		await _context.SaveChangesAsync();
+		// ⬇️ CAMBIO: NO vuelvas a consultar Traspasos.
+		// Antes tenías un bloque con "Buscar si hay un PALET físico..." que repetía la query.
+		// Usa directamente el id ya calculado en el pre-check:
 
-		return Ok(new { message = "Traspaso de artículo finalizado correctamente", traspaso.Id });
+		Guid? paletDestinoId = paletDestinoIdPre;   // ← reutilizado
+
+		string paletInfo;
+
+		if (paletDestinoId.HasValue && paletDestinoId.Value != Guid.Empty)
+		{
+			// Seguimos igual: cargamos el palet (esta FindAsync es barata) y actualizamos
+			var palet = await _context.Palets.FindAsync(paletDestinoId.Value);
+			if (palet != null)
+			{
+				var estadoPalet = (palet.Estado ?? string.Empty).ToUpperInvariant();
+				if (estadoPalet == "CERRADO")
+				{
+					palet.Estado = "Abierto";
+					palet.FechaApertura = DateTime.Now;
+					palet.UsuarioAperturaId = dto.UsuarioId;
+					palet.FechaCierre = null;
+					palet.UsuarioCierreId = null;
+
+					_context.Palets.Update(palet);
+					_context.LogPalet.Add(new LogPalet
+					{
+						PaletId = palet.Id,
+						Fecha = DateTime.Now,
+						IdUsuario = dto.UsuarioId,
+						Accion = "Reabrir",
+						Detalle = "Reapertura automática al agregar artículo (finalización mobility)"
+					});
+				}
+
+				traspaso.PaletId = palet.Id;
+				traspaso.CodigoPalet = palet.Codigo;
+
+				var tempLineaDestino = new TempPaletLinea
+				{
+					PaletId = palet.Id,
+					CodigoEmpresa = traspaso.CodigoEmpresa,
+					CodigoArticulo = traspaso.CodigoArticulo,
+					DescripcionArticulo = null,
+					Cantidad = traspaso.Cantidad ?? 0m,
+					UnidadMedida = null,
+					Lote = traspaso.Partida,
+					FechaCaducidad = traspaso.FechaCaducidad,
+					CodigoAlmacen = almDestino,
+					Ubicacion = ubiDestino,
+					UsuarioId = dto.UsuarioId,
+					FechaAgregado = DateTime.Now,
+					Observaciones = "Delta destino (finalización mobility)",
+					Procesada = false,
+					TraspasoId = traspaso.Id,
+					EsHeredada = false
+				};
+				_context.TempPaletLineas.Add(tempLineaDestino);
+
+				paletInfo = $"Palet detectado en destino (Código: {palet.Codigo}). El artículo se ha agregado al palet.";
+			}
+			else
+			{
+				paletInfo = "Se detectó un palet por traza de traspasos, pero no existe el registro del palet. El artículo queda sin asociar a palet.";
+			}
+		}
+		else
+		{
+			paletInfo = "No hay palet en destino. El artículo queda sin asociar a palet.";
+		}
+
+		await _context.SaveChangesAsync();
+		await tx.CommitAsync();
+
+		return Ok(new
+		{
+			message = "Traspaso de artículo finalizado correctamente",
+			traspaso.Id,
+			traspaso.CodigoEstado,
+			paletInfo
+		});
 	}
+
+
+	//[HttpPut("articulo/{id}/finalizar")]
+	//public async Task<IActionResult> FinalizarTraspasoArticulo(Guid id, [FromBody] FinalizarTraspasoArticuloDto dto)
+	//{
+	//	var traspaso = await _context.Traspasos.FindAsync(id);
+	//	if (traspaso == null)
+	//		return NotFound();
+	//	if (traspaso.TipoTraspaso != "ARTICULO")
+	//		return BadRequest("El traspaso no es de tipo ARTICULO.");
+	//	if (traspaso.CodigoEstado == "COMPLETADO")
+	//		return BadRequest("El traspaso ya está finalizado.");
+	//	if (traspaso.CodigoEstado != "PENDIENTE")
+	//		return BadRequest("El traspaso no está en estado pendiente.");
+	//	if (string.IsNullOrWhiteSpace(dto.AlmacenDestino) || string.IsNullOrWhiteSpace(dto.UbicacionDestino))
+	//		return BadRequest("Debe indicar almacén y ubicación de destino.");
+
+	//	traspaso.AlmacenDestino = dto.AlmacenDestino;
+	//	traspaso.UbicacionDestino = dto.UbicacionDestino;
+	//	traspaso.UsuarioFinalizacionId = dto.UsuarioId;
+	//	traspaso.FechaFinalizacion = DateTime.Now;
+	//	traspaso.MovPosicionDestino = Guid.NewGuid();
+	//	traspaso.CodigoEstado = "PENDIENTE_ERP";
+
+	//	await _context.SaveChangesAsync();
+
+	//	return Ok(new { message = "Traspaso de artículo finalizado correctamente", traspaso.Id });
+	//}
 
 	/// <summary>
 	/// Listar traspasos de artículos individuales (no paletizados).
@@ -941,83 +1142,85 @@ public class TraspasosController : ControllerBase
 
 	[HttpPut("{id}/finalizar-palet")]
 
-	public async Task<IActionResult> FinalizarTraspasoPalet(
+	//public async Task<IActionResult> FinalizarTraspasoPalet(
 
-		Guid id,
+	//	Guid id,
 
-		[FromBody] FinalizarTraspasoPaletDto dto)
+	//	[FromBody] FinalizarTraspasoPaletDto dto)
 
-	{
+	//{
 
-		//1.Localizar el traspaso de referencia
+	//	//1.Localizar el traspaso de referencia
 
-		var traspaso = await _context.Traspasos.FindAsync(id);
+	//	var traspaso = await _context.Traspasos.FindAsync(id);
 
-		if (traspaso is null)
+	//	if (traspaso is null)
 
-			return NotFound("Traspaso no encontrado.");
+	//		return NotFound("Traspaso no encontrado.");
 
-		//2.Comprobar que está en un estado finalizable
+	//	//2.Comprobar que está en un estado finalizable
 
-		if (traspaso.CodigoEstado == "COMPLETADO")
+	//	if (traspaso.CodigoEstado == "COMPLETADO")
 
-			return BadRequest("El traspaso ya está finalizado.");
+	//		return BadRequest("El traspaso ya está finalizado.");
 
-		if (traspaso.CodigoEstado is not ("PENDIENTE" or "EN_TRANSITO"))
+	//	if (traspaso.CodigoEstado is not ("PENDIENTE" or "EN_TRANSITO"))
 
-			return BadRequest("El traspaso no está en un estado válido para ser finalizado.");
+	//		return BadRequest("El traspaso no está en un estado válido para ser finalizado.");
 
-		//3.Obtener TODOS los traspasos del mismo palet que sigan pendientes
+	//	//3.Obtener TODOS los traspasos del mismo palet que sigan pendientes
 
-	   var traspasosPalet = await _context.Traspasos
+	//   var traspasosPalet = await _context.Traspasos
 
-		   .Where(t => t.PaletId == traspaso.PaletId &&
+	//	   .Where(t => t.PaletId == traspaso.PaletId &&
 
-					   (t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "EN_TRANSITO"))
+	//				   (t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "EN_TRANSITO"))
 
-		   .ToListAsync();
+	//	   .ToListAsync();
 
-		if (traspasosPalet.Count == 0)
+	//	if (traspasosPalet.Count == 0)
 
-			return BadRequest("No hay traspasos pendientes para este palet.");
+	//		return BadRequest("No hay traspasos pendientes para este palet.");
 
-		//4.Actualizar cada traspaso y marcarlo explícitamente como “Modified”
+	//	//4.Actualizar cada traspaso y marcarlo explícitamente como “Modified”
 
-		foreach (var t in traspasosPalet)
+	//	foreach (var t in traspasosPalet)
 
-		{
+	//	{
 
-			t.AlmacenDestino = dto.AlmacenDestino;
+	//		t.AlmacenDestino = dto.AlmacenDestino;
 
-			t.UbicacionDestino = dto.UbicacionDestino;
+	//		t.UbicacionDestino = dto.UbicacionDestino;
 
-			t.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
+	//		t.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
 
-			t.FechaFinalizacion = DateTime.Now;
+	//		t.FechaFinalizacion = DateTime.Now;
 
-			t.CodigoEstado = "PENDIENTE_ERP";
+	//		t.CodigoEstado = "PENDIENTE_ERP";
 
-			_context.Entry(t).State = EntityState.Modified;   // ← fuerza el UPDATE
+	//		_context.Entry(t).State = EntityState.Modified;   // ← fuerza el UPDATE
 
-		}
+	//	}
 
-		await _context.SaveChangesAsync();
+	//	await _context.SaveChangesAsync();
 
-		//5.Respuesta
+	//	//5.Respuesta
 
-		return Ok(new
+	//	return Ok(new
 
-		{
+	//	{
 
-			message = "Traspasos de palet finalizados correctamente",
+	//		message = "Traspasos de palet finalizados correctamente",
 
-			traspasoIds = traspasosPalet.Select(t => t.Id).ToList(),
+	//		traspasoIds = traspasosPalet.Select(t => t.Id).ToList(),
 
-			nuevoEstado = "PENDIENTE_ERP"
+	//		nuevoEstado = "PENDIENTE_ERP"
 
-		});
+	//	});
 
-	}
+	//}
+
+
 
 	//[HttpPut("{id}/finalizar-palet")]
 	//public async Task<IActionResult> FinalizarTraspasoPalet(Guid id, [FromBody] FinalizarTraspasoPaletDto dto)

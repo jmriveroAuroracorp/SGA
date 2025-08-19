@@ -4,6 +4,7 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
       mc:Ignorable="d"
       Background="{StaticResource BrushFondo}">
 
@@ -13,6 +14,8 @@
 
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <helpers:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility"/>
+        <helpers:PaletsCountToVisibilityConverter x:Key="PaletsCountToVisibility"/>
     </Page.Resources>
 
     <Grid Margin="0" Cursor="">
@@ -236,6 +239,9 @@
                         </Setter.Value>
                     </Setter>
                 </Style>
+
+                <!-- Converter -->
+              
             </ListView.Resources>
 
             <ListView.ItemTemplate>
@@ -246,7 +252,7 @@
                             <ColumnDefinition Width="180"/>
                             <!-- Artículo + Almacén -->
                             <ColumnDefinition Width="2*"/>
-                            <!-- Ubicación + Partida + Fecha -->
+                            <!-- Ubicación + Partida + Fecha + Palets -->
                             <ColumnDefinition Width="2*"/>
                             <!-- Saldo -->
                             <ColumnDefinition Width="80"/>
@@ -262,8 +268,7 @@
                            TextAlignment="Center"/>
 
                         <!-- 2) Artículo y almacén -->
-                        <StackPanel Grid.Column="1"
-                            VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="{Binding DescripcionArticulo}"
                                FontSize="16"
                                FontWeight="SemiBold"
@@ -273,6 +278,90 @@
                         <Run Text=" – "/>
                         <Run Text="{Binding Almacen}"/>
                             </TextBlock>
+
+                            <!-- Inline si solo hay 1 palet -->
+                            <ItemsControl ItemsSource="{Binding Palets}"
+    Visibility="{Binding Palets, Converter={StaticResource PaletsCountToVisibility}, ConverterParameter=One}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <!-- Código -->
+                                            <TextBlock Text="{Binding CodigoPalet}" 
+                 FontWeight="Bold"
+                 Margin="0,0,6,0"/>
+
+                                            <!-- Estado con color -->
+                                            <Ellipse Width="12" Height="12" Margin="0,0,6,0"
+               VerticalAlignment="Center">
+                                                <Ellipse.Style>
+                                                    <Style TargetType="Ellipse">
+                                                        <Setter Property="Fill" Value="Gray"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EstadoPalet}" Value="Cerrado">
+                                                                <Setter Property="Fill" Value="Red"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding EstadoPalet}" Value="Abierto">
+                                                                <Setter Property="Fill" Value="Green"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding EstadoPalet}" Value="Vaciado">
+                                                                <Setter Property="Fill" Value="Orange"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Ellipse.Style>
+                                            </Ellipse>
+
+                                            <!-- Cantidad -->
+                                            <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:N2}'}"
+                 VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Expander si hay más de 1 palet -->
+                            <Expander Header="Palets en esta ubicación"
+IsExpanded="False"
+Margin="0,4,0,0"
+Visibility="{Binding Palets, Converter={StaticResource PaletsCountToVisibility}, ConverterParameter=Many}">
+                                <ItemsControl ItemsSource="{Binding Palets}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="8,2">
+                                                <!-- Código -->
+                                                <TextBlock Text="{Binding CodigoPalet}" 
+                     FontWeight="Bold"
+                     Margin="0,0,6,0"/>
+
+                                                <!-- Estado con color -->
+                                                <Ellipse Width="12" Height="12" Margin="0,0,6,0"
+                   VerticalAlignment="Center">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Setter Property="Fill" Value="Gray"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding EstadoPalet}" Value="Cerrado">
+                                                                    <Setter Property="Fill" Value="Red"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding EstadoPalet}" Value="Abierto">
+                                                                    <Setter Property="Fill" Value="Green"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding EstadoPalet}" Value="Vaciado">
+                                                                    <Setter Property="Fill" Value="Orange"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+
+                                                <!-- Cantidad -->
+                                                <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:N2}'}"
+                     VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Expander>
                         </StackPanel>
 
                         <!-- 3) Ubicación / Partida / Caducidad -->
@@ -286,30 +375,55 @@
                             <TextBlock Text="{Binding FechaCaducidad, StringFormat='Cad.: {0:d}'}"
                                FontSize="14"
                                Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
+
+                           
+
                         </StackPanel>
 
                         <!-- 4) Saldo -->
-                        <TextBlock Grid.Column="3"
-                           Text="{Binding UnidadSaldo, StringFormat=N2}"
-                           FontSize="16"
-                           FontWeight="Bold"
-                           Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
-                           VerticalAlignment="Center"
-                           TextAlignment="Right"/>
+                        <StackPanel Grid.Column="3"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Right"
+            Margin="0,0,4,0">
+
+                            <!-- Cantidad individual -->
+                            <TextBlock Text="{Binding UnidadSaldo, StringFormat=N2}"
+               FontSize="16"
+               FontWeight="Bold"
+               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
+               TextAlignment="Right"/>
+
+                            <!-- Total global -->
+                            <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat='G: {0:N2}'}"
+               Foreground="Blue"
+               FontWeight="Bold"
+               FontSize="12"
+               TextAlignment="Right"
+               Visibility="{Binding MostrarTotales, Converter={StaticResource BoolToVis}}"/>
+
+                            <!-- Total en almacén -->
+                            <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat='Alm: {0:N2}'}"
+               Foreground="Blue"
+               FontWeight="Bold"
+               FontSize="12"
+               TextAlignment="Right"
+               Visibility="{Binding MostrarTotales, Converter={StaticResource BoolToVis}}"/>
+                        </StackPanel>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
 
+
         <!-- RESULTADOS: MODO POR UBICACIÓN -->
         <ListView Grid.Row="3"
-          ItemsSource="{Binding ResultadosStockPorUbicacion}"
-          SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
-          Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
-          SelectionMode="Single"
-          ScrollViewer.VerticalScrollBarVisibility="Auto">
+   ItemsSource="{Binding ResultadosStockPorUbicacion}"
+   SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
+   Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
+   SelectionMode="Single"
+   ScrollViewer.VerticalScrollBarVisibility="Auto">
 
-            <!-- 1) Estilo de tarjeta idéntico -->
+            <!-- Estilo de tarjeta -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
@@ -322,10 +436,10 @@
                         <Setter.Value>
                             <ControlTemplate TargetType="ListViewItem">
                                 <Border x:Name="Bd"
-                    Background="{TemplateBinding Background}"
-                    CornerRadius="6"
-                    BorderThickness="1"
-                    BorderBrush="{StaticResource BrushPrincipal}">
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                BorderThickness="1"
+                                BorderBrush="{StaticResource BrushPrincipal}">
                                     <ContentPresenter />
                                 </Border>
                                 <ControlTemplate.Triggers>
@@ -343,66 +457,156 @@
                 </Style>
             </ListView.ItemContainerStyle>
 
-            <!-- 2) Template de tarjeta replicado -->
+            <!-- Plantilla con inline o expander -->
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Grid Margin="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="80"/>
-                        </Grid.ColumnDefinitions>
+                    <StackPanel Margin="8">
 
-                        <!-- 2.1 Código Artículo -->
-                        <TextBlock Grid.Column="0"
-                   Text="{Binding CodigoArticulo}"
-                   FontWeight="Bold"
-                   FontSize="20"
-                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
-                   VerticalAlignment="Center"
-                   TextAlignment="Center"/>
+                        <!-- Cabecera tarjeta -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="80"/>
+                            </Grid.ColumnDefinitions>
 
-                        <!-- 2) Artículo y almacén -->
-                        <StackPanel Grid.Column="1"
-      VerticalAlignment="Center">
-                            <TextBlock Text="{Binding DescripcionArticulo}"
-         FontSize="16"
-         FontWeight="SemiBold"
-         Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
-                            <TextBlock>
-  <Run Text="{Binding CodigoAlmacen}"/>
-  <Run Text=" – "/>
-  <Run Text="{Binding Almacen}"/>
-                            </TextBlock>
-                        </StackPanel>
+                            <!-- Código Artículo -->
+                            <TextBlock Grid.Column="0"
+                               Text="{Binding CodigoArticulo}"
+                               FontWeight="Bold"
+                               FontSize="20"
+                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center"/>
 
-                        <!-- 3) Ubicación / Partida / Caducidad -->
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Ubicacion, StringFormat='Ubicación: {0}'}"
-        FontSize="14"
-        Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
-                            <TextBlock Text="{Binding Partida, StringFormat='Partida: {0}'}"
-        FontSize="14"
-        Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
-                            <TextBlock Text="{Binding FechaCaducidad, StringFormat='Cad.: {0:d}'}"
-        FontSize="14"
-        Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
-                        </StackPanel>
+                            <!-- Artículo y almacén -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding DescripcionArticulo}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock>
+                            <Run Text="{Binding CodigoAlmacen}"/>
+                            <Run Text=" – "/>
+                            <Run Text="{Binding Almacen}"/>
+                                </TextBlock>
+                                <!-- Palet inline si solo hay uno -->
+                                <ItemsControl ItemsSource="{Binding Palets}"
+      Visibility="{Binding Palets, Converter={StaticResource PaletsCountToVisibility}, ConverterParameter=One}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <!-- Código -->
+                                                <TextBlock Text="{Binding CodigoPalet}" FontWeight="Bold" Margin="0,0,6,0"/>
 
-                        <!-- 2.5 Saldo -->
-                        <TextBlock Grid.Column="3"
-                   Text="{Binding UnidadSaldo, StringFormat=N2}"
-                   FontSize="16"
-                   FontWeight="Bold"
-                   VerticalAlignment="Center"
-                   TextAlignment="Right"
-                   Margin="8,0,0,0"
-                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"/>
-                    </Grid>
+                                                <!-- Estado con color -->
+                                                <Ellipse Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Setter Property="Fill" Value="Gray"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding EstadoPalet}" Value="Cerrado">
+                                                                    <Setter Property="Fill" Value="Red"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding EstadoPalet}" Value="Abierto">
+                                                                    <Setter Property="Fill" Value="Green"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding EstadoPalet}" Value="Vaciado">
+                                                                    <Setter Property="Fill" Value="Orange"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+
+                                                <!-- Cantidad -->
+                                                <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:N2}'}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Expander si hay más de un palet -->
+                                <Expander Header="Palets en esta ubicación"
+  IsExpanded="False"
+  Margin="0,4,0,0"
+  Visibility="{Binding Palets, Converter={StaticResource PaletsCountToVisibility}, ConverterParameter=Many}">
+                                    <ItemsControl ItemsSource="{Binding Palets}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="8,2">
+                                                    <TextBlock Text="{Binding CodigoPalet}" FontWeight="Bold" Margin="0,0,6,0"/>
+                                                    <Ellipse Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="Gray"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Cerrado">
+                                                                        <Setter Property="Fill" Value="Red"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Abierto">
+                                                                        <Setter Property="Fill" Value="Green"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Vaciado">
+                                                                        <Setter Property="Fill" Value="Orange"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                    <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:N2}'}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </StackPanel>
+
+                            <!-- Ubicación / Partida / Caducidad -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Ubicacion, StringFormat='Ubicación: {0}'}" FontSize="14"/>
+                                <TextBlock Text="{Binding Partida, StringFormat='Partida: {0}'}" FontSize="14"/>
+                                <TextBlock Text="{Binding FechaCaducidad, StringFormat='Cad.: {0:d}'}" FontSize="14"/>
+                            </StackPanel>
+
+                            <!-- Saldo -->
+                            <!-- 4) Saldo + Totales -->
+                            <StackPanel Grid.Column="3"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Right"
+            Margin="0,0,4,0">
+
+                                <!-- Cantidad individual -->
+                                <TextBlock Text="{Binding UnidadSaldo, StringFormat=N2}"
+               FontSize="16"
+               FontWeight="Bold"
+               Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=Foreground}"
+               TextAlignment="Right"/>
+
+                                <!-- Total global -->
+                                <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat='G: {0:N2}'}"
+               Foreground="Blue"
+               FontWeight="Bold"
+               FontSize="12"
+               TextAlignment="Right"
+               Visibility="{Binding MostrarTotales, Converter={StaticResource BoolToVis}}"/>
+
+                                <!-- Total en almacén -->
+                                <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat='Alm: {0:N2}'}"
+               Foreground="Blue"
+               FontWeight="Bold"
+               FontSize="12"
+               TextAlignment="Right"
+               Visibility="{Binding MostrarTotales, Converter={StaticResource BoolToVis}}"/>
+                            </StackPanel>
+
+                        </Grid>
+
+                        
+
+                    </StackPanel>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+
 
 
 

@@ -22,6 +22,13 @@ namespace SGA_Desktop.Dialog
 		public ConfirmarImpresionDialog()
 		{
 			InitializeComponent();
+			Loaded += (_, __) =>
+			{
+				if (DataContext is SGA_Desktop.ViewModels.ConfirmarImpresionDialogViewModel vm)
+				{
+					vm.RequestClose += r => { DialogResult = r; Close(); };
+				}
+			};
 		}
 
 		private void Aceptar_Click(object sender, RoutedEventArgs e)

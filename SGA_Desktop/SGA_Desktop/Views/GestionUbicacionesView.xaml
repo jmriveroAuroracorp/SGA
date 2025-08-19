@@ -6,7 +6,7 @@
       xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
       mc:Ignorable="d"
       d:DesignHeight="600" d:DesignWidth="900"
-      Title="Gestión de Ubicaciones">
+      Title="Gestión de Ubicaciones" Cursor="">
 
     <Page.Resources>
         <!-- Conversor Boolean → Visibility disponible aquí -->
@@ -18,6 +18,8 @@
             <RowDefinition Height="Auto"/>
             <!-- Filtro -->
             <RowDefinition Height="*"/>
+            <!-- ⬅ Barra acciones -->
+            <RowDefinition Height="Auto"/>
             <!-- Listado -->
         </Grid.RowDefinitions>
 
@@ -51,6 +53,7 @@
           ToolTip="Generar ubicaciones en bloque"/>
         </StackPanel>
 
+        
         <!-- 3) ListView con virtualización y estilo de tarjeta -->
         <ListView x:Name="lvUbicaciones" Grid.Row="1"
               ItemsSource="{Binding Ubicaciones}"
@@ -113,59 +116,51 @@
                             Opacity="0.2"/>
                         </Border.Effect>
 
-                        <Expander HorizontalAlignment="Stretch" Expanded="Expander_Expanded">
-                            <!-- Trigger para cargar alérgenos al expandir -->
-                            <i:Interaction.Triggers>
-                                <i:EventTrigger EventName="Expanded">
-                                    <i:InvokeCommandAction
-                Command="{Binding DataContext.LoadAlergenosCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                CommandParameter="{Binding}" />
-                                </i:EventTrigger>
-                            </i:Interaction.Triggers>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                            <!-- HEADER: ya SIN botón -->
-                            <Expander.Header>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                            <Expander Grid.Column="0"
+                  HorizontalAlignment="Stretch"
+                  Expanded="Expander_Expanded">
+                                <i:Interaction.Triggers>
+                                    <i:EventTrigger EventName="Expanded">
+                                        <i:InvokeCommandAction
+                        Command="{Binding DataContext.LoadAlergenosCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                        CommandParameter="{Binding}" />
+                                    </i:EventTrigger>
+                                </i:Interaction.Triggers>
 
-                                    <!-- Columna 0: Código y descripción -->
-                                    <StackPanel Grid.Column="0" Orientation="Vertical">
-                                        <TextBlock Text="{Binding Ubicacion}"
-                                       FontFamily="{StaticResource FuentePrincipal}"
-                                       FontWeight="Bold"
-                                       FontSize="14"/>
-                                        <TextBlock Text="{Binding DescripcionUbicacion}"
-                                       FontFamily="{StaticResource FuentePrincipal}"
-                                       FontSize="12"
-                                       Foreground="Gray"
-                                       Margin="0,2,0,0"/>
-                                    </StackPanel>
-
-                                    <!-- Columna 1: Tipo de ubicación -->
-                                    <TextBlock Text="{Binding TipoUbicacionDescripcion}"
-                                   Grid.Column="1"
-                                   VerticalAlignment="Center"
+                                <!-- HEADER: ya SIN botón -->
+                                <Expander.Header>
+                                    <DockPanel LastChildFill="True" Margin="0">
+                                        <!-- Contenido a la izquierda -->
+                                        <StackPanel DockPanel.Dock="Left" Orientation="Vertical">
+                                            <TextBlock Text="{Binding Ubicacion}"
                                    FontFamily="{StaticResource FuentePrincipal}"
-                                   FontStyle="Italic"
-                                   Margin="10,0,0,0"/>
+                                   FontWeight="Bold"
+                                   FontSize="14"/>
+                                            <TextBlock Text="{Binding DescripcionUbicacion}"
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="12"
+                                   Foreground="Gray"
+                                   Margin="0,2,0,0"/>
+                                        </StackPanel>
 
-                                    <!-- Columna 2: Check “Activo” --><!--
-                                    <CheckBox IsChecked="{Binding Habilitada}"
-                                  Grid.Column="2"
-                                  VerticalAlignment="Center"
-                                  Content="Activo"
-                                  FontFamily="{StaticResource FuentePrincipal}"
-                                  Margin="10,0,0,0"/>-->
-                                </Grid>
-                            </Expander.Header>
+                                        <!-- Tipo de ubicación -->
+                                        <TextBlock Text="{Binding TipoUbicacionDescripcion}"
+                               DockPanel.Dock="Left"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource FuentePrincipal}"
+                               FontStyle="Italic"
+                               Margin="10,0,0,0"/>
+                                    </DockPanel>
+                                </Expander.Header>
 
-                            <!-- CONTENT con TODOS los datos + botón abajo-derecha -->
+
+                                <!-- CONTENT con TODOS los datos + botón abajo-derecha -->
                             <Expander.Content>
                                 <Grid Margin="0,8,0,0">
                                     <Grid.RowDefinitions>
@@ -289,7 +284,7 @@
                             Content="✎"
                             Command="{Binding DataContext.EditarUbicacionCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
                             CommandParameter="{Binding}"/>
-                                    <!-- Botón Imprimir etiqueta de ubicación -->
+                                    <!-- Botón Imprimir etiqueta de ubicación --><!--
                                     <Button Grid.Row="3" Grid.Column="0"
                             Style="{StaticResource EstiloBotonPrincipal}"
                             Width="24" Height="24"
@@ -298,13 +293,58 @@
                             ToolTip="Imprimir etiqueta de ubicación"
                             Content="🖨"
                             Command="{Binding DataContext.ImprimirUbicacionCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                            CommandParameter="{Binding}"/>
+                            CommandParameter="{Binding}"/>-->
                                 </Grid>
                             </Expander.Content>
-                        </Expander>
+                            </Expander>
+
+                            <!-- Checkbox a la derecha del todo -->
+                            <CheckBox Grid.Column="1"
+                  VerticalAlignment="Center"
+                  HorizontalAlignment="Right"
+                  Margin="12,0,4,0"
+                  IsChecked="{Binding IsMarcada, Mode=TwoWay}"/>
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+        <StackPanel Grid.Row="2"
+    Orientation="Horizontal"
+    HorizontalAlignment="Right"
+    Margin="0,10,0,0">
+
+            <TextBlock Text="{Binding SeleccionadasCount, StringFormat=Seleccionadas: {0}}"
+        VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+            <TextBlock Text="Altura:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+            <ComboBox ItemsSource="{Binding AlturasDisponibles}"
+          SelectedItem="{Binding AlturaSeleccionada}"
+          Width="100"
+          Style="{StaticResource ComboEstiloPrincipal}"
+          Margin="0,0,8,0"/>
+
+                <Button Content="Seleccionar por altura"
+        Style="{StaticResource EstiloBotonPrincipal}"
+        Command="{Binding SeleccionarPorAlturaCommand}"
+        CommandParameter="{Binding AlturaSeleccionada}"
+        Margin="0,0,8,0"/>
+
+            <Button Content="Seleccionar todo (filtrado)"
+        Style="{StaticResource EstiloBotonPrincipal}"
+        Command="{Binding SeleccionarTodoCommand}"
+        Margin="0,0,8,0"/>
+
+            <Button Content="Limpiar selección"
+        Style="{StaticResource EstiloBotonPrincipal}"
+        Command="{Binding LimpiarSeleccionCommand}"
+        Margin="0,0,8,0"/>
+
+            <Button Content="Imprimir seleccionadas"
+        Style="{StaticResource EstiloBotonPrincipal}"
+        Command="{Binding ImprimirSeleccionadasCommand}"
+        IsEnabled="{Binding HaySeleccion}"/>
+        </StackPanel>
     </Grid>
 </Page>

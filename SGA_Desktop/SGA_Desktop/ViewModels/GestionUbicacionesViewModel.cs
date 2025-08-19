@@ -19,6 +19,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	private readonly UbicacionesService _ubicService;
 	private readonly PaletService _paletService;
 	private readonly PrintQueueService _printService;
+	private readonly LoginService _loginService;
 
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
 		= new ObservableCollection<AlmacenDto>();
@@ -35,6 +36,32 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public GestionUbicacionesViewModel()
 	: this(new StockService(), new UbicacionesService(), new PaletService())
 	{ }
+
+	[ObservableProperty]
+	private bool haySeleccion;
+
+	[ObservableProperty]
+	private int seleccionadasCount;
+
+	[ObservableProperty]
+	private bool isBusy;
+
+	public ObservableCollection<int?> AlturasDisponibles { get; } = new();
+	[ObservableProperty] private int? alturaSeleccionada;
+
+	[RelayCommand]
+	private void SeleccionarPorAltura(int? altura)
+	{
+		if (altura == null) return;
+		foreach (var u in Ubicaciones)
+			u.IsMarcada = u.Altura == altura;
+		RecalcularSeleccion();
+	}
+	private void RecalcularSeleccion()
+	{
+		SeleccionadasCount = Ubicaciones.Count(u => u.IsMarcada);
+		HaySeleccion = SeleccionadasCount > 0;
+	}
 
 	/// <summary>Comando que carga los alérgenos de una ubicación.</summary>
 	public IAsyncRelayCommand<UbicacionDetalladaDto> LoadAlergenosCommand { get; }
@@ -65,9 +92,15 @@ $"Posición: {ubicacion.Posicion}";
 		if (confirm.ShowDialog() != true) return;
 
 		// Abrimos diálogo de impresión
+		// usa el nombre preferido que tengas (sesión o BD). Si no, el primero.
+		string? preNombre = SessionManager.PreferredPrinter
+	?? ImpresorasDisponibles.FirstOrDefault()?.Nombre;
+
 		var dlgVm = new ConfirmarImpresionDialogViewModel(
 			ImpresorasDisponibles,
-			ImpresorasDisponibles.FirstOrDefault());
+			preNombre,
+			_loginService ?? new LoginService()
+		);
 
 		var dlg = new ConfirmarImpresionDialog
 		{
@@ -79,6 +112,9 @@ $"Posición: {ubicacion.Posicion}";
 			dlg.Owner = owner;
 
 		if (dlg.ShowDialog() != true) return;
+
+		// ya está guardado en BD y en SessionManager por el propio diálogo
+		var seleccionada = dlgVm.ImpresoraSeleccionada;
 
 		try
 		{
@@ -145,6 +181,108 @@ $"Posición: {ubicacion.Posicion}";
 
 	}
 
+	[RelayCommand]
+	private void SeleccionarTodo()
+	{
+		foreach (var u in Ubicaciones)
+			u.IsMarcada = true;
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void LimpiarSeleccion()
+	{
+		foreach (var u in Ubicaciones)
+			u.IsMarcada = false;
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private async Task ImprimirSeleccionadasAsync()
+	{
+		// Filtrar ubicaciones marcadas
+		var seleccionadas = Ubicaciones.Where(u => u.IsMarcada).ToList();
+		if (!seleccionadas.Any())
+		{
+			MessageBox.Show("No hay ubicaciones seleccionadas para imprimir.",
+				"Impresión", MessageBoxButton.OK, MessageBoxImage.Information);
+			return;
+		}
+
+		// Confirmación previa
+		var confirm = new ConfirmationDialog(
+			"Confirmar impresión",
+			$"Se imprimirán {seleccionadas.Count} ubicaciones en la impresora seleccionada.\n¿Deseas continuar?",
+			"\uE946" // icono info
+		)
+		{ Owner = Application.Current.MainWindow };
+
+		if (confirm.ShowDialog() != true)
+			return;
+
+		// Selección de impresora y copias (una sola vez)
+		// usa el nombre preferido que tengas (sesión o BD). Si no, el primero.
+		string? preNombre = SessionManager.PreferredPrinter
+	?? ImpresorasDisponibles.FirstOrDefault()?.Nombre;
+
+		var dlgVm = new ConfirmarImpresionDialogViewModel(
+			ImpresorasDisponibles,
+			preNombre,
+			_loginService ?? new LoginService()
+		);
+
+		var dlg = new ConfirmarImpresionDialog
+		{
+			DataContext = dlgVm,
+			Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					?? Application.Current.MainWindow
+		};
+
+		if (dlg.ShowDialog() != true) return;
+
+		// ya está guardado en BD y en SessionManager por el propio diálogo
+		var seleccionada = dlgVm.ImpresoraSeleccionada;
+		// …continúas con tu impresión de palet…
+
+		try
+		{
+			foreach (var ubicacion in seleccionadas)
+			{
+				var dto = new LogImpresionDto
+				{
+					Usuario = SessionManager.Operario.ToString(),
+					Dispositivo = Environment.MachineName,
+					IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
+					EtiquetaImpresa = 0,
+					Copias = dlgVm.NumeroCopias,
+					PathEtiqueta = @"\\Sage200\mrh\Servicios\PrintCenter\ETIQUETAS\UBICACIONES.nlbl",
+					TipoEtiqueta = 3,
+					CodAlmacen = ubicacion.CodigoAlmacen,
+					CodUbicacion = ubicacion.Ubicacion,
+					Altura = ubicacion.Altura,
+					Estanteria = ubicacion.Estanteria,
+					Pasillo = ubicacion.Pasillo,
+					Posicion = ubicacion.Posicion
+				};
+
+				await _printService.InsertarRegistroImpresionAsync(dto);
+			}
+
+			MessageBox.Show(
+				$"Se han enviado {seleccionadas.Count} impresiones.",
+				"Impresión completada",
+				MessageBoxButton.OK,
+				MessageBoxImage.Information);
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "Error al imprimir", MessageBoxButton.OK, MessageBoxImage.Error);
+		}
+	}
+
+
+
+
 	private async Task InitializeAsync()
 	{
 		var empresa = SessionManager.EmpresaSeleccionada!.Value;
@@ -187,10 +325,23 @@ $"Posición: {ubicacion.Posicion}";
 			dto.AlergenosPresentes = "";
 			dto.AlergenosPermitidos = "";
 			dto.RiesgoContaminacion = false;
+			dto.PropertyChanged += (s, e) =>
+			{
+				if (e.PropertyName == nameof(UbicacionDetalladaDto.IsMarcada))
+					RecalcularSeleccion();
+			};
 			Ubicaciones.Add(dto);
 		}
-
+		AlturasDisponibles.Clear();
+		foreach (var alt in Ubicaciones
+							.Select(u => u.Altura)
+							.Distinct()
+							.OrderBy(a => a))
+		{
+			AlturasDisponibles.Add(alt);
+		}
 		SelectedUbicacion = Ubicaciones.FirstOrDefault();
+		RecalcularSeleccion();
 	}
 
 	public async Task LoadAlergenosAsync(UbicacionDetalladaDto dto)

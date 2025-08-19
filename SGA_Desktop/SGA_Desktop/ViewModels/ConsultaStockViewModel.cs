@@ -40,6 +40,7 @@ namespace SGA_Desktop.ViewModels
 		#region Fields & Services
 		private readonly StockService _stockService;
 		private readonly PrintQueueService _printService = new PrintQueueService();
+		private readonly LoginService _loginService;
 		public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; } = new();
 
 		#endregion
@@ -229,25 +230,6 @@ namespace SGA_Desktop.ViewModels
 		#endregion
 
 		#region Commands
-		//[RelayCommand]
-		//private async Task BuscarPorArticuloAsync()
-		//{
-		//	try
-		//	{
-		//		var (almacenParam, ubicParam) = BuildArticleParams();
-		//		var lista = await _stockService.ObtenerPorArticuloAsync(
-		//			SessionManager.EmpresaSeleccionada!.Value,
-		//			FiltroArticulo,
-		//			string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
-		//			almacenParam,
-		//			ubicParam);
-		//		LlenarResultados(lista, filterByPermissions: true);
-		//	}
-		//	catch (Exception ex)
-		//	{
-		//		MostrarError("Error al consultar por artículo", ex);
-		//	}
-		//}
 		[RelayCommand]
 		private void LimpiarFiltros()
 		{
@@ -266,57 +248,6 @@ namespace SGA_Desktop.ViewModels
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
 		}
-
-
-		// INTRODUCE BUSQUEDA POR ARTÍCULO
-		//[RelayCommand]
-		//private async Task BuscarPorArticuloAsync()
-		//{
-		//	try
-		//	{
-		//		if (string.IsNullOrWhiteSpace(FiltroArticulo))
-		//		{
-		//			var advertencia = new WarningDialog(
-		//				"Buscar artículo",
-		//				"Debes introducir un código o descripción para buscar.",
-		//				"\uE814" // ícono advertencia
-		//			)
-		//			{ Owner = Application.Current.MainWindow };
-
-		//			advertencia.ShowDialog();
-		//			return;
-		//		}
-		//		var (almacenParam, ubicParam) = BuildArticleParams();
-
-		//		List<StockDto> lista = await _stockService.ObtenerPorArticuloAsync(
-		//			SessionManager.EmpresaSeleccionada!.Value,
-		//			codigoArticulo: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo,
-		//			partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
-		//			codigoAlmacen: almacenParam,
-		//			codigoUbicacion: ubicParam,
-		//			descripcion: null // primero intentar por código, descripción null
-		//		);
-
-		//		if (lista == null || !lista.Any())
-		//		{
-		//			// Si no encontró por código, busca por descripción
-		//			lista = await _stockService.ObtenerPorArticuloAsync(
-		//				SessionManager.EmpresaSeleccionada!.Value,
-		//				codigoArticulo: null, // ahora null
-		//				partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
-		//				codigoAlmacen: almacenParam,
-		//				codigoUbicacion: ubicParam,
-		//				descripcion: string.IsNullOrWhiteSpace(FiltroArticulo) ? null : FiltroArticulo
-		//			);
-		//		}
-
-		//		LlenarResultados(lista, filterByPermissions: true);
-		//	}
-		//	catch (Exception ex)
-		//	{
-		//		MostrarError("Error al consultar por artículo", ex);
-		//	}
-		//}
 
 
 		[RelayCommand]
@@ -425,34 +356,6 @@ namespace SGA_Desktop.ViewModels
 				MessageBox.Show(ex.Message, "Error al consultar por artículo", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
-
-		//[RelayCommand]
-		//private async Task BuscarPorUbicacionAsync()
-		//{
-		//	try
-		//	{
-		//		var almacen = AlmacenSeleccionadoCombo ?? AlmacenesCombo
-		//			.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
-
-		//		if (almacen == null || almacen.CodigoAlmacen == TODAS)
-		//		{
-		//			return;
-		//		}
-
-		//		var lista = await _stockService.ObtenerPorUbicacionAsync(
-		//			SessionManager.EmpresaSeleccionada!.Value,
-		//			almacen.CodigoAlmacen,
-		//			FiltroUbicacion == SIN_UBICACION ? string.Empty : FiltroUbicacion
-		//		);
-
-		//		// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
-		//		LlenarResultados(lista, filterByPermissions: true);
-		//	}
-		//	catch (Exception ex)
-		//	{
-		//		MostrarError("Error al consultar por ubicación", ex);
-		//	}
-		//}
 
 		[RelayCommand]
 		private async Task BuscarPorUbicacionAsync()
@@ -627,14 +530,27 @@ namespace SGA_Desktop.ViewModels
 					ImpresorasDisponibles.Add(imp);
 			}
 
-			var dlgVm = new SGA_Desktop.ViewModels.ConfirmarImpresionDialogViewModel(ImpresorasDisponibles, ImpresorasDisponibles.FirstOrDefault());
-			var dlg = new SGA_Desktop.Dialog.ConfirmarImpresionDialog
+			// usa el nombre preferido que tengas (sesión o BD). Si no, el primero.
+			string? preNombre = SessionManager.PreferredPrinter
+	?? ImpresorasDisponibles.FirstOrDefault()?.Nombre;
+
+			var dlgVm = new ConfirmarImpresionDialogViewModel(
+				ImpresorasDisponibles,
+				preNombre,
+				_loginService ?? new LoginService()// importante: el mismo que usas en el resto de la app
+			);
+
+			var dlg = new ConfirmarImpresionDialog
 			{
 				DataContext = dlgVm,
-				Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow
+				Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						?? Application.Current.MainWindow
 			};
+
 			if (dlg.ShowDialog() != true) return;
 
+			// ya está guardado en BD y en SessionManager por el propio diálogo
+			var seleccionada = dlgVm.ImpresoraSeleccionada;
 			// Construir el DTO para impresión
 			var dto = new LogImpresionDto
 			{
@@ -661,29 +577,6 @@ namespace SGA_Desktop.ViewModels
 		#endregion
 
 		#region Initialization & Data Loading
-		//private async Task InitializeAsync()
-		//{
-		//	try
-		//	{
-		//		var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-		//		var desdeCentro = await _stockService.ObtenerAlmacenesAsync(centro);
-		//		var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-
-		//		var todosCodigos = desdeCentro.Concat(desdeLogin)
-		//			.Distinct()
-		//			.OrderBy(c => c)
-		//			.ToList();
-
-		//		Almacenes.Clear();
-		//		Almacenes.Add(TODAS);
-		//		todosCodigos.ForEach(c => Almacenes.Add(c));
-		//		AlmacenSeleccionado = TODAS;
-		//	}
-		//	catch (Exception ex)
-		//	{
-		//		MostrarError("Error cargando almacenes", ex);
-		//	}
-		//}
 		private async Task InitializeAsync()
 		{
 			try
@@ -716,26 +609,6 @@ namespace SGA_Desktop.ViewModels
 				MostrarError("Error cargando almacenes", ex);
 			}
 		}
-
-
-
-		//private async Task LoadUbicacionesAsync(string codigoAlmacen)
-		//{
-		//	Ubicaciones.Clear();
-		//	if (string.IsNullOrWhiteSpace(codigoAlmacen) || codigoAlmacen == TODAS)
-		//	{
-		//		FiltroUbicacion = string.Empty;
-		//		return;
-		//	}
-
-		//	var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen);
-		//	if (IsArticleMode) Ubicaciones.Add(TODAS);
-		//	lista.ForEach(u => Ubicaciones.Add(string.IsNullOrEmpty(u) ? SIN_UBICACION : u));
-
-		//	FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
-		//}
-
-
 
 		private async Task LoadUbicacionesAsync(string codigoAlmacen)
 		{
@@ -795,46 +668,6 @@ namespace SGA_Desktop.ViewModels
 				MostrarError("Error cargando ubicaciones", ex);
 			}
 		}
-
-
-
-
-
-		// ANTIGUO QUE NO TIENE PARA FILTRAR SI EXISTE STOCK
-
-		//private async Task LoadUbicacionesAsync(string codigoAlmacen)
-		//{
-		//	MessageBox.Show($"[DEBUG] Cargando ubicaciones para: {codigoAlmacen}");
-
-		//	Ubicaciones.Clear();
-
-		//	if (string.IsNullOrWhiteSpace(codigoAlmacen) || codigoAlmacen == TODAS)
-		//	{
-		//		FiltroUbicacion = string.Empty;
-		//		return;
-		//	}
-
-		//	try
-		//	{
-		//		var lista = await _stockService.ObtenerUbicacionesAsync(codigoAlmacen);
-		//		MessageBox.Show($"[DEBUG] Nº ubicaciones recibidas: {lista.Count}");
-
-		//		if (IsArticleMode)
-		//			Ubicaciones.Add(TODAS);
-
-		//		lista.ForEach(u =>
-		//			Ubicaciones.Add(string.IsNullOrEmpty(u) ? SIN_UBICACION : u));
-
-		//		FiltroUbicacion = IsArticleMode ? TODAS : Ubicaciones.FirstOrDefault();
-		//	}
-		//	catch (Exception ex)
-		//	{
-		//		MostrarError("Error cargando ubicaciones", ex);
-		//	}
-		//}
-
-
-
 
 
 		#endregion
@@ -972,69 +805,4 @@ namespace SGA_Desktop.ViewModels
 }
 
 
-///// <summary>Lanza la consulta al endpoint de stock con los filtros y la empresa/almacén seleccionados.</summary>
-//[RelayCommand]
-//private async Task BuscarStockAsync()
-//{
-//	try
-//	{
-//		// 0) Traducimos "Sin ubicación" -> "" para la llamada a la API
-//		var ubicacionParaApi = FiltroUbicacion == SIN_UBICACION
-//							  ? string.Empty
-//							  : FiltroUbicacion;
-
-//		// Log de los parámetros que se envían a la API
-//		Console.WriteLine($"Llamada a la API - Empresa: {SessionManager.EmpresaSeleccionada!.Value}, Ubicación: '{ubicacionParaApi}', Almacén: '{(AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!)}', Artículo: '{FiltroArticulo}', Centro: '{SessionManager.UsuarioActual!.codigoCentro}', Partida: '{FiltroPartida}'");
-
-//		// 1) Llamada al servicio usando el valor traducido
-//		var json = await _stockService.ConsultaStockRawAsync(
-//			codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value,
-//			codigoUbicacion: ubicacionParaApi,
-//			codigoAlmacen: AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!,
-//			codigoArticulo: FiltroArticulo,
-//			codigoCentro: SessionManager.UsuarioActual!.codigoCentro,
-//			almacen: AlmacenSeleccionado == "Todos" ? string.Empty : AlmacenSeleccionado!,
-//			partida: FiltroPartida);
-
-//		var lista = JsonConvert
-//			.DeserializeObject<List<StockDto>>(json)
-//			?? new List<StockDto>();
-
-//		// 2) Combina los almacenes que cargaste por centro + los del login
-//		var desdeCentro = Almacenes;
-//		var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-//		var permitidos = desdeCentro.Concat(desdeLogin).Distinct().ToList();
-
-//		// 3) Si seleccionaste “Todos”, mantén el conjunto completo;
-//		//    si no, solo el único seleccionado
-//		if (AlmacenSeleccionado != "Todos")
-//			permitidos = new List<string> { AlmacenSeleccionado! };
-
-//		// 4) Filtra la lista por esos códigos combinados
-//		var filtrada = lista.Where(s => permitidos.Contains(s.CodigoAlmacen)).ToList();
-
-//		// 5) Asigna ArticuloMostrado solo si estamos en modo de búsqueda por artículo
-//		if (IsArticleMode)
-//		{
-//			var primero = filtrada.FirstOrDefault();
-//			ArticuloMostrado = primero?.DescripcionArticulo
-//							   ?? primero?.CodigoArticulo
-//							   ?? string.Empty;
-//		}
-//		else
-//		{
-//			ArticuloMostrado = string.Empty; // Limpia el artículo mostrado si no es por artículo
-//		}
-
-//		// 6) Rellena el DataGrid
-//		ResultadosStock.Clear();
-//		foreach (var item in filtrada)
-//			ResultadosStock.Add(item);
-//	}
-//	catch (Exception ex)
-//	{
-//		MessageBox.Show(ex.Message, "Error al consultar Stock",
-//						MessageBoxButton.OK, MessageBoxImage.Error);
-//	}
-//}
 

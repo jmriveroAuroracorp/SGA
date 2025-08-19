@@ -18,6 +18,7 @@ namespace SGA_Desktop.ViewModels
 		private readonly StockService _stockService;
 		private readonly PrintQueueService _printService;  // <- al igual que en impresiones
 		private readonly UbicacionesService _ubicService;
+		private readonly LoginService _loginService; // <- para impresoras
 
 		[ObservableProperty] private string? errorMessage;
 		[ObservableProperty]
@@ -465,18 +466,27 @@ namespace SGA_Desktop.ViewModels
 			if (PaletSeleccionado is null) return;
 
 			// Abrimos diálogo de impresión
+			// usa el nombre preferido que tengas (sesión o BD). Si no, el primero.
+			string? preNombre = SessionManager.PreferredPrinter
+	?? ImpresorasDisponibles.FirstOrDefault()?.Nombre;
+
 			var dlgVm = new ConfirmarImpresionDialogViewModel(
 				ImpresorasDisponibles,
-				ImpresorasDisponibles.FirstOrDefault());
+				preNombre,
+				_loginService ?? new LoginService()
+			);
+
 			var dlg = new ConfirmarImpresionDialog
 			{
-				DataContext = dlgVm
+				DataContext = dlgVm,
+				Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						?? Application.Current.MainWindow
 			};
-			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-						 ?? Application.Current.MainWindow;
-			if (owner != null && owner != dlg)
-				dlg.Owner = owner;
+
 			if (dlg.ShowDialog() != true) return;
+
+			// ya está guardado en BD y en SessionManager por el propio diálogo
+			var seleccionada = dlgVm.ImpresoraSeleccionada;
 
 			try
 			{
