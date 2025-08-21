@@ -1,5 +1,6 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:helpers="clr-namespace:SGA_Desktop.Helpers">
 
     <!-- 🎨 Colores -->
     <!--<Color x:Key="ColorPrincipal">#0067C3</Color>-->
@@ -13,6 +14,7 @@
     <SolidColorBrush x:Key="BrushIntermedio" Color="{StaticResource ColorIntermedio}"/>
     <SolidColorBrush x:Key="BrushSecundario1" Color="{StaticResource ColorSecundario1}"/>
     <SolidColorBrush x:Key="BrushSecundario2" Color="{StaticResource ColorSecundario2}"/>
+    <SolidColorBrush x:Key="BrushSecundario" Color="{StaticResource ColorSecundario1}"/>
     <SolidColorBrush x:Key="BrushFondo" Color="{StaticResource ColorFondo}"/>
     <SolidColorBrush x:Key="BrushInputBorde" Color="#ccc"/>
     <SolidColorBrush x:Key="BrushHoverBoton" Color="#031ca5"/>
@@ -114,6 +116,96 @@
         </Setter>
     </Style>
 
+    <!-- Estilo para botones secundarios -->
+    <Style x:Key="EstiloBoton" TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource BrushSecundario1}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Height" Value="35" />
+        <Setter Property="Padding" Value="12,4" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <Rectangle x:Name="hoverOverlay"
+                               Fill="#40FFFFFF"
+                               RadiusX="6" RadiusY="6"
+                               Opacity="0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="hoverOverlay" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="hoverOverlay" Property="Opacity" Value="0.2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="border" Property="Background" Value="{StaticResource BrushGrisOscuro}" />
+                            <Setter Property="Foreground" Value="#DDDDDD"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Estilo para botones secundarios -->
+    <Style x:Key="EstiloBotonSecundario" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}" />
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Height" Value="35" />
+        <Setter Property="Padding" Value="12,4" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <Rectangle x:Name="hoverOverlay"
+                               Fill="{StaticResource BrushPrincipal}"
+                               RadiusX="6" RadiusY="6"
+                               Opacity="0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="hoverOverlay" Property="Opacity" Value="0.1"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="hoverOverlay" Property="Opacity" Value="0.2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="#999"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="#999"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!-- 🔖 Estilo para etiquetas (labels) -->
     <Style x:Key="LabelStyle" TargetType="TextBlock">
@@ -416,10 +508,45 @@
     </Style>
 
 
+    <!-- 🎨 Estilo para ContextMenu -->
+    <Style x:Key="EstiloContextMenu" TargetType="ContextMenu">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="2"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- 🎨 Estilo para los items del menú -->
+    <Style x:Key="EstiloMenuItem" TargetType="MenuItem">
+        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}" />
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Style.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter Property="Background" Value="{StaticResource BrushSecundario2}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="#999"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 
 
 
-
-
+    <!-- Estados de inventario -->
+    <x:Array x:Key="EstadosInventario" Type="sys:String" xmlns:sys="clr-namespace:System;assembly=mscorlib">
+        <sys:String>TODOS</sys:String>
+        <sys:String>ABIERTO</sys:String>
+        <sys:String>PENDIENTE_CIERRE</sys:String>
+        <sys:String>CERRADO</sys:String>
+    </x:Array>
 
 </ResourceDictionary>

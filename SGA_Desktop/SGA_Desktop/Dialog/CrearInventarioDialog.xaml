@@ -1,0 +1,400 @@
+<Window x:Class="SGA_Desktop.Dialog.CrearInventarioDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+        xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        Title="CREACIÓN DE INVENTARIO"
+        Width="900"
+        Height="600"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- 1) DataContext -->
+    <Window.DataContext>
+        <vm:CrearInventarioDialogViewModel />
+    </Window.DataContext>
+
+    <!-- 2) Carga de Estilos generales -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- 2) Marco redondeado con fondo y bordes -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}" 
+                    CornerRadius="6,6,0,0">
+                <TextBlock Text="CREACIÓN DE INVENTARIO" 
+                           FontSize="16" 
+                           FontWeight="Bold" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- Contenido principal -->
+            <Grid Grid.Row="1" Margin="20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="350"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Panel izquierdo: Lista de almacenes -->
+                <Border Grid.Column="0" 
+                        BorderBrush="{StaticResource BrushSecundario}" 
+                        BorderThickness="1" 
+                        CornerRadius="4"
+                        Margin="0,0,10,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Título almacenes -->
+                        <TextBlock Grid.Row="0" 
+                                   Text="Lista de almacenes" 
+                                   FontWeight="Bold" 
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   Margin="10,10,10,5"/>
+
+                        <!-- Lista de almacenes -->
+                        <ScrollViewer Grid.Row="1" 
+                                      VerticalScrollBarVisibility="Auto" 
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Margin="5">
+                            <ItemsControl ItemsSource="{Binding AlmacenesDisponibles}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="2" 
+                                                Padding="8,6" 
+                                                Background="Transparent"
+                                                Cursor="Hand"
+                                                MouseLeftButtonDown="AlmacenItem_MouseLeftButtonDown">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Icono almacén -->
+                                                <Ellipse Grid.Column="0" 
+                                                         Width="16" 
+                                                         Height="16" 
+                                                         Fill="Green" 
+                                                         Margin="0,0,8,0"/>
+
+                                                <!-- Código y descripción -->
+                                                <StackPanel Grid.Column="1" 
+                                                            Orientation="Horizontal" 
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding CodigoAlmacen}" 
+                                                               FontWeight="Bold" 
+                                                               Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{Binding Descripcion}" 
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+
+                                                <!-- Indicador seleccionado -->
+                                                <Ellipse Grid.Column="2" 
+                                                         Width="8" 
+                                                         Height="8" 
+                                                         Fill="Black"
+                                                         Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <!-- Botón marcar/desmarcar todo -->
+                        <Button Grid.Row="2" 
+                                Content="MARCAR/DESMARCAR TODO" 
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Margin="10,5,10,10"
+                                Command="{Binding MarcarTodosCommand}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Panel derecho: Datos del inventario -->
+                <Border Grid.Column="1" 
+                        BorderBrush="{StaticResource BrushSecundario}" 
+                        BorderThickness="1" 
+                        CornerRadius="4"
+                        Margin="10,0,0,0">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="15">
+                            <!-- Título datos -->
+                            <TextBlock Text="Datos del inventario" 
+                                       FontWeight="Bold" 
+                                       Foreground="{StaticResource BrushPrincipal}"
+                                       Margin="0,0,0,15"/>
+
+                            <!-- Código de inventario -->
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="Código de inventario:" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding CodigoInventario, UpdateSourceTrigger=PropertyChanged}" 
+                                         Style="{StaticResource EstiloCajaTexto}" 
+                                         Height="30"/>
+                            </StackPanel>
+
+                            <!-- Fecha de inventario -->
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="Fecha de inventario:" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <DatePicker SelectedDate="{Binding FechaInventario}" 
+                                            Style="{StaticResource EstiloDatePicker}"/>
+                            </StackPanel>
+
+                            <!-- Incluir artículos -->
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="Incluir artículos:" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding OpcionesArticulos}" 
+                                          SelectedItem="{Binding ArticulosSeleccionados}"
+                                          Style="{StaticResource EstiloComboBox}" 
+                                          Height="30"/>
+                            </StackPanel>
+
+                            <!-- Valoración -->
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="Valoración:" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding OpcionesValoracion}" 
+                                          SelectedItem="{Binding ValoracionSeleccionada}"
+                                          Style="{StaticResource EstiloComboBox}" 
+                                          Height="30"/>
+                            </StackPanel>
+
+                            <!-- Artículos (rango) -->
+                            <GroupBox Header="Artículos" Margin="0,0,0,10">
+                                <Grid Margin="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox Grid.Column="0" 
+                                              Content="Especificar rango" 
+                                              IsChecked="{Binding UsarRangoArticulos}"
+                                              VerticalAlignment="Center" 
+                                              Margin="0,0,10,0"/>
+
+                                    <TextBlock Grid.Column="1" Text="De:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBox Grid.Column="2" 
+                                             Text="{Binding ArticuloDesde, UpdateSourceTrigger=PropertyChanged}" 
+                                             Style="{StaticResource EstiloCajaTexto}" 
+                                             Width="100" 
+                                             Margin="0,0,5,0"/>
+                                    <Button Grid.Column="3" 
+                                            Content="🔍" 
+                                            Width="25" 
+                                            Height="25" 
+                                            Margin="0,0,5,0"
+                                            Command="{Binding BuscarArticuloDesdeCommand}"/>
+
+                                    <TextBlock Grid.Column="4" Text="a:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBox Grid.Column="5" 
+                                             Text="{Binding ArticuloHasta, UpdateSourceTrigger=PropertyChanged}" 
+                                             Style="{StaticResource EstiloCajaTexto}" 
+                                             Width="100" 
+                                             Margin="0,0,5,0"/>
+                                    <Button Grid.Column="6" 
+                                            Content="🔍" 
+                                            Width="25" 
+                                            Height="25"
+                                            Command="{Binding BuscarArticuloHastaCommand}"/>
+                                </Grid>
+                            </GroupBox>
+
+                            <!-- Ubicaciones (rango) -->
+                            <GroupBox Header="Ubicaciones" Margin="0,0,0,10">
+                                <StackPanel Margin="10">
+                                    <!-- Checkbox para habilitar rangos -->
+                                    <CheckBox Content="Especificar rango de ubicaciones" 
+                                              IsChecked="{Binding UsarRangoUbicaciones}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,0,0,10"/>
+
+                                    <!-- Rangos por dimensiones -->
+                                    <Grid Visibility="{Binding UsarRangoUbicaciones, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Pasillo -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Pasillo:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                        <ComboBox Grid.Row="0" Grid.Column="1" 
+                                                  ItemsSource="{Binding PasillosDisponibles}" 
+                                                  SelectedItem="{Binding PasilloDesde}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="a" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0"/>
+                                        <ComboBox Grid.Row="0" Grid.Column="3" 
+                                                  ItemsSource="{Binding PasillosDisponibles}" 
+                                                  SelectedItem="{Binding PasilloHasta}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"/>
+
+                                        <!-- Estantería -->
+                                        <CheckBox Grid.Row="1" Grid.Column="0" 
+                                                  Content="Estantería:" 
+                                                  IsChecked="{Binding UsarEstanteria}"
+                                                  FontWeight="SemiBold" 
+                                                  VerticalAlignment="Center" 
+                                                  Margin="0,10,15,0"
+                                                  HorizontalAlignment="Left"/>
+                                        <ComboBox Grid.Row="1" Grid.Column="1" 
+                                                  ItemsSource="{Binding EstanteriasDisponibles}" 
+                                                  SelectedItem="{Binding EstanteriaDesde}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="{Binding EstanteriaHabilitada}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="a" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,10,10,0"/>
+                                        <ComboBox Grid.Row="1" Grid.Column="3" 
+                                                  ItemsSource="{Binding EstanteriasDisponibles}" 
+                                                  SelectedItem="{Binding EstanteriaHasta}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="{Binding EstanteriaHabilitada}"/>
+
+                                        <!-- Altura -->
+                                        <CheckBox Grid.Row="2" Grid.Column="0" 
+                                                  Content="Altura:" 
+                                                  IsChecked="{Binding UsarAltura}"
+                                                  FontWeight="SemiBold" 
+                                                  VerticalAlignment="Center" 
+                                                  Margin="0,10,15,0"
+                                                  HorizontalAlignment="Left"/>
+                                        <ComboBox Grid.Row="2" Grid.Column="1" 
+                                                  ItemsSource="{Binding AlturasDisponibles}" 
+                                                  SelectedItem="{Binding AlturaDesde}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="{Binding AlturaHabilitada}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="2" Text="a" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,10,10,0"/>
+                                        <ComboBox Grid.Row="2" Grid.Column="3" 
+                                                  ItemsSource="{Binding AlturasDisponibles}" 
+                                                  SelectedItem="{Binding AlturaHasta}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="{Binding AlturaHabilitada}"/>
+
+                                        <!-- Posición -->
+                                        <CheckBox Grid.Row="3" Grid.Column="0" 
+                                                  Content="Posición:" 
+                                                  IsChecked="{Binding UsarPosicion}"
+                                                  FontWeight="SemiBold" 
+                                                  VerticalAlignment="Center" 
+                                                  Margin="0,10,15,0"
+                                                  HorizontalAlignment="Left"/>
+                                        <ComboBox Grid.Row="3" Grid.Column="1" 
+                                                  ItemsSource="{Binding PosicionesDisponibles}" 
+                                                  SelectedItem="{Binding PosicionDesde}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="{Binding PosicionHabilitada}"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="2" Text="a" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,10,10,0"/>
+                                        <ComboBox Grid.Row="3" Grid.Column="3" 
+                                                  ItemsSource="{Binding PosicionesDisponibles}" 
+                                                  SelectedItem="{Binding PosicionHasta}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="{Binding PosicionHabilitada}"/>
+
+
+                                    </Grid>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <!-- Unidades a 0 -->
+                            <CheckBox Content="Unidades a 0" 
+                                      IsChecked="{Binding IncluirUnidadesCero}"
+                                      Margin="0,0,0,10"/>
+
+                            <!-- Comentarios -->
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="Comentarios:" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Comentarios, UpdateSourceTrigger=PropertyChanged}" 
+                                         Style="{StaticResource EstiloCajaTexto}" 
+                                         Height="60" 
+                                         TextWrapping="Wrap" 
+                                         AcceptsReturn="True" 
+                                         VerticalScrollBarVisibility="Auto"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- Botones -->
+            <Border Grid.Row="2" 
+                    Background="#F5F5F5" 
+                    CornerRadius="0,0,6,6">
+                <StackPanel Orientation="Horizontal" 
+                            HorizontalAlignment="Right" 
+                            VerticalAlignment="Center" 
+                            Margin="20,0">
+                    <Button Content="CANCELAR" 
+                            Width="100" 
+                            Height="35" 
+                            Margin="0,0,10,0" 
+                            IsCancel="True" 
+                            Style="{StaticResource EstiloBotonSecundario}"/>
+                    <Button Content="ACEPTAR" 
+                            Width="100" 
+                            Height="35" 
+                            IsDefault="True" 
+                            Command="{Binding CrearCommand}" 
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            IsEnabled="{Binding PuedeCrear}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window> 

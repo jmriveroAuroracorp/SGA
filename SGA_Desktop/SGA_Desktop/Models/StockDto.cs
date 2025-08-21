@@ -1,5 +1,7 @@
 ﻿using SGA_Desktop.Services;
 using System;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
 namespace SGA_Desktop.Models
@@ -7,7 +9,7 @@ namespace SGA_Desktop.Models
 	/// <summary>
 	/// DTO para recibir los resultados de la consulta de stock.
 	/// </summary>
-	public class StockDto
+	public class StockDto : INotifyPropertyChanged
 	{
 		[JsonPropertyName("codigoEmpresa")]
 		public int CodigoEmpresa { get; set; }
@@ -58,9 +60,28 @@ namespace SGA_Desktop.Models
 		public List<PaletDetalleDto> Palets { get; set; } = new();
 
 		// 🔹 nueva propiedad
-		public decimal TotalArticuloGlobal { get; set; }
+		//public decimal TotalArticuloGlobal { get; set; }
 
-		public decimal TotalArticuloAlmacen { get; set; }
-	
+		//public decimal TotalArticuloAlmacen { get; set; }
+
+		public event PropertyChangedEventHandler? PropertyChanged;
+
+		protected void OnPropertyChanged([CallerMemberName] string? name = null)
+			=> PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+		private decimal? _totalArticuloGlobal;
+		public decimal? TotalArticuloGlobal
+		{
+			get => _totalArticuloGlobal;
+			set { _totalArticuloGlobal = value; OnPropertyChanged(); }
+		}
+
+		private decimal? _totalArticuloAlmacen;
+		public decimal? TotalArticuloAlmacen
+		{
+			get => _totalArticuloAlmacen;
+			set { _totalArticuloAlmacen = value; OnPropertyChanged(); }
+		}
+
 	}
 }

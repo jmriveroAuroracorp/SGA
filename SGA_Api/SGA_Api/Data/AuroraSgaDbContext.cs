@@ -7,6 +7,7 @@ using SGA_Api.Models.Stock;
 using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.Ubicacion;
 using SGA_Api.Models.UsuarioConf;
+using SGA_Api.Models.Inventario;
 
 namespace SGA_Api.Data
 {
@@ -37,6 +38,10 @@ namespace SGA_Api.Data
 		public DbSet<StockDisponible> StockDisponible => Set<StockDisponible>();
 		public DbSet<Traspaso> Traspasos { get; set; }
 		public DbSet<EstadoTraspaso> TipoEstadosTraspaso { get; set; }
+		public DbSet<InventarioCabecera> InventarioCabecera { get; set; }
+		public DbSet<InventarioLineasTemp> InventarioLineasTemp { get; set; }
+		public DbSet<InventarioLineas> InventarioLineas { get; set; }
+		public DbSet<InventarioAjustes> InventarioAjustes { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
@@ -269,6 +274,96 @@ namespace SGA_Api.Data
 				ent.Property(t => t.Comentario).HasColumnName("Comentario");
 				ent.Property(t => t.EstadoErp).HasColumnName("EstadoErp");
 			});
+
+            // Configuración de entidades de Inventario
+            modelBuilder.Entity<InventarioCabecera>(ent =>
+            {
+                ent.ToTable("InventarioCabecera");
+                ent.HasKey(i => i.IdInventario);
+                
+                ent.Property(i => i.IdInventario).HasColumnName("IdInventario");
+                ent.Property(i => i.CodigoInventario).HasColumnName("CodigoInventario").HasMaxLength(30);
+                ent.Property(i => i.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
+                ent.Property(i => i.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
+                ent.Property(i => i.RangoUbicaciones).HasColumnName("RangoUbicaciones").HasMaxLength(50);
+                ent.Property(i => i.TipoInventario).HasColumnName("TipoInventario").HasMaxLength(10);
+                ent.Property(i => i.Comentarios).HasColumnName("Comentarios").HasColumnType("NVARCHAR(500)");
+                ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20);
+                ent.Property(i => i.UsuarioCreacionId).HasColumnName("UsuarioCreacionId");
+                ent.Property(i => i.UsuarioProcesamientoId).HasColumnName("UsuarioProcesamientoId");
+                ent.Property(i => i.FechaCreacion).HasColumnName("FechaCreacion").HasColumnType("DATETIME");
+                ent.Property(i => i.FechaCierre).HasColumnName("FechaCierre").HasColumnType("DATETIME");
+
+                // Índice único por empresa + código inventario
+                ent.HasIndex(i => new { i.CodigoEmpresa, i.CodigoInventario })
+                    .IsUnique()
+                    .HasDatabaseName("UX_InventarioCabecera_Empresa_CodigoInventario");
+            });
+
+            modelBuilder.Entity<InventarioLineasTemp>(ent =>
+            {
+                ent.ToTable("InventarioLineasTemp");
+                ent.HasKey(i => i.IdTemp);
+                
+                ent.Property(i => i.IdTemp).HasColumnName("IdTemp");
+                ent.Property(i => i.IdInventario).HasColumnName("IdInventario");
+                ent.Property(i => i.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
+                ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
+                ent.Property(i => i.CantidadContada).HasColumnName("CantidadContada").HasColumnType("DECIMAL(18,4)");
+                ent.Property(i => i.UsuarioConteoId).HasColumnName("UsuarioConteoId");
+                ent.Property(i => i.FechaConteo).HasColumnName("FechaConteo").HasColumnType("DATETIME");
+                ent.Property(i => i.Observaciones).HasColumnName("Observaciones").HasColumnType("NVARCHAR(500)");
+                ent.Property(i => i.Consolidado).HasColumnName("Consolidado");
+                ent.Property(i => i.FechaConsolidacion).HasColumnName("FechaConsolidacion").HasColumnType("DATETIME");
+                ent.Property(i => i.UsuarioConsolidacionId).HasColumnName("UsuarioConsolidacionId");
+
+                ent.HasOne(i => i.Inventario)
+                    .WithMany(ic => ic.LineasTemp)
+                    .HasForeignKey(i => i.IdInventario)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<InventarioLineas>(ent =>
+            {
+                ent.ToTable("InventarioLineas");
+                ent.HasKey(i => i.IdLinea);
+                
+                ent.Property(i => i.IdLinea).HasColumnName("IdLinea");
+                ent.Property(i => i.IdInventario).HasColumnName("IdInventario");
+                ent.Property(i => i.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
+                ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
+                ent.Property(i => i.StockTeorico).HasColumnName("StockTeorico").HasColumnType("DECIMAL(18,4)");
+                ent.Property(i => i.StockContado).HasColumnName("StockContado").HasColumnType("DECIMAL(18,4)");
+                ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20);
+                ent.Property(i => i.UsuarioValidacionId).HasColumnName("UsuarioValidacionId");
+                ent.Property(i => i.FechaValidacion).HasColumnName("FechaValidacion").HasColumnType("DATETIME");
+                ent.Property(i => i.Observaciones).HasColumnName("Observaciones").HasColumnType("NVARCHAR(500)");
+
+                ent.HasOne(i => i.Inventario)
+                    .WithMany(ic => ic.Lineas)
+                    .HasForeignKey(i => i.IdInventario)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<InventarioAjustes>(ent =>
+            {
+                ent.ToTable("InventarioAjustes");
+                ent.HasKey(i => i.IdAjuste);
+                
+                ent.Property(i => i.IdAjuste).HasColumnName("IdAjuste");
+                ent.Property(i => i.IdInventario).HasColumnName("IdInventario");
+                ent.Property(i => i.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
+                ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
+                ent.Property(i => i.Diferencia).HasColumnName("Diferencia").HasColumnType("DECIMAL(18,4)");
+                ent.Property(i => i.TipoAjuste).HasColumnName("TipoAjuste").HasMaxLength(10);
+                ent.Property(i => i.UsuarioId).HasColumnName("UsuarioId");
+                ent.Property(i => i.Fecha).HasColumnName("Fecha").HasColumnType("DATETIME");
+
+                ent.HasOne(i => i.Inventario)
+                    .WithMany(ic => ic.Ajustes)
+                    .HasForeignKey(i => i.IdInventario)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 		}
 	}
 }

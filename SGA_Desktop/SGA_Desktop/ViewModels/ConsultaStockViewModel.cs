@@ -16,6 +16,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -61,6 +62,9 @@ namespace SGA_Desktop.ViewModels
 			// ② Inicializa ambas colecciones
 			ResultadosStock = new ObservableCollection<StockDto>();
 			ResultadosStockPorUbicacion = new ObservableCollection<StockDto>();
+
+			ResultadosStockPorUbicacionView = CollectionViewSource.GetDefaultView(ResultadosStockPorUbicacion);
+			ResultadosStockPorUbicacionView.Filter = FiltroStock;
 
 			if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
 				_ = InitializeAsync();
@@ -141,6 +145,20 @@ namespace SGA_Desktop.ViewModels
 			!string.IsNullOrWhiteSpace(AlmacenSeleccionado) &&
 			AlmacenSeleccionado != TODAS;
 
+		public ICollectionView ResultadosStockPorUbicacionView { get; }
+
+		private string _filtroBusqueda;
+		public string FiltroBusqueda
+		{
+			get => _filtroBusqueda;
+			set
+			{
+				if (SetProperty(ref _filtroBusqueda, value))
+				{
+					ResultadosStockPorUbicacionView.Refresh();
+				}
+			}
+		}
 
 		public Visibility ArticleFiltersVisibility => IsArticleMode ? Visibility.Visible : Visibility.Collapsed;
 		public Visibility LocationFiltersVisibility => IsLocationMode ? Visibility.Visible : Visibility.Collapsed;
@@ -157,7 +175,10 @@ namespace SGA_Desktop.ViewModels
 
 		public IRelayCommand BuscarCommand =>
 			IsArticleMode ? BuscarPorArticuloCommand : BuscarPorUbicacionCommand;
+		
+		
 		#endregion
+
 
 		#region Property Change Callbacks
 		partial void OnFiltroArticuloChanged(string oldValue, string newValue)
@@ -573,6 +594,20 @@ namespace SGA_Desktop.ViewModels
 			await _printService.InsertarRegistroImpresionAsync(dto);
 		}
 
+		[RelayCommand]
+		private void CopiarCodigo(string codigo)
+		{
+			if (!string.IsNullOrWhiteSpace(codigo))
+				Clipboard.SetText(codigo);
+		}
+
+		[RelayCommand]
+		private void CopiarDescripcion(string descripcion)
+		{
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				Clipboard.SetText(descripcion);
+		}
+
 
 		#endregion
 
@@ -801,6 +836,17 @@ namespace SGA_Desktop.ViewModels
 			return campo;
 		}
 		#endregion
+
+
+
+		private bool FiltroStock(object obj)
+		{
+			if (obj is not StockDto stock) return false;
+			if (string.IsNullOrWhiteSpace(FiltroBusqueda)) return true;
+
+			return (stock.CodigoArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false)
+				|| (stock.DescripcionArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
+		}
 	}
 }
 

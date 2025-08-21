@@ -152,6 +152,11 @@
                     <Button Content="Etiquetas"
                     Command="{Binding IrAEtiquetasCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"
+                    Visibility="Collapsed"/>
+                    <Button Content="Inventario"
+                    Command="{Binding IrAInventarioCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
                     <Button Content="Empresa"
                     Command="{Binding IrASeleccionEmpresaCommand}"

@@ -6,6 +6,10 @@ using SGA_Desktop.Helpers;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Runtime.InteropServices;
+using System.Linq;
+using System;
+using SGA_Desktop.Dialog;
+using System.Net.Http;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -23,15 +27,22 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		public async Task IniciarSesion()
 		{
+			// 0) Validación usuario numérico
 			if (!int.TryParse(Usuario, out int operario))
 			{
-				MessageBox.Show("El campo usuario debe ser numérico.");
+				MostrarAdvertencia("Login", "El campo usuario debe ser numérico.", "\uE814");
+				Usuario = string.Empty;
+				Contraseña = string.Empty;
+				SetFocusUsuario();
 				return;
 			}
 
+			// 1) Validación contraseña
 			if (string.IsNullOrWhiteSpace(Contraseña))
 			{
-				MessageBox.Show("Introduce la contraseña.");
+				MostrarAdvertencia("Login", "Introduce la contraseña.", "\uE814");
+				Contraseña = string.Empty;
+				SetFocusUsuario();
 				return;
 			}
 
@@ -48,27 +59,34 @@ namespace SGA_Desktop.ViewModels
 
 			var loginService = new LoginService();
 
-			// Intentar login primero
-			var respuesta = await loginService.LoginAsync(new LoginRequest
+			try
 			{
-				operario = operario,
-				contraseña = Contraseña,
-				idDispositivo = idDispositivo,
-				tipoDispositivo = tipo
-			});
-			if (respuesta != null)
-			{
+				var respuesta = await loginService.LoginAsync(new LoginRequest
+				{
+					operario = operario,
+					contraseña = Contraseña,
+					idDispositivo = idDispositivo,
+					tipoDispositivo = tipo
+				});
+
+				if (respuesta == null)
+				{
+					// ⚠️ Caso 1: API respondió pero usuario/pass incorrectos
+					MostrarAdvertencia("Login", "Usuario o contraseña incorrectos.", "\uE814");
+					Contraseña = string.Empty;
+					SetFocusUsuario();
+					return;
+				}
+
+				// ✅ Caso 2: Login OK
 				SessionManager.UsuarioActual = respuesta;
-				
 
-
-				// Registrar evento de login
 				try
 				{
 					await loginService.RegistrarLogEventoAsync(new LogEvento
 					{
 						fecha = DateTime.Now,
-						idUsuario = operario, // Asegúrate de que LoginResponse incluya Id
+						idUsuario = operario,
 						tipo = "LOGIN",
 						origen = "PantallaLogin",
 						descripcion = "Inicio de sesión correcto",
@@ -78,10 +96,9 @@ namespace SGA_Desktop.ViewModels
 				}
 				catch (Exception ex)
 				{
-					MessageBox.Show($"Error registrando log de evento: {ex.Message}");
+					MostrarAdvertencia("Login", $"Error registrando log de evento: {ex.Message}", "\uE814");
 				}
 
-				// Mostrar ventana principal
 				Application.Current.Dispatcher.Invoke(() =>
 				{
 					var main = new MainWindow();
@@ -92,7 +109,52 @@ namespace SGA_Desktop.ViewModels
 					}
 				});
 			}
+			catch (TaskCanceledException)
+			{
+				// ⏱️ Timeout
+				MostrarAdvertencia("Servidor no responde", "El servidor tardó demasiado en responder. Inténtalo de nuevo.", "\uE814");
+				Contraseña = string.Empty;
+				SetFocusUsuario();
+			}
+			catch (HttpRequestException ex)
+			{
+				// 🌐 Error de conexión
+				MostrarAdvertencia("Error de conexión", $"No se pudo conectar con el servidor: {ex.Message}", "\uE814");
+				Contraseña = string.Empty;
+				SetFocusUsuario();
+			}
+			catch (Exception ex)
+			{
+				// 🚨 Error inesperado
+				MostrarAdvertencia("Error inesperado", $"Se produjo un error: {ex.Message}", "\uE814");
+				Usuario = string.Empty;
+				Contraseña = string.Empty;
+				SetFocusUsuario();
+			}
 		}
 
+		private void MostrarAdvertencia(string titulo, string mensaje, string icono)
+		{
+			var advertencia = new WarningDialog(titulo, mensaje, icono);
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						 ?? Application.Current.MainWindow;
+			if (owner != null && owner != advertencia)
+				advertencia.Owner = owner;
+			advertencia.ShowDialog();
+		}
+
+		private void SetFocusUsuario()
+		{
+			Application.Current.Dispatcher.Invoke(() =>
+			{
+				var loginWin = Application.Current.Windows.OfType<Login>().FirstOrDefault();
+				if (loginWin != null)
+				{
+					var usuarioBox = loginWin.FindName("UsuarioTextBox") as System.Windows.Controls.TextBox;
+					usuarioBox?.Focus();
+					usuarioBox?.SelectAll();
+				}
+			});
+		}
 	}
 }

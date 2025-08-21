@@ -168,7 +168,8 @@ namespace SGA_Api.Controllers.Stock
 		public async Task<IActionResult> PorUbicacion(
 			[FromQuery] short codigoEmpresa,
 			[FromQuery] string codigoAlmacen,                  // obligatorio
-			[FromQuery] string? codigoUbicacion = null         // 🔷 MODIFICADO: Ahora es opcional
+			[FromQuery] string? codigoUbicacion = null,        // 🔷 MODIFICADO: Ahora es opcional
+			[FromQuery] bool incluirStockCero = false          // 🔷 NUEVO: incluir artículos con stock 0
 		)
 		{
 			var ejercicio = await _sageContext.Periodos
@@ -184,7 +185,7 @@ namespace SGA_Api.Controllers.Stock
 					a.CodigoEmpresa == codigoEmpresa &&
 					a.Ejercicio == ejercicio &&
 					a.CodigoAlmacen == codigoAlmacen &&
-					a.UnidadSaldo != 0
+					(incluirStockCero || a.UnidadSaldo != 0)   // 🔷 MODIFICADO: filtro condicional
 				);
 
 			// 🔷 LÓGICA FINAL: Diferenciar entre todo el almacén, sin ubicación y ubicación específica
@@ -213,22 +214,110 @@ namespace SGA_Api.Controllers.Stock
 			return Ok(resultado);
 		}
 
-		// 1.c) Buscar por artículo (nuevo endpoint)
+		//// 1.c) Buscar por artículo (nuevo endpoint)
+		//[HttpGet("consulta-stock")]
+		//public async Task<IActionResult> ConsultarStock(
+		//	[FromQuery] short codigoEmpresa,
+		//	[FromQuery] string? codigoUbicacion,
+		//	[FromQuery] string? codigoAlmacen,
+		//	[FromQuery] string? codigoArticulo,
+		//	[FromQuery] string? codigoCentro,
+		//	[FromQuery] string? almacen,
+		//	[FromQuery] string? partida)
+		//{
+		//	var flujoUbicacion = !string.IsNullOrWhiteSpace(codigoUbicacion) && !string.IsNullOrWhiteSpace(codigoAlmacen);
+		//	var flujoArticulo = !string.IsNullOrWhiteSpace(codigoArticulo);
+
+		//	if (!flujoUbicacion && !flujoArticulo)
+		//		return BadRequest("Debe indicar ubicación + código de almacén, o un código de artículo.");
+
+		//	var ejercicioActual = await _sageContext.Periodos
+		//		.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+		//		.OrderByDescending(p => p.Fechainicio)
+		//		.Select(p => p.Ejercicio)
+		//		.FirstOrDefaultAsync();
+
+		//	if (ejercicioActual == 0)
+		//		return BadRequest("No se encontró un ejercicio válido para la empresa.");
+
+		//	var stockData = await _storageContext.AcumuladoStockUbicacion
+		//		.Where(a =>
+		//			a.CodigoEmpresa == codigoEmpresa &&
+		//			a.Ejercicio == ejercicioActual &&
+		//			a.UnidadSaldo != 0 &&
+		//			(
+		//				(flujoUbicacion && a.Ubicacion == codigoUbicacion && a.CodigoAlmacen == codigoAlmacen) ||
+		//				(flujoArticulo && a.CodigoArticulo == codigoArticulo)
+		//			) &&
+		//			(partida == null || a.Partida == partida))
+		//		.ToListAsync();
+
+		//	var almacenes = await _sageContext.Almacenes
+		//		.Where(a =>
+		//			a.CodigoEmpresa == codigoEmpresa &&
+		//			(codigoCentro == null || a.CodigoCentro == codigoCentro) &&
+		//			(almacen == null || a.Almacen == almacen))
+		//		.ToListAsync();
+
+		//	var resultado = stockData
+		//		.Select(s =>
+		//		{
+		//			var alm = almacenes.FirstOrDefault(a =>
+		//				a.CodigoEmpresa == s.CodigoEmpresa &&
+		//				a.CodigoAlmacen == s.CodigoAlmacen);
+
+		//			return new StockUbicacionDto
+		//			{
+		//				CodigoEmpresa = s.CodigoEmpresa.ToString(),
+		//				CodigoArticulo = s.CodigoArticulo,
+		//				CodigoCentro = alm?.CodigoCentro?.ToString(),
+		//				CodigoAlmacen = s.CodigoAlmacen.ToString(),
+		//				Almacen = alm?.Almacen,
+		//				Ubicacion = s.Ubicacion,
+		//				Partida = s.Partida,
+		//				FechaCaducidad = s.FechaCaducidad,
+		//				UnidadSaldo = s.UnidadSaldo
+		//			};
+		//		})
+		//		.ToList();
+
+		//	return Ok(resultado);
+		//}
+
 		[HttpGet("consulta-stock")]
 		public async Task<IActionResult> ConsultarStock(
-			[FromQuery] short codigoEmpresa,
-			[FromQuery] string? codigoUbicacion,
-			[FromQuery] string? codigoAlmacen,
-			[FromQuery] string? codigoArticulo,
-			[FromQuery] string? codigoCentro,
-			[FromQuery] string? almacen,
-			[FromQuery] string? partida)
+	[FromQuery] short codigoEmpresa,
+	[FromQuery] string? codigoUbicacion,
+	[FromQuery] string? codigoAlmacen,
+	[FromQuery] string? codigoArticulo,
+	[FromQuery] string? codigoCentro,
+	[FromQuery] string? almacen,
+	[FromQuery] string? partida)
 		{
-			var flujoUbicacion = !string.IsNullOrWhiteSpace(codigoUbicacion) && !string.IsNullOrWhiteSpace(codigoAlmacen);
+			// 🔹 Normalizar: si llega null → lo tratamos como "" (sin ubicar)
+			if (codigoUbicacion == null)
+				codigoUbicacion = "";
+
+			Console.WriteLine("📥 Petición recibida -------------------------");
+			Console.WriteLine($"codigoEmpresa: {codigoEmpresa}");
+			Console.WriteLine($"codigoAlmacen: '{codigoAlmacen ?? "null"}'");
+			Console.WriteLine($"codigoUbicacion: '{codigoUbicacion}'"); // nunca será null aquí
+			Console.WriteLine($"codigoArticulo: '{codigoArticulo ?? "null"}'");
+			Console.WriteLine($"codigoCentro: '{codigoCentro ?? "null"}'");
+			Console.WriteLine($"almacen: '{almacen ?? "null"}'");
+			Console.WriteLine($"partida: '{partida ?? "null"}'");
+
+			var flujoUbicacion = !string.IsNullOrWhiteSpace(codigoAlmacen);
 			var flujoArticulo = !string.IsNullOrWhiteSpace(codigoArticulo);
 
+			Console.WriteLine($"flujoUbicacion: {flujoUbicacion}");
+			Console.WriteLine($"flujoArticulo: {flujoArticulo}");
+
 			if (!flujoUbicacion && !flujoArticulo)
+			{
+				Console.WriteLine("❌ BadRequest -> no se indicó ubicación+almacén ni artículo.");
 				return BadRequest("Debe indicar ubicación + código de almacén, o un código de artículo.");
+			}
 
 			var ejercicioActual = await _sageContext.Periodos
 				.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
@@ -236,8 +325,13 @@ namespace SGA_Api.Controllers.Stock
 				.Select(p => p.Ejercicio)
 				.FirstOrDefaultAsync();
 
+			Console.WriteLine($"ejercicioActual: {ejercicioActual}");
+
 			if (ejercicioActual == 0)
+			{
+				Console.WriteLine("❌ BadRequest -> no se encontró ejercicio válido.");
 				return BadRequest("No se encontró un ejercicio válido para la empresa.");
+			}
 
 			var stockData = await _storageContext.AcumuladoStockUbicacion
 				.Where(a =>
@@ -245,11 +339,16 @@ namespace SGA_Api.Controllers.Stock
 					a.Ejercicio == ejercicioActual &&
 					a.UnidadSaldo != 0 &&
 					(
-						(flujoUbicacion && a.Ubicacion == codigoUbicacion && a.CodigoAlmacen == codigoAlmacen) ||
+						(flujoUbicacion &&
+						 a.CodigoAlmacen == codigoAlmacen &&
+						 a.Ubicacion == codigoUbicacion)
+						||
 						(flujoArticulo && a.CodigoArticulo == codigoArticulo)
 					) &&
 					(partida == null || a.Partida == partida))
 				.ToListAsync();
+
+			Console.WriteLine($"📊 StockData recuperado: {stockData.Count} registros");
 
 			var almacenes = await _sageContext.Almacenes
 				.Where(a =>
@@ -257,6 +356,8 @@ namespace SGA_Api.Controllers.Stock
 					(codigoCentro == null || a.CodigoCentro == codigoCentro) &&
 					(almacen == null || a.Almacen == almacen))
 				.ToListAsync();
+
+			Console.WriteLine($"📦 Almacenes recuperados: {almacenes.Count}");
 
 			var resultado = stockData
 				.Select(s =>
@@ -280,8 +381,15 @@ namespace SGA_Api.Controllers.Stock
 				})
 				.ToList();
 
+			Console.WriteLine($"✅ Resultado final: {resultado.Count} registros");
+			Console.WriteLine("--------------------------------------------------");
+
 			return Ok(resultado);
 		}
+
+
+
+
 
 		// 1.d) Buscar artículo (nuevo endpoint)
 		[HttpGet("buscar-articulo")]
@@ -506,19 +614,23 @@ namespace SGA_Api.Controllers.Stock
 
 			// 🔹 total global por artículo (en toda la empresa, independiente del filtro)
 			var totalesGlobales = _auroraSgaContext.StockDisponible
-	.Where(x => x.CodigoEmpresa == empresa &&
-				codigosArticulos.Contains(x.CodigoArticulo) &&
-				x.Partida != null)
-	.AsEnumerable() // 🔑 ejecución en memoria
-	.GroupBy(x => new { x.CodigoArticulo, x.Partida })
-	.ToDictionary(
-		g => (g.Key.CodigoArticulo, g.Key.Partida),
-		g => g.Sum(x => x.UnidadSaldo)
-	);
+				.Where(x => x.CodigoEmpresa == empresa &&
+							codigosArticulos.Contains(x.CodigoArticulo) &&
+							x.Partida != null)
+				.AsEnumerable() // 🔑 ejecución en memoria
+				.GroupBy(x => new { x.CodigoArticulo, x.Partida })
+				.ToDictionary(
+					g => (g.Key.CodigoArticulo, g.Key.Partida),
+					g => g.Sum(x => x.UnidadSaldo)
+				);
 
-			// 🔹 total por artículo+almacén (sí depende del filtro actual)
-			var totalesPorArticuloAlmacen = datos
-				.GroupBy(d => new { d.CodigoArticulo, d.Partida, d.CodigoAlmacen })
+			// 🔹 total por artículo+almacén (usar StockDisponible entero, no datos filtrados)
+			var totalesPorArticuloAlmacen = _auroraSgaContext.StockDisponible
+				.Where(x => x.CodigoEmpresa == empresa &&
+							codigosArticulos.Contains(x.CodigoArticulo) &&
+							x.Partida != null)
+				.AsEnumerable()
+				.GroupBy(x => new { x.CodigoArticulo, x.Partida, x.CodigoAlmacen })
 				.ToDictionary(
 					g => (g.Key.CodigoArticulo, g.Key.Partida, g.Key.CodigoAlmacen),
 					g => g.Sum(x => x.UnidadSaldo)
@@ -535,28 +647,32 @@ namespace SGA_Api.Controllers.Stock
 					x.CodigoArticulo == s.CodigoArticulo);
 
 				var palets = lineasPalets
-					.Where(l =>
-						l.CodigoEmpresa == s.CodigoEmpresa &&
-						l.CodigoArticulo == s.CodigoArticulo &&
-						l.Lote == s.Partida &&
-						l.Ubicacion == s.Ubicacion &&
-						(l.Palet.Estado == "Abierto" || l.Palet.Estado == "Cerrado"))
-					.Select(l => new PaletDetalleDto
-					{
-						PaletId = l.PaletId,
-						CodigoPalet = l.Palet.Codigo,
-						EstadoPalet = l.Palet.Estado,
-						Cantidad = l.Cantidad,
-						Ubicacion = l.Ubicacion,
-						Partida = l.Lote,
-						FechaApertura = l.Palet.FechaApertura,
-						FechaCierre = l.Palet.FechaCierre
-					})
-					.ToList();
+	.Where(l =>
+		l.CodigoEmpresa == s.CodigoEmpresa &&
+		l.CodigoArticulo == s.CodigoArticulo &&
+		l.Lote == s.Partida &&
+		l.Ubicacion == s.Ubicacion &&
+		l.CodigoAlmacen == s.CodigoAlmacen &&   // 👈 Filtro de almacén
+		(l.Palet.Estado == "Abierto" || l.Palet.Estado == "Cerrado"))
+	.Select(l => new PaletDetalleDto
+	{
+		PaletId = l.PaletId,
+		CodigoPalet = l.Palet.Codigo,
+		EstadoPalet = l.Palet.Estado,
+		Cantidad = l.Cantidad,
+		Ubicacion = l.Ubicacion,
+		Partida = l.Lote,
+		FechaApertura = l.Palet.FechaApertura,
+		FechaCierre = l.Palet.FechaCierre
+	})
+	.ToList();
 
 				// totales
 				totalesGlobales.TryGetValue((s.CodigoArticulo, s.Partida), out var totalArticuloGlobal);
-				totalesPorArticuloAlmacen.TryGetValue((s.CodigoArticulo, s.Partida, s.CodigoAlmacen), out var totalArticuloAlmacen);
+				totalesPorArticuloAlmacen.TryGetValue(
+	(s.CodigoArticulo, s.Partida, s.CodigoAlmacen),
+	out var totalArticuloAlmacen
+);
 
 				return new StockUbicacionDto
 				{

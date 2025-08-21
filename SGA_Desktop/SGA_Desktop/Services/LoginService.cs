@@ -14,65 +14,42 @@ public class LoginService : ApiService
 {
 	public async Task<LoginResponse?> LoginAsync(LoginRequest request)
 	{
-		try
-		{
-			var json = JsonSerializer.Serialize(request);
-			var content = new StringContent(json, Encoding.UTF8, "application/json");
+		var json = JsonSerializer.Serialize(request);
+		var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-			var response = await _httpClient.PostAsync("Login", content);
-			if (!response.IsSuccessStatusCode)
-				return null;
+		var response = await _httpClient.PostAsync("Login", content);
 
-			var result = await response.Content.ReadAsStringAsync();
-			var loginResp = JsonSerializer.Deserialize<LoginResponse>(result,
-								new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-			if (loginResp != null)
-			{
-				// 1) Guardamos la respuesta de login en sesión
-				SessionManager.UsuarioActual = loginResp;
-
-				// 2) A continuación, cargamos la impresora preferida del usuario
-				var (okPrn, printerName) = await ObtenerImpresoraPreferidaAsync(loginResp.operario);
-				if (okPrn && !string.IsNullOrWhiteSpace(printerName))
-				{
-					SessionManager.PreferredPrinter = printerName!;
-				}
-			}
-
-			return loginResp;
-		}
-		catch (HttpRequestException ex)
-		{
-			// Error de red: la API no responde
-			Console.WriteLine($"Error de conexión: {ex.Message}");
-			MessageBox.Show("No se pudo conectar con el servidor. Verifica tu conexión o inténtalo más tarde.",
-							"Error de conexión",
-							MessageBoxButton.OK,
-							MessageBoxImage.Error);
+		// 🔹 Si credenciales inválidas (401 Unauthorized) → devolver null
+		if (response.StatusCode == HttpStatusCode.Unauthorized)
 			return null;
-		}
-		catch (TaskCanceledException ex)
+
+		// 🔹 Si otro error del servidor → lanzar excepción
+		if (!response.IsSuccessStatusCode)
 		{
-			// Timeout
-			Console.WriteLine($"Timeout al intentar conectar: {ex.Message}");
-			MessageBox.Show("La solicitud tardó demasiado y fue cancelada. Inténtalo nuevamente más tarde.",
-							"Tiempo de espera agotado",
-							MessageBoxButton.OK,
-							MessageBoxImage.Warning);
-			return null;
+			var errorMsg = await response.Content.ReadAsStringAsync();
+			throw new HttpRequestException(
+				$"Error en login: {response.StatusCode} - {errorMsg}");
 		}
-		catch (Exception ex)
+
+		// 🔹 Si todo OK → deserializar respuesta
+		var result = await response.Content.ReadAsStringAsync();
+		var loginResp = JsonSerializer.Deserialize<LoginResponse>(result,
+							new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+		if (loginResp != null)
 		{
-			// Otros errores no controlados
-			Console.WriteLine($"Error inesperado: {ex.Message}");
-			MessageBox.Show("Ocurrió un error inesperado al iniciar sesión.",
-							"Error",
-							MessageBoxButton.OK,
-							MessageBoxImage.Error);
-			return null;
+			// Guardamos sesión
+			SessionManager.UsuarioActual = loginResp;
+
+			// Cargar impresora preferida del usuario
+			var (okPrn, printerName) = await ObtenerImpresoraPreferidaAsync(loginResp.operario);
+			if (okPrn && !string.IsNullOrWhiteSpace(printerName))
+				SessionManager.PreferredPrinter = printerName!;
 		}
+
+		return loginResp;
 	}
+
 
 
 	public async Task<bool> RegistrarDispositivoAsync(Dispositivo dispositivo)
