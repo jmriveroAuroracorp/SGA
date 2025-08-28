@@ -29,7 +29,7 @@ namespace SGA_Desktop.ViewModels
             
             AlmacenesDisponibles = new ObservableCollection<AlmacenDto>();
             TiposInventario = new ObservableCollection<string> { "TOTAL", "PARCIAL" };
-            OpcionesArticulos = new ObservableCollection<string> { "Todos", "Con stock", "Sin stock" };
+            OpcionesArticulos = new ObservableCollection<string> { "Todos", "Con stock" };
             OpcionesValoracion = new ObservableCollection<string> 
             { 
                 "Precio medio de las entradas", 
@@ -40,7 +40,10 @@ namespace SGA_Desktop.ViewModels
             
             // Valores por defecto
             TipoInventarioSeleccionado = "TOTAL";
-            Comentarios = $"Inventario creado el {DateTime.Now:dd/MM/yyyy HH:mm}";
+            ArticulosSeleccionados = "Todos"; // Por defecto "Todos" para incluir artículos con stock 0
+            IncluirUnidadesCero = false; // Por defecto false (no inicializar a 0)
+            IncluirUbicacionesEspeciales = false; // Por defecto false
+            Comentarios = string.Empty; // Sin comentario predeterminado
 
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
                 _ = InitializeAsync();
@@ -59,13 +62,13 @@ namespace SGA_Desktop.ViewModels
         private AlmacenDto? almacenSeleccionado;
 
         [ObservableProperty]
-        private string tipoInventarioSeleccionado = "TOTAL";
+        private string tipoInventarioSeleccionado = "PARCIAL";
 
         [ObservableProperty]
         private string codigoInventario = string.Empty;
 
         [ObservableProperty]
-        private DateTime fechaInventario = DateTime.Today;
+        private DateTime fechaInventario = DateTime.Today.Date;
 
         [ObservableProperty]
         private string articulosSeleccionados = "Todos";
@@ -129,6 +132,9 @@ namespace SGA_Desktop.ViewModels
         private bool incluirUnidadesCero = false;
 
         [ObservableProperty]
+        private bool incluirUbicacionesEspeciales = false;
+
+        [ObservableProperty]
         private string comentarios = string.Empty;
 
         [ObservableProperty]
@@ -153,6 +159,29 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private bool posicionHabilitada = false;
+
+        [ObservableProperty]
+        private string mensajeErrorCodigo = string.Empty;
+
+        [ObservableProperty]
+        private bool codigoExiste = false;
+
+        // NUEVO: Propiedades para filtro de artículo específico
+        [ObservableProperty]
+        private bool usarFiltroArticulo = false;
+
+        [ObservableProperty]
+        private string articuloBuscado = string.Empty;
+
+        [ObservableProperty]
+        private ObservableCollection<ArticuloResumenDto> articulosEncontrados = new();
+
+        [ObservableProperty]
+        private ArticuloResumenDto? articuloSeleccionado;
+
+        // Propiedades calculadas para la UI
+        public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
+        public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
         #endregion
 
 
@@ -189,6 +218,11 @@ namespace SGA_Desktop.ViewModels
         partial void OnCodigoInventarioChanged(string oldValue, string newValue)
         {
             ValidarFormulario();
+            // Verificar si el código ya existe cuando el usuario termine de escribir
+            if (!string.IsNullOrWhiteSpace(newValue))
+            {
+                _ = VerificarCodigoExistenteAsync(newValue);
+            }
         }
 
         partial void OnUsarRangoArticulosChanged(bool oldValue, bool newValue)
@@ -238,6 +272,17 @@ namespace SGA_Desktop.ViewModels
             ValidarFormulario();
         }
 
+        partial void OnArticulosSeleccionadosChanged(string oldValue, string newValue)
+        {
+            // Si selecciona "Todos", deshabilitar rango de ubicaciones
+            if (newValue == "Todos")
+            {
+                UsarRangoUbicaciones = false;
+            }
+            
+            ValidarFormulario();
+        }
+
 
         // Callbacks para control jerárquico
         partial void OnPasilloDesdeChanged(int oldValue, int newValue) 
@@ -278,6 +323,38 @@ namespace SGA_Desktop.ViewModels
         { 
             ValidarFormulario();
         }
+
+        // NUEVO: Callbacks para filtro de artículo
+        partial void OnUsarFiltroArticuloChanged(bool oldValue, bool newValue)
+        {
+            if (newValue)
+            {
+                // Al activar filtro, forzar tipo PARCIAL
+                TipoInventarioSeleccionado = "PARCIAL";
+            }
+            else
+            {
+                // Limpiar búsqueda
+                ArticuloBuscado = string.Empty;
+                ArticulosEncontrados.Clear();
+                ArticuloSeleccionado = null;
+                OnPropertyChanged(nameof(MostrarListaArticulos));
+                OnPropertyChanged(nameof(MostrarInfoArticulo));
+            }
+            
+            ValidarFormulario();
+        }
+
+        partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? oldValue, ArticuloResumenDto? newValue)
+        {
+            OnPropertyChanged(nameof(MostrarInfoArticulo));
+            ValidarFormulario();
+        }
+
+        partial void OnArticulosEncontradosChanged(ObservableCollection<ArticuloResumenDto> oldValue, ObservableCollection<ArticuloResumenDto> newValue)
+        {
+            OnPropertyChanged(nameof(MostrarListaArticulos));
+        }
         #endregion
 
         #region Commands
@@ -289,12 +366,11 @@ namespace SGA_Desktop.ViewModels
                 await CargarAlmacenesAsync();
                 ValidarFormulario();
                 
-                // Debug: mostrar cuántos almacenes se cargaron
-                MessageBox.Show($"Almacenes cargados: {AlmacenesDisponibles.Count}", "Debug", MessageBoxButton.OK, MessageBoxImage.Information);
+
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al inicializar: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowDialog(new WarningDialog("Error", $"Error al inicializar: {ex.Message}"));
             }
         }
 
@@ -304,6 +380,13 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 if (!PuedeCrear) return;
+
+                // Verificar si el código ya existe antes de crear
+                if (CodigoExiste)
+                {
+                    ShowDialog(new WarningDialog("Código Duplicado", $"El código '{CodigoInventario}' ya existe en esta empresa. Por favor, elija un código diferente."));
+                    return;
+                }
 
                 // Mostrar diálogo de confirmación
                 var mensaje = $"Se va a crear un inventario con las siguientes características:\n\n";
@@ -331,54 +414,183 @@ namespace SGA_Desktop.ViewModels
 
                 if (IncluirUnidadesCero)
                     mensaje += $"• Incluir unidades a 0: Sí\n";
+                
+                if (IncluirUbicacionesEspeciales)
+                    mensaje += $"• Incluir ubicaciones especiales: Sí\n";
+
+
 
                 mensaje += $"\n¿Desea continuar con la creación del inventario?";
 
-                var confirmacion = MessageBox.Show(mensaje, "Confirmar creación de inventario", 
-                    MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-                if (confirmacion != MessageBoxResult.Yes) return;
+                var confirmacion = new ConfirmationDialog("Confirmar creación de inventario", mensaje);
+                ShowDialog(confirmacion);
+                if (confirmacion.DialogResult != true) return;
 
                 var dto = new CrearInventarioDto
                 {
+                    CodigoInventario = CodigoInventario,
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
                     CodigoAlmacen = AlmacenSeleccionado!.CodigoAlmacen,
-                    TipoInventario = TipoInventarioSeleccionado,
+                    TipoInventario = UsarFiltroArticulo || ArticulosSeleccionados == "Con stock" ? "PARCIAL" : "TOTAL",
+                    FechaInventario = FechaInventario.Date, // Asegurar que solo se envía la fecha sin hora
                     Comentarios = Comentarios,
-                    UsuarioCreacionId = SessionManager.UsuarioActual!.operario
+                    UsuarioCreacionId = SessionManager.UsuarioActual!.operario,
+                    IncluirUnidadesCero = IncluirUnidadesCero, // Checkbox "Inicializar a 0"
+                    IncluirArticulosConStockCero = ArticulosSeleccionados == "Todos", // Combo "Todos" vs "Con stock"
+                    IncluirUbicacionesEspeciales = IncluirUbicacionesEspeciales,
+                    // NUEVO: Filtro de artículo específico
+                    CodigoArticuloFiltro = UsarFiltroArticulo ? ArticuloSeleccionado?.CodigoArticulo : null
                 };
 
-                // Agregar rangos de ubicaciones si están habilitados
+                // Agregar rangos de ubicaciones basándose en los checkboxes individuales
+                // Se envía el rango si está especificado, independientemente del tipo de inventario
                 if (UsarRangoUbicaciones)
                 {
+                    // Pasillo siempre se envía si hay rango de ubicaciones
                     dto.PasilloDesde = PasilloDesde;
                     dto.PasilloHasta = PasilloHasta;
-                    dto.EstanteriaDesde = EstanteriaDesde;
-                    dto.EstanteriaHasta = EstanteriaHasta;
-                    dto.AlturaDesde = AlturaDesde;
-                    dto.AlturaHasta = AlturaHasta;
-                    dto.PosicionDesde = PosicionDesde;
-                    dto.PosicionHasta = PosicionHasta;
+                    
+                    // Estantería solo si está habilitada
+                    if (UsarEstanteria)
+                    {
+                        dto.EstanteriaDesde = EstanteriaDesde;
+                        dto.EstanteriaHasta = EstanteriaHasta;
+                    }
+                    
+                    // Altura solo si está habilitada
+                    if (UsarAltura)
+                    {
+                        dto.AlturaDesde = AlturaDesde;
+                        dto.AlturaHasta = AlturaHasta;
+                    }
+                    
+                    // Posición solo si está habilitada
+                    if (UsarPosicion)
+                    {
+                        dto.PosicionDesde = PosicionDesde;
+                        dto.PosicionHasta = PosicionHasta;
+                    }
                 }
+
+
 
                 var resultado = await _inventarioService.CrearInventarioAsync(dto);
 
                 if (resultado)
                 {
-                    MessageBox.Show("Inventario creado correctamente.", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowDialog(new WarningDialog("Éxito", "Inventario creado correctamente."));
                     CerrarDialogo(true);
                 }
                 else
                 {
-                    MessageBox.Show("Error al crear el inventario.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowDialog(new WarningDialog("Error", "Error al crear el inventario."));
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al crear inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowDialog(new WarningDialog("Error", $"Error al crear inventario: {ex.Message}"));
             }
         }
 
+        [RelayCommand]
+        private async Task BuscarArticuloAsync()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(ArticuloBuscado))
+                {
+                    ShowDialog(new WarningDialog("Buscar artículo", "Introduce un código o descripción para buscar."));
+                    return;
+                }
+
+                if (AlmacenSeleccionado == null)
+                {
+                    ShowDialog(new WarningDialog("Buscar artículo", "Primero selecciona un almacén."));
+                    return;
+                }
+
+                ArticulosEncontrados.Clear();
+                ArticuloSeleccionado = null;
+
+                var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                var terminoBusqueda = ArticuloBuscado.Trim();
+                
+                List<StockDto> resultados = new();
+                string tipoBusqueda = "";
+
+                // Intentar buscar por código primero (si parece un código)
+                if (terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" "))
+                {
+                    tipoBusqueda = "código";
+                    resultados = await _stockService.ObtenerPorArticuloAsync(
+                        empresa,
+                        codigoArticulo: terminoBusqueda,
+                        codigoAlmacen: AlmacenSeleccionado.CodigoAlmacen
+                    );
+                }
+
+                // Si no encuentra por código o el término parece una descripción, buscar por descripción
+                if (!resultados.Any())
+                {
+                    tipoBusqueda = terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" ") ? 
+                        "código (sin resultados), luego descripción" : "descripción";
+                    
+                    resultados = await _stockService.ObtenerPorArticuloAsync(
+                        empresa,
+                        codigoArticulo: null,
+                        codigoAlmacen: AlmacenSeleccionado.CodigoAlmacen,
+                        descripcion: terminoBusqueda
+                    );
+                }
+
+                // Agrupar por artículo
+                var grupos = resultados
+                    .GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
+                    .Select(g => new ArticuloResumenDto
+                    {
+                        CodigoArticulo = g.Key.CodigoArticulo,
+                        DescripcionArticulo = g.Key.DescripcionArticulo ?? ""
+                    })
+                    .OrderBy(a => a.CodigoArticulo)
+                    .ToList();
+
+                foreach (var articulo in grupos)
+                {
+                    ArticulosEncontrados.Add(articulo);
+                }
+
+                // Mostrar mensaje apropiado según los resultados
+                if (ArticulosEncontrados.Count == 1)
+                {
+                    ArticuloSeleccionado = ArticulosEncontrados.First();
+                    var mensaje = $"✓ Encontrado por {tipoBusqueda}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
+                    ShowDialog(new WarningDialog("Artículo encontrado", mensaje));
+                }
+                else if (ArticulosEncontrados.Count > 1)
+                {
+                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}.\nSelecciona uno de la lista desplegable.";
+                    ShowDialog(new WarningDialog("Múltiples resultados", mensaje));
+                }
+                else
+                {
+                    var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por {tipoBusqueda} en el almacén {AlmacenSeleccionado.CodigoAlmacen}.\n\n";
+                    mensaje += "💡 Consejos:\n";
+                    mensaje += "• Para buscar por código: introduce el código exacto (ej: 10000)\n";
+                    mensaje += "• Para buscar por descripción: introduce parte de la descripción (ej: azúcar)\n";
+                    mensaje += "• Verifica que el artículo tiene stock en este almacén";
+                    
+                    ShowDialog(new WarningDialog("Sin resultados", mensaje));
+                }
+
+                // Notificar cambios en visibilidad
+                OnPropertyChanged(nameof(MostrarListaArticulos));
+                OnPropertyChanged(nameof(MostrarInfoArticulo));
+            }
+            catch (Exception ex)
+            {
+                ShowDialog(new WarningDialog("Error", $"Error al buscar artículo: {ex.Message}"));
+            }
+        }
 
 
         [RelayCommand]
@@ -396,28 +608,28 @@ namespace SGA_Desktop.ViewModels
         private void BuscarArticuloDesde()
         {
             // TODO: Implementar búsqueda de artículos
-            MessageBox.Show("Búsqueda de artículos - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowDialog(new WarningDialog("Info", "Búsqueda de artículos - En desarrollo"));
         }
 
         [RelayCommand]
         private void BuscarArticuloHasta()
         {
             // TODO: Implementar búsqueda de artículos
-            MessageBox.Show("Búsqueda de artículos - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowDialog(new WarningDialog("Info", "Búsqueda de artículos - En desarrollo"));
         }
 
         [RelayCommand]
         private void BuscarUbicacionDesde()
         {
             // TODO: Implementar búsqueda de ubicaciones
-            MessageBox.Show("Búsqueda de ubicaciones - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowDialog(new WarningDialog("Info", "Búsqueda de ubicaciones - En desarrollo"));
         }
 
         [RelayCommand]
         private void BuscarUbicacionHasta()
         {
             // TODO: Implementar búsqueda de ubicaciones
-            MessageBox.Show("Búsqueda de ubicaciones - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowDialog(new WarningDialog("Info", "Búsqueda de ubicaciones - En desarrollo"));
         }
 
         [RelayCommand]
@@ -496,7 +708,7 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar almacenes: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowDialog(new WarningDialog("Error", $"Error al cargar almacenes: {ex.Message}"));
                 
                 // En caso de error, agregar almacenes de prueba
                 AlmacenesDisponibles.Clear();
@@ -533,6 +745,28 @@ namespace SGA_Desktop.ViewModels
             PuedeCrear = esValido;
         }
 
+        private async Task VerificarCodigoExistenteAsync(string codigo)
+        {
+            try
+            {
+                // Verificar si el código ya existe en la empresa actual
+                var inventarios = await _inventarioService.ObtenerInventariosAsync();
+                var existe = inventarios.Any(i => i.CodigoInventario.Equals(codigo, StringComparison.OrdinalIgnoreCase));
+                
+                CodigoExiste = existe;
+                MensajeErrorCodigo = existe ? $"El código '{codigo}' ya existe en esta empresa" : string.Empty;
+                
+                // Actualizar validación
+                ValidarFormulario();
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, no bloquear la creación
+                CodigoExiste = false;
+                MensajeErrorCodigo = string.Empty;
+            }
+        }
+
         private bool ValidarRangos()
         {
             // Validar rangos de artículos si están habilitados
@@ -542,7 +776,11 @@ namespace SGA_Desktop.ViewModels
                     return false;
             }
 
-
+            // Validar filtro de artículo específico
+            if (UsarFiltroArticulo)
+            {
+                return ArticuloSeleccionado != null;
+            }
 
             return true;
         }
@@ -600,7 +838,7 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar rangos disponibles: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowDialog(new WarningDialog("Error", $"Error al cargar rangos disponibles: {ex.Message}"));
             }
         }
 
@@ -637,6 +875,15 @@ namespace SGA_Desktop.ViewModels
         }
 
 
+
+        private void ShowDialog(Window dialog)
+        {
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                     ?? Application.Current.MainWindow;
+            if (owner != null && owner != dialog)
+                dialog.Owner = owner;
+            dialog.ShowDialog();
+        }
 
         private void CerrarDialogo(bool resultado)
         {

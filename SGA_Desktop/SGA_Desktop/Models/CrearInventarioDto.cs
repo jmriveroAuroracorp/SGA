@@ -57,6 +57,22 @@ namespace SGA_Desktop.Models
 
         [JsonPropertyName("posicionHasta")]
         public int? PosicionHasta { get; set; }
+
+        [JsonPropertyName("incluirUnidadesCero")]
+        public bool IncluirUnidadesCero { get; set; } = false;
+
+        [JsonPropertyName("incluirArticulosConStockCero")]
+        public bool IncluirArticulosConStockCero { get; set; } = false;
+
+        [JsonPropertyName("incluirUbicacionesEspeciales")]
+        public bool IncluirUbicacionesEspeciales { get; set; } = false;
+
+        [JsonPropertyName("fechaInventario")]
+        public DateTime FechaInventario { get; set; } = DateTime.Today.Date;
+
+        // NUEVO: Filtro de artículo específico
+        [JsonPropertyName("codigoArticuloFiltro")]
+        public string? CodigoArticuloFiltro { get; set; }
     }
 
     /// <summary>

@@ -14,6 +14,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Data;
+using ClosedXML.Excel;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -70,13 +71,16 @@ namespace SGA_Desktop.ViewModels
         private string mensajeEstado = string.Empty;
 
         [ObservableProperty]
-        private DateTime fechaDesde = DateTime.Today.AddDays(-30);
+        private DateTime fechaDesde = DateTime.Today.AddDays(-2);
 
         [ObservableProperty]
         private DateTime fechaHasta = DateTime.Today;
 
         [ObservableProperty]
-        private string estadoFiltro = "TODOS"; // TODOS, ABIERTO, PENDIENTE_CIERRE, CERRADO
+        private string estadoFiltro = "TODOS"; // TODOS, ABIERTO, EN_CONTEO, CONSOLIDADO, CERRADO
+
+        [ObservableProperty]
+        private string idInventarioFiltro = string.Empty;
 
         // Propiedades para rangos de ubicaciones
         [ObservableProperty]
@@ -148,6 +152,12 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(CanEnableInputs));
             OnPropertyChanged(nameof(CanCargarInventarios));
         }
+
+        partial void OnIdInventarioFiltroChanged(string oldValue, string newValue)
+        {
+            // Refrescar la vista cuando cambie el filtro por ID
+            InventariosView.Refresh();
+        }
         #endregion
 
         #region Commands
@@ -172,7 +182,12 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 MensajeEstado = $"Error: {ex.Message}";
-                MessageBox.Show($"Error al inicializar: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al inicializar: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
             finally
             {
@@ -210,8 +225,8 @@ namespace SGA_Desktop.ViewModels
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
                     CodigoAlmacen = codigoAlmacen,
                     CodigosAlmacen = codigosAlmacen,
-                    FechaDesde = FechaDesde,
-                    FechaHasta = FechaHasta,
+                    FechaDesde = FechaDesde.Date, // Solo la fecha, hora 00:00:00
+                    FechaHasta = FechaHasta.Date.AddDays(1).AddSeconds(-1), // Último segundo del día (23:59:59)
                     EstadoInventario = EstadoFiltro == "TODOS" ? null : EstadoFiltro
                 };
 
@@ -233,9 +248,12 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 MensajeEstado = $"Error: {ex.Message}";
-                Debug.WriteLine($"Error al cargar inventarios: {ex.Message}");
-                Debug.WriteLine($"StackTrace: {ex.StackTrace}");
-                MessageBox.Show($"Error al cargar inventarios: {ex.Message}\n\nStackTrace: {ex.StackTrace}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al cargar inventarios: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
             finally
             {
@@ -262,7 +280,12 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 MensajeEstado = $"Error: {ex.Message}";
-                MessageBox.Show($"Error al cargar rangos: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al cargar rangos: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
             finally
             {
@@ -301,7 +324,12 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 MensajeEstado = $"Error: {ex.Message}";
-                MessageBox.Show($"Error al cargar stock: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al cargar stock: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
             finally
             {
@@ -315,7 +343,10 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 var dialog = new CrearInventarioDialog();
-                dialog.Owner = Application.Current.MainWindow;
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != dialog)
+                    dialog.Owner = owner;
                 
                 var result = dialog.ShowDialog();
                 
@@ -327,7 +358,12 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al crear inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al crear inventario: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -336,25 +372,108 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
-                var resultado = MessageBox.Show(
-                    "¿Está seguro de que desea consolidar este inventario?",
-                    "Confirmar consolidación",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-
-                if (resultado == MessageBoxResult.Yes)
+                var confirmDialog = new ConfirmationDialog("Confirmar consolidación", "¿Está seguro de que desea consolidar este inventario?");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != confirmDialog)
+                    confirmDialog.Owner = owner;
+                
+                if (confirmDialog.ShowDialog() != true)
+                    return;
                 {
-                    var consolidado = await _inventarioService.ConsolidarInventarioAsync(inventario.IdInventario);
-                    if (consolidado)
+                    // Primero verificar si hay advertencias SIN consolidar
+                    var (success, tieneAdvertencias, lineasConStockCambiado) = await _inventarioService.VerificarAdvertenciasConsolidacionAsync(inventario.IdInventario);
+                    
+                    if (success)
                     {
-                        MessageBox.Show("Inventario consolidado correctamente.", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                        if (tieneAdvertencias)
+                        {
+                            var mensaje = $"⚠️ Se detectaron {lineasConStockCambiado.Count} líneas donde el stock real ha cambiado desde que se creó el inventario.\n\n";
+                            mensaje += "Esto puede indicar que:\n";
+                            mensaje += "• Se han realizado movimientos de stock durante el conteo\n";
+                            mensaje += "• Otros usuarios han trabajado en el mismo almacén\n\n";
+                            mensaje += "¿Desea revisar y ajustar los valores antes de consolidar el inventario?";
+                            
+                            var respuestaDialog = new ConfirmationDialog("Stock Cambiado Durante Inventario", mensaje);
+                            var ownerRespuesta = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                             ?? Application.Current.MainWindow;
+                            if (ownerRespuesta != null && ownerRespuesta != respuestaDialog)
+                                respuestaDialog.Owner = ownerRespuesta;
+                            
+                            if (respuestaDialog.ShowDialog() == true)
+                            {
+                                // Abrir pantalla de reconteo para ajustar valores
+                                var dialog = new ReconteoLineasProblematicasDialog(inventario);
+                                var ownerDialog = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                             ?? Application.Current.MainWindow;
+                                if (ownerDialog != null && ownerDialog != dialog)
+                                    dialog.Owner = ownerDialog;
+                                
+                                var result = dialog.ShowDialog();
+                                
+                                if (result == true)
+                                {
+                                    // El reconteo se guardó y consolidó automáticamente
+                                    var successDialog = new WarningDialog("Éxito", "Inventario consolidado correctamente con los valores ajustados.");
+                                    var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                                   ?? Application.Current.MainWindow;
+                                    if (ownerSuccess != null && ownerSuccess != successDialog)
+                                        successDialog.Owner = ownerSuccess;
+                                    successDialog.ShowDialog();
+                                }
+                                else
+                                {
+                                    // Si se canceló el reconteo, NO consolidar el inventario
+                                    var infoDialog = new WarningDialog("Información", "Consolidación cancelada. El inventario permanece sin consolidar.");
+                                    var ownerInfo = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                                ?? Application.Current.MainWindow;
+                                    if (ownerInfo != null && ownerInfo != infoDialog)
+                                        infoDialog.Owner = ownerInfo;
+                                    infoDialog.ShowDialog();
+                                }
+                            }
+                            else
+                            {
+                                // El usuario no quiere revisar, consolidar con los valores originales
+                                var (successConsolidacion, _, _) = await _inventarioService.ConsolidarInventarioAsync(inventario.IdInventario);
+                                if (successConsolidacion)
+                                {
+                                    var infoDialog = new WarningDialog("Información", "Inventario consolidado con los valores originales.");
+                                    var ownerInfo = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                                ?? Application.Current.MainWindow;
+                                    if (ownerInfo != null && ownerInfo != infoDialog)
+                                        infoDialog.Owner = ownerInfo;
+                                    infoDialog.ShowDialog();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // No hay advertencias, consolidar directamente
+                            var (successConsolidacion, _, _) = await _inventarioService.ConsolidarInventarioAsync(inventario.IdInventario);
+                            if (successConsolidacion)
+                            {
+                                var successDialog = new WarningDialog("Éxito", "Inventario consolidado correctamente.");
+                                var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                               ?? Application.Current.MainWindow;
+                                if (ownerSuccess != null && ownerSuccess != successDialog)
+                                    successDialog.Owner = ownerSuccess;
+                                successDialog.ShowDialog();
+                            }
+                        }
+                        
                         await CargarInventariosAsync();
                     }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al consolidar inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al consolidar inventario: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -363,25 +482,35 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
-                var resultado = MessageBox.Show(
-                    "¿Está seguro de que desea cerrar este inventario? Se generarán los ajustes correspondientes.",
-                    "Confirmar cierre",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-
-                if (resultado == MessageBoxResult.Yes)
+                var confirmDialog = new ConfirmationDialog("Confirmar cierre", "¿Está seguro de que desea cerrar este inventario? Se generarán los ajustes correspondientes.");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != confirmDialog)
+                    confirmDialog.Owner = owner;
+                
+                if (confirmDialog.ShowDialog() == true)
                 {
                     var cerrado = await _inventarioService.CerrarInventarioAsync(inventario.IdInventario);
                     if (cerrado)
                     {
-                        MessageBox.Show("Inventario cerrado correctamente.", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                        var successDialog = new WarningDialog("Éxito", "Inventario cerrado correctamente.");
+                        var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                       ?? Application.Current.MainWindow;
+                        if (ownerSuccess != null && ownerSuccess != successDialog)
+                            successDialog.Owner = ownerSuccess;
+                        successDialog.ShowDialog();
                         await CargarInventariosAsync();
                     }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cerrar inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al cerrar inventario: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -391,7 +520,10 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 var dialog = new ContarInventarioDialog(inventario);
-                dialog.Owner = Application.Current.MainWindow;
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != dialog)
+                    dialog.Owner = owner;
                 
                 var result = dialog.ShowDialog();
                 
@@ -403,7 +535,12 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al abrir conteo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al abrir conteo: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -412,12 +549,22 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
-                // TODO: Abrir diálogo para ver detalles del inventario
-                MessageBox.Show($"Ver detalles del inventario {inventario.IdInventario} - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                // Abrir diálogo para ver detalles del inventario
+                var dialog = new VerInventarioDialog(inventario);
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != dialog)
+                    dialog.Owner = owner;
+                dialog.ShowDialog();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al ver inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al ver inventario: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -435,12 +582,22 @@ namespace SGA_Desktop.ViewModels
                 if (saveFileDialog.ShowDialog() == true)
                 {
                     await ExportarAExcelAsync(saveFileDialog.FileName);
-                    MessageBox.Show("Inventarios exportados correctamente.", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                    var successDialog = new WarningDialog("Éxito", "Inventarios exportados correctamente.");
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (owner != null && owner != successDialog)
+                        successDialog.Owner = owner;
+                    successDialog.ShowDialog();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al exportar: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al exportar: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
         #endregion
@@ -473,7 +630,12 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar almacenes: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al cargar almacenes: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -486,14 +648,147 @@ namespace SGA_Desktop.ViewModels
         {
             if (item is not InventarioCabeceraDto inventario) return false;
 
-            // TODO: Implementar filtros si es necesario
+            // Filtro por ID de inventario
+            if (!string.IsNullOrWhiteSpace(IdInventarioFiltro))
+            {
+                if (!inventario.IdInventarioCorto.Contains(IdInventarioFiltro, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            // TODO: Implementar otros filtros si es necesario
             return true;
         }
 
         private async Task ExportarAExcelAsync(string filePath)
         {
-            // TODO: Implementar exportación a Excel
-            await Task.Delay(1000); // Placeholder
+            try
+            {
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("Inventarios");
+
+                // Configurar encabezados
+                var headers = new[]
+                {
+                    "ID Inventario",
+                    "Almacén",
+                    "Tipo",
+                    "Estado",
+                    "Rango Ubicaciones",
+                    "Comentarios",
+                    "Usuario Creación",
+                    "Fecha Creación",
+                    "Fecha Cierre",
+                    "Total Líneas"
+                };
+
+                // Escribir encabezados
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    worksheet.Cell(1, i + 1).Value = headers[i];
+                    worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                    worksheet.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.LightBlue;
+                    worksheet.Cell(1, i + 1).Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                }
+
+                // Escribir datos
+                int row = 2;
+                foreach (var inventario in Inventarios)
+                {
+                    // Obtener el total de líneas para este inventario
+                    var totalLineas = await ObtenerTotalLineasInventarioAsync(inventario.IdInventario);
+
+                    worksheet.Cell(row, 1).Value = inventario.IdInventarioCorto;
+                    worksheet.Cell(row, 2).Value = inventario.CodigoAlmacen;
+                    worksheet.Cell(row, 3).Value = inventario.TipoInventarioFormateado;
+                    worksheet.Cell(row, 4).Value = inventario.EstadoFormateado;
+                    worksheet.Cell(row, 5).Value = inventario.RangoUbicaciones;
+                    worksheet.Cell(row, 6).Value = inventario.Comentarios;
+                    worksheet.Cell(row, 7).Value = inventario.UsuarioCreacionNombre;
+                    worksheet.Cell(row, 8).Value = inventario.FechaCreacion.ToString("dd/MM/yyyy HH:mm");
+                    worksheet.Cell(row, 9).Value = inventario.FechaCierre?.ToString("dd/MM/yyyy HH:mm") ?? "";
+                    worksheet.Cell(row, 10).Value = totalLineas;
+
+                    // Aplicar formato a las celdas de fecha
+                    worksheet.Cell(row, 8).Style.NumberFormat.Format = "dd/mm/yyyy hh:mm";
+                    if (inventario.FechaCierre.HasValue)
+                    {
+                        worksheet.Cell(row, 9).Style.NumberFormat.Format = "dd/mm/yyyy hh:mm";
+                    }
+
+                    row++;
+                }
+
+                // Autoajustar columnas
+                worksheet.Columns().AdjustToContents();
+
+                // Agregar información del filtro aplicado
+                var infoRow = row + 2;
+                worksheet.Cell(infoRow, 1).Value = "INFORMACIÓN DEL FILTRO APLICADO:";
+                worksheet.Cell(infoRow, 1).Style.Font.Bold = true;
+                worksheet.Cell(infoRow, 1).Style.Font.FontColor = XLColor.DarkBlue;
+                worksheet.Range(infoRow, 1, infoRow, headers.Length).Merge();
+
+                var almacenRow = infoRow + 1;
+                worksheet.Cell(almacenRow, 1).Value = $"Almacén: {AlmacenSeleccionadoCombo?.CodigoAlmacen ?? "Todos"}";
+                worksheet.Cell(almacenRow, 1).Style.Font.FontColor = XLColor.Gray;
+                worksheet.Range(almacenRow, 1, almacenRow, headers.Length).Merge();
+
+                var fechaRow = almacenRow + 1;
+                worksheet.Cell(fechaRow, 1).Value = $"Período: {FechaDesde:dd/MM/yyyy} - {FechaHasta:dd/MM/yyyy}";
+                worksheet.Cell(fechaRow, 1).Style.Font.FontColor = XLColor.Gray;
+                worksheet.Range(fechaRow, 1, fechaRow, headers.Length).Merge();
+
+                var estadoRow = fechaRow + 1;
+                worksheet.Cell(estadoRow, 1).Value = $"Estado: {EstadoFiltro}";
+                worksheet.Cell(estadoRow, 1).Style.Font.FontColor = XLColor.Gray;
+                worksheet.Range(estadoRow, 1, estadoRow, headers.Length).Merge();
+
+                var idRow = estadoRow + 1;
+                if (!string.IsNullOrWhiteSpace(IdInventarioFiltro))
+                {
+                    worksheet.Cell(idRow, 1).Value = $"ID Filtro: {IdInventarioFiltro}";
+                    worksheet.Cell(idRow, 1).Style.Font.FontColor = XLColor.Gray;
+                    worksheet.Range(idRow, 1, idRow, headers.Length).Merge();
+                }
+
+                var totalRow = idRow + 1;
+                worksheet.Cell(totalRow, 1).Value = $"Total inventarios exportados: {Inventarios.Count}";
+                worksheet.Cell(totalRow, 1).Style.Font.Bold = true;
+                worksheet.Cell(totalRow, 1).Style.Font.FontColor = XLColor.DarkGreen;
+                worksheet.Range(totalRow, 1, totalRow, headers.Length).Merge();
+
+                var fechaExportRow = totalRow + 1;
+                worksheet.Cell(fechaExportRow, 1).Value = $"Fecha de exportación: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+                worksheet.Cell(fechaExportRow, 1).Style.Font.FontColor = XLColor.Gray;
+                worksheet.Range(fechaExportRow, 1, fechaExportRow, headers.Length).Merge();
+
+                // Guardar archivo
+                workbook.SaveAs(filePath);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al generar el archivo Excel: {ex.Message}");
+            }
+        }
+
+        private async Task<int> ObtenerTotalLineasInventarioAsync(Guid idInventario)
+        {
+            try
+            {
+                // Obtener líneas temporales (no consolidadas)
+                var lineasTemp = await _inventarioService.ObtenerLineasTemporalesAsync(idInventario);
+                
+                // Obtener líneas consolidadas
+                var lineasConsolidadas = await _inventarioService.ObtenerLineasInventarioAsync(idInventario);
+                
+                // Retornar el total de ambas
+                return lineasTemp.Count + lineasConsolidadas.Count;
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, retornar 0
+                return 0;
+            }
         }
         #endregion
     }

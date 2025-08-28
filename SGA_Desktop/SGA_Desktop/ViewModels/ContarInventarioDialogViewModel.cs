@@ -19,7 +19,7 @@ namespace SGA_Desktop.ViewModels
         #region Fields & Services
         private readonly InventarioService _inventarioService;
         private readonly StockService _stockService;
-        private List<ArticuloInventarioDto> _todosLosArticulos = new();
+        private List<LineaTemporalInventarioDto> _todosLosArticulos = new();
         #endregion
 
         #region Constructor
@@ -28,7 +28,7 @@ namespace SGA_Desktop.ViewModels
             _inventarioService = inventarioService;
             _stockService = stockService;
             
-            ArticulosInventario = new ObservableCollection<ArticuloInventarioDto>();
+            ArticulosInventario = new ObservableCollection<LineaTemporalInventarioDto>();
 
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
                 _ = InitializeAsync();
@@ -41,7 +41,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private InventarioCabeceraDto? inventario;
 
-        public ObservableCollection<ArticuloInventarioDto> ArticulosInventario { get; }
+        public ObservableCollection<LineaTemporalInventarioDto> ArticulosInventario { get; }
 
         [ObservableProperty]
         private string filtroUbicacion = string.Empty;
@@ -50,7 +50,7 @@ namespace SGA_Desktop.ViewModels
         private string filtroArticulo = string.Empty;
 
         [ObservableProperty]
-        private ArticuloInventarioDto? articuloSeleccionado;
+        private LineaTemporalInventarioDto? articuloSeleccionado;
 
         [ObservableProperty]
         private bool isCargando = false;
@@ -58,20 +58,18 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string mensajeEstado = string.Empty;
 
-        [ObservableProperty]
-        private bool sumarUnidades = false;
 
-        [ObservableProperty]
-        private decimal unidadesGlobales = 0;
 
         [ObservableProperty]
         private bool puedeGuardar = false;
+
+
         #endregion
 
         #region Computed Properties
         public bool CanCargarArticulos => !IsCargando && Inventario != null;
         public string TotalArticulos => $"Total: {ArticulosInventario.Count} artículos";
-        public string ArticulosContados => $"Contados: {ArticulosInventario.Count(a => a.CantidadInventario > 0)}";
+        public string ArticulosContados => $"Contados: {ArticulosInventario.Count(a => a.CantidadContada.HasValue)}";
         #endregion
 
         #region Property Change Callbacks
@@ -87,6 +85,7 @@ namespace SGA_Desktop.ViewModels
         partial void OnIsCargandoChanged(bool oldValue, bool newValue)
         {
             OnPropertyChanged(nameof(CanCargarArticulos));
+            ValidarFormulario(); // Revalidar cuando cambie IsCargando
         }
 
         partial void OnFiltroUbicacionChanged(string oldValue, string newValue)
@@ -99,24 +98,16 @@ namespace SGA_Desktop.ViewModels
             AplicarFiltros();
         }
 
-        partial void OnUnidadesGlobalesChanged(decimal oldValue, decimal newValue)
-        {
-            if (SumarUnidades && newValue > 0)
-            {
-                AplicarUnidadesGlobales();
-            }
-        }
 
-        partial void OnSumarUnidadesChanged(bool oldValue, bool newValue)
+
+        partial void OnArticuloSeleccionadoChanged(LineaTemporalInventarioDto? oldValue, LineaTemporalInventarioDto? newValue)
         {
-            if (newValue && UnidadesGlobales > 0)
-            {
-                AplicarUnidadesGlobales();
-            }
+            ValidarFormulario();
         }
         #endregion
 
         #region Commands
+
         [RelayCommand]
         private async Task InitializeAsync()
         {
@@ -127,8 +118,29 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al inicializar: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al inicializar: {ex.Message}");
+                var ownerInit = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                            ?? Application.Current.MainWindow;
+                if (ownerInit != null && ownerInit != errorDialog)
+                    errorDialog.Owner = ownerInit;
+                errorDialog.ShowDialog();
             }
+        }
+
+        [RelayCommand]
+        private void SeleccionarArticulo(LineaTemporalInventarioDto? articulo)
+        {
+            if (articulo == null) return;
+
+            // Deseleccionar todos los artículos
+            foreach (var item in ArticulosInventario)
+            {
+                item.IsSelected = false;
+            }
+            
+            // Seleccionar el artículo actual
+            articulo.IsSelected = true;
+            ArticuloSeleccionado = articulo;
         }
 
         [RelayCommand]
@@ -139,35 +151,37 @@ namespace SGA_Desktop.ViewModels
                 if (Inventario == null) return;
 
                 IsCargando = true;
-                MensajeEstado = "Cargando artículos del inventario...";
+                MensajeEstado = "Cargando líneas temporales del inventario...";
 
-                // Crear filtro para obtener artículos del inventario
-                var filtro = new FiltroArticulosInventarioDto
-                {
-                    IdInventario = Inventario.IdInventario,
-                    CodigoUbicacion = FiltroUbicacion,
-                    CodigoArticulo = FiltroArticulo
-                };
+                // Obtener líneas temporales del inventario
+                var lineas = await _inventarioService.ObtenerLineasTemporalesAsync(Inventario.IdInventario);
 
-                // Obtener artículos reales del servicio
-                var articulos = await _inventarioService.ObtenerArticulosInventarioAsync(filtro);
 
-                // Guardar todos los artículos y aplicar filtros
-                _todosLosArticulos = articulos;
+
+                // Guardar todas las líneas y aplicar filtros
+                _todosLosArticulos = lineas;
                 AplicarFiltros();
 
-                MensajeEstado = $"Cargados {articulos.Count} artículos";
+                MensajeEstado = $"Cargadas {lineas.Count} líneas temporales";
             }
             catch (Exception ex)
             {
                 MensajeEstado = $"Error: {ex.Message}";
-                MessageBox.Show($"Error al cargar artículos: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al cargar líneas temporales: {ex.Message}");
+                var ownerLoad = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                            ?? Application.Current.MainWindow;
+                if (ownerLoad != null && ownerLoad != errorDialog)
+                    errorDialog.Owner = ownerLoad;
+                errorDialog.ShowDialog();
             }
             finally
             {
                 IsCargando = false;
+                ValidarFormulario(); // Revalidar después de cambiar IsCargando
             }
         }
+
+
 
         [RelayCommand]
         private void LimpiarFiltros()
@@ -183,50 +197,54 @@ namespace SGA_Desktop.ViewModels
             // Pero lo mantenemos por si se quiere usar para algo específico
         }
 
-        [RelayCommand]
-        private void CambiarUbicacion()
-        {
-            if (ArticuloSeleccionado == null)
-            {
-                MessageBox.Show("Seleccione un artículo para cambiar su ubicación", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
 
-            // TODO: Implementar cambio de ubicación
-            MessageBox.Show($"Cambiar ubicación del artículo {ArticuloSeleccionado.CodigoArticulo} - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
 
-        [RelayCommand]
-        private void AnadirArticulo()
-        {
-            // TODO: Implementar añadir artículo al inventario
-            MessageBox.Show("Añadir artículo al inventario - En desarrollo", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+
 
         [RelayCommand]
         private async Task GuardarConteoAsync()
         {
+
             try
             {
-                if (!PuedeGuardar) return;
 
-                var articulosModificados = ArticulosInventario
-                    .Where(a => a.CantidadInventario > 0)
-                    .ToList();
-
-                if (!articulosModificados.Any())
+                
+                if (!PuedeGuardar) 
                 {
-                    MessageBox.Show("No hay artículos con conteo para guardar", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
 
-                var confirmacion = MessageBox.Show(
-                    $"¿Está seguro de que desea guardar el conteo de {articulosModificados.Count} artículos?",
-                    "Confirmar guardado",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+                // SIEMPRE enviar TODAS las líneas del inventario, aunque no haya modificaciones
+                var lineasParaGuardar = ArticulosInventario.ToList();
 
-                if (confirmacion != MessageBoxResult.Yes) return;
+                var lineasConDiferencias = lineasParaGuardar
+                    .Where(a => Math.Abs(ObtenerCantidadContada(a) - a.StockActual) > 0.0001m)
+                    .ToList();
+
+                var totalArticulos = ArticulosInventario.Count;
+                var articulosContados = lineasParaGuardar.Count;
+
+                string mensajeConfirmacion;
+                if (lineasConDiferencias.Any())
+                {
+                    mensajeConfirmacion = $"¿Está seguro de que desea guardar el conteo?\n\n" +
+                                         $"• {lineasConDiferencias.Count} líneas con diferencias\n" +
+                                         $"• {articulosContados - lineasConDiferencias.Count} líneas sin diferencias\n" +
+                                         $"• {totalArticulos - articulosContados} líneas sin contar";
+                }
+                else
+                {
+                    mensajeConfirmacion = $"¿Está seguro de que desea guardar el conteo?\n\n" +
+                                         $"• {articulosContados} artículos contados sin diferencias\n" +
+                                         $"• {totalArticulos - articulosContados} líneas sin contar";
+                }
+
+                var confirmacion = new ConfirmationDialog("Confirmar guardado", mensajeConfirmacion);
+                var ownerConfirm = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                if (ownerConfirm != null && ownerConfirm != confirmacion)
+                    confirmacion.Owner = ownerConfirm;
+                if (confirmacion.ShowDialog() != true) return;
 
                 IsCargando = true;
                 MensajeEstado = "Guardando conteo...";
@@ -234,36 +252,55 @@ namespace SGA_Desktop.ViewModels
                 var dto = new GuardarConteoInventarioDto
                 {
                     IdInventario = Inventario!.IdInventario,
-                    Articulos = articulosModificados.Select(a => new ArticuloConteoDto
+                    Articulos = lineasParaGuardar.Select(a => new ArticuloConteoDto
                     {
                         CodigoArticulo = a.CodigoArticulo,
                         CodigoUbicacion = a.CodigoUbicacion,
-                        Partida = a.Partida,
-                        CantidadInventario = a.CantidadInventario.Value,
+                        Partida = a.Partida ?? "", // Usar la partida real de la línea temporal
+                        FechaCaducidad = a.FechaCaducidad, // Agregar fecha de caducidad
+                        CantidadInventario = ObtenerCantidadContada(a), // Obtener valor contado correctamente
                         UsuarioConteo = SessionManager.UsuarioActual!.operario
                     }).ToList()
                 };
+
+
 
                 var resultado = await _inventarioService.GuardarConteoInventarioAsync(dto);
 
                 if (resultado)
                 {
-                    MessageBox.Show("Conteo guardado correctamente.", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                    var successDialog = new WarningDialog("Éxito", "Conteo guardado correctamente.");
+                    var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                    if (ownerSuccess != null && ownerSuccess != successDialog)
+                        successDialog.Owner = ownerSuccess;
+                    successDialog.ShowDialog();
                     CerrarDialogo(true);
                 }
                 else
                 {
-                    MessageBox.Show("Error al guardar el conteo.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    var errorDialog = new WarningDialog("Error", "Error al guardar el conteo.");
+                    var ownerError = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                 ?? Application.Current.MainWindow;
+                    if (ownerError != null && ownerError != errorDialog)
+                        errorDialog.Owner = ownerError;
+                    errorDialog.ShowDialog();
                 }
             }
             catch (Exception ex)
             {
                 MensajeEstado = $"Error: {ex.Message}";
-                MessageBox.Show($"Error al guardar conteo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog("Error", $"Error al guardar conteo: {ex.Message}");
+                var ownerCatch = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                if (ownerCatch != null && ownerCatch != errorDialog)
+                    errorDialog.Owner = ownerCatch;
+                errorDialog.ShowDialog();
             }
             finally
             {
                 IsCargando = false;
+                ValidarFormulario(); // Revalidar después del guardado
             }
         }
 
@@ -272,12 +309,114 @@ namespace SGA_Desktop.ViewModels
         {
             CerrarDialogo(false);
         }
+
+        [RelayCommand]
+        private void CopiarCodigo(string codigo)
+        {
+            if (!string.IsNullOrWhiteSpace(codigo))
+            {
+                System.Windows.Clipboard.SetText(codigo);
+                FiltroArticulo = codigo; // Escribir en el campo de búsqueda de artículo
+                SeleccionarTextoFiltroArticulo(); // Seleccionar todo el texto
+            }
+        }
+
+        [RelayCommand]
+        private void CopiarDescripcion(string descripcion)
+        {
+            if (!string.IsNullOrWhiteSpace(descripcion))
+            {
+                System.Windows.Clipboard.SetText(descripcion);
+                FiltroArticulo = descripcion; // Escribir en el campo de búsqueda de artículo
+                SeleccionarTextoFiltroArticulo(); // Seleccionar todo el texto
+            }
+        }
+
+        [RelayCommand]
+        private void CopiarUbicacion(string ubicacion)
+        {
+            if (!string.IsNullOrWhiteSpace(ubicacion))
+            {
+                System.Windows.Clipboard.SetText(ubicacion);
+                FiltroUbicacion = ubicacion; // Escribir en el campo de búsqueda de ubicación
+                SeleccionarTextoFiltroUbicacion(); // Seleccionar todo el texto
+            }
+        }
+
+        /// <summary>
+        /// Selecciona todo el texto en el TextBox de filtro de artículo
+        /// </summary>
+        private void SeleccionarTextoFiltroArticulo()
+        {
+            // Usar Dispatcher para asegurar que se ejecute en el hilo de UI
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // Buscar el TextBox de filtro de artículo en la ventana
+                if (System.Windows.Application.Current.Windows.OfType<ContarInventarioDialog>().FirstOrDefault() is ContarInventarioDialog dialog)
+                {
+                    // Buscar el TextBox por nombre o usando VisualTreeHelper
+                    var textBox = FindTextBoxInVisualTree(dialog, "FiltroArticuloTextBox");
+                    if (textBox != null)
+                    {
+                        textBox.SelectAll();
+                        textBox.Focus();
+                    }
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Selecciona todo el texto en el TextBox de filtro de ubicación
+        /// </summary>
+        private void SeleccionarTextoFiltroUbicacion()
+        {
+            // Usar Dispatcher para asegurar que se ejecute en el hilo de UI
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // Buscar el TextBox de filtro de ubicación en la ventana
+                if (System.Windows.Application.Current.Windows.OfType<ContarInventarioDialog>().FirstOrDefault() is ContarInventarioDialog dialog)
+                {
+                    // Buscar el TextBox por nombre o usando VisualTreeHelper
+                    var textBox = FindTextBoxInVisualTree(dialog, "FiltroUbicacionTextBox");
+                    if (textBox != null)
+                    {
+                        textBox.SelectAll();
+                        textBox.Focus();
+                    }
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Busca un TextBox en el árbol visual por nombre
+        /// </summary>
+        private System.Windows.Controls.TextBox? FindTextBoxInVisualTree(System.Windows.DependencyObject parent, string name)
+        {
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is System.Windows.Controls.TextBox textBox && textBox.Name == name)
+                    return textBox;
+                
+                var result = FindTextBoxInVisualTree(child, name);
+                if (result != null)
+                    return result;
+            }
+            return null;
+        }
         #endregion
 
         #region Private Methods
         private void AplicarFiltros()
         {
             if (_todosLosArticulos == null) return;
+
+            // Desuscribirse de los eventos anteriores
+            foreach (var articulo in ArticulosInventario)
+            {
+                articulo.PropertyChanged -= OnArticuloPropertyChanged;
+            }
 
             var articulosFiltrados = _todosLosArticulos.AsEnumerable();
 
@@ -301,25 +440,33 @@ namespace SGA_Desktop.ViewModels
             foreach (var articulo in articulosFiltrados)
             {
                 ArticulosInventario.Add(articulo);
+                // Suscribirse a los cambios del artículo
+                articulo.PropertyChanged += OnArticuloPropertyChanged;
             }
 
             // Notificar cambios en las propiedades computadas
             OnPropertyChanged(nameof(TotalArticulos));
             OnPropertyChanged(nameof(ArticulosContados));
+            
+            // Validar formulario después de aplicar filtros
+            ValidarFormulario();
         }
 
-        private void AplicarUnidadesGlobales()
-        {
-            if (ArticuloSeleccionado != null)
-            {
-                ArticuloSeleccionado.CantidadInventario = UnidadesGlobales;
-            }
-        }
+
 
         private void ValidarFormulario()
         {
-            var tieneArticulosContados = ArticulosInventario.Any(a => a.CantidadInventario > 0);
-            PuedeGuardar = Inventario != null && tieneArticulosContados && !IsCargando;
+            // Siempre permitir guardar si hay líneas en el inventario
+            // Un inventario puede estar perfecto sin modificaciones
+            var tieneLineasEnInventario = ArticulosInventario.Any();
+            var nuevoPuedeGuardar = Inventario != null && tieneLineasEnInventario && !IsCargando;
+            
+            PuedeGuardar = nuevoPuedeGuardar;
+            
+            // Notificar cambios en las propiedades computadas
+            OnPropertyChanged(nameof(TotalArticulos));
+            OnPropertyChanged(nameof(ArticulosContados));
+            OnPropertyChanged(nameof(PuedeGuardar)); // Notificar explícitamente el cambio
         }
 
         private void CerrarDialogo(bool resultado)
@@ -329,6 +476,34 @@ namespace SGA_Desktop.ViewModels
                 dialog.DialogResult = resultado;
                 dialog.Close();
             }
+        }
+
+        private void OnArticuloPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(LineaTemporalInventarioDto.CantidadContada))
+            {
+                ValidarFormulario();
+            }
+        }
+
+        /// <summary>
+        /// Obtiene la cantidad contada de una línea, considerando tanto el valor decimal como el texto
+        /// </summary>
+        private decimal ObtenerCantidadContada(LineaTemporalInventarioDto linea)
+        {
+            // Si tiene valor decimal, usarlo
+            if (linea.CantidadContada.HasValue)
+                return linea.CantidadContada.Value;
+
+            // Si no tiene valor decimal pero tiene texto, intentar parsearlo
+            if (!string.IsNullOrWhiteSpace(linea.CantidadContadaTexto))
+            {
+                if (decimal.TryParse(linea.CantidadContadaTexto, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal result))
+                    return result;
+            }
+
+            // Si no se puede obtener, usar el stock actual
+            return linea.StockActual;
         }
         #endregion
     }

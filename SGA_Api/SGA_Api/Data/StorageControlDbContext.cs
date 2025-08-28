@@ -12,6 +12,7 @@ namespace SGA_Api.Data
         }
         public DbSet<AcumuladoStockUbicacion> AcumuladoStockUbicacion { get; set; }
 		public DbSet<Ubicaciones> Ubicaciones { get; set; }
+
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -22,6 +23,8 @@ namespace SGA_Api.Data
 		  .Entity<Ubicaciones>()
 		  .HasNoKey()
 		  .ToView("Ubicaciones");
+
+
 		}
     }
 }

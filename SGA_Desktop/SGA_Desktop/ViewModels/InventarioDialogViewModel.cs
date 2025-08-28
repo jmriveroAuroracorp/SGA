@@ -139,10 +139,10 @@ namespace SGA_Desktop.ViewModels
             if (ValidarDatos())
             {
                 // Cerrar diálogo con resultado positivo
-                if (Application.Current.MainWindow is Window mainWindow)
+                if (Application.Current.Windows.OfType<InventarioDialog>().FirstOrDefault() is InventarioDialog dialog)
                 {
-                    var dialog = mainWindow.OwnedWindows.OfType<InventarioDialog>().FirstOrDefault();
-                    dialog?.Close();
+                    dialog.DialogResult = true;
+                    dialog.Close();
                 }
             }
         }
@@ -151,10 +151,10 @@ namespace SGA_Desktop.ViewModels
         private void Cancelar()
         {
             // Cerrar diálogo con resultado negativo
-            if (Application.Current.MainWindow is Window mainWindow)
+            if (Application.Current.Windows.OfType<InventarioDialog>().FirstOrDefault() is InventarioDialog dialog)
             {
-                var dialog = mainWindow.OwnedWindows.OfType<InventarioDialog>().FirstOrDefault();
-                dialog?.Close();
+                dialog.DialogResult = false;
+                dialog.Close();
             }
         }
         #endregion
@@ -185,19 +185,24 @@ namespace SGA_Desktop.ViewModels
         {
             if (StockFisico < 0)
             {
-                MessageBox.Show("El stock físico no puede ser negativo.", "Validación", MessageBoxButton.OK, MessageBoxImage.Warning);
+                var warningDialog = new WarningDialog("Validación", "El stock físico no puede ser negativo.");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != warningDialog)
+                    warningDialog.Owner = owner;
+                warningDialog.ShowDialog();
                 return false;
             }
 
             if (string.IsNullOrWhiteSpace(Observaciones) && Math.Abs(Diferencia) > 0.01m)
             {
-                var resultado = MessageBox.Show(
-                    "Hay una diferencia entre el stock del sistema y el físico. ¿Desea añadir observaciones?",
-                    "Confirmación",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+                var confirmDialog = new ConfirmationDialog("Confirmación", "Hay una diferencia entre el stock del sistema y el físico. ¿Desea añadir observaciones?");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != confirmDialog)
+                    confirmDialog.Owner = owner;
 
-                if (resultado == MessageBoxResult.Yes)
+                if (confirmDialog.ShowDialog() == true)
                 {
                     return false; // Mantener el diálogo abierto para que añada observaciones
                 }

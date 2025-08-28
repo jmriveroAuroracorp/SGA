@@ -4,41 +4,58 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.Inventario
 {
-    [Table("InventarioLineas")]
-    public class InventarioLineas
-    {
-        [Key]
-        public Guid IdLinea { get; set; }
+	[Table("InventarioLineas")]
+	public class InventarioLineas
+	{
+		[Key]
+		public Guid IdLinea { get; set; }
 
-        [Required]
-        public Guid IdInventario { get; set; }
+		[Required]
+		public Guid IdInventario { get; set; }
 
-        [Required]
-        [StringLength(30)]
-        public string CodigoArticulo { get; set; } = string.Empty;
+		[Required]
+		[StringLength(30)]
+		public string CodigoArticulo { get; set; } = string.Empty;
 
-        [Required]
-        [StringLength(30)]
-        public string CodigoUbicacion { get; set; } = string.Empty;
+		[Required]
+		[StringLength(30)]
+		public string CodigoUbicacion { get; set; } = string.Empty;
 
-        [Required]
-        public decimal StockTeorico { get; set; } = 0;
+		[Required]
+		[Column(TypeName = "decimal(18,4)")]
+		public decimal StockTeorico { get; set; } = 0;
 
-        public decimal? StockContado { get; set; }
+		[Column(TypeName = "decimal(18,4)")]
+		public decimal? StockContado { get; set; }
 
-        [Required]
-        [StringLength(20)]
-        public string Estado { get; set; } = "PENDIENTE";
+		[Required]
+		[StringLength(20)]
+		public string Estado { get; set; } = "PENDIENTE";
 
-        public int? UsuarioValidacionId { get; set; }
+		public int? UsuarioValidacionId { get; set; }
 
-        public DateTime? FechaValidacion { get; set; }
+		public DateTime? FechaValidacion { get; set; }
 
-        [StringLength(500)]
-        public string? Observaciones { get; set; }
+		[StringLength(500)]
+		public string? Observaciones { get; set; }
 
-        // Navigation property
-        [ForeignKey("IdInventario")]
-        public virtual InventarioCabecera Inventario { get; set; } = null!;
-    }
-} 
+		[StringLength(50)]
+		public string? Partida { get; set; }
+
+		public DateTime? FechaCaducidad { get; set; }
+
+		[Required]
+		[Column(TypeName = "decimal(18,4)")]
+		public decimal StockActual { get; set; } = 0;
+
+		/// <summary>
+		/// Ajuste final calculado: StockContado - StockActual
+		/// </summary>
+		[Column(TypeName = "decimal(18,4)")]
+		public decimal? AjusteFinal { get; set; }
+
+		// Navigation property
+		[ForeignKey("IdInventario")]
+		public virtual InventarioCabecera Inventario { get; set; } = null!;
+	}
+}

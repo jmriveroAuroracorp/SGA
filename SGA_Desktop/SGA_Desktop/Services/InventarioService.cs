@@ -9,6 +9,7 @@ using System.Windows;
 using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
+using SGA_Desktop.ViewModels;
 
 namespace SGA_Desktop.Services
 {
@@ -115,6 +116,29 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
+        /// Obtiene todos los registros de inventario existentes (sin filtro)
+        /// </summary>
+        public async Task<List<InventarioCabeceraDto>> ObtenerInventariosAsync()
+        {
+            try
+            {
+                var filtro = new FiltroInventarioDto
+                {
+                    CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+                    FechaDesde = DateTime.Today.AddDays(-365), // Último año
+                    FechaHasta = DateTime.Today.AddDays(1)
+                };
+                
+                return await ObtenerInventariosAsync(filtro);
+            }
+            catch (Exception ex)
+            {
+                // En servicios es mejor lanzar la excepción para que el ViewModel la maneje
+                throw new Exception($"Error al obtener inventarios: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Crea un nuevo registro de inventario
         /// </summary>
         public async Task<bool> CrearInventarioAsync(CrearInventarioDto inventario)
@@ -127,8 +151,7 @@ namespace SGA_Desktop.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al crear inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
+                throw new Exception($"Error al crear inventario: {ex.Message}", ex);
             }
         }
 
@@ -145,26 +168,66 @@ namespace SGA_Desktop.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al registrar conteo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
+                throw new Exception($"Error al registrar conteo: {ex.Message}", ex);
             }
         }
 
         /// <summary>
-        /// Consolida las líneas temporales de un inventario
+        /// Consolida las líneas temporales de un inventario de forma inteligente
         /// </summary>
-        public async Task<bool> ConsolidarInventarioAsync(Guid idInventario)
+        public async Task<(bool success, bool tieneAdvertencias, List<object> lineasConStockCambiado)> ConsolidarInventarioAsync(Guid idInventario)
         {
             try
             {
-                var response = await _httpClient.PostAsync($"Inventario/consolidar/{idInventario}", null);
+                var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
+                var response = await _httpClient.PostAsync($"Inventario/consolidar-inteligente/{idInventario}?usuarioValidacionId={usuarioId}", null);
                 response.EnsureSuccessStatusCode();
-                return true;
+                
+                var json = await response.Content.ReadAsStringAsync();
+                var resultado = JsonConvert.DeserializeObject<dynamic>(json);
+                
+                bool tieneAdvertencias = resultado?.tieneAdvertencias ?? false;
+                var lineasConStockCambiado = new List<object>();
+                
+                if (tieneAdvertencias && resultado?.lineasConStockCambiado != null)
+                {
+                    lineasConStockCambiado = resultado.lineasConStockCambiado.ToObject<List<object>>();
+                }
+                
+                return (true, tieneAdvertencias, lineasConStockCambiado);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al consolidar inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
+                throw new Exception($"Error al consolidar inventario: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Verifica si hay advertencias de consolidación sin consolidar el inventario
+        /// </summary>
+        public async Task<(bool success, bool tieneAdvertencias, List<object> lineasConStockCambiado)> VerificarAdvertenciasConsolidacionAsync(Guid idInventario)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"Inventario/verificar-advertencias/{idInventario}");
+                response.EnsureSuccessStatusCode();
+                
+                var json = await response.Content.ReadAsStringAsync();
+                var resultado = JsonConvert.DeserializeObject<dynamic>(json);
+                
+                bool tieneAdvertencias = resultado?.tieneAdvertencias ?? false;
+                var lineasConStockCambiado = new List<object>();
+                
+                if (tieneAdvertencias && resultado?.lineasConStockCambiado != null)
+                {
+                    lineasConStockCambiado = resultado.lineasConStockCambiado.ToObject<List<object>>();
+                }
+                
+                return (true, tieneAdvertencias, lineasConStockCambiado);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al verificar advertencias: {ex.Message}", ex);
             }
         }
 
@@ -181,23 +244,22 @@ namespace SGA_Desktop.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cerrar inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
+                throw new Exception($"Error al cerrar inventario: {ex.Message}", ex);
             }
         }
 
         /// <summary>
         /// Obtiene las líneas de un inventario
         /// </summary>
-        public async Task<List<object>> ObtenerLineasInventarioAsync(Guid idInventario)
+        public async Task<List<LineaInventarioDto>> ObtenerLineasInventarioAsync(Guid idInventario)
         {
             try
             {
-                return await GetAsync<List<object>>($"Inventario/lineas/{idInventario}");
+                return await GetAsync<List<LineaInventarioDto>>($"Inventario/lineas/{idInventario}");
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                return new List<object>();
+                return new List<LineaInventarioDto>();
             }
         }
 
@@ -229,11 +291,11 @@ namespace SGA_Desktop.Services
                 if (inventario == null)
                     return new List<ArticuloInventarioDto>();
 
-                // Construir la URL para el endpoint de Stock con incluirStockCero=true
+                // Construir la URL para el endpoint de Stock SIN incluir stock cero
                 var empresa = SessionManager.EmpresaSeleccionada!.Value;
                 var almacen = inventario.CodigoAlmacen;
                 
-                var url = $"Stock/ubicacion?codigoEmpresa={empresa}&codigoAlmacen={Uri.EscapeDataString(almacen)}&incluirStockCero=true";
+                var url = $"Stock/ubicacion?codigoEmpresa={empresa}&codigoAlmacen={Uri.EscapeDataString(almacen)}&incluirStockCero=false";
                 
                 // Agregar filtro de ubicación si está especificado
                 if (!string.IsNullOrWhiteSpace(filtro.CodigoUbicacion))
@@ -241,7 +303,7 @@ namespace SGA_Desktop.Services
                     url += $"&codigoUbicacion={Uri.EscapeDataString(filtro.CodigoUbicacion)}";
                 }
 
-                // Obtener stock de las ubicaciones (incluyendo stock 0)
+                // Obtener stock de las ubicaciones (SIN incluir stock 0)
                 var stockData = await GetAsync<List<StockUbicacionDto>>(url);
 
                 // Convertir a ArticuloInventarioDto
@@ -274,8 +336,7 @@ namespace SGA_Desktop.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al obtener artículos del inventario: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return new List<ArticuloInventarioDto>();
+                throw new Exception($"Error al obtener artículos del inventario: {ex.Message}", ex);
             }
         }
 
@@ -292,8 +353,64 @@ namespace SGA_Desktop.Services
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar conteo: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
+                throw new Exception($"Error al guardar conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtiene las líneas temporales de un inventario
+        /// </summary>
+        public async Task<List<LineaTemporalInventarioDto>> ObtenerLineasTemporalesAsync(Guid idInventario)
+        {
+            try
+            {
+                return await GetAsync<List<LineaTemporalInventarioDto>>($"Inventario/lineas-temporales/{idInventario}");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new List<LineaTemporalInventarioDto>();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener líneas temporales: {ex.Message}", ex);
+            }
+        }
+
+
+
+        /// <summary>
+        /// Obtiene las líneas problemáticas de un inventario (con stock cambiado)
+        /// </summary>
+        public async Task<List<Models.LineaProblematicaDto>> ObtenerLineasProblematicasAsync(Guid idInventario)
+        {
+            try
+            {
+                return await GetAsync<List<Models.LineaProblematicaDto>>($"Inventario/lineas-problematicas/{idInventario}");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new List<Models.LineaProblematicaDto>();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener líneas problemáticas: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Guarda el reconteo de líneas problemáticas
+        /// </summary>
+        public async Task<bool> GuardarReconteoAsync(GuardarReconteoDto reconteo)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsJsonAsync("Inventario/guardar-reconteo", reconteo);
+                response.EnsureSuccessStatusCode();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al guardar reconteo: {ex.Message}", ex);
             }
         }
 

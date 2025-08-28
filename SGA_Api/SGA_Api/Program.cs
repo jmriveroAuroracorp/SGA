@@ -34,6 +34,13 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IPesajeService, PesajeLogic>();
+builder.Services.AddScoped<IConteosService>(provider => 
+    new ConteosService(
+        provider.GetRequiredService<AuroraSgaDbContext>(),
+        provider.GetRequiredService<SageDbContext>(),
+        provider.GetRequiredService<StorageControlDbContext>(),
+        provider.GetRequiredService<ILogger<ConteosService>>()
+    ));
 builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
 
 // CORS aqu

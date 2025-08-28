@@ -9,6 +9,7 @@ using SGA_Api.Models.UsuarioConf;
 using System;
 using System.Data;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 
 namespace SGA_Api.Controllers.Palet;
 
@@ -19,15 +20,18 @@ public class PaletController : ControllerBase
 	private readonly AuroraSgaDbContext _auroraSgaContext;
 	private readonly SageDbContext _sageContext;
 	private readonly StorageControlDbContext _storageContext;
+	private readonly ILogger<PaletController> _logger;
 
 	public PaletController(
 		AuroraSgaDbContext auroraSgaContext,
 		SageDbContext sageContext,
-		StorageControlDbContext storageContext)
+		StorageControlDbContext storageContext,
+		ILogger<PaletController> logger)
 	{
 		_auroraSgaContext = auroraSgaContext;
 		_sageContext = sageContext;
 		_storageContext = storageContext;
+		_logger = logger;
 	}
 
 	#region GET: Catálogo de tipos
@@ -870,6 +874,9 @@ public class PaletController : ControllerBase
 			_auroraSgaContext.TempPaletLineas.Update(linea);
 		}
 
+		// === NUEVO: Aplicar lógica de inventario cuando se cierra el palet ===
+		await AplicarLogicaInventarioAlCerrarPaletAsync(palet.Id, dto.CodigoEmpresa);
+
 		await _auroraSgaContext.SaveChangesAsync();
 
 		return Ok(new
@@ -877,6 +884,97 @@ public class PaletController : ControllerBase
 			message = $"Palet {palet.Codigo} cerrado correctamente y traspasos de artículos creados.",
 			traspasosIds = traspasosCreados
 		});
+	}
+
+	/// <summary>
+	/// Aplica la lógica de inventario cuando se cierra un palet
+	/// </summary>
+	private async Task AplicarLogicaInventarioAlCerrarPaletAsync(Guid paletId, short codigoEmpresa)
+	{
+		try
+		{
+			// Obtener todas las líneas del palet (definitivas y temporales)
+			var lineasPalet = await _auroraSgaContext.PaletLineas
+				.Where(pl => pl.PaletId == paletId)
+				.ToListAsync();
+
+			var lineasTempPalet = await _auroraSgaContext.TempPaletLineas
+				.Where(tpl => tpl.PaletId == paletId && !tpl.Procesada)
+				.ToListAsync();
+
+			// Crear una lista unificada con información común
+			var todasLasLineas = lineasPalet.Select(pl => new
+			{
+				pl.CodigoArticulo,
+				pl.CodigoAlmacen,
+				pl.Ubicacion,
+				pl.Cantidad,
+				pl.Lote
+			}).ToList();
+
+			todasLasLineas.AddRange(lineasTempPalet.Select(tpl => new
+			{
+				tpl.CodigoArticulo,
+				tpl.CodigoAlmacen,
+				tpl.Ubicacion,
+				tpl.Cantidad,
+				tpl.Lote
+			}));
+
+			// Agrupar por ubicación
+			var lineasPorUbicacion = todasLasLineas
+				.GroupBy(l => new { l.CodigoAlmacen, l.Ubicacion })
+				.ToList();
+
+			foreach (var grupo in lineasPorUbicacion)
+			{
+				var ubicacion = grupo.Key.Ubicacion;
+				var esUbicacionNormal = ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase);
+
+				// Buscar líneas de inventario temporales para esta ubicación
+				var lineasInventario = await _auroraSgaContext.InventarioLineasTemp
+					.Where(ilt => !ilt.Consolidado && 
+								  ilt.CodigoUbicacion == ubicacion &&
+								  grupo.Any(l => l.CodigoArticulo == ilt.CodigoArticulo))
+					.ToListAsync();
+
+				foreach (var lineaInventario in lineasInventario)
+				{
+					var diferencia = (lineaInventario.CantidadContada ?? 0) - lineaInventario.StockActual;
+
+					if (Math.Abs(diferencia) > 0.001m) // Hay diferencia significativa
+					{
+						if (esUbicacionNormal)
+						{
+							// Ubicación normal: modificar visualmente el palet existente
+							var lineaPalet = grupo.FirstOrDefault(l => l.CodigoArticulo == lineaInventario.CodigoArticulo);
+							if (lineaPalet != null)
+							{
+								// Buscar la línea real del palet para modificarla
+								var lineaPaletReal = lineasPalet.FirstOrDefault(pl => 
+									pl.CodigoArticulo == lineaInventario.CodigoArticulo && 
+									pl.Ubicacion == ubicacion);
+								
+								if (lineaPaletReal != null)
+								{
+									lineaPaletReal.Cantidad = lineaInventario.CantidadContada ?? 0;
+									_logger.LogInformation($"Palet modificado visualmente: {lineaPaletReal.CodigoArticulo} en {ubicacion}, nueva cantidad: {lineaPaletReal.Cantidad}");
+								}
+							}
+						}
+						else
+						{
+							// Ubicación especial: NO modificamos palets, el servicio externo se encarga
+							_logger.LogInformation($"Stock sin paletizar: {lineaInventario.CodigoArticulo} en {ubicacion}, diferencia: {diferencia} - El servicio externo se encargará");
+						}
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error al aplicar lógica de inventario al cerrar palet {PaletId}", paletId);
+		}
 	}
 
 

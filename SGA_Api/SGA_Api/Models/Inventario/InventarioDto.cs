@@ -1,3 +1,4 @@
+using SGA_Api.Models.Palet;
 using System.Text.Json.Serialization;
 
 namespace SGA_Api.Models.Inventario
@@ -11,7 +12,7 @@ namespace SGA_Api.Models.Inventario
         public string CodigoInventario { get; set; } = string.Empty;
 
         [JsonPropertyName("codigoEmpresa")]
-        public int CodigoEmpresa { get; set; }
+        public short CodigoEmpresa { get; set; }
 
         [JsonPropertyName("codigoAlmacen")]
         public string CodigoAlmacen { get; set; } = string.Empty;
@@ -27,6 +28,109 @@ namespace SGA_Api.Models.Inventario
 
         [JsonPropertyName("usuarioCreacionId")]
         public int UsuarioCreacionId { get; set; }
+
+        // Propiedades para rangos de ubicaciones
+        [JsonPropertyName("pasilloDesde")]
+        public int? PasilloDesde { get; set; }
+
+        [JsonPropertyName("pasilloHasta")]
+        public int? PasilloHasta { get; set; }
+
+        [JsonPropertyName("estanteriaDesde")]
+        public int? EstanteriaDesde { get; set; }
+
+        [JsonPropertyName("estanteriaHasta")]
+        public int? EstanteriaHasta { get; set; }
+
+        [JsonPropertyName("alturaDesde")]
+        public int? AlturaDesde { get; set; }
+
+        [JsonPropertyName("alturaHasta")]
+        public int? AlturaHasta { get; set; }
+
+        [JsonPropertyName("posicionDesde")]
+        public int? PosicionDesde { get; set; }
+
+        [JsonPropertyName("posicionHasta")]
+        public int? PosicionHasta { get; set; }
+
+        [JsonPropertyName("incluirUnidadesCero")]
+        public bool IncluirUnidadesCero { get; set; } = false;
+
+        [JsonPropertyName("incluirArticulosConStockCero")]
+        public bool IncluirArticulosConStockCero { get; set; } = false;
+
+        [JsonPropertyName("incluirUbicacionesEspeciales")]
+        public bool IncluirUbicacionesEspeciales { get; set; } = false;
+
+        [JsonPropertyName("fechaInventario")]
+        public DateTime FechaInventario { get; set; } = DateTime.Today.Date;
+
+        // NUEVO: Filtro de artículo específico
+        [JsonPropertyName("codigoArticuloFiltro")]
+        public string? CodigoArticuloFiltro { get; set; }
+    }
+
+    /// <summary>
+    /// DTO para líneas temporales de inventario con información adicional
+    /// </summary>
+    public class LineaTemporalInventarioDto
+    {
+        [JsonPropertyName("idTemp")]
+        public Guid IdTemp { get; set; }
+
+        [JsonPropertyName("idInventario")]
+        public Guid IdInventario { get; set; }
+
+        [JsonPropertyName("codigoArticulo")]
+        public string CodigoArticulo { get; set; } = string.Empty;
+
+        [JsonPropertyName("descripcionArticulo")]
+        public string? DescripcionArticulo { get; set; }
+
+        [JsonPropertyName("codigoUbicacion")]
+        public string CodigoUbicacion { get; set; } = string.Empty;
+
+        [JsonPropertyName("codigoAlmacen")]
+        public string CodigoAlmacen { get; set; } = string.Empty;
+
+        [JsonPropertyName("partida")]
+        public string? Partida { get; set; }
+
+        [JsonPropertyName("fechaCaducidad")]
+        public DateTime? FechaCaducidad { get; set; }
+
+        [JsonPropertyName("cantidadContada")]
+        public decimal? CantidadContada { get; set; }
+
+        [JsonPropertyName("stockActual")]
+        public decimal StockActual { get; set; }
+
+        [JsonPropertyName("usuarioConteoId")]
+        public int UsuarioConteoId { get; set; }
+
+        [JsonPropertyName("fechaConteo")]
+        public DateTime FechaConteo { get; set; }
+
+        [JsonPropertyName("observaciones")]
+        public string? Observaciones { get; set; }
+
+        [JsonPropertyName("consolidado")]
+        public bool Consolidado { get; set; }
+
+        [JsonPropertyName("fechaConsolidacion")]
+        public DateTime? FechaConsolidacion { get; set; }
+
+        [JsonPropertyName("usuarioConsolidacionId")]
+        public int? UsuarioConsolidacionId { get; set; }
+
+        // === PROPIEDADES PARA INFORMACIÓN DE PALETS ===
+        
+        /// <summary>
+        /// Información de los palets que contienen este stock
+        /// </summary>
+        [JsonPropertyName("palets")]
+        public List<PaletDetalleDto> Palets { get; set; } = new();
     }
 
     /// <summary>

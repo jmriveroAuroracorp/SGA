@@ -64,6 +64,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -106,8 +107,22 @@
                               Height="30"/>
                 </StackPanel>
 
+                <!-- ID Inventario -->
+                <StackPanel Grid.Column="4" Margin="0,0,15,0">
+                    <TextBlock Text="ID Inventario" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                    <TextBox 
+                          Text="{Binding IdInventarioFiltro, UpdateSourceTrigger=PropertyChanged}"
+                          Height="30"
+                          FontFamily="Consolas"
+                          FontSize="16"
+                          Padding="4,2"
+                          BorderThickness="1"
+                          BorderBrush="{StaticResource BrushInputBorde}"
+                          Background="White"/>
+                </StackPanel>
+
                 <!-- Botón cargar -->
-                <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                <StackPanel Grid.Column="5" VerticalAlignment="Center">
                     <Button 
                             Content="🔄 Cargar"
                         Command="{Binding CargarInventariosCommand}"

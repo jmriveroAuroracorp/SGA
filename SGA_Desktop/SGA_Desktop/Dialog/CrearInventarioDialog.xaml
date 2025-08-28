@@ -133,12 +133,13 @@
                             </ItemsControl>
                         </ScrollViewer>
 
-                        <!-- Botón marcar/desmarcar todo -->
+                        <!-- Botón marcar/desmarcar todo (oculto) -->
                         <Button Grid.Row="2" 
                                 Content="MARCAR/DESMARCAR TODO" 
                                 Style="{StaticResource EstiloBotonSecundario}"
                                 Margin="10,5,10,10"
-                                Command="{Binding MarcarTodosCommand}"/>
+                                Command="{Binding MarcarTodosCommand}"
+                                Visibility="Collapsed"/>
                     </Grid>
                 </Border>
 
@@ -161,14 +162,18 @@
                                 <TextBlock Text="Código de inventario:" FontWeight="SemiBold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding CodigoInventario, UpdateSourceTrigger=PropertyChanged}" 
                                          Style="{StaticResource EstiloCajaTexto}" 
-                                         Height="30"/>
+                                         Height="35"
+                                         MinWidth="200"
+                                         MaxLength="30"
+                                         HorizontalAlignment="Stretch"/>
                             </StackPanel>
 
                             <!-- Fecha de inventario -->
                             <StackPanel Margin="0,0,0,10">
                                 <TextBlock Text="Fecha de inventario:" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                                <DatePicker SelectedDate="{Binding FechaInventario}" 
-                                            Style="{StaticResource EstiloDatePicker}"/>
+                                <DatePicker SelectedDate="{Binding FechaInventario, StringFormat=dd/MM/yyyy}" 
+                                            Style="{StaticResource EstiloDatePicker}"
+                                            IsEnabled="False"/>
                             </StackPanel>
 
                             <!-- Incluir artículos -->
@@ -186,51 +191,85 @@
                                 <ComboBox ItemsSource="{Binding OpcionesValoracion}" 
                                           SelectedItem="{Binding ValoracionSeleccionada}"
                                           Style="{StaticResource EstiloComboBox}" 
-                                          Height="30"/>
+                                          Height="30"
+                                          IsEnabled="False"/>
                             </StackPanel>
 
-                            <!-- Artículos (rango) -->
+                            <!-- Artículos (filtro específico) -->
                             <GroupBox Header="Artículos" Margin="0,0,0,10">
-                                <Grid Margin="10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                <StackPanel Margin="10">
+                                    <!-- Checkbox para habilitar filtro de artículo -->
+                                    <CheckBox Content="Filtrar por artículo específico" 
+                                              IsChecked="{Binding UsarFiltroArticulo}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,0,0,10"/>
 
-                                    <CheckBox Grid.Column="0" 
-                                              Content="Especificar rango" 
-                                              IsChecked="{Binding UsarRangoArticulos}"
-                                              VerticalAlignment="Center" 
-                                              Margin="0,0,10,0"/>
+                                    <!-- Panel de búsqueda (visible cuando se activa el filtro) -->
+                                    <Grid Visibility="{Binding UsarFiltroArticulo, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
 
-                                    <TextBlock Grid.Column="1" Text="De:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                    <TextBox Grid.Column="2" 
-                                             Text="{Binding ArticuloDesde, UpdateSourceTrigger=PropertyChanged}" 
-                                             Style="{StaticResource EstiloCajaTexto}" 
-                                             Width="100" 
-                                             Margin="0,0,5,0"/>
-                                    <Button Grid.Column="3" 
-                                            Content="🔍" 
-                                            Width="25" 
-                                            Height="25" 
-                                            Margin="0,0,5,0"
-                                            Command="{Binding BuscarArticuloDesdeCommand}"/>
+                                        <!-- Campo de búsqueda -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="4" Text="a:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                    <TextBox Grid.Column="5" 
-                                             Text="{Binding ArticuloHasta, UpdateSourceTrigger=PropertyChanged}" 
-                                             Style="{StaticResource EstiloCajaTexto}" 
-                                             Width="100" 
-                                             Margin="0,0,5,0"/>
-                                    <Button Grid.Column="6" 
-                                            Content="🔍" 
-                                            Width="25" 
-                                            Height="25"
-                                            Command="{Binding BuscarArticuloHastaCommand}"/>
-                                </Grid>
+                                            <TextBlock Grid.Column="0" 
+                                                       Text="Buscar:" 
+                                                       VerticalAlignment="Center" 
+                                                       Margin="0,0,10,0" 
+                                                       FontWeight="SemiBold"/>
+                                            <TextBox Grid.Column="1" 
+                                                     Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}" 
+                                                     Style="{StaticResource EstiloCajaTexto}" 
+                                                     Height="35"
+                                                     Margin="0,0,10,0"
+                                                     ToolTip="Introduce código (ej: 10000) o descripción (ej: azúcar) del artículo"
+                                                     Tag="Código o descripción..."/>
+                                            <Button Grid.Column="2" 
+                                                    Content="🔍" 
+                                                    Height="30" 
+                                                    Width="30"
+                                                    Command="{Binding BuscarArticuloCommand}"/>
+                                        </Grid>
+
+                                        <!-- Lista de resultados -->
+                                        <ComboBox Grid.Row="1" 
+                                                  ItemsSource="{Binding ArticulosEncontrados}" 
+                                                  SelectedItem="{Binding ArticuloSeleccionado}"
+                                                  Style="{StaticResource EstiloComboBox}" 
+                                                  Height="30"
+                                                  Margin="0,0,0,10"
+                                                  Visibility="{Binding MostrarListaArticulos, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" Margin="0,0,5,0"/>
+                                                        <TextBlock Text="-" Margin="0,0,5,0"/>
+                                                        <TextBlock Text="{Binding DescripcionArticulo}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+
+                                        <!-- Info del artículo seleccionado -->
+                                        <TextBlock Grid.Row="2" 
+                                                   Foreground="#2E8B57" 
+                                                   FontStyle="Italic"
+                                                   Visibility="{Binding MostrarInfoArticulo, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <Run Text="✓ Artículo seleccionado:"/>
+                                            <Run Text="{Binding ArticuloSeleccionado.CodigoArticulo}" FontWeight="Bold"/>
+                                            <Run Text="-"/>
+                                            <Run Text="{Binding ArticuloSeleccionado.DescripcionArticulo}"/>
+                                        </TextBlock>
+                                    </Grid>
+                                </StackPanel>
                             </GroupBox>
 
                             <!-- Ubicaciones (rango) -->
@@ -245,6 +284,7 @@
                                     <!-- Rangos por dimensiones -->
                                     <Grid Visibility="{Binding UsarRangoUbicaciones, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
@@ -347,6 +387,14 @@
                                                   VerticalAlignment="Center"
                                                   IsEnabled="{Binding PosicionHabilitada}"/>
 
+                                        <!-- Ubicaciones especiales -->
+                                        <CheckBox Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="5"
+                                                  Content="Incluir ubicaciones especiales (sin ubicar, ND, etc.)" 
+                                                  IsChecked="{Binding IncluirUbicacionesEspeciales}"
+                                                  FontWeight="SemiBold" 
+                                                  VerticalAlignment="Center" 
+                                                  Margin="0,10,0,0"
+                                                  HorizontalAlignment="Left"/>
 
                                     </Grid>
                                 </StackPanel>
@@ -356,6 +404,8 @@
                             <CheckBox Content="Unidades a 0" 
                                       IsChecked="{Binding IncluirUnidadesCero}"
                                       Margin="0,0,0,10"/>
+
+
 
                             <!-- Comentarios -->
                             <StackPanel Margin="0,0,0,10">

@@ -21,7 +21,19 @@ namespace SGA_Api.Models.Inventario
         [StringLength(30)]
         public string CodigoUbicacion { get; set; } = string.Empty;
 
+        [StringLength(50)]
+        public string? Partida { get; set; }
+
+        public DateTime? FechaCaducidad { get; set; }
+
+        [Column(TypeName = "decimal(18,4)")]
         public decimal? CantidadContada { get; set; }
+
+        /// <summary>
+        /// Stock actual en la ubicación al momento de crear la línea temporal
+        /// </summary>
+        [Column(TypeName = "decimal(18,4)")]
+        public decimal StockActual { get; set; } = 0.0000m;
 
         [Required]
         public int UsuarioConteoId { get; set; }
@@ -38,6 +50,8 @@ namespace SGA_Api.Models.Inventario
         public DateTime? FechaConsolidacion { get; set; }
 
         public int? UsuarioConsolidacionId { get; set; }
+
+
 
         // Navigation property
         [ForeignKey("IdInventario")]

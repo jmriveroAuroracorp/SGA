@@ -57,6 +57,8 @@ namespace SGA_Desktop.Models
         public string EstadoFormateado => Estado switch
         {
             "ABIERTO" => "Abierto",
+            "EN_CONTEO" => "En Conteo",
+            "CONSOLIDADO" => "Consolidado",
             "PENDIENTE_CIERRE" => "Pendiente de Cierre",
             "CERRADO" => "Cerrado",
             _ => Estado
@@ -74,10 +76,10 @@ namespace SGA_Desktop.Models
         public bool PuedeContar => Estado == "ABIERTO";
 
         [JsonIgnore]
-        public bool PuedeConsolidar => Estado == "ABIERTO";
+        public bool PuedeConsolidar => Estado == "ABIERTO" || Estado == "EN_CONTEO";
 
         [JsonIgnore]
-        public bool PuedeCerrar => Estado == "PENDIENTE_CIERRE";
+        public bool PuedeCerrar => Estado == "CONSOLIDADO" || Estado == "PENDIENTE_CIERRE";
 
         [JsonIgnore]
         public string IdInventarioCorto => CodigoInventario; // Ahora usa el código personalizado

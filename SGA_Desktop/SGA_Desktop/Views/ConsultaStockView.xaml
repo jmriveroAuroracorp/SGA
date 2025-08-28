@@ -16,6 +16,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <helpers:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility"/>
         <helpers:PaletsCountToVisibilityConverter x:Key="PaletsCountToVisibility"/>
+        <helpers:NegativeValueColorConverter x:Key="NegativeValueColorConverter"/>
         <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
     </Page.Resources>
 
@@ -391,7 +392,8 @@ CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
                                        Margin="0,0,4,0"/>
                                     <TextBlock Text="{Binding UnidadSaldo, StringFormat=N4}"  
                                        FontWeight="Bold" 
-                                       FontSize="22"/>
+                                       FontSize="22"
+                                       Foreground="{Binding UnidadSaldo, Converter={StaticResource NegativeValueColorConverter}}"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -587,7 +589,8 @@ CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
                                        Margin="0,0,4,0"/>
                                     <TextBlock Text="{Binding UnidadSaldo, StringFormat=N4}"  
                                        FontWeight="Bold" 
-                                       FontSize="22"/>
+                                       FontSize="22"
+                                       Foreground="{Binding UnidadSaldo, Converter={StaticResource NegativeValueColorConverter}}"/>
                                 </StackPanel>
                             </Border>
                         </Grid>

@@ -14,5 +14,8 @@ namespace SGA_Api.Models.Almacen
 
 		[Column("Ubicacion")]
 		public string Ubicacion { get; set; } = null!;
+
+		[Column("Obsoleta")]
+		public int Obsoleta { get; set; }
 	}
 }

@@ -545,7 +545,8 @@
     <x:Array x:Key="EstadosInventario" Type="sys:String" xmlns:sys="clr-namespace:System;assembly=mscorlib">
         <sys:String>TODOS</sys:String>
         <sys:String>ABIERTO</sys:String>
-        <sys:String>PENDIENTE_CIERRE</sys:String>
+        <sys:String>EN_CONTEO</sys:String>
+        <sys:String>CONSOLIDADO</sys:String>
         <sys:String>CERRADO</sys:String>
     </x:Array>
 

@@ -17,7 +17,7 @@
         <vm:ContarInventarioDialogViewModel />
     </Window.DataContext>
 
-    <!-- 2) Carga de Estilos generales -->
+    <!-- 2) Recursos y Estilos -->
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -26,6 +26,23 @@
 
             <!-- Converters -->
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+            <helpers:DecimalInputConverter x:Key="DecimalInputConverter"/>
+            <helpers:NegativeValueColorConverter x:Key="NegativeValueColorConverter"/>
+            
+            <!-- Template para el header del expander -->
+            <DataTemplate x:Key="ExpanderHeaderTemplate">
+                <TextBlock Text="{Binding}" 
+                           FontSize="9" 
+                           FontWeight="Bold" 
+                           Foreground="Orange"
+                           HorizontalAlignment="Center"/>
+            </DataTemplate>
+            
+
+            
+            <!-- Proxy para acceder al ViewModel desde los DataTemplates -->
+            <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
         </ResourceDictionary>
     </Window.Resources>
 
@@ -39,7 +56,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="60"/>
                 <RowDefinition/>
-                <RowDefinition Height="140"/>
+                <RowDefinition Height="60"/>
             </Grid.RowDefinitions>
 
             <!-- Header -->
@@ -179,7 +196,8 @@
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"
                                        Margin="0,0,0,5"/>
-                            <TextBox Text="{Binding FiltroUbicacion}" 
+                            <TextBox Name="FiltroUbicacionTextBox"
+                                     Text="{Binding FiltroUbicacion, UpdateSourceTrigger=PropertyChanged}" 
                                      Style="{StaticResource EstiloCajaTexto}" 
                                      Height="40"/>
                         </StackPanel>
@@ -190,7 +208,8 @@
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"
                                        Margin="0,0,0,5"/>
-                            <TextBox Text="{Binding FiltroArticulo}" 
+                            <TextBox Name="FiltroArticuloTextBox"
+                                     Text="{Binding FiltroArticulo, UpdateSourceTrigger=PropertyChanged}" 
                                      Style="{StaticResource EstiloCajaTexto}" 
                                      Height="40"/>
                         </StackPanel>
@@ -243,105 +262,181 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- DataGrid de artículos -->
-                        <DataGrid Grid.Row="1" 
-                                  ItemsSource="{Binding ArticulosInventario}"
-                                  SelectedItem="{Binding ArticuloSeleccionado}"
-                                  AutoGenerateColumns="False"
-                                  CanUserAddRows="False"
-                                  CanUserDeleteRows="False"
-                                  CanUserReorderColumns="True"
-                                  CanUserResizeColumns="True"
-                                  CanUserSortColumns="True"
-                                  GridLinesVisibility="Horizontal"
-                                  HeadersVisibility="Column"
-                                  SelectionMode="Single"
-                                  Style="{StaticResource EstiloDataGrid}"
-                                  Margin="20,0,20,20">
+                        <!-- Cards de artículos -->
+                        <ScrollViewer Grid.Row="1" 
+                                      VerticalScrollBarVisibility="Auto" 
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Margin="20,0,20,20">
+                            <StackPanel>
+                                <!-- Header de columnas -->
+                                <Border Background="{StaticResource BrushSecundario}" 
+                                        BorderBrush="{StaticResource BrushIntermedio}" 
+                                        BorderThickness="0,0,0,1"
+                                        Padding="12,8"
+                                        Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="100"/>
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <TextBlock Grid.Column="0" Text="Código" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
+                                        <TextBlock Grid.Column="1" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
+                                        <TextBlock Grid.Column="2" Text="Almacén" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="3" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="4" Text="Partida" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="5" Text="Caducidad" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="6" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="7" Text="Palets" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="8" Text="Inventario" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
 
-                            <DataGrid.Columns>
-                                <!-- Icono -->
-                                <DataGridTemplateColumn Header="" Width="30">
-                                    <DataGridTemplateColumn.CellTemplate>
+                                <!-- Lista de artículos -->
+                                <ItemsControl ItemsSource="{Binding ArticulosInventario}">
+                                    <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="📦" FontSize="16" HorizontalAlignment="Center"/>
+                                            <Border Background="{Binding IsSelected, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='LightBlue|White'}"
+                                                    CornerRadius="6" 
+                                                    Padding="12" 
+                                                    Margin="0,0,0,8" 
+                                                    BorderThickness="1" 
+                                                    BorderBrush="{StaticResource BrushIntermedio}"
+                                                    Cursor="Hand">
+                                                <Border.InputBindings>
+                                                    <MouseBinding MouseAction="LeftClick" 
+                                                                  Command="{Binding DataContext.SeleccionarArticuloCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                                  CommandParameter="{Binding}"/>
+                                                </Border.InputBindings>
+                                                <Border.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="📋 Copiar código"
+                                                                  Command="{Binding Data.CopiarCodigoCommand, Source={StaticResource VmProxy}}"
+                                                                  CommandParameter="{Binding CodigoArticulo}" />
+                                                        <MenuItem Header="📝 Copiar descripción"
+                                                                  Command="{Binding Data.CopiarDescripcionCommand, Source={StaticResource VmProxy}}"
+                                                                  CommandParameter="{Binding DescripcionArticulo}" />
+                                                        <MenuItem Header="📍 Copiar ubicación"
+                                                                  Command="{Binding Data.CopiarUbicacionCommand, Source={StaticResource VmProxy}}"
+                                                                  CommandParameter="{Binding CodigoUbicacion}" />
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
+                                                <Border.Effect>
+                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.1"/>
+                                                </Border.Effect>
+                                                
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="80"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="120"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="80"/>
+                                                        <ColumnDefinition Width="120"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    
+                                                    <!-- Código -->
+                                                    <TextBlock Grid.Column="0" 
+                                                               Text="{Binding CodigoArticulo}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="13" 
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               VerticalAlignment="Center"/>
+                                                    
+                                                    <!-- Descripción -->
+                                                    <TextBlock Grid.Column="1" 
+                                                               Text="{Binding DescripcionArticulo}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               TextWrapping="Wrap"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0"/>
+                                                    
+                                                    <!-- Almacén -->
+                                                    <TextBlock Grid.Column="2" 
+                                                               Text="{Binding CodigoAlmacen}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Ubicación -->
+                                                    <TextBlock Grid.Column="3" 
+                                                               Text="{Binding CodigoUbicacion}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Partida -->
+                                                    <TextBlock Grid.Column="4" 
+                                                               Text="{Binding Partida}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Caducidad -->
+                                                    <TextBlock Grid.Column="5" 
+                                                               Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Stock -->
+                                                    <TextBlock Grid.Column="6" 
+                                                               Text="{Binding StockActual, StringFormat=F4}" 
+                                                               FontSize="12" 
+                                                               FontWeight="Bold"
+                                                               Foreground="{Binding StockActual, Converter={StaticResource NegativeValueColorConverter}}"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Palets -->
+                                                    <TextBlock Grid.Column="7" 
+                                                               Text="{Binding PaletsResumen}" 
+                                                               FontSize="10" 
+                                                               Foreground="{Binding TienePalets, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='DarkBlue|Gray'}"
+                                                               TextWrapping="Wrap"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               MaxWidth="110"/>
+                                                    
+                                                    <!-- Inventario (editable) -->
+                                                    <TextBox Grid.Column="8" 
+                                                             Text="{Binding CantidadContadaTexto, UpdateSourceTrigger=PropertyChanged}" 
+                                                             Width="80" 
+                                                             Height="24"
+                                                             FontSize="12"
+                                                             FontWeight="Bold"
+                                                             VerticalAlignment="Center"
+                                                             HorizontalAlignment="Center"
+                                                             Padding="4,2"
+                                                             BorderThickness="1"
+                                                             BorderBrush="Gray"
+                                                             PreviewTextInput="TextBox_PreviewTextInput"/>
+                                                </Grid>
+
+
+                                            </StackPanel>
+                                        </Border>
                                         </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-
-                                <!-- Artículo -->
-                                <DataGridTextColumn Header="Artículo" 
-                                                    Binding="{Binding DescripcionArticulo}" 
-                                                    Width="*" MinWidth="200"
-                                                    IsReadOnly="True"/>
-
-                                <!-- Almacén -->
-                                <DataGridTextColumn Header="Almacén" 
-                                                    Binding="{Binding CodigoAlmacen}" 
-                                                    Width="100" IsReadOnly="True"/>
-
-                                <!-- Ubicación -->
-                                <DataGridTextColumn Header="Ubicación" 
-                                                    Binding="{Binding CodigoUbicacion}" 
-                                                    Width="120" IsReadOnly="True"/>
-
-                                <!-- Partida -->
-                                <DataGridTextColumn Header="Partida" 
-                                                    Binding="{Binding Partida}" 
-                                                    Width="100" IsReadOnly="True"/>
-
-                                <!-- Caducidad -->
-                                <DataGridTextColumn Header="Caducidad" 
-                                                    Binding="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" 
-                                                    Width="100" IsReadOnly="True"/>
-
-                                <!-- Color -->
-                                <DataGridTextColumn Header="Color" 
-                                                    Binding="{Binding Color}" 
-                                                    Width="80" IsReadOnly="True"/>
-
-                                <!-- Talla -->
-                                <DataGridTextColumn Header="Talla" 
-                                                    Binding="{Binding Talla}" 
-                                                    Width="80" IsReadOnly="True"/>
-
-                                <!-- Stock -->
-                                <DataGridTextColumn Header="Stock" 
-                                                    Binding="{Binding StockActual}" 
-                                                    Width="80" IsReadOnly="True">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding StockActual}" Value="0">
-                                                    <Setter Property="Foreground" Value="Red"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding StockActual}" Value="{x:Null}">
-                                                    <Setter Property="Foreground" Value="Red"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-
-                                <!-- Inventario (editable) -->
-                                <DataGridTextColumn Header="Inventario" 
-                                                    Binding="{Binding CantidadInventario}" 
-                                                    Width="100">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding CantidadInventario}" Value="0">
-                                                    <Setter Property="Foreground" Value="Red"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding CantidadInventario}" Value="{x:Null}">
-                                                    <Setter Property="Foreground" Value="Red"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
                 </Border>
             </Grid>
@@ -349,103 +444,46 @@
             <!-- Footer con botones -->
             <Border Grid.Row="2" 
                     Background="{StaticResource BrushSecundario}" 
-                    CornerRadius="0,0,6,6">
-                <Grid Margin="25">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    CornerRadius="0,0,6,6"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{StaticResource BrushIntermedio}">
+                <Grid Margin="15,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                    <!-- Primera fila: Información y controles -->
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <!-- Información -->
+                    <StackPanel Grid.Column="0" 
+                                Orientation="Horizontal" 
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TotalArticulos}" 
+                                   FontWeight="Bold" 
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   Margin="0,0,20,0"/>
+                        <TextBlock Text="{Binding ArticulosContados}" 
+                                   FontWeight="Bold" 
+                                   VerticalAlignment="Center"
+                                   Foreground="Green"/>
+                    </StackPanel>
 
-                        <!-- Información -->
-                        <StackPanel Grid.Column="0" 
-                                    Orientation="Horizontal" 
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="{Binding TotalArticulos}" 
-                                       FontWeight="Bold" 
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource BrushPrincipal}"
-                                       Margin="0,0,20,0"/>
-                            <TextBlock Text="{Binding ArticulosContados}" 
-                                       FontWeight="Bold" 
-                                       VerticalAlignment="Center"
-                                       Foreground="Green"/>
-                        </StackPanel>
+                    <!-- Botón Guardar -->
+                    <Button Grid.Column="1"
+                            Content="💾 GUARDAR"
+                            Command="{Binding GuardarConteoCommand}"
+                            IsEnabled="{Binding PuedeGuardar}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="120" Height="35"
+                            Margin="0,0,10,0"/>
 
-                        <!-- Checkbox Sumar unidades -->
-                        <CheckBox Grid.Column="1" 
-                                  Content="Sumar unidades" 
-                                  IsChecked="{Binding SumarUnidades}"
-                                  VerticalAlignment="Center" 
-                                  Margin="0,0,20,0"
-                                  Foreground="{StaticResource BrushPrincipal}"/>
-
-                        <!-- Campo unidades -->
-                        <StackPanel Grid.Column="2" 
-                                    Orientation="Horizontal" 
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="Unidades:" 
-                                       VerticalAlignment="Center" 
-                                       Margin="0,0,5,0"
-                                       Foreground="{StaticResource BrushPrincipal}"/>
-                            <TextBox Text="{Binding UnidadesGlobales}" 
-                                     Width="80" Height="36" 
-                                     Style="{StaticResource EstiloCajaTexto}"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Segunda fila: Botones -->
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Espacio vacío a la izquierda -->
-                        <StackPanel Grid.Column="0"/>
-
-                        <!-- Botón Cambiar Ubicación -->
-                        <Button Grid.Column="1"
-                                Content="📍 CAMBIAR UBICACIÓN"
-                                Command="{Binding CambiarUbicacionCommand}"
-                                Style="{StaticResource EstiloBotonSecundario}"
-                                Width="180" Height="35" 
-                                Margin="0,0,10,0"
-                                IsEnabled="{Binding ArticuloSeleccionado, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                        <!-- Botón Añadir Artículo -->
-                        <Button Grid.Column="2"
-                                Content="➕ AÑADIR ARTÍCULO"
-                                Command="{Binding AnadirArticuloCommand}"
-                                Style="{StaticResource EstiloBoton}"
-                                Width="160" Height="35" 
-                                Margin="0,0,10,0"/>
-
-                        <!-- Botón Guardar -->
-                        <Button Grid.Column="3"
-                                Content="💾 GUARDAR"
-                                Command="{Binding GuardarConteoCommand}"
-                                Style="{StaticResource EstiloBotonPrincipal}"
-                                Width="120" Height="35"
-                                Margin="0,0,10,0"/>
-
-                        <!-- Botón Cancelar -->
-                        <Button Grid.Column="4"
-                                Content="❌ CANCELAR"
-                                Command="{Binding CancelarCommand}"
-                                Style="{StaticResource EstiloBotonSecundario}"
-                                Width="120" Height="35"/>
-                    </Grid>
+                    <!-- Botón Cancelar -->
+                    <Button Grid.Column="2"
+                            Content="❌ CANCELAR"
+                            Command="{Binding CancelarCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="120" Height="35"/>
                 </Grid>
             </Border>
         </Grid>

@@ -16,7 +16,7 @@ namespace SGA_Api.Models.Inventario
 
         [Required]
         [Column(TypeName = "SMALLINT")]
-        public int CodigoEmpresa { get; set; }
+        public short CodigoEmpresa { get; set; }
 
         [Required]
         [StringLength(10)]
@@ -56,6 +56,9 @@ namespace SGA_Api.Models.Inventario
 
         [Column(TypeName = "DATETIME")]
         public DateTime? FechaCierre { get; set; }
+
+        // Usuario que cierra el inventario
+        public int? UsuarioCierreId { get; set; }
 
         // Navigation properties
         public virtual ICollection<InventarioLineasTemp> LineasTemp { get; set; } = new List<InventarioLineasTemp>();
