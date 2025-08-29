@@ -241,6 +241,37 @@ namespace SGA_Desktop.Services
 			var json = await response.Content.ReadAsStringAsync();
 			return JsonConvert.DeserializeObject<List<StockDisponibleDto>>(json) ?? new List<StockDisponibleDto>();
 		}
-		// ... existing code ...
+
+		/// <summary>
+		/// Obtiene el precio medio de un artículo desde el API
+		/// </summary>
+		public async Task<decimal> ObtenerPrecioMedioAsync(int codigoEmpresa, string codigoArticulo, string codigoAlmacen)
+		{
+			try
+			{
+				var qs = $"?codigoEmpresa={codigoEmpresa}&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+				var response = await _httpClient.GetAsync($"stock/precio-medio{qs}");
+				
+				if (response.IsSuccessStatusCode)
+				{
+					var jsonContent = await response.Content.ReadAsStringAsync();
+					
+					// 🔧 FIX: El API devuelve un número simple, no JSON
+					if (decimal.TryParse(jsonContent, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal precio))
+					{
+						return precio;
+					}
+					
+					return 0m; // Si no se puede parsear
+				}
+				
+				return 0m; // Sin precio si no se encuentra
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"Error obteniendo precio medio: {ex.Message}");
+				return 0m;
+			}
+		}
 	}
 }

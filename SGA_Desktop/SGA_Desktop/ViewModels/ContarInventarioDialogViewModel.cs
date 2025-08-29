@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using SGA_Desktop.Helpers;
 
 namespace SGA_Desktop.ViewModels
@@ -19,14 +20,18 @@ namespace SGA_Desktop.ViewModels
         #region Fields & Services
         private readonly InventarioService _inventarioService;
         private readonly StockService _stockService;
+        private readonly LoginService _loginService;
         private List<LineaTemporalInventarioDto> _todosLosArticulos = new();
+        // Cache para precios medios para evitar múltiples consultas
+        private readonly Dictionary<string, decimal> _cachePreciosMedios = new();
         #endregion
 
         #region Constructor
-        public ContarInventarioDialogViewModel(InventarioService inventarioService, StockService stockService)
+        public ContarInventarioDialogViewModel(InventarioService inventarioService, StockService stockService, LoginService loginService)
         {
             _inventarioService = inventarioService;
             _stockService = stockService;
+            _loginService = loginService;
             
             ArticulosInventario = new ObservableCollection<LineaTemporalInventarioDto>();
 
@@ -34,7 +39,7 @@ namespace SGA_Desktop.ViewModels
                 _ = InitializeAsync();
         }
 
-        public ContarInventarioDialogViewModel() : this(new InventarioService(), new StockService()) { }
+        public ContarInventarioDialogViewModel() : this(new InventarioService(), new StockService(), new LoginService()) { }
         #endregion
 
         #region Observable Properties
@@ -63,6 +68,21 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private bool puedeGuardar = false;
 
+        [ObservableProperty]
+        private decimal limiteOperarioEuros = 1000m; // TODO: Obtener desde API
+
+        [ObservableProperty]
+        private decimal limiteOperarioUnidades = 0m; // Límite en unidades
+
+        [ObservableProperty] 
+        private decimal valorDiferenciasActual = 0;
+
+        [ObservableProperty]
+        private decimal unidadesDiferenciasActual = 0;
+
+        [ObservableProperty]
+        private bool limiteSuperado = false;
+
 
         #endregion
 
@@ -70,6 +90,28 @@ namespace SGA_Desktop.ViewModels
         public bool CanCargarArticulos => !IsCargando && Inventario != null;
         public string TotalArticulos => $"Total: {ArticulosInventario.Count} artículos";
         public string ArticulosContados => $"Contados: {ArticulosInventario.Count(a => a.CantidadContada.HasValue)}";
+        public string EstadoLimite 
+        {
+            get
+            {
+                var estado = "";
+                
+                if (LimiteOperarioEuros > 0)
+                {
+                    var estadoEuros = ValorDiferenciasActual > LimiteOperarioEuros ? "⚠️" : "✅";
+                    estado += $"{estadoEuros} Euros: {ValorDiferenciasActual:C2} / {LimiteOperarioEuros:C2}";
+                }
+                
+                if (LimiteOperarioUnidades > 0)
+                {
+                    if (!string.IsNullOrEmpty(estado)) estado += " | ";
+                    var estadoUnidades = UnidadesDiferenciasActual > LimiteOperarioUnidades ? "⚠️" : "✅";
+                    estado += $"{estadoUnidades} Unidades: {UnidadesDiferenciasActual:F2} / {LimiteOperarioUnidades:F2}";
+                }
+                
+                return string.IsNullOrEmpty(estado) ? "Sin límites establecidos" : estado;
+            }
+        }
         #endregion
 
         #region Property Change Callbacks
@@ -113,7 +155,19 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
-                // Ya no necesitamos cargar almacenes para filtros
+                // Cargar límites del operario actual
+                if (SessionManager.UsuarioActual?.operario != null)
+                {
+                    var operarioId = SessionManager.UsuarioActual.operario;
+                    LimiteOperarioEuros = await _loginService.ObtenerLimiteInventarioOperarioAsync(operarioId);
+                    LimiteOperarioUnidades = await _loginService.ObtenerLimiteUnidadesOperarioAsync(operarioId);
+                }
+                else
+                {
+                    LimiteOperarioEuros = 0m; // Sin operario = sin límite
+                    LimiteOperarioUnidades = 0m; // Sin operario = sin límite
+                }
+                
                 await Task.CompletedTask;
             }
             catch (Exception ex)
@@ -478,10 +532,14 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        private void OnArticuloPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        private async void OnArticuloPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(LineaTemporalInventarioDto.CantidadContada))
             {
+                if (sender is LineaTemporalInventarioDto linea)
+                {
+                    await ValidarLimiteOperario(linea); // Nueva validación
+                }
                 ValidarFormulario();
             }
         }
@@ -504,6 +562,272 @@ namespace SGA_Desktop.ViewModels
 
             // Si no se puede obtener, usar el stock actual
             return linea.StockActual;
+        }
+
+        /// <summary>
+        /// Valida que el operario no supere su límite de inventario
+        /// </summary>
+        private async Task ValidarLimiteOperario(LineaTemporalInventarioDto lineaCambiada)
+        {
+            try
+            {
+                if (SessionManager.UsuarioActual?.operario == null) return;
+
+                bool limiteSuperadoEuros = false;
+                bool limiteSuperadoUnidades = false;
+                string tipoLimiteSuperado = "";
+
+                var operarioId = SessionManager.UsuarioActual.operario;
+                var codigoArticulo = lineaCambiada.CodigoArticulo;
+                var cantidadContada = ObtenerCantidadContada(lineaCambiada);
+                var nuevaDiferencia = Math.Abs(cantidadContada - lineaCambiada.StockActual);
+
+                // DEBUG: Log información básica (comentado para producción)
+                // MessageBox.Show($"🔍 VALIDACIÓN LÍMITES\n\n" +
+                //     $"Operario: {operarioId}\n" +
+                //     $"Artículo: {codigoArticulo}\n" +
+                //     $"Stock Actual: {lineaCambiada.StockActual}\n" +
+                //     $"Cantidad Contada: {cantidadContada}\n" +
+                //     $"Nueva Diferencia: {nuevaDiferencia}\n" +
+                //     $"Límite Euros: {LimiteOperarioEuros}\n" +
+                //     $"Límite Unidades: {LimiteOperarioUnidades}", 
+                //     "DEBUG - Datos Básicos");
+
+                // Obtener diferencias acumuladas del artículo en el día (excluyendo inventario actual)
+                var (unidadesAcumuladas, eurosAcumulados) = await _loginService.ObtenerDiferenciasOperarioArticuloDiaAsync(operarioId, codigoArticulo, Inventario.IdInventario);
+                
+                // AÑADIR: diferencias del mismo artículo en la sesión actual (excluyendo la línea que estamos validando)
+                var diferenciasEnSesion = CalcularDiferenciasArticuloEnSesion(codigoArticulo, lineaCambiada.IdTemp);
+                unidadesAcumuladas += diferenciasEnSesion.unidades;
+                eurosAcumulados += diferenciasEnSesion.euros;
+
+                // DEBUG: Log diferencias acumuladas (comentado para producción)
+                // MessageBox.Show($"📊 DIFERENCIAS ACUMULADAS\n\n" +
+                //     $"Diferencias Anteriores Hoy:\n" +
+                //     $"  • Unidades: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
+                //     $"  • Euros: {eurosAcumulados - diferenciasEnSesion.euros:F2}\n\n" +
+                //     $"Diferencias en Sesión Actual:\n" +
+                //     $"  • Unidades: {diferenciasEnSesion.unidades:F2}\n" +
+                //     $"  • Euros: {diferenciasEnSesion.euros:F2}\n\n" +
+                //     $"TOTAL ACUMULADO:\n" +
+                //     $"  • Unidades: {unidadesAcumuladas:F2}\n" +
+                //     $"  • Euros: {eurosAcumulados:F2}", 
+                //     "DEBUG - Acumulados Detallados");
+
+                // Validar límite de euros (acumulado del día + nueva diferencia)
+                if (LimiteOperarioEuros > 0)
+                {
+                    var precioMedio = await ObtenerPrecioMedioAsync(codigoArticulo, lineaCambiada.CodigoAlmacen ?? "");
+                    var nuevaDiferenciaEuros = nuevaDiferencia * precioMedio;
+                    var totalEurosArticulo = eurosAcumulados + nuevaDiferenciaEuros;
+
+                    // También calcular total global para mostrar en UI
+                    var valorTotalGlobal = await CalcularValorTotalDiferenciasAsync();
+                    ValorDiferenciasActual = valorTotalGlobal;
+
+                    // DEBUG: Log cálculos de euros (comentado para producción)
+                    // MessageBox.Show($"💰 VALIDACIÓN EUROS\n\n" +
+                    //     $"Precio Medio: {precioMedio:F4}\n" +
+                    //     $"Nueva Diferencia: {nuevaDiferencia} unidades\n" +
+                    //     $"Nueva Diferencia €: {nuevaDiferenciaEuros:F2}\n" +
+                    //     $"Euros Acumulados: {eurosAcumulados:F2}\n" +
+                    //     $"Total Euros Artículo: {totalEurosArticulo:F2}\n" +
+                    //     $"Límite: {LimiteOperarioEuros:F2}\n" +
+                    //     $"¿Supera límite?: {totalEurosArticulo > LimiteOperarioEuros}", 
+                    //     "DEBUG - Euros");
+
+                    if (totalEurosArticulo > LimiteOperarioEuros)
+                    {
+                        limiteSuperadoEuros = true;
+                        tipoLimiteSuperado = $"valor en euros para el artículo {codigoArticulo}";
+                    }
+                }
+
+                // Validar límite de unidades (acumulado del día + nueva diferencia)
+                if (LimiteOperarioUnidades > 0)
+                {
+                    var totalUnidadesArticulo = unidadesAcumuladas + nuevaDiferencia;
+
+                    // También calcular total global para mostrar en UI
+                    var unidadesTotalGlobal = CalcularUnidadesTotalDiferencias();
+                    UnidadesDiferenciasActual = unidadesTotalGlobal;
+
+                    // DEBUG: Log cálculos de unidades (comentado para producción)
+                    // MessageBox.Show($"📦 VALIDACIÓN UNIDADES\n\n" +
+                    //     $"Diferencias Anteriores: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
+                    //     $"Diferencias en Sesión: {diferenciasEnSesion.unidades:F2}\n" +
+                    //     $"Nueva Diferencia: {nuevaDiferencia:F2}\n\n" +
+                    //     $"Total Acumulado: {unidadesAcumuladas:F2}\n" +
+                    //     $"Total + Nueva: {totalUnidadesArticulo:F2}\n" +
+                    //     $"Límite: {LimiteOperarioUnidades:F2}\n\n" +
+                    //     $"¿Supera límite?: {totalUnidadesArticulo > LimiteOperarioUnidades}", 
+                    //     "DEBUG - Unidades Detallado");
+
+                    if (totalUnidadesArticulo > LimiteOperarioUnidades)
+                    {
+                        limiteSuperadoUnidades = true;
+                        if (limiteSuperadoEuros)
+                            tipoLimiteSuperado = $"valor en euros y unidades para el artículo {codigoArticulo}";
+                        else
+                            tipoLimiteSuperado = $"unidades para el artículo {codigoArticulo}";
+                    }
+                }
+
+                // DEBUG: Log resultado final (comentado para producción)
+                // MessageBox.Show($"🏁 RESULTADO VALIDACIÓN\n\n" +
+                //     $"Límite Euros Superado: {limiteSuperadoEuros}\n" +
+                //     $"Límite Unidades Superado: {limiteSuperadoUnidades}\n" +
+                //     $"Tipo Límite Superado: {tipoLimiteSuperado}", 
+                //     "DEBUG - Resultado");
+
+                // Si se supera algún límite
+                if (limiteSuperadoEuros || limiteSuperadoUnidades)
+                {
+                    LimiteSuperado = true;
+                    
+                    // Resetear el valor que causó el problema
+                    lineaCambiada.CantidadContadaTexto = lineaCambiada.StockActual.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
+                    
+                    // Mostrar warning más específico
+                    var warning = new WarningDialog(
+                        "⚠️ Límite Diario Superado", 
+                        $"Las diferencias diarias superan su límite autorizado de {tipoLimiteSuperado}.\n\n" +
+                        $"Se ha restablecido la cantidad original para:\n" +
+                        $"• {lineaCambiada.CodigoArticulo} - {lineaCambiada.DescripcionArticulo}\n" +
+                        $"• Ubicación: {lineaCambiada.CodigoUbicacion}\n\n" +
+                        $"💡 El límite se aplica por artículo y por día en todos los almacenes.");
+                    warning.ShowDialog();
+                    
+                    // Recalcular después del reset
+                    if (LimiteOperarioEuros > 0)
+                        ValorDiferenciasActual = await CalcularValorTotalDiferenciasAsync();
+                    if (LimiteOperarioUnidades > 0)
+                        UnidadesDiferenciasActual = CalcularUnidadesTotalDiferencias();
+                }
+                else
+                {
+                    LimiteSuperado = false;
+                }
+                
+                OnPropertyChanged(nameof(EstadoLimite));
+            }
+            catch (Exception ex)
+            {
+                // Log error pero no interrumpir el flujo
+                System.Diagnostics.Debug.WriteLine($"Error validando límite: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Calcula el valor total de todas las diferencias de inventario
+        /// Cuenta tanto sobrestocks como faltantes (valor absoluto)
+        /// </summary>
+        private async Task<decimal> CalcularValorTotalDiferenciasAsync()
+        {
+            decimal valorTotal = 0;
+            
+            foreach (var linea in ArticulosInventario)
+            {
+                var cantidadContada = ObtenerCantidadContada(linea);
+                
+                // 🔧 CONTROLAR tanto sobrestocks como faltantes (valor absoluto)
+                var diferencia = Math.Abs(cantidadContada - linea.StockActual);
+                
+                if (diferencia > 0.01m) // Tolerancia para evitar diferencias mínimas por redondeo
+                {
+                    var precioMedio = await ObtenerPrecioMedioAsync(linea.CodigoArticulo, linea.CodigoAlmacen ?? "");
+                    valorTotal += diferencia * precioMedio;
+                }
+            }
+            
+            return valorTotal;
+        }
+
+        /// <summary>
+        /// Calcula el total de unidades de diferencias de inventario
+        /// Cuenta tanto sobrestocks como faltantes (valor absoluto)
+        /// </summary>
+        private decimal CalcularUnidadesTotalDiferencias()
+        {
+            decimal unidadesTotal = 0;
+            
+            foreach (var linea in ArticulosInventario)
+            {
+                var cantidadContada = ObtenerCantidadContada(linea);
+                
+                // Controlar tanto sobrestocks como faltantes (valor absoluto)
+                var diferencia = Math.Abs(cantidadContada - linea.StockActual);
+                
+                if (diferencia > 0.01m) // Tolerancia para evitar diferencias mínimas por redondeo
+                {
+                    unidadesTotal += diferencia;
+                }
+            }
+            
+            return unidadesTotal;
+        }
+
+        /// <summary>
+        /// Calcula las diferencias del mismo artículo en la sesión actual de inventario
+        /// Excluye la línea que se está validando para evitar contarla dos veces
+        /// </summary>
+        private (decimal unidades, decimal euros) CalcularDiferenciasArticuloEnSesion(string codigoArticulo, Guid idTempExcluir)
+        {
+            decimal totalUnidades = 0;
+            decimal totalEuros = 0;
+            
+            // Buscar todas las líneas del mismo artículo en la sesión actual (excluyendo la que estamos validando)
+            var lineasMismoArticulo = ArticulosInventario
+                .Where(l => l.CodigoArticulo == codigoArticulo && l.IdTemp != idTempExcluir)
+                .ToList();
+            
+            foreach (var linea in lineasMismoArticulo)
+            {
+                var cantidadContada = ObtenerCantidadContada(linea);
+                var diferencia = Math.Abs(cantidadContada - linea.StockActual);
+                
+                if (diferencia > 0.01m) // Tolerancia para diferencias mínimas
+                {
+                    totalUnidades += diferencia;
+                    
+                    // Para euros, usar precio medio en cache si existe
+                    var clave = $"{codigoArticulo}|{linea.CodigoAlmacen ?? ""}";
+                    if (_cachePreciosMedios.TryGetValue(clave, out var precio))
+                    {
+                        totalEuros += diferencia * precio;
+                    }
+                    // Si no hay precio en cache, no sumar euros (será cálculo conservador)
+                }
+            }
+            
+            return (totalUnidades, totalEuros);
+        }
+
+        /// <summary>
+        /// Obtiene el precio medio de un artículo desde el API
+        /// </summary>
+        private async Task<decimal> ObtenerPrecioMedioAsync(string codigoArticulo, string codigoAlmacen)
+        {
+            var clave = $"{codigoArticulo}|{codigoAlmacen}";
+            
+            // Usar cache si existe
+            if (_cachePreciosMedios.TryGetValue(clave, out var precioCache))
+                return precioCache;
+            
+            try
+            {
+                var empresa = SessionManager.EmpresaSeleccionada ?? 1;
+                var precio = await _stockService.ObtenerPrecioMedioAsync(empresa, codigoArticulo, codigoAlmacen);
+                
+                // Guardar en cache
+                _cachePreciosMedios[clave] = precio;
+                return precio;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error obteniendo precio medio: {ex.Message}");
+                return 0m; // Sin precio si hay error
+            }
         }
         #endregion
     }

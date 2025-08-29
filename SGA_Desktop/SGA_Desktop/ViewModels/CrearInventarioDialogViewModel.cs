@@ -61,6 +61,31 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private AlmacenDto? almacenSeleccionado;
 
+        // NUEVO: Propiedades para multialmacén
+        [ObservableProperty]
+        private bool modoMultialmacen = false;
+
+        // Propiedades computadas para almacenes seleccionados
+        public List<AlmacenDto> AlmacenesSeleccionados => 
+            AlmacenesDisponibles.Where(a => a.IsSelected).ToList();
+
+        public string DescripcionAlmacenesSeleccionados
+        {
+            get
+            {
+                var seleccionados = AlmacenesSeleccionados;
+                if (!seleccionados.Any())
+                    return "Ningún almacén seleccionado";
+                    
+                if (seleccionados.Count == 1)
+                    return seleccionados.First().DescripcionCombo;
+                    
+                return seleccionados.Count <= 3 
+                    ? string.Join(", ", seleccionados.Select(a => a.CodigoAlmacen))
+                    : $"{string.Join(", ", seleccionados.Take(2).Select(a => a.CodigoAlmacen))} y {seleccionados.Count - 2} más";
+            }
+        }
+
         [ObservableProperty]
         private string tipoInventarioSeleccionado = "PARCIAL";
 
@@ -182,11 +207,51 @@ namespace SGA_Desktop.ViewModels
         // Propiedades calculadas para la UI
         public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
+
+        // Propiedades calculadas para UI de rango de artículos
+        public bool MostrarInfoRango => !string.IsNullOrWhiteSpace(ArticuloDesde) && !string.IsNullOrWhiteSpace(ArticuloHasta) && UsarRangoArticulos;
         #endregion
 
 
 
         #region Property Change Callbacks
+        partial void OnModoMultialmacenChanged(bool oldValue, bool newValue)
+        {
+            if (newValue)
+            {
+                // Activar modo multialmacén: Deseleccionar el almacén único
+                if (AlmacenSeleccionado != null)
+                {
+                    AlmacenSeleccionado.IsSelected = false;
+                    AlmacenSeleccionado = null;
+                }
+                
+                // Permitir selección múltiple
+                foreach (var almacen in AlmacenesDisponibles)
+                {
+                    almacen.IsSelected = false; // Empezar limpio
+                }
+            }
+            else
+            {
+                // Volver a modo único: Deseleccionar todos
+                foreach (var almacen in AlmacenesDisponibles)
+                {
+                    almacen.IsSelected = false;
+                }
+                
+                // Seleccionar el primero por defecto
+                if (AlmacenesDisponibles.Any())
+                {
+                    AlmacenSeleccionado = AlmacenesDisponibles.First();
+                    AlmacenSeleccionado.IsSelected = true;
+                }
+            }
+            
+            OnPropertyChanged(nameof(DescripcionAlmacenesSeleccionados));
+            ValidarFormulario();
+        }
+
         partial void OnAlmacenSeleccionadoChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
         {
             // Cargar rangos disponibles siempre que se seleccione un almacén
@@ -225,8 +290,26 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        partial void OnUsarRangoArticulosChanged(bool oldValue, bool newValue)
+        partial void OnUsarRangoArticulosChanged(bool value)
         {
+            OnPropertyChanged(nameof(MostrarInfoRango));
+            if (value)
+            {
+                // Si se activa el rango, desactivar filtro específico
+                UsarFiltroArticulo = false;
+            }
+            ValidarFormulario();
+        }
+
+        partial void OnArticuloDesdeChanged(string value)
+        {
+            OnPropertyChanged(nameof(MostrarInfoRango));
+            ValidarFormulario();
+        }
+
+        partial void OnArticuloHastaChanged(string value)
+        {
+            OnPropertyChanged(nameof(MostrarInfoRango));
             ValidarFormulario();
         }
 
@@ -325,23 +408,14 @@ namespace SGA_Desktop.ViewModels
         }
 
         // NUEVO: Callbacks para filtro de artículo
-        partial void OnUsarFiltroArticuloChanged(bool oldValue, bool newValue)
+        partial void OnUsarFiltroArticuloChanged(bool value)
         {
-            if (newValue)
+            OnPropertyChanged(nameof(MostrarInfoArticulo));
+            if (value)
             {
-                // Al activar filtro, forzar tipo PARCIAL
-                TipoInventarioSeleccionado = "PARCIAL";
+                // Si se activa el filtro específico, desactivar rango
+                UsarRangoArticulos = false;
             }
-            else
-            {
-                // Limpiar búsqueda
-                ArticuloBuscado = string.Empty;
-                ArticulosEncontrados.Clear();
-                ArticuloSeleccionado = null;
-                OnPropertyChanged(nameof(MostrarListaArticulos));
-                OnPropertyChanged(nameof(MostrarInfoArticulo));
-            }
-            
             ValidarFormulario();
         }
 
@@ -391,7 +465,16 @@ namespace SGA_Desktop.ViewModels
                 // Mostrar diálogo de confirmación
                 var mensaje = $"Se va a crear un inventario con las siguientes características:\n\n";
                 mensaje += $"• Código: {CodigoInventario}\n";
-                mensaje += $"• Almacén: {AlmacenSeleccionado?.DescripcionCombo}\n";
+                
+                if (ModoMultialmacen)
+                {
+                    mensaje += $"• Almacenes: {DescripcionAlmacenesSeleccionados}\n";
+                }
+                else
+                {
+                    mensaje += $"• Almacén: {AlmacenSeleccionado?.DescripcionCombo}\n";
+                }
+                
                 mensaje += $"• Tipo: {TipoInventarioSeleccionado}\n";
                 mensaje += $"• Fecha: {FechaInventario:dd/MM/yyyy}\n";
                 mensaje += $"• Artículos: {ArticulosSeleccionados}\n";
@@ -430,8 +513,7 @@ namespace SGA_Desktop.ViewModels
                 {
                     CodigoInventario = CodigoInventario,
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-                    CodigoAlmacen = AlmacenSeleccionado!.CodigoAlmacen,
-                    TipoInventario = UsarFiltroArticulo || ArticulosSeleccionados == "Con stock" ? "PARCIAL" : "TOTAL",
+                    TipoInventario = UsarFiltroArticulo || UsarRangoArticulos || ArticulosSeleccionados == "Con stock" ? "PARCIAL" : "TOTAL",
                     FechaInventario = FechaInventario.Date, // Asegurar que solo se envía la fecha sin hora
                     Comentarios = Comentarios,
                     UsuarioCreacionId = SessionManager.UsuarioActual!.operario,
@@ -439,7 +521,10 @@ namespace SGA_Desktop.ViewModels
                     IncluirArticulosConStockCero = ArticulosSeleccionados == "Todos", // Combo "Todos" vs "Con stock"
                     IncluirUbicacionesEspeciales = IncluirUbicacionesEspeciales,
                     // NUEVO: Filtro de artículo específico
-                    CodigoArticuloFiltro = UsarFiltroArticulo ? ArticuloSeleccionado?.CodigoArticulo : null
+                    CodigoArticuloFiltro = UsarFiltroArticulo ? ArticuloSeleccionado?.CodigoArticulo : null,
+                    // NUEVO: Rango de artículos
+                    ArticuloDesde = UsarRangoArticulos ? ArticuloDesde : null,
+                    ArticuloHasta = UsarRangoArticulos ? ArticuloHasta : null
                 };
 
                 // Agregar rangos de ubicaciones basándose en los checkboxes individuales
@@ -472,7 +557,19 @@ namespace SGA_Desktop.ViewModels
                     }
                 }
 
-
+                // Configurar almacenes según el modo seleccionado
+                if (ModoMultialmacen)
+                {
+                    // Modo multialmacén: usar lista de códigos
+                    dto.CodigosAlmacen = AlmacenesSeleccionados.Select(a => a.CodigoAlmacen).ToList();
+                    dto.CodigoAlmacen = dto.CodigosAlmacen.FirstOrDefault() ?? ""; // Compatibilidad hacia atrás
+                }
+                else
+                {
+                    // Modo único: usar almacén seleccionado
+                    dto.CodigoAlmacen = AlmacenSeleccionado!.CodigoAlmacen;
+                    dto.CodigosAlmacen = new List<string> { dto.CodigoAlmacen }; // Para que la API funcione
+                }
 
                 var resultado = await _inventarioService.CrearInventarioAsync(dto);
 
@@ -593,30 +690,7 @@ namespace SGA_Desktop.ViewModels
         }
 
 
-        [RelayCommand]
-        private void MarcarTodos()
-        {
-            var todosMarcados = AlmacenesDisponibles.All(a => a.IsSelected);
-            foreach (var almacen in AlmacenesDisponibles)
-            {
-                almacen.IsSelected = !todosMarcados;
-            }
-            ValidarFormulario();
-        }
 
-        [RelayCommand]
-        private void BuscarArticuloDesde()
-        {
-            // TODO: Implementar búsqueda de artículos
-            ShowDialog(new WarningDialog("Info", "Búsqueda de artículos - En desarrollo"));
-        }
-
-        [RelayCommand]
-        private void BuscarArticuloHasta()
-        {
-            // TODO: Implementar búsqueda de artículos
-            ShowDialog(new WarningDialog("Info", "Búsqueda de artículos - En desarrollo"));
-        }
 
         [RelayCommand]
         private void BuscarUbicacionDesde()
@@ -637,6 +711,35 @@ namespace SGA_Desktop.ViewModels
         {
             CerrarDialogo(false);
         }
+
+        [RelayCommand]
+        private void MarcarTodos()
+        {
+            if (!ModoMultialmacen) return; // Solo funciona en modo multialmacén
+            
+            var todosMarcados = AlmacenesDisponibles.All(a => a.IsSelected);
+            foreach (var almacen in AlmacenesDisponibles)
+            {
+                almacen.IsSelected = !todosMarcados;
+            }
+            OnPropertyChanged(nameof(DescripcionAlmacenesSeleccionados));
+            ValidarFormulario();
+        }
+
+        public void NotificarCambioSeleccionAlmacen()
+        {
+            OnPropertyChanged(nameof(DescripcionAlmacenesSeleccionados));
+            ValidarFormulario();
+        }
+
+        private void AlmacenDto_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(AlmacenDto.IsSelected))
+            {
+                OnPropertyChanged(nameof(DescripcionAlmacenesSeleccionados));
+                ValidarFormulario();
+            }
+        }
         #endregion
 
         #region Private Methods
@@ -655,48 +758,58 @@ namespace SGA_Desktop.ViewModels
                 // Si no hay almacenes autorizados, agregar algunos de prueba
                 if (!resultado.Any())
                 {
-                    AlmacenesDisponibles.Add(new AlmacenDto
+                    var almacenesPrueba = new List<AlmacenDto>
                     {
-                        CodigoAlmacen = "000",
-                        NombreAlmacen = "SALIDA EXPEDICIONES",
-                        CodigoEmpresa = empresa,
-                        EsDelCentro = true
-                    });
-                    AlmacenesDisponibles.Add(new AlmacenDto
+                        new AlmacenDto
+                        {
+                            CodigoAlmacen = "000",
+                            NombreAlmacen = "SALIDA EXPEDICIONES",
+                            CodigoEmpresa = empresa,
+                            EsDelCentro = true
+                        },
+                        new AlmacenDto
+                        {
+                            CodigoAlmacen = "001",
+                            NombreAlmacen = "ALMACEN MATERIAS PRI",
+                            CodigoEmpresa = empresa,
+                            EsDelCentro = true
+                        },
+                        new AlmacenDto
+                        {
+                            CodigoAlmacen = "002",
+                            NombreAlmacen = "FABRICACIÓN CANELA",
+                            CodigoEmpresa = empresa,
+                            EsDelCentro = true
+                        },
+                        new AlmacenDto
+                        {
+                            CodigoAlmacen = "003",
+                            NombreAlmacen = "ALMACEN DE RECHAZOS",
+                            CodigoEmpresa = empresa,
+                            EsDelCentro = true
+                        },
+                        new AlmacenDto
+                        {
+                            CodigoAlmacen = "004",
+                            NombreAlmacen = "TRANSITO",
+                            CodigoEmpresa = empresa,
+                            EsDelCentro = true
+                        }
+                    };
+
+                    foreach (var almacen in almacenesPrueba)
                     {
-                        CodigoAlmacen = "001",
-                        NombreAlmacen = "ALMACEN MATERIAS PRI",
-                        CodigoEmpresa = empresa,
-                        EsDelCentro = true
-                    });
-                    AlmacenesDisponibles.Add(new AlmacenDto
-                    {
-                        CodigoAlmacen = "002",
-                        NombreAlmacen = "FABRICACIÓN CANELA",
-                        CodigoEmpresa = empresa,
-                        EsDelCentro = true
-                    });
-                    AlmacenesDisponibles.Add(new AlmacenDto
-                    {
-                        CodigoAlmacen = "003",
-                        NombreAlmacen = "ALMACEN DE RECHAZOS",
-                        CodigoEmpresa = empresa,
-                        EsDelCentro = true
-                    });
-                    AlmacenesDisponibles.Add(new AlmacenDto
-                    {
-                        CodigoAlmacen = "004",
-                        NombreAlmacen = "TRANSITO",
-                        CodigoEmpresa = empresa,
-                        EsDelCentro = true
-                    });
+                        almacen.PropertyChanged += AlmacenDto_PropertyChanged;
+                        AlmacenesDisponibles.Add(almacen);
+                    }
                 }
                 else
                 {
-                    foreach (var almacen in resultado)
-                    {
-                        AlmacenesDisponibles.Add(almacen);
-                    }
+                                    foreach (var almacen in resultado)
+                {
+                    almacen.PropertyChanged += AlmacenDto_PropertyChanged;
+                    AlmacenesDisponibles.Add(almacen);
+                }
                 }
 
                 // Seleccionar el primer almacén por defecto
@@ -712,20 +825,29 @@ namespace SGA_Desktop.ViewModels
                 
                 // En caso de error, agregar almacenes de prueba
                 AlmacenesDisponibles.Clear();
-                AlmacenesDisponibles.Add(new AlmacenDto
+                var almacenesError = new List<AlmacenDto>
                 {
-                    CodigoAlmacen = "000",
-                    NombreAlmacen = "SALIDA EXPEDICIONES",
-                    CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-                    EsDelCentro = true
-                });
-                AlmacenesDisponibles.Add(new AlmacenDto
+                    new AlmacenDto
+                    {
+                        CodigoAlmacen = "000",
+                        NombreAlmacen = "SALIDA EXPEDICIONES",
+                        CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+                        EsDelCentro = true
+                    },
+                    new AlmacenDto
+                    {
+                        CodigoAlmacen = "001",
+                        NombreAlmacen = "ALMACEN MATERIAS PRI",
+                        CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+                        EsDelCentro = true
+                    }
+                };
+
+                foreach (var almacen in almacenesError)
                 {
-                    CodigoAlmacen = "001",
-                    NombreAlmacen = "ALMACEN MATERIAS PRI",
-                    CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-                    EsDelCentro = true
-                });
+                    almacen.PropertyChanged += AlmacenDto_PropertyChanged;
+                    AlmacenesDisponibles.Add(almacen);
+                }
                 
                 if (AlmacenesDisponibles.Any())
                 {
@@ -737,7 +859,18 @@ namespace SGA_Desktop.ViewModels
 
         private void ValidarFormulario()
         {
-            var esValido = AlmacenSeleccionado != null &&
+            // Validar almacenes según el modo
+            bool almacenesValidos;
+            if (ModoMultialmacen)
+            {
+                almacenesValidos = AlmacenesSeleccionados.Any();
+            }
+            else
+            {
+                almacenesValidos = AlmacenSeleccionado != null;
+            }
+
+            var esValido = almacenesValidos &&
                           !string.IsNullOrWhiteSpace(TipoInventarioSeleccionado) &&
                           !string.IsNullOrWhiteSpace(CodigoInventario) &&
                           ValidarRangos();

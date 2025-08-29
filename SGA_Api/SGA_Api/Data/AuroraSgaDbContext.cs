@@ -43,6 +43,7 @@ namespace SGA_Api.Data
 		public DbSet<InventarioLineasTemp> InventarioLineasTemp { get; set; }
 		public DbSet<InventarioLineas> InventarioLineas { get; set; }
 		public DbSet<InventarioAjustes> InventarioAjustes { get; set; }
+		public DbSet<InventarioAlmacenes> InventarioAlmacenes { get; set; }
 		
 		// Entidades de Conteos
 		public DbSet<OrdenConteo> OrdenesConteo { get; set; }
@@ -372,6 +373,29 @@ namespace SGA_Api.Data
                     .WithMany(ic => ic.Ajustes)
                     .HasForeignKey(i => i.IdInventario)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<InventarioAlmacenes>(ent =>
+            {
+                ent.ToTable("InventarioAlmacenes");
+                ent.HasKey(i => i.Id);
+                
+                ent.Property(i => i.Id).HasColumnName("Id");
+                ent.Property(i => i.IdInventario).HasColumnName("IdInventario");
+                ent.Property(i => i.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
+                ent.Property(i => i.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
+                ent.Property(i => i.FechaCreacion).HasColumnName("FechaCreacion").HasColumnType("DATETIME");
+
+                // Relación con InventarioCabecera
+                ent.HasOne(i => i.Inventario)
+                    .WithMany(ic => ic.Almacenes)
+                    .HasForeignKey(i => i.IdInventario)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Índice único para evitar duplicados
+                ent.HasIndex(i => new { i.IdInventario, i.CodigoAlmacen })
+                    .IsUnique()
+                    .HasDatabaseName("UX_InventarioAlmacenes_Inventario_Almacen");
             });
 
             // Configuración de entidades de Conteos

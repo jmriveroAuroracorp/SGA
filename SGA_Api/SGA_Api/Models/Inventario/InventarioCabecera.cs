@@ -60,9 +60,33 @@ namespace SGA_Api.Models.Inventario
         // Usuario que cierra el inventario
         public int? UsuarioCierreId { get; set; }
 
+        // Nuevas propiedades para información expandida (solo para UI)
+        [NotMapped]
+        public bool? ConteoACiegas { get; set; }
+        
+        [NotMapped]
+        public string? ArticuloDesde { get; set; }
+        
+        [NotMapped]
+        public string? ArticuloHasta { get; set; }
+        
+        [NotMapped]
+        public string? CodigoArticuloFiltro { get; set; }
+        
+        [NotMapped]
+        public bool? IncluirUbicacionesEspeciales { get; set; }
+
+        // Propiedades calculadas (no se mapean a la BD)
+        [NotMapped]
+        public int? TotalLineas { get; set; }
+
+        [NotMapped]
+        public int? LineasContadas { get; set; }
+
         // Navigation properties
         public virtual ICollection<InventarioLineasTemp> LineasTemp { get; set; } = new List<InventarioLineasTemp>();
         public virtual ICollection<InventarioLineas> Lineas { get; set; } = new List<InventarioLineas>();
         public virtual ICollection<InventarioAjustes> Ajustes { get; set; } = new List<InventarioAjustes>();
+        public virtual ICollection<InventarioAlmacenes> Almacenes { get; set; } = new List<InventarioAlmacenes>();
     }
 } 

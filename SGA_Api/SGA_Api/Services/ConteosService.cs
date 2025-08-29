@@ -35,23 +35,54 @@ namespace SGA_Api.Services
                 var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
                 var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
                 
-                // Construir ubicación a partir de los componentes si están disponibles
+                // Primero intentar extraer ubicación directa del filtro (para ubicaciones especiales)
+                var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
+                
+                // Extraer componentes para determinar el alcance automáticamente
                 var pasillo = ExtraerPasilloDelFiltro(dto.FiltrosJson);
                 var estanteria = ExtraerEstanteriaDelFiltro(dto.FiltrosJson);
                 var altura = ExtraerAlturaDelFiltro(dto.FiltrosJson);
                 var posicion = ExtraerPosicionDelFiltro(dto.FiltrosJson);
                 
-                string? codigoUbicacion = null;
-                if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                                 // Determinar el alcance automáticamente según los componentes disponibles
+                 // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
+                 string alcanceDeterminado = "ALMACEN"; // Default
+                
+                                 if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
+                 {
+                     // Si hay ubicación directa (incluyendo ubicación vacía ""), el alcance es UBICACION
+                     alcanceDeterminado = "UBICACION";
+                 }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) && 
+                         !string.IsNullOrEmpty(altura) && !string.IsNullOrEmpty(posicion))
                 {
+                    // Si están todos los componentes, es UBICACION
+                    alcanceDeterminado = "UBICACION";
                     // Construir ubicación en formato UB + pasillo + estanteria + altura + posicion
                     var pasilloFormateado = pasillo.PadLeft(3, '0');
                     var estanteriaFormateada = estanteria.PadLeft(3, '0');
-                    var alturaFormateada = altura?.PadLeft(3, '0') ?? "000";
-                    var posicionFormateada = posicion?.PadLeft(3, '0') ?? "000";
+                    var alturaFormateada = altura.PadLeft(3, '0');
+                    var posicionFormateada = posicion.PadLeft(3, '0');
                     
                     codigoUbicacion = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
                 }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                {
+                    // Si hay pasillo y estantería, es ESTANTERIA
+                    alcanceDeterminado = "ESTANTERIA";
+                }
+                else if (!string.IsNullOrEmpty(pasillo))
+                {
+                    // Si solo hay pasillo, es PASILLO
+                    alcanceDeterminado = "PASILLO";
+                }
+                // Si solo hay almacén, el alcance es ALMACEN (default)
+                
+                                 _logger.LogInformation("ALCANCE_AUTO: Alcance determinado automáticamente: '{AlcanceDeterminado}' para filtros: almacen='{Almacen}', pasillo='{Pasillo}', estanteria='{Estanteria}', altura='{Altura}', posicion='{Posicion}', ubicacion='{Ubicacion}'", 
+                     alcanceDeterminado, codigoAlmacen, pasillo, estanteria, altura, posicion, codigoUbicacion);
+                 
+                 _logger.LogInformation("ALCANCE_AUTO: Detalles de determinación - codigoUbicacion='{CodigoUbicacion}', esVacio={EsVacio}, esNull={EsNull}", 
+                     codigoUbicacion, codigoUbicacion == "", codigoUbicacion == null);
 
                 var orden = new OrdenConteo
                 {
@@ -59,7 +90,7 @@ namespace SGA_Api.Services
                     Titulo = dto.Titulo,
                     Visibilidad = dto.Visibilidad,
                     ModoGeneracion = dto.ModoGeneracion,
-                    Alcance = dto.Alcance,
+                    Alcance = alcanceDeterminado, // Usar el alcance determinado automáticamente
                     FiltrosJson = dto.FiltrosJson,
                     FechaPlan = dto.FechaPlan?.ToUniversalTime(),
                     FechaEjecucion = dto.FechaEjecucion?.ToUniversalTime(),
@@ -465,26 +496,35 @@ namespace SGA_Api.Services
 
             if (ejercicio == 0) return;
 
-            // Si el alcance es UBICACION, construir la ubicación específica desde los filtros
-            string? ubicacionEspecifica = null;
-            if (orden.Alcance == "UBICACION")
-            {
-                var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
-                var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
-                var altura = ExtraerAlturaDelFiltro(orden.FiltrosJson);
-                var posicion = ExtraerPosicionDelFiltro(orden.FiltrosJson);
-                
-                if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
-                {
-                    var pasilloFormateado = pasillo.PadLeft(3, '0');
-                    var estanteriaFormateada = estanteria.PadLeft(3, '0');
-                    var alturaFormateada = altura?.PadLeft(3, '0') ?? "001";
-                    var posicionFormateada = posicion?.PadLeft(3, '0') ?? "001";
-                    
-                    ubicacionEspecifica = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
-                }
-            }
+                         // Si el alcance es UBICACION, obtener la ubicación específica desde los filtros
+             string? ubicacionEspecifica = null;
+             if (orden.Alcance == "UBICACION")
+             {
+                 // Primero intentar extraer ubicación directa del filtro (para ubicaciones especiales)
+                 ubicacionEspecifica = ExtraerUbicacionDelFiltro(orden.FiltrosJson);
+                 
+                 // Si no hay ubicación directa, construir a partir de los componentes
+                 if (ubicacionEspecifica == null)
+                 {
+                     var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
+                     var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
+                     var altura = ExtraerAlturaDelFiltro(orden.FiltrosJson);
+                     var posicion = ExtraerPosicionDelFiltro(orden.FiltrosJson);
+                     
+                     if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                     {
+                         var pasilloFormateado = pasillo.PadLeft(3, '0');
+                         var estanteriaFormateada = estanteria.PadLeft(3, '0');
+                         var alturaFormateada = altura?.PadLeft(3, '0') ?? "001";
+                         var posicionFormateada = posicion?.PadLeft(3, '0') ?? "001";
+                         
+                         ubicacionEspecifica = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
+                     }
+                 }
+             }
 
+            _logger.LogInformation("UBICACION_DEBUG: Ubicación específica extraída = '{UbicacionEspecifica}'", ubicacionEspecifica);
+            
             // Construir la consulta base
             var query = _storageControlContext.AcumuladoStockUbicacion
                 .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
@@ -493,12 +533,22 @@ namespace SGA_Api.Services
                            x.UnidadSaldo > 0);
 
             // Si hay ubicación específica, filtrar por ella
-            if (!string.IsNullOrEmpty(ubicacionEspecifica))
+            if (ubicacionEspecifica != null)
             {
                 query = query.Where(x => x.Ubicacion == ubicacionEspecifica);
+                _logger.LogInformation("UBICACION_DEBUG: Aplicando filtro por ubicación específica: '{UbicacionEspecifica}'", ubicacionEspecifica);
             }
 
             var stockPorUbicacion = await query.ToListAsync();
+            
+            _logger.LogInformation("UBICACION_DEBUG: Encontrados {Count} registros de stock para la ubicación", stockPorUbicacion.Count);
+            
+            // Mostrar los primeros registros para debug
+            foreach (var stock in stockPorUbicacion.Take(5))
+            {
+                _logger.LogInformation("UBICACION_DEBUG: Stock encontrado - Ubicación: '{Ubicacion}', Artículo: {Articulo}, Saldo: {Saldo}", 
+                    stock.Ubicacion, stock.CodigoArticulo, stock.UnidadSaldo);
+            }
 
             foreach (var stock in stockPorUbicacion)
             {
@@ -525,6 +575,14 @@ namespace SGA_Api.Services
                         UsuarioCodigo = orden.CodigoOperario ?? "",
                         Fecha = DateTime.UtcNow
                     });
+                    
+                    _logger.LogInformation("UBICACION_DEBUG: Lectura generada para ubicación '{Ubicacion}', artículo {Articulo}", 
+                        stock.Ubicacion, stock.CodigoArticulo);
+                }
+                else
+                {
+                    _logger.LogWarning("UBICACION_DEBUG: Ubicación '{Ubicacion}' no válida para conteo, artículo {Articulo}", 
+                        stock.Ubicacion, stock.CodigoArticulo);
                 }
             }
         }
@@ -646,16 +704,16 @@ namespace SGA_Api.Services
             if (ubicacion == null)
                 return false;
 
-            // Ubicación vacía NO es válida para conteo automático
+            // Ubicación vacía es válida para conteo (ubicación especial "SIN UBICAR")
             if (ubicacion == "")
-                return false;
+                return true;
 
-            // Ubicaciones especiales NO son válidas para conteo automático
-            if (!ubicacion.StartsWith("UB"))
-                return false;
-
-            // Solo ubicaciones normales UB con formato correcto (14 caracteres)
+            // Ubicaciones normales UB con formato correcto (14 caracteres)
             if (ubicacion.StartsWith("UB") && ubicacion.Length == 14)
+                return true;
+
+            // Cualquier otra ubicación que no empiece con UB es una ubicación especial válida
+            if (!ubicacion.StartsWith("UB"))
                 return true;
 
             // Otras ubicaciones no válidas
@@ -789,6 +847,20 @@ namespace SGA_Api.Services
             {
                 var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(filtrosJson);
                 return filtros?.GetValueOrDefault("posicion")?.ToString();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private string? ExtraerUbicacionDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(filtrosJson);
+                return filtros?.GetValueOrDefault("ubicacion")?.ToString();
             }
             catch
             {

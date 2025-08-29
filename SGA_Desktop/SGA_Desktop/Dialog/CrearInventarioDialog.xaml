@@ -26,7 +26,19 @@
             
             <!-- Converters -->
             <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-            <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+            <helpers:InverseBoolToVisibilityConverter x:Key="InvertedBoolToVisibilityConverter"/>
+            
+            <!-- Estilo para items de almacén -->
+            <Style x:Key="AlmacenItemStyle" TargetType="Border">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="LightGray"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                        <Setter Property="Background" Value="LightBlue"/>
+                        <Setter Property="BorderBrush" Value="Blue"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -75,24 +87,63 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Título almacenes -->
-                        <TextBlock Grid.Row="0" 
-                                   Text="Lista de almacenes" 
-                                   FontWeight="Bold" 
-                                   Foreground="{StaticResource BrushPrincipal}"
-                                   Margin="10,10,10,5"/>
+                        <!-- Header almacenes con switch -->
+                        <StackPanel Grid.Row="0" Margin="10,10,10,5">
+                            <TextBlock Text="Almacenes" 
+                                       FontWeight="Bold" 
+                                       Foreground="{StaticResource BrushPrincipal}"
+                                       Margin="0,0,0,5"/>
+                            
+                                                         <!-- Switch modo multialmacén -->
+                             <CheckBox Content="Inventario multialmacén" 
+                                       IsChecked="{Binding ModoMultialmacen}"
+                                       FontSize="12"
+                                       Foreground="Gray"/>
+                        </StackPanel>
 
-                        <!-- Lista de almacenes -->
-                        <ScrollViewer Grid.Row="1" 
-                                      VerticalScrollBarVisibility="Auto" 
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      Margin="5">
+                        <!-- ComboBox tradicional (modo único) -->
+                        <StackPanel Grid.Row="1" 
+                                    Margin="10,5,10,10"
+                                    Visibility="{Binding ModoMultialmacen, Converter={StaticResource InvertedBoolToVisibilityConverter}}">
+                            <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
+                                      SelectedItem="{Binding AlmacenSeleccionado}"
+                                      DisplayMemberPath="DescripcionCombo"
+                                      Height="35"/>
+                                                         <TextBlock Text="{Binding AlmacenSeleccionado.DescripcionCombo, StringFormat='Seleccionado: {0}'}"
+                                        FontSize="11"
+                                        Foreground="Gray"
+                                        Margin="5,5,5,0"/>
+                        </StackPanel>
+
+                        <!-- Panel modo múltiple -->
+                        <Grid Grid.Row="1" 
+                              Margin="5"
+                              Visibility="{Binding ModoMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            
+                                                         <!-- Resumen de selección -->
+                             <TextBlock Grid.Row="0"
+                                        Text="{Binding DescripcionAlmacenesSeleccionados}"
+                                        FontSize="11"
+                                        Foreground="Gray"
+                                        Margin="5,0,5,10"
+                                        TextWrapping="Wrap"/>
+                            
+                            <!-- Lista de almacenes -->
+                            <ScrollViewer Grid.Row="1"
+                                          VerticalScrollBarVisibility="Auto" 
+                                          HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl ItemsSource="{Binding AlmacenesDisponibles}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Margin="2" 
                                                 Padding="8,6" 
-                                                Background="Transparent"
+                                                Style="{StaticResource AlmacenItemStyle}"
+                                                BorderThickness="2"
+                                                CornerRadius="3"
                                                 Cursor="Hand"
                                                 MouseLeftButtonDown="AlmacenItem_MouseLeftButtonDown">
                                             <Grid>
@@ -121,25 +172,28 @@
                                                 </StackPanel>
 
                                                 <!-- Indicador seleccionado -->
-                                                <Ellipse Grid.Column="2" 
-                                                         Width="8" 
-                                                         Height="8" 
-                                                         Fill="Black"
-                                                         Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                <TextBlock Grid.Column="2" 
+                                                           Text="✓" 
+                                                           FontSize="16"
+                                                           FontWeight="Bold"
+                                                           Foreground="Green"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </ScrollViewer>
+                            </ScrollViewer>
+                        </Grid>
 
-                        <!-- Botón marcar/desmarcar todo (oculto) -->
+                        <!-- Botón marcar/desmarcar todo -->
                         <Button Grid.Row="2" 
                                 Content="MARCAR/DESMARCAR TODO" 
                                 Style="{StaticResource EstiloBotonSecundario}"
                                 Margin="10,5,10,10"
                                 Command="{Binding MarcarTodosCommand}"
-                                Visibility="Collapsed"/>
+                                Visibility="{Binding ModoMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     </Grid>
                 </Border>
 
@@ -267,6 +321,66 @@
                                             <Run Text="{Binding ArticuloSeleccionado.CodigoArticulo}" FontWeight="Bold"/>
                                             <Run Text="-"/>
                                             <Run Text="{Binding ArticuloSeleccionado.DescripcionArticulo}"/>
+                                        </TextBlock>
+                                    </Grid>
+
+                                    <!-- Separador -->
+                                    <Border Height="1" Background="#E0E0E0" Margin="0,10,0,10"/>
+
+                                    <!-- Checkbox para habilitar rango de artículos -->
+                                    <CheckBox Content="Usar rango de artículos" 
+                                              IsChecked="{Binding UsarRangoArticulos}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,0,0,10"/>
+
+                                    <!-- Panel de rango de artículos -->
+                                    <Grid Visibility="{Binding UsarRangoArticulos, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Desde -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" 
+                                                   Text="Desde:" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="0,0,10,0" 
+                                                   FontWeight="SemiBold"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1" 
+                                                 Text="{Binding ArticuloDesde, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource EstiloCajaTexto}" 
+                                                 Height="35"
+                                                 Margin="0,0,15,0"
+                                                 ToolTip="Código del artículo inicial del rango (ej: 10000)"/>
+
+                                        <!-- Hasta -->
+                                        <TextBlock Grid.Row="0" Grid.Column="2" 
+                                                   Text="Hasta:" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="0,0,10,0" 
+                                                   FontWeight="SemiBold"/>
+                                        <TextBox Grid.Row="0" Grid.Column="3" 
+                                                 Text="{Binding ArticuloHasta, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource EstiloCajaTexto}" 
+                                                 Height="35"
+                                                 ToolTip="Código del artículo final del rango (ej: 10999)"/>
+
+                                        <!-- Info del rango -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                                                   Foreground="#2E8B57" 
+                                                   FontStyle="Italic"
+                                                   Margin="0,10,0,0"
+                                                   Visibility="{Binding MostrarInfoRango, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <Run Text="📋 Rango seleccionado:"/>
+                                            <Run Text="{Binding ArticuloDesde}" FontWeight="Bold"/>
+                                            <Run Text="→"/>
+                                            <Run Text="{Binding ArticuloHasta}" FontWeight="Bold"/>
                                         </TextBlock>
                                     </Grid>
                                 </StackPanel>

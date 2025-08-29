@@ -416,13 +416,15 @@
                                                     
                                                     <!-- Inventario (editable) -->
                                                     <TextBox Grid.Column="8" 
-                                                             Text="{Binding CantidadContadaTexto, UpdateSourceTrigger=PropertyChanged}" 
+                                                             Text="{Binding CantidadContadaTexto, UpdateSourceTrigger=LostFocus}" 
                                                              Width="80" 
                                                              Height="24"
                                                              FontSize="12"
                                                              FontWeight="Bold"
                                                              VerticalAlignment="Center"
                                                              HorizontalAlignment="Center"
+                                                             GotFocus="TextBox_GotFocus"
+                                                             MouseUp="TextBox_MouseUp"
                                                              Padding="4,2"
                                                              BorderThickness="1"
                                                              BorderBrush="Gray"

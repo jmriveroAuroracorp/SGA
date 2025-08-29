@@ -573,6 +573,54 @@ namespace SGA_Api.Controllers.Stock
 			return Ok(datos);
 		}
 
+		/// <summary>
+		/// GET api/Stock/precio-medio
+		/// Obtiene el precio medio de un artículo desde la tabla AcumuladoStock en Sage
+		/// </summary>
+		[HttpGet("precio-medio")]
+		public async Task<IActionResult> ObtenerPrecioMedio(
+			[FromQuery] int codigoEmpresa,
+			[FromQuery] string codigoArticulo,
+			[FromQuery] string? codigoAlmacen = null)
+		{
+			try
+			{
+				// Obtener el ejercicio actual
+				var ejercicio = await _sageContext.Periodos
+					.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+
+				if (ejercicio == 0)
+					return BadRequest("No se encontró ejercicio válido");
+
+				// Buscar en AcumuladoStock
+				var query = _sageContext.AcumuladoStock
+					.Where(a => a.CodigoEmpresa == codigoEmpresa &&
+								a.Ejercicio == ejercicio &&
+								a.CodigoArticulo == codigoArticulo);
+
+				// Si se especifica almacén, filtrar por él
+				if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+					query = query.Where(a => a.CodigoAlmacen == codigoAlmacen);
+
+				var acumuladoStock = await query.FirstOrDefaultAsync();
+
+				if (acumuladoStock?.PrecioMedio != null)
+				{
+					return Ok(acumuladoStock.PrecioMedio);
+				}
+
+				// Si no se encuentra precio medio, devolver 0
+				return Ok(0m);
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, $"Error obteniendo precio medio: {ex.Message}");
+			}
+		}
+
 
 		private async Task<List<string>> ObtenerCodigosArticulosPorDescripcion(string descripcion, short codigoEmpresa)
 		{

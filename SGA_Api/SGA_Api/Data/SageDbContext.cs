@@ -23,6 +23,7 @@ namespace SGA_Api.Data
 		public DbSet<Articulo> Articulos { get; set; }
         // Vista para los alérgenos de las etiquetas
 		public DbSet<VisArticulo> VisArticulos { get; set; } = null!;
+		public DbSet<AcumuladoStock> AcumuladoStock { get; set; } = null!;
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -120,6 +121,11 @@ namespace SGA_Api.Data
 				eb.Property(v => v.VNEWAlergenos)         // coincide con tu POCO
 				  .HasColumnName("VNEWALERGENOS");        // exacto nombre de la columna
 			});
+
+			// Configuración para AcumuladoStock
+			modelBuilder.Entity<AcumuladoStock>()
+				.ToTable("AcumuladoStock")
+				.HasNoKey(); // Vista sin clave primaria definida
 
 		}
 	}

@@ -12,5 +12,11 @@ namespace SGA_Api.Models.Login
         public DateTime? FechaBaja { get; set; }         // Si no es null, el operario está de baja
 
         public string? CodigoCentro { get; set; }
+        
+        [Column("MRH_LimiteInventarioEuros")]
+        public decimal? MRH_LimiteInventarioEuros { get; set; }  // Límite de inventario en euros
+
+        [Column("MRH_LimiteInventarioUnidades")]
+        public decimal? MRH_LimiteInventarioUnidades { get; set; }  // Límite de inventario en unidades
     }
 }

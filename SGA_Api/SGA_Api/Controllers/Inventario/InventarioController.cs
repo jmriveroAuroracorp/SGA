@@ -45,14 +45,18 @@ namespace SGA_Api.Controllers.Inventario
                 // Filtro por empresa (obligatorio)
                 query = query.Where(i => i.CodigoEmpresa == filtro.CodigoEmpresa);
 
-                // Filtro por almacén
+                // Filtro por almacén - ACTUALIZADO para soporte multialmacén
                 if (!string.IsNullOrWhiteSpace(filtro.CodigoAlmacen))
                 {
-                    query = query.Where(i => i.CodigoAlmacen == filtro.CodigoAlmacen);
+                    // Filtrar inventarios que incluyan este almacén específico
+                    query = query.Where(i => _context.InventarioAlmacenes
+                        .Any(ia => ia.IdInventario == i.IdInventario && ia.CodigoAlmacen == filtro.CodigoAlmacen));
                 }
                 else if (filtro.CodigosAlmacen?.Any() == true)
                 {
-                    query = query.Where(i => filtro.CodigosAlmacen.Contains(i.CodigoAlmacen));
+                    // Filtrar inventarios que incluyan cualquiera de estos almacenes
+                    query = query.Where(i => _context.InventarioAlmacenes
+                        .Any(ia => ia.IdInventario == i.IdInventario && filtro.CodigosAlmacen.Contains(ia.CodigoAlmacen)));
                 }
 
                 // Filtro por estado
@@ -76,8 +80,9 @@ namespace SGA_Api.Controllers.Inventario
                     query = query.Where(i => i.FechaCreacion <= fechaHasta);
                 }
 
-                // Obtener inventarios primero
+                // Obtener inventarios con información de almacenes
                 var inventarios = await query
+                    .Include(i => i.Almacenes)  // ← NUEVO: Incluir almacenes del inventario
                     .OrderByDescending(i => i.FechaCreacion)
                     .Take(100)
                     .ToListAsync();
@@ -86,7 +91,7 @@ namespace SGA_Api.Controllers.Inventario
                 var nombreDict = await _context.vUsuariosConNombre
                     .ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
 
-                // Asignar nombres de usuarios a cada inventario
+                // Asignar nombres de usuarios y estadísticas a cada inventario
                 foreach (var inventario in inventarios)
                 {
                     if (nombreDict.TryGetValue(inventario.UsuarioCreacionId, out var nombre))
@@ -95,9 +100,45 @@ namespace SGA_Api.Controllers.Inventario
                     if (inventario.UsuarioProcesamientoId.HasValue && 
                         nombreDict.TryGetValue(inventario.UsuarioProcesamientoId.Value, out var nombreProcesamiento))
                         inventario.UsuarioProcesamientoNombre = nombreProcesamiento;
+
+                    // Calcular estadísticas de líneas
+                    var totalLineas = await _context.InventarioLineasTemp
+                        .Where(lt => lt.IdInventario == inventario.IdInventario)
+                        .CountAsync();
+                    
+                    var lineasContadas = await _context.InventarioLineasTemp
+                        .Where(lt => lt.IdInventario == inventario.IdInventario && lt.CantidadContada.HasValue)
+                        .CountAsync();
+
+                    inventario.TotalLineas = totalLineas;
+                    inventario.LineasContadas = lineasContadas;
                 }
 
-                return Ok(inventarios);
+                // Mapear información de almacenes para cada inventario
+                var inventariosDto = inventarios.Select(inv => new 
+                {
+                    IdInventario = inv.IdInventario,
+                    CodigoInventario = inv.CodigoInventario,
+                    CodigoEmpresa = inv.CodigoEmpresa,
+                    CodigoAlmacen = inv.CodigoAlmacen,
+                    RangoUbicaciones = inv.RangoUbicaciones,
+                    TipoInventario = inv.TipoInventario,
+                    Comentarios = inv.Comentarios,
+                    Estado = inv.Estado,
+                    UsuarioCreacionId = inv.UsuarioCreacionId,
+                    UsuarioCreacionNombre = inv.UsuarioCreacionNombre,
+                    UsuarioProcesamientoId = inv.UsuarioProcesamientoId,
+                    UsuarioProcesamientoNombre = inv.UsuarioProcesamientoNombre,
+                    FechaCreacion = inv.FechaCreacion,
+                    FechaCierre = inv.FechaCierre,
+                    UsuarioCierreId = inv.UsuarioCierreId,
+                    TotalLineas = inv.TotalLineas,
+                    LineasContadas = inv.LineasContadas,
+                    // NUEVO: Información de almacenes
+                    CodigosAlmacen = inv.Almacenes.Select(a => a.CodigoAlmacen).ToList()
+                }).ToList();
+
+                return Ok(inventariosDto);
             }
             catch (Exception ex)
             {
@@ -140,8 +181,9 @@ namespace SGA_Api.Controllers.Inventario
                 if (string.IsNullOrWhiteSpace(dto.CodigoInventario))
                     return BadRequest("El código de inventario es obligatorio");
 
-                if (string.IsNullOrWhiteSpace(dto.CodigoAlmacen))
-                    return BadRequest("El código de almacén es obligatorio");
+                // Validar almacenes - debe tener al menos uno en CodigoAlmacen o CodigosAlmacen
+                if (string.IsNullOrWhiteSpace(dto.CodigoAlmacen) && (!dto.CodigosAlmacen?.Any() ?? true))
+                    return BadRequest("Debe especificar al menos un almacén");
 
                 if (string.IsNullOrWhiteSpace(dto.TipoInventario))
                     return BadRequest("El tipo de inventario es obligatorio");
@@ -168,12 +210,23 @@ namespace SGA_Api.Controllers.Inventario
                     rangoFormateado = "Error al formatear rango";
                 }
 
+                // Determinar almacenes a incluir - compatibilidad hacia atrás y nueva funcionalidad
+                var almacenesAIncluir = new List<string>();
+                if (dto.CodigosAlmacen?.Any() == true)
+                {
+                    almacenesAIncluir.AddRange(dto.CodigosAlmacen.Distinct());
+                }
+                else if (!string.IsNullOrWhiteSpace(dto.CodigoAlmacen))
+                {
+                    almacenesAIncluir.Add(dto.CodigoAlmacen);
+                }
+
                 var inventario = new InventarioCabecera
                 {
                     IdInventario = Guid.NewGuid(),
                     CodigoInventario = dto.CodigoInventario,
                     CodigoEmpresa = dto.CodigoEmpresa,
-                    CodigoAlmacen = dto.CodigoAlmacen,
+                    CodigoAlmacen = almacenesAIncluir.First(), // Primer almacén para compatibilidad
                     RangoUbicaciones = rangoFormateado,
                     TipoInventario = dto.TipoInventario.ToUpper(),
                     Comentarios = dto.Comentarios,
@@ -183,6 +236,19 @@ namespace SGA_Api.Controllers.Inventario
                 };
 
                 _context.InventarioCabecera.Add(inventario);
+                
+                // Crear relaciones de almacenes
+                foreach (var codigoAlmacen in almacenesAIncluir)
+                {
+                    var relacionAlmacen = new InventarioAlmacenes
+                    {
+                        IdInventario = inventario.IdInventario,
+                        CodigoAlmacen = codigoAlmacen,
+                        CodigoEmpresa = dto.CodigoEmpresa
+                    };
+                    _context.InventarioAlmacenes.Add(relacionAlmacen);
+                }
+                
                 await _context.SaveChangesAsync();
 
                 // Generar líneas temporales automáticamente
@@ -190,7 +256,7 @@ namespace SGA_Api.Controllers.Inventario
                 {
                     _logger.LogInformation("Creando inventario con parámetros: IncluirUnidadesCero={IncluirUnidadesCero}, IncluirArticulosConStockCero={IncluirArticulosConStockCero}, IncluirUbicacionesEspeciales={IncluirUbicacionesEspeciales}", 
                     dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales);
-                var resultadoGeneracion = await GenerarLineasTemporalesInterno(inventario.IdInventario, dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales, dto.CodigoArticuloFiltro);
+                var resultadoGeneracion = await GenerarLineasTemporalesInterno(inventario.IdInventario, dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales, dto.CodigoArticuloFiltro, dto.ArticuloDesde, dto.ArticuloHasta);
                     if (resultadoGeneracion.Exito)
                     {
                         return Ok(new { 
@@ -198,7 +264,9 @@ namespace SGA_Api.Controllers.Inventario
                             Mensaje = "Inventario creado correctamente",
                             LineasGeneradas = resultadoGeneracion.LineasGeneradas,
                             UbicacionesEnRango = resultadoGeneracion.UbicacionesEnRango,
-                            StockEncontrado = resultadoGeneracion.StockEncontrado
+                            StockEncontrado = resultadoGeneracion.StockEncontrado,
+                            AlmacenesIncluidos = almacenesAIncluir,
+                            EsMultialmacen = almacenesAIncluir.Count > 1
                         });
                     }
                     else
@@ -206,7 +274,9 @@ namespace SGA_Api.Controllers.Inventario
                         return Ok(new { 
                             Id = inventario.IdInventario, 
                             Mensaje = "Inventario creado correctamente, pero no se pudieron generar líneas temporales",
-                            ErrorGeneracion = resultadoGeneracion.Mensaje
+                            ErrorGeneracion = resultadoGeneracion.Mensaje,
+                            AlmacenesIncluidos = almacenesAIncluir,
+                            EsMultialmacen = almacenesAIncluir.Count > 1
                         });
                     }
                 }
@@ -215,7 +285,9 @@ namespace SGA_Api.Controllers.Inventario
                     _logger.LogWarning(ex, "Inventario creado pero error al generar líneas temporales");
                     return Ok(new { 
                         Id = inventario.IdInventario, 
-                        Mensaje = "Inventario creado correctamente, pero error al generar líneas temporales"
+                        Mensaje = "Inventario creado correctamente, pero error al generar líneas temporales",
+                        AlmacenesIncluidos = almacenesAIncluir,
+                        EsMultialmacen = almacenesAIncluir.Count > 1
                     });
                 }
             }
@@ -337,6 +409,7 @@ namespace SGA_Api.Controllers.Inventario
             try
             {
                 var inventario = await _context.InventarioCabecera
+                    .Include(i => i.Almacenes)  // ← NUEVO: Incluir almacenes para multialmacén
                     .FirstOrDefaultAsync(i => i.IdInventario == idInventario);
 
                 if (inventario == null)
@@ -344,6 +417,17 @@ namespace SGA_Api.Controllers.Inventario
 
                 if (inventario.Estado != "CONSOLIDADO")
                     return BadRequest("Solo se pueden cerrar inventarios consolidados");
+
+                // Obtener almacenes del inventario para multialmacén
+                var almacenesInventario = inventario.Almacenes.Select(a => a.CodigoAlmacen).ToList();
+                if (!almacenesInventario.Any())
+                {
+                    // Compatibilidad hacia atrás: usar el almacén de la cabecera
+                    almacenesInventario.Add(inventario.CodigoAlmacen);
+                }
+
+                _logger.LogInformation("Cerrando inventario {IdInventario} que incluye {NumAlmacenes} almacenes: {Almacenes}", 
+                    idInventario, almacenesInventario.Count, string.Join(", ", almacenesInventario));
 
                 // Iniciar transacción para asegurar consistencia
                 await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -381,10 +465,11 @@ namespace SGA_Api.Controllers.Inventario
                             try
                             {
                                 // Buscar TODAS las líneas de palet en esa ubicación específica
+                                // ACTUALIZADO: Buscar en TODOS los almacenes del inventario multialmacén
                                 var lineasPalet = await _context.PaletLineas
                                     .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
                                                 pl.CodigoArticulo == linea.CodigoArticulo &&
-                                                pl.CodigoAlmacen == inventario.CodigoAlmacen &&
+                                                almacenesInventario.Contains(pl.CodigoAlmacen) &&  // ← CAMBIO: Usar lista de almacenes
                                                 pl.Ubicacion == linea.CodigoUbicacion &&
                                                 pl.Lote == linea.Partida)
                                     .Include(pl => pl.Palet)
@@ -1320,85 +1405,116 @@ namespace SGA_Api.Controllers.Inventario
         /// Método interno para generar líneas temporales (usado por CrearInventario)
         /// </summary>
                 private async Task<(bool Exito, int LineasGeneradas, int UbicacionesEnRango, int StockEncontrado, string Mensaje)>
-            GenerarLineasTemporalesInterno(Guid idInventario, bool incluirUnidadesCero = false, bool incluirArticulosConStockCero = false, bool incluirUbicacionesEspeciales = false, string? codigoArticuloFiltro = null)
+            GenerarLineasTemporalesInterno(Guid idInventario, bool incluirUnidadesCero = false, bool incluirArticulosConStockCero = false, bool incluirUbicacionesEspeciales = false, string? codigoArticuloFiltro = null, string? articuloDesde = null, string? articuloHasta = null)
         {
             try
             {
                 _logger.LogInformation("Generando líneas temporales para inventario {IdInventario}, incluirUnidadesCero: {IncluirUnidadesCero}, incluirArticulosConStockCero: {IncluirArticulosConStockCero}, incluirUbicacionesEspeciales: {IncluirUbicacionesEspeciales}, codigoArticuloFiltro: {CodigoArticuloFiltro}", 
                     idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales, codigoArticuloFiltro ?? "null");
                 
-                // 1. Obtener inventario
+                // 1. Obtener inventario con sus almacenes
                 var inventario = await _context.InventarioCabecera
+                    .Include(i => i.Almacenes)
                     .FirstOrDefaultAsync(i => i.IdInventario == idInventario);
                 
                 if (inventario == null) 
                     return (false, 0, 0, 0, "Inventario no encontrado");
 
-                // 2. Parsear rango de ubicaciones
-                var rangos = ParsearRangoUbicaciones(inventario.RangoUbicaciones);
-                
-                // 3. Obtener ubicaciones reales en ese rango
-                var ubicacionesEnRango = await ObtenerUbicacionesEnRangoAsync(
-                    inventario.CodigoEmpresa, 
-                    inventario.CodigoAlmacen, 
-                    rangos);
-
-                if (ubicacionesEnRango.Count == 0)
-                    return (false, 0, 0, 0, "No se encontraron ubicaciones en el rango especificado");
-
-                // 4. Obtener ejercicio actual
-                var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
-                    .OrderByDescending(p => p.Fechainicio)
-                    .Select(p => p.Ejercicio)
-                    .FirstOrDefaultAsync();
-
-
-
-                if (ejercicio == 0)
-                    return (false, 0, 0, 0, "No se encontró un ejercicio válido");
-
-                // 5. Obtener stock actual para esas ubicaciones
-                var stockActual = await ObtenerStockParaInventario(
-                    inventario.CodigoEmpresa, 
-                    ejercicio, 
-                    inventario.CodigoAlmacen, 
-                    ubicacionesEnRango, 
-                    incluirArticulosConStockCero,
-                    codigoArticuloFiltro);
-
-
-
-
-
-
-
-
-
-
-
-                // 5.1 Si se incluyen ubicaciones especiales, agregar ubicaciones como "", "ND", etc.
-                if (incluirUbicacionesEspeciales)
+                // 2. Obtener almacenes del inventario
+                var almacenesInventario = inventario.Almacenes.Select(a => a.CodigoAlmacen).ToList();
+                if (!almacenesInventario.Any())
                 {
-                    var ubicacionesEspecialesList = new List<string> { "", "ND" };
-                    
-                    var ubicacionesEspeciales = await ObtenerStockParaInventarioUbicacionesEspeciales(
-                        inventario.CodigoEmpresa, 
-                        ejercicio, 
-                        inventario.CodigoAlmacen, 
-                        incluirArticulosConStockCero,
-                        codigoArticuloFiltro);
-
-                    stockActual.AddRange(ubicacionesEspeciales);
+                    // Compatibilidad hacia atrás: si no hay relaciones, usar el almacén de la cabecera
+                    almacenesInventario.Add(inventario.CodigoAlmacen);
                 }
 
-                // 6. Crear líneas temporales (agrupando para evitar duplicados)
+                _logger.LogInformation("Inventario {IdInventario} incluye {NumAlmacenes} almacenes: {Almacenes}", 
+                    idInventario, almacenesInventario.Count, string.Join(", ", almacenesInventario));
+
+                // 3. Parsear rango de ubicaciones (aplica a todos los almacenes)
+                var rangos = ParsearRangoUbicaciones(inventario.RangoUbicaciones);
+
+                // 4. Procesar cada almacén del inventario
+                var stockActualTotal = new List<AcumuladoStockUbicacion>();
+                var totalUbicacionesEnRango = 0;
+
+                foreach (var codigoAlmacen in almacenesInventario)
+                {
+                    _logger.LogInformation("Procesando almacén {CodigoAlmacen} para inventario {IdInventario}", 
+                        codigoAlmacen, idInventario);
+
+                    // 4.1. Obtener ejercicio para este almacén específico
+                    var ejercicio = await _sageDbContext.Periodos
+                        .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                        .OrderByDescending(p => p.Fechainicio)
+                        .Select(p => p.Ejercicio)
+                        .FirstOrDefaultAsync();
+
+                    if (ejercicio == 0)
+                    {
+                        _logger.LogWarning("No se encontró ejercicio válido para almacén {CodigoAlmacen}", codigoAlmacen);
+                        continue; // Saltar este almacén y continuar con el siguiente
+                    }
+
+                    // 4.2. Obtener ubicaciones reales en rango para este almacén
+                    var ubicacionesEnRangoAlmacen = await ObtenerUbicacionesEnRangoAsync(
+                        inventario.CodigoEmpresa, 
+                        codigoAlmacen, 
+                        rangos);
+
+                    totalUbicacionesEnRango += ubicacionesEnRangoAlmacen.Count;
+
+                    if (ubicacionesEnRangoAlmacen.Count == 0)
+                    {
+                        _logger.LogWarning("No se encontraron ubicaciones en rango para almacén {CodigoAlmacen}", codigoAlmacen);
+                        continue; // Saltar este almacén si no tiene ubicaciones válidas
+                    }
+
+                    // 4.3. Obtener stock actual para las ubicaciones de este almacén
+                    var stockAlmacen = await ObtenerStockParaInventario(
+                        inventario.CodigoEmpresa, 
+                        ejercicio, 
+                        codigoAlmacen, 
+                        ubicacionesEnRangoAlmacen, 
+                        incluirArticulosConStockCero,
+                        codigoArticuloFiltro,
+                        articuloDesde,
+                        articuloHasta);
+
+                    stockActualTotal.AddRange(stockAlmacen);
+
+                    // 4.4. Si se incluyen ubicaciones especiales, agregarlas para este almacén
+                    if (incluirUbicacionesEspeciales)
+                    {
+                        var ubicacionesEspeciales = await ObtenerStockParaInventarioUbicacionesEspeciales(
+                            inventario.CodigoEmpresa, 
+                            ejercicio, 
+                            codigoAlmacen, 
+                            incluirArticulosConStockCero,
+                            codigoArticuloFiltro,
+                            articuloDesde,
+                            articuloHasta);
+
+                        stockActualTotal.AddRange(ubicacionesEspeciales);
+                    }
+
+                    _logger.LogInformation("Almacén {CodigoAlmacen}: {NumUbicaciones} ubicaciones, {NumRegistrosStock} registros de stock", 
+                        codigoAlmacen, ubicacionesEnRangoAlmacen.Count, stockAlmacen.Count);
+                }
+
+                // Verificar que se encontró stock en al menos un almacén
+                if (!stockActualTotal.Any())
+                    return (false, 0, totalUbicacionesEnRango, 0, "No se encontró stock en ninguno de los almacenes especificados");
+
+                // 5. Crear líneas temporales (agrupando para evitar duplicados entre almacenes)
                 var lineasTemporales = new List<InventarioLineasTemp>();
                 
-                // Agrupar por artículo, ubicación, partida y fecha para evitar duplicados
-                var stockAgrupado = stockActual
+                // Agrupar por artículo, ALMACÉN, ubicación, partida y fecha para evitar duplicados
+                // IMPORTANTE: Incluir CodigoAlmacen en el grouping para inventarios multialmacén
+                var stockAgrupado = stockActualTotal
                     .GroupBy(s => new { 
                         s.CodigoArticulo, 
+                        s.CodigoAlmacen,  // ← NUEVO: Agrupar también por almacén
                         s.Ubicacion, 
                         s.Partida, 
                         s.FechaCaducidad 
@@ -1406,6 +1522,7 @@ namespace SGA_Api.Controllers.Inventario
                     .Select(g => new
                     {
                         CodigoArticulo = g.Key.CodigoArticulo,
+                        CodigoAlmacen = g.Key.CodigoAlmacen,  // ← NUEVO: Incluir almacén en el resultado
                         Ubicacion = g.Key.Ubicacion,
                         Partida = g.Key.Partida,
                         FechaCaducidad = g.Key.FechaCaducidad,
@@ -1418,11 +1535,11 @@ namespace SGA_Api.Controllers.Inventario
                 
                 foreach (var stock in stockAgrupado)
                 {
-                    // Determinar cantidad inicial según el checkbox "Inicializar a 0"
+                    // incluirUnidadesCero determina si inicializar CantidadContada a 0 (conteo ciego) o al stock actual (conteo normal)
                     decimal cantidadInicial = incluirUnidadesCero ? 0 : stock.UnidadSaldo;
                     
-                    _logger.LogInformation("Artículo {CodigoArticulo} en {Ubicacion}: incluirUnidadesCero={IncluirUnidadesCero}, cantidadInicial={CantidadInicial}, stockActual={StockActual}", 
-                        stock.CodigoArticulo, stock.Ubicacion, incluirUnidadesCero, cantidadInicial, stock.UnidadSaldo);
+                    _logger.LogInformation("Artículo {CodigoArticulo} en {CodigoAlmacen}/{Ubicacion}: incluirUnidadesCero={IncluirUnidadesCero}, cantidadInicial={CantidadInicial}, stockActual={StockActual}", 
+                        stock.CodigoArticulo, stock.CodigoAlmacen, stock.Ubicacion, incluirUnidadesCero, cantidadInicial, stock.UnidadSaldo);
 
                     var nuevaLinea = new InventarioLineasTemp
                     {
@@ -1452,7 +1569,7 @@ namespace SGA_Api.Controllers.Inventario
                 
 
 
-                return (true, lineasTemporales.Count, ubicacionesEnRango.Count, stockActual.Count, "Líneas generadas correctamente");
+                return (true, lineasTemporales.Count, totalUbicacionesEnRango, stockActualTotal.Count, "Líneas generadas correctamente para inventario multialmacén");
             }
             catch (Exception ex)
             {
@@ -1649,9 +1766,9 @@ namespace SGA_Api.Controllers.Inventario
         /// Genera líneas temporales del inventario basadas en ubicaciones reales con stock
         /// </summary>
         [HttpPost("generar-lineas-temporales/{idInventario}")]
-        public async Task<IActionResult> GenerarLineasTemporales(Guid idInventario, [FromQuery] bool incluirUnidadesCero = false, [FromQuery] bool incluirArticulosConStockCero = false, [FromQuery] bool incluirUbicacionesEspeciales = false)
+        public async Task<IActionResult> GenerarLineasTemporales(Guid idInventario, [FromQuery] bool incluirUnidadesCero = false, [FromQuery] bool incluirArticulosConStockCero = false, [FromQuery] bool incluirUbicacionesEspeciales = false, [FromQuery] string? codigoArticuloFiltro = null, [FromQuery] string? articuloDesde = null, [FromQuery] string? articuloHasta = null)
         {
-            var resultado = await GenerarLineasTemporalesInterno(idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales);
+            var resultado = await GenerarLineasTemporalesInterno(idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales, codigoArticuloFiltro, articuloDesde, articuloHasta);
             
             if (resultado.Exito)
             {
@@ -1720,7 +1837,9 @@ namespace SGA_Api.Controllers.Inventario
             string codigoAlmacen, 
             List<string> ubicacionesEnRango, 
             bool incluirArticulosConStockCero,
-            string? codigoArticuloFiltro = null)
+            string? codigoArticuloFiltro = null,
+            string? articuloDesde = null,
+            string? articuloHasta = null)
         {
             try
             {
@@ -1739,6 +1858,13 @@ namespace SGA_Api.Controllers.Inventario
                 if (!string.IsNullOrWhiteSpace(codigoArticuloFiltro))
                 {
                     query = query.Where(s => s.CodigoArticulo == codigoArticuloFiltro);
+                }
+
+                // NUEVO: Filtro por rango de artículos si se especifica
+                if (!string.IsNullOrWhiteSpace(articuloDesde) && !string.IsNullOrWhiteSpace(articuloHasta))
+                {
+                    query = query.Where(s => string.Compare(s.CodigoArticulo, articuloDesde) >= 0 && 
+                                           string.Compare(s.CodigoArticulo, articuloHasta) <= 0);
                 }
 
                 var result = await query.ToListAsync();
@@ -1762,7 +1888,9 @@ namespace SGA_Api.Controllers.Inventario
             short ejercicio, 
             string codigoAlmacen, 
             bool incluirArticulosConStockCero,
-            string? codigoArticuloFiltro = null)
+            string? codigoArticuloFiltro = null,
+            string? articuloDesde = null,
+            string? articuloHasta = null)
         {
             try
             {
@@ -1781,6 +1909,13 @@ namespace SGA_Api.Controllers.Inventario
                 if (!string.IsNullOrWhiteSpace(codigoArticuloFiltro))
                 {
                     query = query.Where(s => s.CodigoArticulo == codigoArticuloFiltro);
+                }
+
+                // NUEVO: Filtro por rango de artículos si se especifica
+                if (!string.IsNullOrWhiteSpace(articuloDesde) && !string.IsNullOrWhiteSpace(articuloHasta))
+                {
+                    query = query.Where(s => string.Compare(s.CodigoArticulo, articuloDesde) >= 0 && 
+                                           string.Compare(s.CodigoArticulo, articuloHasta) <= 0);
                 }
 
                 return await query.ToListAsync();

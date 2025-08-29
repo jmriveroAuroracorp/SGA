@@ -1,0 +1,325 @@
+<Window x:Class="SGA_Desktop.Dialog.CrearOrdenConteoDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+        xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        Title="CREAR ORDEN DE CONTEO"
+        Width="800"
+        Height="650"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- DataContext -->
+    <Window.DataContext>
+        <vm:CrearOrdenConteoDialogViewModel />
+    </Window.DataContext>
+
+    <!-- Recursos -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Marco principal -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}" 
+                    CornerRadius="6,6,0,0">
+                <Grid>
+                    <TextBlock Text="🔄 CREAR ORDEN DE CONTEO" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                    <!-- Botón cerrar -->
+                    <Button Content="✕" 
+                            Width="30" 
+                            Height="30"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Command="{Binding CancelarCommand}"
+                            FontSize="14"/>
+                </Grid>
+            </Border>
+
+            <!-- Contenido principal -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="20">
+                <StackPanel>
+                    <!-- Información básica -->
+                    <GroupBox Header="📝 Información Básica" Margin="0,0,0,15">
+                        <Grid Margin="15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Título -->
+                            <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                                <TextBlock Text="Título *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Titulo, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"
+                                         BorderThickness="1"
+                                         BorderBrush="{StaticResource BrushInputBorde}"/>
+                            </StackPanel>
+
+                            <!-- Alcance -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,10">
+                                <TextBlock Text="Alcance *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding AlcancesDisponibles}"
+                                          SelectedItem="{Binding AlcanceSeleccionado}"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8"/>
+                            </StackPanel>
+
+                            <!-- Prioridad -->
+                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,10">
+                                <TextBlock Text="Prioridad" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding PrioridadesDisponibles}"
+                                          DisplayMemberPath="Texto"
+                                          SelectedItem="{Binding PrioridadSeleccionada}"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8"/>
+                            </StackPanel>
+
+                            <!-- Almacén -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10">
+                                <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
+                                          DisplayMemberPath="DescripcionCombo"
+                                          SelectedItem="{Binding AlmacenSeleccionado}"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8"/>
+                            </StackPanel>
+
+                            <!-- Operario -->
+                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,10">
+                                <TextBlock Text="Operario Asignado" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding CodigoOperario, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"
+                                         BorderThickness="1"
+                                         BorderBrush="{StaticResource BrushInputBorde}"/>
+                            </StackPanel>
+
+                            <!-- Fecha -->
+                            <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,0,0,0">
+                                <TextBlock Text="Fecha Planificada" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <DatePicker SelectedDate="{Binding FechaPlan}"
+                                           Height="35"
+                                           FontSize="14"/>
+                            </StackPanel>
+
+
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Filtros específicos -->
+                    <GroupBox Header="🎯 Filtros de Conteo" Margin="0,0,0,15">
+                        <Grid Margin="15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Filtros por ubicación -->
+                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,5,10"
+                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Pasillo" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Pasillo, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="5,0,5,10"
+                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Estantería" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Estanteria, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="0" Grid.Column="2" Margin="5,0,5,10"
+                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Altura" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Altura, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="0" Grid.Column="3" Margin="5,0,0,10"
+                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Posición" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Posicion, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"/>
+                            </StackPanel>
+
+                            <!-- Filtro por artículo -->
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Margin="0,0,0,10"
+                                       Visibility="{Binding MostrarFiltroArticulo, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Buscar Artículo" FontWeight="Bold" Margin="0,0,0,5"/>
+                                
+                                <!-- Campo de búsqueda con botón -->
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="35"
+                                             FontSize="14"
+                                             Padding="8"
+                                             Margin="0,0,10,0"/>
+                                    
+                                    <Button Grid.Column="1"
+                                            Content="🔍 Buscar"
+                                            Command="{Binding BuscarArticuloCommand}"
+                                            Style="{StaticResource EstiloBotonPrincipal}"
+                                            Width="100"
+                                            Height="35"
+                                            FontSize="12"/>
+                                </Grid>
+
+                                <!-- Lista desplegable para múltiples resultados -->
+                                <StackPanel Visibility="{Binding MostrarListaArticulos, Converter={StaticResource BoolToVis}}"
+                                           Margin="0,0,0,10">
+                                    <TextBlock Text="Selecciona el artículo:" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                                    <ComboBox ItemsSource="{Binding ArticulosEncontrados}"
+                                              SelectedItem="{Binding ArticuloSeleccionado}"
+                                              Height="35"
+                                              FontSize="12">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                                    <TextBlock Text="-" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{Binding DescripcionArticulo}" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- Información del artículo seleccionado -->
+                                <Border Visibility="{Binding MostrarInfoArticulo, Converter={StaticResource BoolToVis}}"
+                                        Background="#F8F9FA"
+                                        BorderBrush="#DEE2E6"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="✅ Artículo seleccionado:" FontWeight="Bold" Foreground="#198754" Margin="0,0,0,5"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                            <TextBlock Text="Código: " FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding ArticuloSeleccionado.CodigoArticulo}" FontFamily="Consolas"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Descripción: " FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding ArticuloSeleccionado.DescripcionArticulo}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Comentario -->
+                            <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Margin="0,0,0,0">
+                                <TextBlock Text="Comentarios" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Comentario, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="60"
+                                         FontSize="14"
+                                         Padding="8"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"/>
+                            </StackPanel>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Información de estado -->
+                    <StackPanel Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}"
+                               Orientation="Horizontal"
+                               Margin="0,10,0,0">
+                        <ProgressBar Width="20" Height="20" 
+                                     IsIndeterminate="True" 
+                                     Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding MensajeEstado}" 
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource BrushSecundario}"
+                                   FontStyle="Italic"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Botones de acción -->
+            <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BrushSecundario}">
+                <StackPanel Orientation="Horizontal" 
+                           HorizontalAlignment="Right" 
+                           VerticalAlignment="Center"
+                           Margin="20,10">
+                    <Button Content="Cancelar"
+                            Command="{Binding CancelarCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="100"
+                            Height="35"
+                            Margin="0,0,10,0"/>
+                    <Button Content="Crear Orden"
+                            Command="{Binding CrearOrdenCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="120"
+                            Height="35"
+                            IsEnabled="{Binding PuedeCrearOrden}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window> 

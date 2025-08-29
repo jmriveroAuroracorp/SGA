@@ -18,6 +18,9 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("codigoAlmacen")]
         public string CodigoAlmacen { get; set; } = string.Empty;
 
+        [JsonPropertyName("codigosAlmacen")]
+        public List<string> CodigosAlmacen { get; set; } = new List<string>();
+
         [JsonPropertyName("zona")]
         public string? Zona { get; set; }
 
@@ -73,6 +76,44 @@ namespace SGA_Desktop.Models
         // NUEVO: Filtro de artículo específico
         [JsonPropertyName("codigoArticuloFiltro")]
         public string? CodigoArticuloFiltro { get; set; }
+
+        // NUEVO: Rango de artículos
+        [JsonPropertyName("articuloDesde")]
+        public string? ArticuloDesde { get; set; }
+
+        [JsonPropertyName("articuloHasta")]
+        public string? ArticuloHasta { get; set; }
+
+        // ===== PROPIEDADES DE COMPATIBILIDAD MULTIALMACÉN =====
+        
+        /// <summary>
+        /// Indica si este inventario abarca múltiples almacenes
+        /// </summary>
+        [JsonIgnore]
+        public bool EsMultialmacen => CodigosAlmacen.Count > 1;
+
+        /// <summary>
+        /// Devuelve el primer almacén para compatibilidad con código existente
+        /// </summary>
+        [JsonIgnore]
+        public string AlmacenPrincipal => CodigosAlmacen.FirstOrDefault() ?? CodigoAlmacen;
+
+        /// <summary>
+        /// Devuelve una descripción legible de los almacenes incluidos
+        /// </summary>
+        [JsonIgnore]
+        public string DescripcionAlmacenes 
+        { 
+            get 
+            {
+                if (!CodigosAlmacen.Any() && !string.IsNullOrEmpty(CodigoAlmacen))
+                    return CodigoAlmacen;
+                    
+                return CodigosAlmacen.Count <= 3 
+                    ? string.Join(", ", CodigosAlmacen)
+                    : $"{string.Join(", ", CodigosAlmacen.Take(2))} y {CodigosAlmacen.Count - 2} más";
+            }
+        }
     }
 
     /// <summary>

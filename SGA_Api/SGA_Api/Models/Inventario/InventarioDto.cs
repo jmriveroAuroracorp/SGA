@@ -1,4 +1,5 @@
 using SGA_Api.Models.Palet;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace SGA_Api.Models.Inventario
@@ -16,6 +17,9 @@ namespace SGA_Api.Models.Inventario
 
         [JsonPropertyName("codigoAlmacen")]
         public string CodigoAlmacen { get; set; } = string.Empty;
+
+        [JsonPropertyName("codigosAlmacen")]
+        public List<string> CodigosAlmacen { get; set; } = new List<string>();
 
         [JsonPropertyName("rangoUbicaciones")]
         public string? RangoUbicaciones { get; set; }
@@ -69,6 +73,13 @@ namespace SGA_Api.Models.Inventario
         // NUEVO: Filtro de artículo específico
         [JsonPropertyName("codigoArticuloFiltro")]
         public string? CodigoArticuloFiltro { get; set; }
+
+        // NUEVO: Rango de artículos
+        [JsonPropertyName("articuloDesde")]
+        public string? ArticuloDesde { get; set; }
+
+        [JsonPropertyName("articuloHasta")]
+        public string? ArticuloHasta { get; set; }
     }
 
     /// <summary>

@@ -85,6 +85,13 @@ namespace SGA_Desktop.ViewModels
 			CurrentHeader = "INVENTARIO";
 		}
 
+	[RelayCommand]
+	public void IrAControlesRotativos()
+	{
+		NavigationStore.Navigate("ControlesRotativos");
+		CurrentHeader = "CONTROLES ROTATIVOS";
+	}
+
 		[RelayCommand]
 		public void IrAEtiquetas()
 		{

@@ -158,6 +158,10 @@
                     Command="{Binding IrAInventarioCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <Button Content="Controles Rotativos"
+                    Command="{Binding IrAControlesRotativosCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"/>
                     <Button Content="Empresa"
                     Command="{Binding IrASeleccionEmpresaCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

@@ -221,4 +221,97 @@ public class LoginService : ApiService
 		return (true, null);
 	}
 
+	/// <summary>
+	/// Obtiene el límite de inventario en euros para un operario
+	/// </summary>
+	public async Task<decimal> ObtenerLimiteInventarioOperarioAsync(int operario)
+	{
+		try
+		{
+			var response = await _httpClient.GetAsync($"OperariosAcceso/limite-inventario/{operario}");
+			
+			if (response.IsSuccessStatusCode)
+			{
+				var jsonContent = await response.Content.ReadAsStringAsync();
+				
+				// 🔧 FIX: El API devuelve un número simple, no JSON
+				if (decimal.TryParse(jsonContent, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal limite))
+				{
+					return limite;
+				}
+				
+				return 0m; // Si no se puede parsear
+			}
+			
+			return 0m; // Sin límite si no se encuentra
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"Error obteniendo límite operario: {ex.Message}");
+			                return 0m; // Sin límite si hay error
+            }
+        }
+
+        /// <summary>
+        /// Obtiene el límite de unidades de inventario para un operario
+        /// </summary>
+        public async Task<decimal> ObtenerLimiteUnidadesOperarioAsync(int operario)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"OperariosAcceso/limite-unidades/{operario}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonContent = await response.Content.ReadAsStringAsync();
+                    
+                    // El API devuelve un número simple, no JSON
+                    if (decimal.TryParse(jsonContent, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal limite))
+                    {
+                        return limite;
+                    }
+                    
+                    return 0m; // Si no se puede parsear
+                }
+                
+                return 0m; // Sin límite si no se encuentra
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error obteniendo límite de unidades operario: {ex.Message}");
+                return 0m; // Sin límite si hay error
+            }
+        }
+
+        /// <summary>
+        /// Obtiene las diferencias acumuladas del operario para un artículo específico en el día actual
+        /// </summary>
+        public async Task<(decimal totalUnidades, decimal totalValorEuros)> ObtenerDiferenciasOperarioArticuloDiaAsync(int operario, string codigoArticulo, Guid idInventarioActual)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"OperariosAcceso/diferencias-dia/{operario}/{Uri.EscapeDataString(codigoArticulo)}/{idInventarioActual}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonContent = await response.Content.ReadAsStringAsync();
+                    
+                    using var document = JsonDocument.Parse(jsonContent);
+                    var root = document.RootElement;
+                    
+                    var totalUnidades = root.GetProperty("totalUnidades").GetDecimal();
+                    var totalValorEuros = root.GetProperty("totalValorEuros").GetDecimal();
+                    
+                    return (totalUnidades, totalValorEuros);
+                }
+                
+                return (0m, 0m); // Sin diferencias si no se encuentra
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error obteniendo diferencias del operario: {ex.Message}");
+                return (0m, 0m); // Sin diferencias si hay error
+            }
+        }
+
 }

@@ -21,15 +21,23 @@ namespace SGA_Desktop.Dialog
                 border.DataContext is AlmacenDto almacen &&
                 DataContext is CrearInventarioDialogViewModel viewModel)
             {
-                // Desmarcar todos los demás
-                foreach (var a in viewModel.AlmacenesDisponibles)
+                if (viewModel.ModoMultialmacen)
                 {
-                    a.IsSelected = false;
+                    // Modo multialmacén: toggle individual
+                    almacen.IsSelected = !almacen.IsSelected;
                 }
-                
-                // Marcar el seleccionado
-                almacen.IsSelected = true;
-                viewModel.AlmacenSeleccionado = almacen;
+                else
+                {
+                    // Modo único: desmarcar todos los demás
+                    foreach (var a in viewModel.AlmacenesDisponibles)
+                    {
+                        a.IsSelected = false;
+                    }
+                    
+                    // Marcar el seleccionado
+                    almacen.IsSelected = true;
+                    viewModel.AlmacenSeleccionado = almacen;
+                }
             }
         }
     }
