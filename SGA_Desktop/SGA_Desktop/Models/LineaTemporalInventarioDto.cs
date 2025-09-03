@@ -137,7 +137,7 @@ namespace SGA_Desktop.Models
         /// </summary>
         public string CantidadContadaTexto
         {
-            get => _cantidadContadaTexto ?? CantidadContada?.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) ?? "0";
+            get => _cantidadContadaTexto ?? (CantidadContada?.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) ?? "");
             set
             {
                 _cantidadContadaTexto = value;

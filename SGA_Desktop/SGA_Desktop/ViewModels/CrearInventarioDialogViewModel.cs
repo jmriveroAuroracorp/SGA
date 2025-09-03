@@ -231,6 +231,9 @@ namespace SGA_Desktop.ViewModels
                 {
                     almacen.IsSelected = false; // Empezar limpio
                 }
+                
+                // Desactivar rangos en modo multialmacén
+                UsarRangoUbicaciones = false;
             }
             else
             {
@@ -924,7 +927,8 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
-                if (AlmacenSeleccionado == null) return;
+                // Solo cargar rangos en modo almacén único
+                if (ModoMultialmacen || AlmacenSeleccionado == null) return;
 
                 var rangos = await _inventarioService.ObtenerRangosDisponiblesAsync(
                     SessionManager.EmpresaSeleccionada!.Value,

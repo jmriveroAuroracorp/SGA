@@ -28,6 +28,9 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string cantidadATraspasarTexto;
 
+        [ObservableProperty]
+        private string comentariosTexto = "";
+
         partial void OnCantidadATraspasarTextoChanged(string value)
         {
             ConfirmarCommand.NotifyCanExecuteChanged();
@@ -230,7 +233,7 @@ namespace SGA_Desktop.ViewModels
 				FechaInicio = _fechaBusqueda,
 				DescripcionArticulo = _stockSeleccionado.DescripcionArticulo,
 				UnidadMedida = null,
-				Observaciones = null,
+				Observaciones = comentariosTexto, // Usar comentarios del usuario
 
 				// 🔹 nuevo flag para que el backend reabra el palet de ORIGEN si estaba cerrado
 				ReabrirSiCerradoOrigen = reabrirOrigen

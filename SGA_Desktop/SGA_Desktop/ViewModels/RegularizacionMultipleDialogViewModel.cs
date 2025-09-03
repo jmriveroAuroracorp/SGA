@@ -31,6 +31,10 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private UbicacionDto destinoComunUbicacion;
 
+		// NUEVO: Campo de comentarios para la regularización múltiple
+		[ObservableProperty]
+		private string comentariosTexto = "";
+
 		// NUEVO: Ubicaciones destino común
 		public ObservableCollection<UbicacionDto> UbicacionesDestinoComun { get; } = new();
 
@@ -464,6 +468,7 @@ namespace SGA_Desktop.ViewModels
 					FechaInicio = _fechaInicioDialogo,
 					Finalizar = true,
 					DescripcionArticulo = dto.DescripcionArticulo,
+					Observaciones = comentariosTexto, // Añadir comentarios
 
 					// 🔹 clave: si el ORIGEN está Cerrado, pedimos reapertura automática
 					ReabrirSiCerradoOrigen = string.Equals(dto.EstadoPaletOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase)

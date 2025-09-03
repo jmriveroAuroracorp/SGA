@@ -165,8 +165,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Style="{StaticResource EstiloTarjeta}" 
-                                        Width="350" 
-                                        Height="280"
+                                        Width="380" 
+                                        Height="320"
                                         Margin="6"
                                         Cursor="Hand">
                                     <Grid>
@@ -249,32 +249,88 @@
 
                                         <!-- Contenido principal -->
                                         <StackPanel Grid.Row="1" Margin="0,0,0,12">
-                                            <!-- Almacén y Tipo -->
+                                            <!-- Almacenes y Tipo -->
                                             <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
 
-                                                <TextBlock Grid.Column="0" Text="Almacén: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding CodigoAlmacen}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
-                                                <TextBlock Grid.Column="2" Text="Tipo: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"
-                                                           Margin="10,0,0,0"/>
-                                                <TextBlock Grid.Column="3" Text="{Binding TipoInventarioFormateado}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
+                                                <!-- Fila 1: Almacenes -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Almacenes: " 
+                                                               FontWeight="SemiBold" 
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <!-- Almacenes con badge integrado -->
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DescripcionAlmacenes}" 
+                                                                   FontWeight="Bold" 
+                                                                   FontSize="12"
+                                                                   Foreground="#34495E"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,8,0"/>
+                                                        
+                                                        <!-- Badge para multialmacén -->
+                                                        <Border Background="#E8F4FD" 
+                                                                BorderBrush="#3498DB" 
+                                                                BorderThickness="1" 
+                                                                CornerRadius="12" 
+                                                                Padding="6,2"
+                                                                VerticalAlignment="Center"
+                                                                Visibility="{Binding EsMultialmacen, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="MULTI" 
+                                                                       FontSize="9" 
+                                                                       FontWeight="Bold" 
+                                                                       Foreground="#2980B9"/>
+                                                        </Border>
+                                                        
+                                                        <!-- Badge para almacén único -->
+                                                        <Border Background="#F8F9FA" 
+                                                                BorderBrush="#6C757D" 
+                                                                BorderThickness="1" 
+                                                                CornerRadius="12" 
+                                                                Padding="6,2"
+                                                                VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding EsMultialmacen}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="ÚNICO" 
+                                                                       FontSize="9" 
+                                                                       FontWeight="Bold" 
+                                                                       Foreground="#6C757D"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <!-- Fila 2: Tipo -->
+                                                <Grid Grid.Row="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Tipo: " 
+                                                               FontWeight="SemiBold" 
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding TipoInventarioFormateado}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="12"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
                                             </Grid>
 
                                             <!-- Creador -->
@@ -295,22 +351,67 @@
                                                            TextTrimming="CharacterEllipsis"/>
                                             </Grid>
 
-                                            <!-- Rango Ubicaciones -->
+                                            <!-- Tipo de Conteo y Rango -->
                                             <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
 
-                                                <TextBlock Grid.Column="0" Text="Rango: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding RangoUbicaciones}" 
-                                                           FontFamily="Consolas"
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#2C3E50"/>
+                                                <!-- Tipo de conteo -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Inventario: " 
+                                                               FontWeight="SemiBold" 
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ConteoTipo}" 
+                                                                   FontWeight="Bold" 
+                                                                   FontSize="12"
+                                                                   Foreground="#2C3E50"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <!-- Rango ubicaciones -->
+                                                <Grid Grid.Row="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Rango: " 
+                                                               FontWeight="SemiBold" 
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" 
+                                                               FontSize="11"
+                                                               TextTrimming="CharacterEllipsis">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="{Binding RangoUbicaciones}"/>
+                                                                <Setter Property="FontFamily" Value="Consolas"/>
+                                                                <Setter Property="FontWeight" Value="Bold"/>
+                                                                <Setter Property="Foreground" Value="#2C3E50"/>
+                                                                <Style.Triggers>
+                                                                    <!-- Si es "Rango no especificado", mostrar diferente -->
+                                                                    <DataTrigger Binding="{Binding RangoUbicaciones}" Value="Rango no especificado">
+                                                                        <Setter Property="Text" Value="Todas las ubicaciones"/>
+                                                                        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                                                                        <Setter Property="FontWeight" Value="Normal"/>
+                                                                        <Setter Property="Foreground" Value="#7F8C8D"/>
+                                                                        <Setter Property="FontStyle" Value="Italic"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
                                             </Grid>
 
                                             <!-- Comentarios -->
@@ -329,6 +430,23 @@
                                                            Foreground="#7F8C8D"
                                                            TextWrapping="Wrap"
                                                            TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+
+                                            <!-- Simplificar completamente la sección de modificaciones -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Modificaciones: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding ProgresoCounting}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
                                             </Grid>
 
                                             <!-- Fechas -->
@@ -364,24 +482,24 @@
                                         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
                                             
 
-                                            <!-- Botón Contar -->
-                                            <Button Content="📝 Contar"
+                                            <!-- Botón Inventariar - aumentar ancho de 70 a 90 -->
+                                            <Button Content="📝 Inventariar"
                                                     Command="{Binding DataContext.ContarInventarioCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                             CommandParameter="{Binding}"
                                             Style="{StaticResource EstiloBoton}"
-                                            Width="70"
+                                            Width="90"
                                                     Height="30"
                                                     FontSize="11"
                                                     FontWeight="Medium"
                                                     Margin="0,0,4,0"
                                                     Visibility="{Binding PuedeContar, Converter={StaticResource BoolToVis}}"/>
                                             
-                                            <!-- Botón Consolidar -->
+                                            <!-- Botón Consolidar - aumentar ancho de 75 a 90 -->
                                             <Button Content="✅ Consolidar"
                                                     Command="{Binding DataContext.ConsolidarInventarioCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     CommandParameter="{Binding}"
                                                     Style="{StaticResource EstiloBotonSecundario}"
-                                                    Width="75"
+                                                    Width="90"
                                                     Height="30"
                                                     FontSize="11"
                                                     FontWeight="Medium"

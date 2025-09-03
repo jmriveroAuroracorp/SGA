@@ -87,8 +87,11 @@ $"Posición: {ubicacion.Posicion}";
 			"Confirmar impresión de ubicación",
 			detalles,
 			"\uE946" // icono de información
-		)
-		{ Owner = Application.Current.MainWindow };
+		);
+		var confirmOwner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			?? Application.Current.MainWindow;
+		if (confirmOwner != null && confirmOwner != confirm)
+			confirm.Owner = confirmOwner;
 		if (confirm.ShowDialog() != true) return;
 
 		// Abrimos diálogo de impresión
@@ -214,8 +217,11 @@ $"Posición: {ubicacion.Posicion}";
 			"Confirmar impresión",
 			$"Se imprimirán {seleccionadas.Count} ubicaciones en la impresora seleccionada.\n¿Deseas continuar?",
 			"\uE946" // icono info
-		)
-		{ Owner = Application.Current.MainWindow };
+		);
+		var confirmOwner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				?? Application.Current.MainWindow;
+		if (confirmOwner != null && confirmOwner != confirm)
+			confirm.Owner = confirmOwner;
 
 		if (confirm.ShowDialog() != true)
 			return;
@@ -233,10 +239,13 @@ $"Posición: {ubicacion.Posicion}";
 
 		var dlg = new ConfirmarImpresionDialog
 		{
-			DataContext = dlgVm,
-			Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-					?? Application.Current.MainWindow
+			DataContext = dlgVm
 		};
+		
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+			dlg.Owner = owner;
 
 		if (dlg.ShowDialog() != true) return;
 

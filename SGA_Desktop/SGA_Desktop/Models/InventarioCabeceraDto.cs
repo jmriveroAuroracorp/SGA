@@ -123,7 +123,7 @@ namespace SGA_Desktop.Models
 
         // Propiedades calculadas para información expandida
         [JsonIgnore]
-        public string ConteoTipo => ConteoACiegas == true ? "A Ciegas" : "Normal";
+        public string ConteoTipo => ConteoACiegas == true ? "Inicializado a 0" : "Normal";
 
         [JsonIgnore]
         public string RangoArticulos 
@@ -138,6 +138,7 @@ namespace SGA_Desktop.Models
             }
         }
 
+        // Simplificar ProgresoCounting para mostrar solo "x de x líneas"
         [JsonIgnore]
         public string ProgresoCounting 
         {
@@ -145,10 +146,63 @@ namespace SGA_Desktop.Models
             {
                 if (TotalLineas.HasValue && LineasContadas.HasValue)
                 {
-                    var porcentaje = TotalLineas.Value > 0 ? (LineasContadas.Value * 100.0 / TotalLineas.Value) : 0;
-                    return $"{LineasContadas.Value}/{TotalLineas.Value} líneas ({porcentaje:F1}%)";
+                    return $"{LineasContadas.Value} de {TotalLineas.Value} líneas";
                 }
                 return "Sin datos disponibles";
+            }
+        }
+
+        [JsonIgnore]
+        public double PorcentajeProgreso
+        {
+            get
+            {
+                if (TotalLineas.HasValue && LineasContadas.HasValue && TotalLineas.Value > 0)
+                {
+                    return (LineasContadas.Value * 100.0 / TotalLineas.Value);
+                }
+                return 0;
+            }
+        }
+
+        [JsonIgnore]
+        public string ProgresoTexto
+        {
+            get
+            {
+                if (TotalLineas.HasValue && LineasContadas.HasValue)
+                {
+                    return $"{LineasContadas.Value}/{TotalLineas.Value}";
+                }
+                return "0/0";
+            }
+        }
+
+        [JsonIgnore]
+        public string ColorProgreso
+        {
+            get
+            {
+                var porcentaje = PorcentajeProgreso;
+                if (porcentaje == 0) return "#E74C3C";      // Rojo - Sin empezar
+                if (porcentaje < 25) return "#F39C12";      // Naranja - Iniciado
+                if (porcentaje < 75) return "#F1C40F";      // Amarillo - En progreso
+                if (porcentaje < 100) return "#3498DB";     // Azul - Casi terminado
+                return "#27AE60";                           // Verde - Completado
+            }
+        }
+
+        [JsonIgnore]
+        public string EstadoProgreso
+        {
+            get
+            {
+                var porcentaje = PorcentajeProgreso;
+                if (porcentaje == 0) return "Sin empezar";
+                if (porcentaje < 25) return "Iniciado";
+                if (porcentaje < 75) return "En progreso";
+                if (porcentaje < 100) return "Casi terminado";
+                return "Completado";
             }
         }
 

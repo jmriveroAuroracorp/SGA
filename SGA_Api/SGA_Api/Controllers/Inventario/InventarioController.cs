@@ -134,6 +134,8 @@ namespace SGA_Api.Controllers.Inventario
                     UsuarioCierreId = inv.UsuarioCierreId,
                     TotalLineas = inv.TotalLineas,
                     LineasContadas = inv.LineasContadas,
+                    // Información de conteo
+                    ConteoACiegas = inv.ConteoACiegas,
                     // NUEVO: Información de almacenes
                     CodigosAlmacen = inv.Almacenes.Select(a => a.CodigoAlmacen).ToList()
                 }).ToList();
@@ -232,7 +234,8 @@ namespace SGA_Api.Controllers.Inventario
                     Comentarios = dto.Comentarios,
                     Estado = "ABIERTO",
                     UsuarioCreacionId = dto.UsuarioCreacionId,
-                    FechaCreacion = DateTime.Now // Usar la fecha y hora actual
+                    FechaCreacion = DateTime.Now, // Siempre usar la hora del servidor/API
+                    ConteoACiegas = dto.IncluirUnidadesCero // true = ciego, false = normal
                 };
 
                 _context.InventarioCabecera.Add(inventario);
@@ -322,9 +325,10 @@ namespace SGA_Api.Controllers.Inventario
                     IdInventario = dto.IdInventario,
                     CodigoArticulo = dto.CodigoArticulo,
                     CodigoUbicacion = dto.CodigoUbicacion,
+                    CodigoAlmacen = dto.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
                     CantidadContada = dto.CantidadContada,
                     UsuarioConteoId = dto.UsuarioConteoId,
-                    FechaConteo = DateTime.Now,
+                    FechaConteo = DateTime.Now, // Siempre usar la hora del servidor/API
                     Observaciones = dto.Observaciones,
                     Consolidado = false
                 };
@@ -374,6 +378,7 @@ namespace SGA_Api.Controllers.Inventario
                         IdInventario = idInventario,
                         CodigoArticulo = lineaTemp.CodigoArticulo,
                         CodigoUbicacion = lineaTemp.CodigoUbicacion,
+                        CodigoAlmacen = lineaTemp.CodigoAlmacen, // Copiar almacén de la línea temporal
                         Partida = lineaTemp.Partida, // Copiar partida de la línea temporal
                         FechaCaducidad = lineaTemp.FechaCaducidad, // Copiar fecha de caducidad de la línea temporal
                         StockTeorico = 0, // Se calculará después
@@ -384,10 +389,10 @@ namespace SGA_Api.Controllers.Inventario
 
                     _context.InventarioLineas.Add(linea);
                     lineaTemp.Consolidado = true;
-                    lineaTemp.FechaConsolidacion = DateTime.Now;
+                    lineaTemp.FechaConsolidacion = DateTime.Now; // Siempre usar la hora del servidor/API
                 }
 
-                inventario.Estado = "PENDIENTE_CIERRE";
+                inventario.Estado = "CONSOLIDADO";
                 await _context.SaveChangesAsync();
 
                 return Ok(new { Mensaje = "Inventario consolidado correctamente" });
@@ -401,7 +406,7 @@ namespace SGA_Api.Controllers.Inventario
 
         /// <summary>
         /// POST /api/Inventario/cerrar/{idInventario}
-        /// Cierra un inventario y genera ajustes
+        /// Cierra un inventario y genera los ajustes correspondientes
         /// </summary>
         [HttpPost("cerrar/{idInventario}")]
         public async Task<IActionResult> CerrarInventario(Guid idInventario)
@@ -409,7 +414,6 @@ namespace SGA_Api.Controllers.Inventario
             try
             {
                 var inventario = await _context.InventarioCabecera
-                    .Include(i => i.Almacenes)  // ← NUEVO: Incluir almacenes para multialmacén
                     .FirstOrDefaultAsync(i => i.IdInventario == idInventario);
 
                 if (inventario == null)
@@ -418,166 +422,48 @@ namespace SGA_Api.Controllers.Inventario
                 if (inventario.Estado != "CONSOLIDADO")
                     return BadRequest("Solo se pueden cerrar inventarios consolidados");
 
-                // Obtener almacenes del inventario para multialmacén
-                var almacenesInventario = inventario.Almacenes.Select(a => a.CodigoAlmacen).ToList();
-                if (!almacenesInventario.Any())
+                // Obtener las líneas del inventario para calcular ajustes
+                var lineas = await _context.InventarioLineas
+                    .Where(l => l.IdInventario == idInventario)
+                    .ToListAsync();
+
+                // Generar ajustes para cada línea
+                foreach (var linea in lineas)
                 {
-                    // Compatibilidad hacia atrás: usar el almacén de la cabecera
-                    almacenesInventario.Add(inventario.CodigoAlmacen);
-                }
-
-                _logger.LogInformation("Cerrando inventario {IdInventario} que incluye {NumAlmacenes} almacenes: {Almacenes}", 
-                    idInventario, almacenesInventario.Count, string.Join(", ", almacenesInventario));
-
-                // Iniciar transacción para asegurar consistencia
-                await using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var lineas = await _context.InventarioLineas
-                        .Where(l => l.IdInventario == idInventario)
-                        .ToListAsync();
-
-                    var ajustesAplicados = new List<object>();
-                    var errores = new List<string>();
-
-                    // 1. Crear registros de ajustes y aplicar a palets
-                    foreach (var linea in lineas)
+                    // Calcular la diferencia entre stock contado y stock actual
+                    var diferencia = (linea.StockContado ?? 0) - linea.StockActual;
+                    
+                    // Solo crear ajuste si hay diferencia significativa
+                    if (Math.Abs(diferencia) > 0.01m)
                     {
-                        if (linea.StockContado.HasValue && linea.AjusteFinal.HasValue && Math.Abs(linea.AjusteFinal.Value) > 0.01m)
+                        var ajuste = new InventarioAjustes
                         {
-                            // Crear registro de ajuste
-                            var ajuste = new InventarioAjustes
-                            {
-                                IdAjuste = Guid.NewGuid(),
-                                IdInventario = idInventario,
-                                CodigoArticulo = linea.CodigoArticulo,
-                                CodigoUbicacion = linea.CodigoUbicacion,
-                                Diferencia = linea.AjusteFinal.Value,
-                                TipoAjuste = linea.AjusteFinal.Value > 0 ? "POSITIVO" : "NEGATIVO",
-                                UsuarioId = inventario.UsuarioCreacionId,
-                                Fecha = DateTime.Now
-                            };
+                            IdAjuste = Guid.NewGuid(),
+                            IdInventario = idInventario,
+                            CodigoArticulo = linea.CodigoArticulo,
+                            CodigoUbicacion = linea.CodigoUbicacion,
+                            Diferencia = diferencia,
+                            UsuarioId = inventario.UsuarioCreacionId,
+                            Fecha = DateTime.Now,
+                            IdConteo = Guid.Empty,
+                            CodigoEmpresa = inventario.CodigoEmpresa,
+                            CodigoAlmacen = linea.CodigoAlmacen ?? inventario.CodigoAlmacen,
+                            Estado = "PENDIENTE_ERP"
+                        };
 
-                            _context.InventarioAjustes.Add(ajuste);
-
-                            // 2. Aplicar ajuste a los palets en esa ubicación
-                            try
-                            {
-                                // Buscar TODAS las líneas de palet en esa ubicación específica
-                                // ACTUALIZADO: Buscar en TODOS los almacenes del inventario multialmacén
-                                var lineasPalet = await _context.PaletLineas
-                                    .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
-                                                pl.CodigoArticulo == linea.CodigoArticulo &&
-                                                almacenesInventario.Contains(pl.CodigoAlmacen) &&  // ← CAMBIO: Usar lista de almacenes
-                                                pl.Ubicacion == linea.CodigoUbicacion &&
-                                                pl.Lote == linea.Partida)
-                                    .Include(pl => pl.Palet)
-                                    .ToListAsync();
-
-                                if (lineasPalet.Any())
-                                {
-                                    // Aplicar el ajuste proporcionalmente a todas las líneas de palet encontradas
-                                    var ajusteTotal = linea.AjusteFinal.Value;
-                                    var cantidadPalets = lineasPalet.Count;
-                                    var ajustePorPalet = ajusteTotal / cantidadPalets;
-
-                                    foreach (var lineaPalet in lineasPalet)
-                                    {
-                                        // Verificar si el palet está cerrado y abrirlo si es necesario
-                                        var palet = lineaPalet.Palet;
-                                        var estadoOriginal = palet.Estado;
-                                        
-                                        if (palet.Estado == "Cerrado")
-                                        {
-                                            palet.Estado = "Abierto";
-                                            palet.FechaCierre = null; // Limpiar fecha de cierre
-                                            palet.UsuarioCierreId = null; // Limpiar usuario de cierre
-                                            
-                                            // Registrar apertura del palet
-                                            _context.LogPalet.Add(new LogPalet
-                                            {
-                                                PaletId = lineaPalet.PaletId,
-                                                Fecha = DateTime.Now,
-                                                IdUsuario = inventario.UsuarioCreacionId,
-                                                Accion = "AbrirPorAjusteInventario",
-                                                Detalle = $"Palet abierto automáticamente por ajuste de inventario. Artículo: {linea.CodigoArticulo}, Ubicación: {linea.CodigoUbicacion}, Inventario: {idInventario}"
-                                            });
-                                        }
-
-                                        // Aplicar el ajuste al stock del palet
-                                        lineaPalet.Cantidad += ajustePorPalet;
-
-                                        // Registrar el ajuste de inventario
-                                        _context.LogPalet.Add(new LogPalet
-                                        {
-                                            PaletId = lineaPalet.PaletId,
-                                            Fecha = DateTime.Now,
-                                            IdUsuario = inventario.UsuarioCreacionId,
-                                            Accion = "AjusteInventario",
-                                            Detalle = $"Ajuste de inventario: {ajustePorPalet:F4} unidades. Artículo: {linea.CodigoArticulo}, Ubicación: {linea.CodigoUbicacion}, Inventario: {idInventario}. Estado anterior: {estadoOriginal}"
-                                        });
-                                    }
-
-                                    // Crear información de palets afectados
-                                    var paletsInfo = lineasPalet.Select(pl => new
-                                    {
-                                        PaletId = pl.PaletId,
-                                        CodigoPalet = pl.Palet.Codigo,
-                                        EstadoPalet = pl.Palet.Estado,
-                                        EstadoAnterior = pl.Palet.Estado == "Abierto" ? "Cerrado" : pl.Palet.Estado, // Si está abierto, significa que antes estaba cerrado
-                                        SeAbrioAutomaticamente = pl.Palet.Estado == "Abierto" && pl.Palet.FechaCierre == null,
-                                        StockFinal = pl.Cantidad
-                                    }).ToList();
-
-                                    ajustesAplicados.Add(new
-                                    {
-                                        linea.CodigoArticulo,
-                                        linea.CodigoUbicacion,
-                                        AjusteAplicado = ajusteTotal,
-                                        PaletsAfectados = lineasPalet.Count,
-                                        PaletsInfo = paletsInfo
-                                    });
-                                }
-                                else
-                                {
-                                    errores.Add($"No se encontraron palets para el artículo {linea.CodigoArticulo} en la ubicación {linea.CodigoUbicacion}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                errores.Add($"Error al aplicar ajuste para {linea.CodigoArticulo} en {linea.CodigoUbicacion}: {ex.Message}");
-                            }
-                        }
+                        _context.InventarioAjustes.Add(ajuste);
                     }
-
-                    // 3. Cerrar el inventario
-                    inventario.Estado = "CERRADO";
-                    inventario.FechaCierre = DateTime.Now;
-                    inventario.UsuarioCierreId = inventario.UsuarioCreacionId;
-
-                    // 4. Guardar todos los cambios
-                    await _context.SaveChangesAsync();
-
-                    // 5. Confirmar transacción
-                    await transaction.CommitAsync();
-
-                    var resultado = new
-                    {
-                        Mensaje = "Inventario cerrado correctamente",
-                        AjustesAplicados = ajustesAplicados.Count,
-                        DetalleAjustes = ajustesAplicados,
-                        Errores = errores
-                    };
-
-                    return Ok(resultado);
                 }
-                catch (Exception ex)
-                {
-                    // Si algo falla, deshacer la transacción
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+
+                // Cambiar el estado a CERRADO
+                inventario.Estado = "CERRADO";
+                inventario.FechaCierre = DateTime.Now;
+                inventario.UsuarioCierreId = inventario.UsuarioCreacionId;
+
+                // Guardar todos los cambios (ajustes + cierre)
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Mensaje = "Inventario cerrado correctamente con ajustes generados" });
             }
             catch (Exception ex)
             {
@@ -618,8 +504,9 @@ namespace SGA_Api.Controllers.Inventario
                     var codigosArticulos = lineas.Select(l => l.CodigoArticulo).Distinct().ToList();
                     if (codigosArticulos.Any())
                     {
-                        // Usar la misma lógica que funciona en ObtenerLineasTemporales
+                        // Consulta filtrada por empresa para obtener solo los artículos relevantes
                         var articulosSage = await _sageDbContext.Articulos
+                            .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa)
                             .Select(a => new { a.CodigoArticulo, a.DescripcionArticulo })
                             .ToListAsync();
                             
@@ -651,7 +538,7 @@ namespace SGA_Api.Controllers.Inventario
                 }
 
                 // Crear resultado con descripciones usando DTO
-                var resultado = lineas.Select(l => new LineaInventarioDto
+                var lineasDto = lineas.Select(l => new LineaInventarioDto
                 {
                     CodigoArticulo = l.CodigoArticulo,
                     DescripcionArticulo = articulos.GetValueOrDefault(l.CodigoArticulo, ""),
@@ -669,7 +556,7 @@ namespace SGA_Api.Controllers.Inventario
                         .ToList()
                 }).ToList();
 
-                return Ok(resultado);
+                return Ok(lineasDto);
             }
             catch (Exception ex)
             {
@@ -720,7 +607,7 @@ namespace SGA_Api.Controllers.Inventario
             try
             {
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
@@ -829,7 +716,7 @@ namespace SGA_Api.Controllers.Inventario
             try
             {
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
@@ -912,7 +799,7 @@ namespace SGA_Api.Controllers.Inventario
 
                 // Obtener ejercicio actual
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
@@ -921,6 +808,68 @@ namespace SGA_Api.Controllers.Inventario
                 {
                     _logger.LogError("No se encontró ejercicio válido para la empresa");
                     return BadRequest("Sin ejercicio válido");
+                }
+
+                // === NUEVO: Validación de límites por artículo antes de guardar ===
+                foreach (var articulo in conteo.Articulos)
+                {
+                    var (acumUnid, acumEur) = await CalcularDiferenciasDiariasPorArticuloAsync(
+                        articulo.UsuarioConteo,
+                        articulo.CodigoArticulo,
+                        conteo.IdInventario,
+                        inventario.CodigoEmpresa);
+
+                    // Límites del operario desde SAGE (si no hay, 0 => sin límite)
+                    var limEuros = await _sageDbContext.Operarios
+                        .Where(o => o.Id == articulo.UsuarioConteo)
+                        .Select(o => o.MRH_LimiteInventarioEuros)
+                        .FirstOrDefaultAsync() ?? 0m;
+
+                    var limUnidades = await _sageDbContext.Operarios
+                        .Where(o => o.Id == articulo.UsuarioConteo)
+                        .Select(o => o.MRH_LimiteInventarioUnidades)
+                        .FirstOrDefaultAsync() ?? 0m;
+
+                    // Diferencia que se intenta registrar ahora
+                    var stockActual = await _storageContext.AcumuladoStockUbicacion
+                        .FirstOrDefaultAsync(s =>
+                            s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                            s.Ejercicio == ejercicio &&
+                            s.CodigoAlmacen == articulo.CodigoAlmacen && // ← CORREGIDO: Usar almacén del artículo
+                            s.CodigoArticulo == articulo.CodigoArticulo &&
+                            s.Ubicacion == articulo.CodigoUbicacion &&
+                            (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
+                            (s.FechaCaducidad == articulo.FechaCaducidad || (s.FechaCaducidad == null && articulo.FechaCaducidad == null)));
+
+                    var diferenciaNueva = Math.Abs((articulo.CantidadInventario) - (stockActual?.UnidadSaldo ?? 0));
+
+                    // Solo validar límites si hay diferencia real (no 0 absoluto)
+                    if (diferenciaNueva > 0)
+                    {
+                        if (limEuros > 0)
+                        {
+                            var precioMedio = await _sageDbContext.AcumuladoStock
+                                .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa && a.CodigoArticulo == articulo.CodigoArticulo)
+                                .OrderByDescending(a => a.Ejercicio)
+                                .Select(a => a.PrecioMedio)
+                                .FirstOrDefaultAsync() ?? 0m;
+
+                            var totalEuros = acumEur + (diferenciaNueva * precioMedio);
+                            if (totalEuros > limEuros)
+                            {
+                                return BadRequest($"Límite diario de euros superado para el artículo {articulo.CodigoArticulo}.");
+                            }
+                        }
+
+                        if (limUnidades > 0)
+                        {
+                            var totalUnidades = acumUnid + diferenciaNueva;
+                            if (totalUnidades > limUnidades)
+                            {
+                                return BadRequest($"Límite diario de unidades superado para el artículo {articulo.CodigoArticulo}.");
+                            }
+                        }
+                    }
                 }
 
                 // Procesar cada artículo del conteo
@@ -941,7 +890,7 @@ namespace SGA_Api.Controllers.Inventario
                         // Actualizar línea existente
                         lineaTempExistente.CantidadContada = articulo.CantidadInventario;
                         lineaTempExistente.UsuarioConteoId = articulo.UsuarioConteo;
-                        lineaTempExistente.FechaConteo = DateTime.Now;
+                        lineaTempExistente.FechaConteo = DateTime.Now; // Siempre usar la hora del servidor/API
                         
                         _logger.LogInformation($"Línea temporal actualizada: {articulo.CodigoArticulo} en {articulo.CodigoUbicacion}. " +
                                               $"StockActual: {lineaTempExistente.StockActual}, CantidadContada: {articulo.CantidadInventario}");
@@ -953,7 +902,7 @@ namespace SGA_Api.Controllers.Inventario
                             .FirstOrDefaultAsync(s => 
                                 s.CodigoEmpresa == inventario.CodigoEmpresa &&
                                 s.Ejercicio == ejercicio &&
-                                s.CodigoAlmacen == inventario.CodigoAlmacen &&
+                                s.CodigoAlmacen == articulo.CodigoAlmacen && // ← CORREGIDO: Usar almacén del artículo
                                 s.CodigoArticulo == articulo.CodigoArticulo &&
                                 s.Ubicacion == articulo.CodigoUbicacion &&
                                 (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
@@ -965,12 +914,13 @@ namespace SGA_Api.Controllers.Inventario
                             IdInventario = inventario.IdInventario,
                             CodigoArticulo = articulo.CodigoArticulo,
                             CodigoUbicacion = articulo.CodigoUbicacion,
+                            CodigoAlmacen = articulo.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
                             CantidadContada = articulo.CantidadInventario,
                             StockActual = stockActual?.UnidadSaldo ?? 0,
                             Partida = stockActual?.Partida,
                             FechaCaducidad = stockActual?.FechaCaducidad,
                             UsuarioConteoId = articulo.UsuarioConteo,
-                            FechaConteo = DateTime.Now,
+                            FechaConteo = DateTime.Now, // Siempre usar la hora del servidor/API
                             Consolidado = false
                         };
 
@@ -981,19 +931,9 @@ namespace SGA_Api.Controllers.Inventario
                     }
                 }
 
-                // Actualizar estado del inventario a "EN_CONTEO" si está abierto
-                _logger.LogInformation($"Estado actual del inventario {conteo.IdInventario}: {inventario.Estado}");
-                
-                if (inventario.Estado == "ABIERTO")
-                {
-                    inventario.Estado = "EN_CONTEO";
-                    _context.InventarioCabecera.Update(inventario);
-                    _logger.LogInformation($"Estado del inventario {conteo.IdInventario} cambiado de ABIERTO a EN_CONTEO");
-                }
-                else
-                {
-                    _logger.LogInformation($"Inventario {conteo.IdInventario} no está en estado ABIERTO, estado actual: {inventario.Estado}");
-                }
+                // NOTA: El inventario permanece en estado "ABIERTO" durante todo el proceso de conteo
+                // Solo cambiará a "CONSOLIDADO" cuando se consolide explícitamente
+                _logger.LogInformation($"Estado del inventario {conteo.IdInventario} permanece como: {inventario.Estado}");
 
                 // Guardar cambios
                 await _context.SaveChangesAsync();
@@ -1006,6 +946,71 @@ namespace SGA_Api.Controllers.Inventario
                 _logger.LogError(ex, "Error al guardar conteo de inventario");
                 return StatusCode(500, "Error interno del servidor");
             }
+        }
+
+        /// <summary>
+        /// Calcula diferencias diarias por artículo para un operario, excluyendo un inventario dado
+        /// Suma tanto líneas temporales (no consolidadas) como líneas definitivas consolidadas del día.
+        /// </summary>
+        private async Task<(decimal unidades, decimal euros)> CalcularDiferenciasDiariasPorArticuloAsync(
+            int operarioId, string codigoArticulo, Guid inventarioAExcluir, short codigoEmpresa)
+        {
+            var hoy = DateTime.Today;
+            var manana = hoy.AddDays(1);
+
+            decimal totalUnidades = 0m;
+            decimal totalEuros = 0m;
+
+            // Precio medio (si no hay o es 0, aceptamos 0€ como pediste)
+            var precioMedio = await _sageDbContext.AcumuladoStock
+                .Where(a => a.CodigoEmpresa == codigoEmpresa && a.CodigoArticulo == codigoArticulo)
+                .OrderByDescending(a => a.Ejercicio)
+                .Select(a => a.PrecioMedio)
+                .FirstOrDefaultAsync() ?? 0m;
+
+            // InventarioLineasTemp del día (no consolidadas) distinto del actual
+            var temp = await _context.InventarioLineasTemp
+                .Where(lt => lt.UsuarioConteoId == operarioId &&
+                             lt.CodigoArticulo == codigoArticulo &&
+                             lt.IdInventario != inventarioAExcluir &&
+                             lt.FechaConteo >= hoy && lt.FechaConteo < manana &&
+                             !lt.Consolidado &&
+                             lt.CantidadContada.HasValue)
+                .Select(lt => new { lt.CantidadContada, lt.StockActual })
+                .ToListAsync();
+
+            foreach (var l in temp)
+            {
+                var diff = Math.Abs((l.CantidadContada ?? 0) - (l.StockActual));
+                Console.WriteLine($"🔍 TEMP CALC: Contado={l.CantidadContada}, Stock={l.StockActual}, Diff={diff}");
+                if (diff > 0.01m)
+                {
+                    totalUnidades += diff;
+                    totalEuros += diff * precioMedio;
+                }
+            }
+
+            // InventarioLineas del día (consolidadas) distinto del actual
+            var finales = await _context.InventarioLineas
+                .Where(l => l.UsuarioValidacionId == operarioId &&
+                            l.CodigoArticulo == codigoArticulo &&
+                            l.IdInventario != inventarioAExcluir &&
+                            l.FechaValidacion >= hoy && l.FechaValidacion < manana)
+                .Select(l => new { l.StockContado, l.StockActual })
+                .ToListAsync();
+
+            foreach (var l in finales)
+            {
+                var diff = Math.Abs((l.StockContado ?? 0m) - l.StockActual);
+                Console.WriteLine($"🔍 FINAL CALC: Contado={l.StockContado}, Stock={l.StockActual}, Diff={diff}");
+                if (diff > 0.01m)
+                {
+                    totalUnidades += diff;
+                    totalEuros += diff * precioMedio;
+                }
+            }
+
+            return (totalUnidades, totalEuros);
         }
 
         /// <summary>
@@ -1092,7 +1097,7 @@ namespace SGA_Api.Controllers.Inventario
                         StockContado = linea.StockContado,
                         Estado = "CONTADO",
                         UsuarioValidacionId = usuarioValidacionId,
-                        FechaValidacion = DateTime.Now
+                        FechaValidacion = DateTime.Now // Siempre usar la hora del servidor/API
                     };
 
                     _context.InventarioLineas.Add(lineaConsolidada);
@@ -1102,7 +1107,7 @@ namespace SGA_Api.Controllers.Inventario
                 foreach (var lineaTemp in lineasTemp)
                 {
                     lineaTemp.Consolidado = true;
-                    lineaTemp.FechaConsolidacion = DateTime.Now;
+                    lineaTemp.FechaConsolidacion = DateTime.Now; // Siempre usar la hora del servidor/API
                     lineaTemp.UsuarioConsolidacionId = usuarioValidacionId;
                 }
 
@@ -1170,7 +1175,7 @@ namespace SGA_Api.Controllers.Inventario
 
                 // Obtener ejercicio actual una sola vez para todo el método
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
@@ -1178,36 +1183,56 @@ namespace SGA_Api.Controllers.Inventario
                 // Crear líneas definitivas para todas las líneas temporales
                 foreach (var lineaTemp in lineasTemp)
                 {
-                    // NO HAY REDONDEO - Usar exactamente el mismo valor que se guardó al crear el inventario
+                    // Stock teórico: el que había cuando se creó el inventario
                     var stockTeorico = lineaTemp.StockActual;
                     
-                    // Crear nueva línea definitiva
+                    // Stock actual: consultar el stock actual del sistema al momento de consolidar
+                    // 🔷 CORREGIDO: Usar el almacén de cada línea individual en lugar del almacén del inventario
+                    var stockActualSistema = await _storageContext.AcumuladoStockUbicacion
+                        .FirstOrDefaultAsync(s => 
+                            s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                            s.Ejercicio == ejercicio &&
+                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen && // ← CORREGIDO: Usar almacén de la línea
+                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                            s.Ubicacion == lineaTemp.CodigoUbicacion &&
+                            s.Partida == lineaTemp.Partida);
+                    
+                    var stockActual = stockActualSistema?.UnidadSaldo ?? 0;
+                    
+                    // Stock contado por el usuario
                     var stockContado = lineaTemp.CantidadContada ?? lineaTemp.StockActual;
-                    var ajusteFinal = stockContado - stockTeorico;
+                    
+                    // 🔷 CORREGIDO: El ajuste final debe ser sobre StockActual, no sobre StockTeorico
+                    // StockActual = lo que hay actualmente en el sistema
+                    // StockContado = lo que contó el usuario
+                    // AjusteFinal = diferencia entre lo que hay y lo que debería haber
+                    var ajusteFinal = stockContado - stockActual;
                     
                     var nuevaLinea = new InventarioLineas
                     {
                         IdInventario = idInventario,
                         CodigoArticulo = lineaTemp.CodigoArticulo,
                         CodigoUbicacion = lineaTemp.CodigoUbicacion,
-                        StockActual = lineaTemp.StockActual, // Stock cuando se creó el inventario
-                        StockContado = stockContado,
-                        StockTeorico = stockTeorico, // Stock actual del sistema al consolidar
-                        AjusteFinal = ajusteFinal, // Calcular ajuste final
+                        // 🔷 NUEVO: Preservar el almacén de cada línea individual
+                        CodigoAlmacen = lineaTemp.CodigoAlmacen,
+                        StockTeorico = stockTeorico, // Stock cuando se creó el inventario
+                        StockActual = stockActual, // Stock actual del sistema al consolidar
+                        StockContado = stockContado, // Lo que contó el usuario
+                        AjusteFinal = ajusteFinal, // 🔷 CORREGIDO: StockContado - StockActual
                         Estado = "CONTADA",
                         Partida = lineaTemp.Partida,
                         FechaCaducidad = lineaTemp.FechaCaducidad,
                         UsuarioValidacionId = usuarioValidacionId,
-                        FechaValidacion = DateTime.Now,
+                        FechaValidacion = DateTime.Now, // Siempre usar la hora del servidor/API
                         Observaciones = lineaTemp.Observaciones
                     };
                     
                     _context.InventarioLineas.Add(nuevaLinea);
-                    _logger.LogInformation($"Creando línea: Artículo={lineaTemp.CodigoArticulo}, StockContado={stockContado}, StockTeorico={stockTeorico}, AjusteFinal={ajusteFinal}");
+                    _logger.LogInformation($"Creando línea: Artículo={lineaTemp.CodigoArticulo}, Almacén={lineaTemp.CodigoAlmacen}, StockTeórico={stockTeorico}, StockActual={stockActual}, StockContado={stockContado}, AjusteFinal={ajusteFinal} (StockContado - StockActual)");
                     
                     // Marcar línea temporal como consolidada
                     lineaTemp.Consolidado = true;
-                    lineaTemp.FechaConsolidacion = DateTime.Now;
+                    lineaTemp.FechaConsolidacion = DateTime.Now; // Siempre usar la hora del servidor/API
                     lineaTemp.UsuarioConsolidacionId = usuarioValidacionId;
                 }
 
@@ -1217,11 +1242,12 @@ namespace SGA_Api.Controllers.Inventario
 
                 foreach (var lineaTemp in lineasTemp)
                 {
+                    // 🔷 CORREGIDO: Usar el almacén de cada línea individual en lugar del almacén del inventario
                     var stockActualSistema = await _storageContext.AcumuladoStockUbicacion
                         .FirstOrDefaultAsync(s => 
                             s.CodigoEmpresa == inventario.CodigoEmpresa &&
                             s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == inventario.CodigoAlmacen &&
+                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen && // ← CORREGIDO: Usar almacén de la línea
                             s.CodigoArticulo == lineaTemp.CodigoArticulo &&
                             s.Ubicacion == lineaTemp.CodigoUbicacion);
 
@@ -1229,11 +1255,12 @@ namespace SGA_Api.Controllers.Inventario
                     var stockAlCrear = lineaTemp.StockActual; // Stock cuando se creó el inventario
                     var diferencia = Math.Abs(stockActual - stockAlCrear);
 
-                    if (diferencia > tolerancia)
+                    if (diferencia > 0m) // Sin tolerancia, cualquier diferencia cuenta
                     {
                         lineasConDiferencias.Add(new
                         {
                             CodigoArticulo = lineaTemp.CodigoArticulo,
+                            CodigoAlmacen = lineaTemp.CodigoAlmacen, // ← NUEVO: Incluir almacén en las diferencias
                             CodigoUbicacion = lineaTemp.CodigoUbicacion,
                             StockAlCrear = stockAlCrear,
                             StockActual = stockActual,
@@ -1445,7 +1472,7 @@ namespace SGA_Api.Controllers.Inventario
 
                     // 4.1. Obtener ejercicio para este almacén específico
                     var ejercicio = await _sageDbContext.Periodos
-                        .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                        .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                         .OrderByDescending(p => p.Fechainicio)
                         .Select(p => p.Ejercicio)
                         .FirstOrDefaultAsync();
@@ -1535,23 +1562,24 @@ namespace SGA_Api.Controllers.Inventario
                 
                 foreach (var stock in stockAgrupado)
                 {
-                    // incluirUnidadesCero determina si inicializar CantidadContada a 0 (conteo ciego) o al stock actual (conteo normal)
-                    decimal cantidadInicial = incluirUnidadesCero ? 0 : stock.UnidadSaldo;
+                    // NUEVO: Las líneas se crean SIN contar (CantidadContada = null)
+                    // El progreso se basará en líneas donde el usuario realmente haya contado
                     
-                    _logger.LogInformation("Artículo {CodigoArticulo} en {CodigoAlmacen}/{Ubicacion}: incluirUnidadesCero={IncluirUnidadesCero}, cantidadInicial={CantidadInicial}, stockActual={StockActual}", 
-                        stock.CodigoArticulo, stock.CodigoAlmacen, stock.Ubicacion, incluirUnidadesCero, cantidadInicial, stock.UnidadSaldo);
+                    _logger.LogInformation("Artículo {CodigoArticulo} en {CodigoAlmacen}/{Ubicacion}: Creando línea temporal sin contar (CantidadContada = null), stockActual={StockActual}", 
+                        stock.CodigoArticulo, stock.CodigoAlmacen, stock.Ubicacion, stock.UnidadSaldo);
 
                     var nuevaLinea = new InventarioLineasTemp
                     {
                         IdInventario = idInventario,
                         CodigoArticulo = stock.CodigoArticulo ?? "",
                         CodigoUbicacion = stock.Ubicacion ?? "",
+                        CodigoAlmacen = stock.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
                         Partida = stock.Partida,
                         FechaCaducidad = stock.FechaCaducidad,
-                        CantidadContada = cantidadInicial, // 0 o stock actual según checkbox
-                        StockActual = stock.UnidadSaldo, // Stock actual en la ubicación
+                        CantidadContada = null,
+                        StockActual = stock.UnidadSaldo,
                         UsuarioConteoId = inventario.UsuarioCreacionId,
-                        FechaConteo = DateTime.Now,
+                        FechaConteo = DateTime.Now, // Siempre usar la hora del servidor/API
                         Consolidado = false
                     };
 
@@ -1595,8 +1623,9 @@ namespace SGA_Api.Controllers.Inventario
 
                 var lineas = await _context.InventarioLineasTemp
                     .Where(l => l.IdInventario == idInventario && !l.Consolidado)
-                    .OrderBy(l => l.CodigoUbicacion)
-                    .ThenBy(l => l.CodigoArticulo)
+                    .OrderBy(l => l.CodigoAlmacen)        // ← CAMBIAR: Ordenar por almacén primero
+                    .ThenBy(l => l.CodigoUbicacion)       // ← CAMBIAR: Luego por ubicación
+                    .ThenBy(l => l.CodigoArticulo)        // ← MANTENER: Finalmente por artículo
                     .ToListAsync();
 
                 // Obtener descripciones de artículos con manejo de errores
@@ -1606,8 +1635,9 @@ namespace SGA_Api.Controllers.Inventario
                     var codigosArticulos = lineas.Select(l => l.CodigoArticulo).Distinct().ToList();
                     if (codigosArticulos.Any())
                     {
-                        // Consulta más simple sin Contains
+                        // Consulta filtrada por empresa para obtener solo los artículos relevantes
                         var articulosSage = await _sageDbContext.Articulos
+                            .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa)
                             .Select(a => new { a.CodigoArticulo, a.DescripcionArticulo })
                             .ToListAsync();
                             
@@ -1638,6 +1668,7 @@ namespace SGA_Api.Controllers.Inventario
                     CodigoArticulo = l.CodigoArticulo,
                     DescripcionArticulo = articulos.GetValueOrDefault(l.CodigoArticulo, ""),
                     CodigoUbicacion = l.CodigoUbicacion,
+                    CodigoAlmacen = l.CodigoAlmacen ?? "", // ← AGREGAR ESTA LÍNEA
                     Partida = l.Partida ?? "",
                     FechaCaducidad = l.FechaCaducidad,
                     CantidadContada = l.CantidadContada,
@@ -1648,7 +1679,6 @@ namespace SGA_Api.Controllers.Inventario
                     Consolidado = l.Consolidado,
                     FechaConsolidacion = l.FechaConsolidacion,
                     UsuarioConsolidacionId = l.UsuarioConsolidacionId,
-                    // === NUEVO: Información de palets ===
                     Palets = paletsInfo.GetValueOrDefault($"{l.CodigoArticulo}_{l.CodigoUbicacion}_{l.Partida ?? ""}", new List<object>())
                         .Cast<PaletDetalleDto>()
                         .ToList()
@@ -1945,7 +1975,7 @@ namespace SGA_Api.Controllers.Inventario
 
                 // Obtener ejercicio actual para consultas de stock
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
@@ -1965,11 +1995,12 @@ namespace SGA_Api.Controllers.Inventario
                 foreach (var lineaTemp in lineasTemp)
                 {
                     // Obtener stock actual del sistema
+                    // 🔷 CORREGIDO: Usar el almacén de cada línea individual en lugar del almacén del inventario
                     var stockActual = await _storageContext.AcumuladoStockUbicacion
                         .FirstOrDefaultAsync(s => 
                             s.CodigoEmpresa == inventario.CodigoEmpresa &&
                             s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == inventario.CodigoAlmacen &&
+                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen && // ← CORREGIDO: Usar almacén de la línea
                             s.CodigoArticulo == lineaTemp.CodigoArticulo &&
                             s.Ubicacion == lineaTemp.CodigoUbicacion &&
                             s.Partida == lineaTemp.Partida);
@@ -1980,11 +2011,12 @@ namespace SGA_Api.Controllers.Inventario
                     // SOLO detectar cambios de stock real, NO cambios en el conteo del usuario
                     var diferencia = Math.Abs(stockAlCrearInventario - stockActualSistema);
 
-                    if (diferencia > tolerancia)
+                    if (diferencia > 0m) // Sin tolerancia, cualquier diferencia cuenta
                     {
                         lineasConDiferencias.Add(new
                         {
                             codigoArticulo = lineaTemp.CodigoArticulo,
+                            codigoAlmacen = lineaTemp.CodigoAlmacen, // ← NUEVO: Incluir almacén en las diferencias
                             codigoUbicacion = lineaTemp.CodigoUbicacion,
                             partida = lineaTemp.Partida,
                             fechaCaducidad = lineaTemp.FechaCaducidad,
@@ -2027,7 +2059,7 @@ namespace SGA_Api.Controllers.Inventario
 
                 // Obtener ejercicio actual para consultas de stock
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
@@ -2055,14 +2087,18 @@ namespace SGA_Api.Controllers.Inventario
                     var stockAlCrearInventario = lineaTemp.StockActual;
                     var cantidadContada = lineaTemp.CantidadContada ?? 0;
                     
+                    // DEBUG: Mostrar información de evaluación
+                    Console.WriteLine($"🔍 RECONTEO: Art={lineaTemp.CodigoArticulo}, Ubic={lineaTemp.CodigoUbicacion}");
+                    Console.WriteLine($"   StockAlCrear={stockAlCrearInventario}, StockActual={stockRealActual}");
+                    
                     // SOLO detectar cambios de stock real, NO cambios en el conteo del usuario
                     // Comparar stock al crear inventario vs stock actual del sistema
                     var diferenciaStock = Math.Abs(stockRealActual - stockAlCrearInventario);
                     
-                    // Una línea es problemática si:
-                    // 1. El stock real ha cambiado significativamente (>5% o >1 unidad) respecto al stock al crear inventario
-                    bool stockHaCambiado = diferenciaStock > 1m || 
-                                          (stockAlCrearInventario > 0 && diferenciaStock / stockAlCrearInventario > 0.05m);
+                    Console.WriteLine($"   DiferenciaStock={diferenciaStock}, ¿HaCambiado?={diferenciaStock > 0m}");
+                    
+                    // Sin tolerancia: cualquier diferencia se considera problemática
+                    bool stockHaCambiado = diferenciaStock > 0m;
                     
                     if (stockHaCambiado)
                     {
@@ -2111,6 +2147,64 @@ namespace SGA_Api.Controllers.Inventario
                     return NotFound(new { mensaje = "Inventario no encontrado" });
                 }
 
+                // === NUEVO: Validación de límites por artículo antes de guardar reconteo ===
+                foreach (var lineaReconteo in reconteo.LineasRecontadas)
+                {
+                    var (acumUnid, acumEur) = await CalcularDiferenciasDiariasPorArticuloAsync(
+                        lineaReconteo.UsuarioReconteo,
+                        lineaReconteo.CodigoArticulo,
+                        reconteo.IdInventario,
+                        inventario.CodigoEmpresa);
+
+                    var limEuros = await _sageDbContext.Operarios
+                        .Where(o => o.Id == lineaReconteo.UsuarioReconteo)
+                        .Select(o => o.MRH_LimiteInventarioEuros)
+                        .FirstOrDefaultAsync() ?? 0m;
+
+                    var limUnidades = await _sageDbContext.Operarios
+                        .Where(o => o.Id == lineaReconteo.UsuarioReconteo)
+                        .Select(o => o.MRH_LimiteInventarioUnidades)
+                        .FirstOrDefaultAsync() ?? 0m;
+
+                                    // Calcular diferencia con stock actual del sistema
+                var ejercicio = await _sageDbContext.Periodos
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
+                    .OrderByDescending(p => p.Fechainicio)
+                    .Select(p => p.Ejercicio)
+                    .FirstOrDefaultAsync();
+
+                    var stockActual = await _storageContext.AcumuladoStockUbicacion
+                        .FirstOrDefaultAsync(s => s.CodigoEmpresa == inventario.CodigoEmpresa && s.Ejercicio == ejercicio &&
+                                                  s.CodigoAlmacen == inventario.CodigoAlmacen && s.CodigoArticulo == lineaReconteo.CodigoArticulo &&
+                                                  s.Ubicacion == lineaReconteo.CodigoUbicacion && s.Partida == lineaReconteo.Partida);
+
+                    var diferenciaNueva = Math.Abs(lineaReconteo.CantidadReconteo - (stockActual?.UnidadSaldo ?? 0));
+
+                    if (limEuros > 0)
+                    {
+                        var precioMedio = await _sageDbContext.AcumuladoStock
+                            .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa && a.CodigoArticulo == lineaReconteo.CodigoArticulo)
+                            .OrderByDescending(a => a.Ejercicio)
+                            .Select(a => a.PrecioMedio)
+                            .FirstOrDefaultAsync() ?? 0m;
+
+                        var totalEuros = acumEur + (diferenciaNueva * precioMedio);
+                        if (totalEuros > limEuros)
+                        {
+                            return BadRequest(new { mensaje = $"Límite diario de euros superado para el artículo {lineaReconteo.CodigoArticulo}." });
+                        }
+                    }
+
+                    if (limUnidades > 0)
+                    {
+                        var totalUnidades = acumUnid + diferenciaNueva;
+                        if (totalUnidades > limUnidades)
+                        {
+                            return BadRequest(new { mensaje = $"Límite diario de unidades superado para el artículo {lineaReconteo.CodigoArticulo}." });
+                        }
+                    }
+                }
+
                 foreach (var lineaReconteo in reconteo.LineasRecontadas)
                 {
                     // Buscar la línea temporal correspondiente
@@ -2125,7 +2219,7 @@ namespace SGA_Api.Controllers.Inventario
                         // Actualizar la cantidad contada con el reconteo
                         lineaTemp.CantidadContada = lineaReconteo.CantidadReconteo;
                         lineaTemp.UsuarioConteoId = lineaReconteo.UsuarioReconteo;
-                        lineaTemp.FechaConteo = DateTime.Now;
+                        lineaTemp.FechaConteo = DateTime.Now; // Siempre usar la hora del servidor/API
                         
                         _context.InventarioLineasTemp.Update(lineaTemp);
                     }
@@ -2204,7 +2298,7 @@ namespace SGA_Api.Controllers.Inventario
                                 _context.LogPalet.Add(new LogPalet
                                 {
                                     PaletId = lineaPalet.PaletId,
-                                    Fecha = DateTime.Now,
+                                    Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
                                     IdUsuario = usuarioId,
                                     Accion = "AjusteInventario",
                                     Detalle = $"Añadido {cantidadAAnadir:F4} unidades por inventario. Artículo: {linea.CodigoArticulo}, Línea ID: {lineaPalet.Id}"
@@ -2223,7 +2317,7 @@ namespace SGA_Api.Controllers.Inventario
                                 _context.LogPalet.Add(new LogPalet
                                 {
                                     PaletId = lineaPalet.PaletId,
-                                    Fecha = DateTime.Now,
+                                    Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
                                     IdUsuario = usuarioId,
                                     Accion = "AjusteInventario",
                                     Detalle = $"Restado {cantidadARestar:F4} unidades por inventario. Artículo: {linea.CodigoArticulo}, Línea ID: {lineaPalet.Id}"
@@ -2282,7 +2376,7 @@ namespace SGA_Api.Controllers.Inventario
 
                 // 5. Marcar inventario como cerrado
                 inventario.Estado = "CERRADO";
-                inventario.FechaCierre = DateTime.Now;
+                inventario.FechaCierre = DateTime.Now; // Siempre usar la hora del servidor/API
                 inventario.UsuarioCierreId = usuarioId;
                 _context.InventarioCabecera.Update(inventario);
 

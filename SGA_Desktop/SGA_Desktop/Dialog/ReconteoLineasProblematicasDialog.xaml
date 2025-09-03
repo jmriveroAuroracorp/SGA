@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
         xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
-        Title="RECONTEO DE LÍNEAS CON STOCK CAMBIADO"
+        Title="REINVENTARIO DE LÍNEAS CON STOCK CAMBIADO"
         Width="1400"
         Height="900"
         WindowStartupLocation="CenterOwner"
@@ -52,7 +52,7 @@
             <Border Grid.Row="0" 
                     Background="{StaticResource BrushPrincipal}" 
                     CornerRadius="6,6,0,0">
-                <TextBlock Text="⚠️ RECONTEO DE LÍNEAS CON STOCK CAMBIADO" 
+                <TextBlock Text="⚠️ REINVENTARIO DE LÍNEAS CON STOCK CAMBIADO" 
                            FontSize="16" 
                            FontWeight="Bold" 
                            Foreground="White"
@@ -130,7 +130,7 @@
                                     BorderThickness="1" 
                                     CornerRadius="3" 
                                     Padding="6,3">
-                                <TextBlock Text="PENDIENTE DE RECONTEO" 
+                                <TextBlock Text="PENDIENTE DE REINVENTARIO" 
                                            FontWeight="SemiBold" 
                                            FontSize="12" 
                                            Foreground="{StaticResource BrushPrincipal}"
@@ -166,10 +166,10 @@
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"
                                        Margin="0,0,0,8"/>
-                            <TextBlock Text="Esto puede indicar que se han realizado movimientos de stock durante el conteo o que otros usuarios han trabajado en el mismo almacén." 
+                            <TextBlock Text="Esto puede indicar que se han realizado movimientos de stock durante el inventario o que otros usuarios han trabajado en el mismo almacén." 
                                        Foreground="{StaticResource BrushPrincipal}"
                                        TextWrapping="Wrap"/>
-                            <TextBlock Text="Por favor, reconte estas líneas para asegurar la precisión del inventario." 
+                            <TextBlock Text="Por favor, reinventarie estas líneas para asegurar la precisión del inventario." 
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"
                                        Margin="0,8,0,0"/>
@@ -196,7 +196,7 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0"
-                                       Text="🔍 Líneas que requieren reconteo" 
+                                       Text="🔍 Líneas que requieren reinventario" 
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"/>
 
@@ -241,13 +241,13 @@
                                         
                                         <TextBlock Grid.Column="0" Text="Código" FontWeight="Bold" FontSize="11" Foreground="White"/>
                                         <TextBlock Grid.Column="1" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="White" Margin="8,0"/>
-                                        <TextBlock Grid.Column="2" Text="Almacén" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="Almacén" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" Visibility="{Binding Inventario.EsMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         <TextBlock Grid.Column="3" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="4" Text="Partida" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="5" Text="Caducidad" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="6" Text="Stock al crear" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="7" Text="Stock actual" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="8" Text="Reconteo" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="8" Text="Reinventario" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center"/>
                                     </Grid>
                                 </Border>
 
@@ -307,7 +307,8 @@
                                                            FontSize="12" 
                                                            Foreground="Black"
                                                            VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
+                                                           HorizontalAlignment="Center"
+                                                           Visibility="{Binding DataContext.Inventario.EsMultialmacen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                 
                                                 <!-- Ubicación -->
                                                 <TextBlock Grid.Column="3" 
@@ -353,7 +354,7 @@
                                                 
                                                 <!-- Reconteo (editable) -->
                                                 <TextBox Grid.Column="8" 
-                                                         Text="{Binding CantidadReconteoTexto, UpdateSourceTrigger=PropertyChanged}" 
+                                                         Text="{Binding CantidadReconteoTexto, UpdateSourceTrigger=LostFocus}" 
                                                          Width="80" 
                                                          Height="24"
                                                          FontSize="12"
@@ -377,85 +378,60 @@
 
             <!-- Footer con botones -->
             <Border Grid.Row="2" 
-                    Background="{StaticResource BrushFondo}" 
-                    CornerRadius="0,0,6,6">
-                <Grid Margin="25">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    Background="{StaticResource BrushSecundario}" 
+                    CornerRadius="0,0,6,6"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{StaticResource BrushIntermedio}">
+                <Grid Margin="20,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                    <!-- Primera fila: Información -->
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <!-- Información -->
+                    <StackPanel Grid.Column="0" 
+                                Orientation="Horizontal" 
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TotalLineasProblematicas}" 
+                                   FontWeight="Bold" 
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   Margin="0,0,20,0"/>
+                        <TextBlock Text="{Binding LineasRecontadas}" 
+                                   FontWeight="Bold" 
+                                   VerticalAlignment="Center"
+                                   Foreground="Green"/>
+                    </StackPanel>
 
-                        <!-- Información -->
-                        <StackPanel Grid.Column="0" 
-                                    Orientation="Horizontal" 
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="{Binding TotalLineasProblematicas}" 
-                                       FontWeight="Bold" 
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource BrushPrincipal}"
-                                       Margin="0,0,20,0"/>
-                            <TextBlock Text="{Binding LineasRecontadas}" 
-                                       FontWeight="Bold" 
-                                       VerticalAlignment="Center"
-                                       Foreground="Green"/>
-                        </StackPanel>
+                    <!-- Botón Guardar y Continuar -->
+                    <Button Grid.Column="1"
+                            Content="💾 GUARDAR Y CONTINUAR REINVENTARIANDO"
+                            Command="{Binding GuardarYContinuarCommand}"
+                            IsEnabled="{Binding PuedeGuardar}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="200" Height="35"
+                            Margin="0,0,10,0"
+                            ToolTip="Guarda el progreso actual y permite continuar reinventariando"/>
 
-                        <!-- Campo unidades globales -->
-                        <StackPanel Grid.Column="1" 
-                                    Orientation="Horizontal" 
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="Unidades:" 
-                                       VerticalAlignment="Center" 
-                                       Margin="0,0,5,0"
-                                       Foreground="{StaticResource BrushPrincipal}"/>
-                            <TextBox Text="{Binding UnidadesGlobales}" 
-                                     Width="80" Height="36" 
-                                     Style="{StaticResource EstiloCajaTexto}"/>
-                        </StackPanel>
-                    </Grid>
+                    <!-- Botón Finalizar -->
+                    <Button Grid.Column="2"
+                            Content="✅ FINALIZAR REINVENTARIO"
+                            Command="{Binding GuardarReconteoCommand}"
+                            IsEnabled="{Binding PuedeGuardar}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="140" Height="35"
+                            Margin="0,0,10,0"
+                            ToolTip="Guarda el reinventario y cierra el diálogo"/>
 
-                    <!-- Segunda fila: Botones -->
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Espacio vacío a la izquierda -->
-                        <StackPanel Grid.Column="0"/>
-
-                        <!-- Botón Actualizar Stock -->
-                        <Button Grid.Column="1"
-                                Content="🔄 ACTUALIZAR STOCK"
-                                Command="{Binding ActualizarStockCommand}"
-                                Style="{StaticResource EstiloBotonSecundario}"
-                                Width="160" Height="35" 
-                                Margin="0,0,10,0"/>
-
-                        <!-- Botón Guardar Reconteo -->
-                        <Button Grid.Column="2"
-                                Content="💾 GUARDAR RECONTEO"
-                                Command="{Binding GuardarReconteoCommand}"
-                                Style="{StaticResource EstiloBotonPrincipal}"
-                                Width="160" Height="35"
-                                Margin="0,0,10,0"/>
-
-                        <!-- Botón Cancelar -->
-                        <Button Grid.Column="3"
-                                Content="❌ CANCELAR"
-                                Command="{Binding CancelarCommand}"
-                                Style="{StaticResource EstiloBotonSecundario}"
-                                Width="120" Height="35"/>
-                    </Grid>
+                    <!-- Botón Salir -->
+                    <Button Grid.Column="3"
+                            Content="🚪 SALIR"
+                            Command="{Binding CancelarCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="120" Height="35"
+                            ToolTip="Cierra el diálogo sin guardar cambios"/>
                 </Grid>
             </Border>
         </Grid>

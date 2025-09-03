@@ -27,8 +27,9 @@ namespace SGA_Api.Models.Traspasos
 
 		public string? CodigoPalet { get; set; }
 		public string? CodigoArticulo { get; set; }
+		public string? DescripcionArticulo { get; set; }
 		public string? TipoTraspaso { get; set; }
-
+		public decimal? Cantidad { get; set; }
 
 		
 		// Líneas del palet

@@ -268,11 +268,30 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
-                // SIEMPRE enviar TODAS las líneas del inventario, aunque no haya modificaciones
-                var lineasParaGuardar = ArticulosInventario.ToList();
+                // NUEVA VALIDACIÓN: Verificar límites del operario antes de guardar
+                var limiteSuperado = await ValidarLimitesOperarioAntesDeGuardarAsync();
+                if (limiteSuperado)
+                {
+                    return; // No guardar si se superan los límites
+                }
+
+                // ENVIAR TODAS LAS LÍNEAS para inventarios inicializados a 0, o solo las contadas para inventarios normales
+                var lineasParaGuardar = ArticulosInventario
+                    .Select(a => new { Linea = a, Cantidad = ObtenerCantidadContadaNullable(a) })
+                    .Where(x => x.Cantidad.HasValue)
+                    .ToList();
+
+                // Si es inventario inicializado a 0, incluir todas las líneas (incluso las que no se han modificado)
+                if (Inventario?.ConteoACiegas == true)
+                {
+                    lineasParaGuardar = ArticulosInventario
+                        .Select(a => new { Linea = a, Cantidad = ObtenerCantidadContadaNullable(a) })
+                        .Where(x => x.Cantidad.HasValue)
+                        .ToList();
+                }
 
                 var lineasConDiferencias = lineasParaGuardar
-                    .Where(a => Math.Abs(ObtenerCantidadContada(a) - a.StockActual) > 0.0001m)
+                    .Where(x => Math.Abs(x.Cantidad!.Value - x.Linea.StockActual) > 0.0001m)
                     .ToList();
 
                 var totalArticulos = ArticulosInventario.Count;
@@ -306,13 +325,14 @@ namespace SGA_Desktop.ViewModels
                 var dto = new GuardarConteoInventarioDto
                 {
                     IdInventario = Inventario!.IdInventario,
-                    Articulos = lineasParaGuardar.Select(a => new ArticuloConteoDto
+                    Articulos = lineasParaGuardar.Select(x => new ArticuloConteoDto
                     {
-                        CodigoArticulo = a.CodigoArticulo,
-                        CodigoUbicacion = a.CodigoUbicacion,
-                        Partida = a.Partida ?? "", // Usar la partida real de la línea temporal
-                        FechaCaducidad = a.FechaCaducidad, // Agregar fecha de caducidad
-                        CantidadInventario = ObtenerCantidadContada(a), // Obtener valor contado correctamente
+                        CodigoArticulo = x.Linea.CodigoArticulo,
+                        CodigoUbicacion = x.Linea.CodigoUbicacion,
+                        CodigoAlmacen = x.Linea.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
+                        Partida = x.Linea.Partida ?? "", // Usar la partida real de la línea temporal
+                        FechaCaducidad = x.Linea.FechaCaducidad, // Agregar fecha de caducidad
+                        CantidadInventario = x.Cantidad!.Value, // Usar solo si realmente hay cantidad
                         UsuarioConteo = SessionManager.UsuarioActual!.operario
                     }).ToList()
                 };
@@ -355,6 +375,117 @@ namespace SGA_Desktop.ViewModels
             {
                 IsCargando = false;
                 ValidarFormulario(); // Revalidar después del guardado
+            }
+        }
+
+        [RelayCommand]
+        private async Task GuardarYContinuarAsync()
+        {
+            try
+            {
+                if (!PuedeGuardar)
+                {
+                    return;
+                }
+
+                // NUEVA VALIDACIÓN: Verificar límites del operario antes de guardar
+                var limiteSuperado = await ValidarLimitesOperarioAntesDeGuardarAsync();
+                if (limiteSuperado)
+                {
+                    return; // No guardar si se superan los límites
+                }
+
+                // Preparar líneas a guardar (solo las contadas por el usuario)
+                var lineasParaGuardar = ArticulosInventario
+                    .Select(a => new { Linea = a, Cantidad = ObtenerCantidadContadaNullable(a) })
+                    .Where(x => x.Cantidad.HasValue)
+                    .ToList();
+
+                var lineasConDiferencias = lineasParaGuardar
+                    .Where(x => Math.Abs(x.Cantidad!.Value - x.Linea.StockActual) > 0.0001m)
+                    .ToList();
+
+                var totalArticulos = ArticulosInventario.Count;
+                var articulosContados = lineasParaGuardar.Count;
+
+                string mensajeConfirmacion;
+                if (lineasConDiferencias.Any())
+                {
+                    mensajeConfirmacion = $"¿Desea guardar el progreso y seguir contando?\n\n" +
+                                         $"• {lineasConDiferencias.Count} líneas con diferencias\n" +
+                                         $"• {articulosContados - lineasConDiferencias.Count} líneas sin diferencias\n" +
+                                         $"• {totalArticulos - articulosContados} líneas sin contar";
+                }
+                else
+                {
+                    mensajeConfirmacion = $"¿Desea guardar el progreso y seguir contando?\n\n" +
+                                         $"• {articulosContados} artículos contados sin diferencias\n" +
+                                         $"• {totalArticulos - articulosContados} líneas sin contar";
+                }
+
+                var confirmacion = new ConfirmationDialog("Confirmar guardado parcial", mensajeConfirmacion);
+                var ownerConfirm = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                if (ownerConfirm != null && ownerConfirm != confirmacion)
+                    confirmacion.Owner = ownerConfirm;
+                if (confirmacion.ShowDialog() != true) return;
+
+                IsCargando = true;
+                MensajeEstado = "Guardando progreso...";
+
+                var dto = new GuardarConteoInventarioDto
+                {
+                    IdInventario = Inventario!.IdInventario,
+                    Articulos = lineasParaGuardar.Select(x => new ArticuloConteoDto
+                    {
+                        CodigoArticulo = x.Linea.CodigoArticulo,
+                        CodigoUbicacion = x.Linea.CodigoUbicacion,
+                        CodigoAlmacen = x.Linea.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
+                        Partida = x.Linea.Partida ?? "",
+                        FechaCaducidad = x.Linea.FechaCaducidad,
+                        CantidadInventario = x.Cantidad!.Value,
+                        UsuarioConteo = SessionManager.UsuarioActual!.operario
+                    }).ToList()
+                };
+
+                var resultado = await _inventarioService.GuardarConteoInventarioAsync(dto);
+
+                if (resultado)
+                {
+                    var successDialog = new WarningDialog("Éxito", "Progreso guardado. Puedes seguir contando.");
+                    var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                    if (ownerSuccess != null && ownerSuccess != successDialog)
+                        successDialog.Owner = ownerSuccess;
+                    successDialog.ShowDialog();
+
+                    // Recargar líneas para reflejar cambios sin cerrar el diálogo
+                    await CargarArticulosAsync();
+                }
+                else
+                {
+                    var errorDialog = new WarningDialog("Error", "Error al guardar el progreso.");
+                    var ownerError = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                 ?? Application.Current.MainWindow;
+                    if (ownerError != null && ownerError != errorDialog)
+                        errorDialog.Owner = ownerError;
+                    errorDialog.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                MensajeEstado = $"Error: {ex.Message}";
+                var errorDialog = new WarningDialog("Error", $"Error al guardar progreso: {ex.Message}");
+                var ownerCatch = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                if (ownerCatch != null && ownerCatch != errorDialog)
+                    errorDialog.Owner = ownerCatch;
+                errorDialog.ShowDialog();
+            }
+            finally
+            {
+                IsCargando = false;
+                ValidarFormulario();
             }
         }
 
@@ -565,6 +696,30 @@ namespace SGA_Desktop.ViewModels
         }
 
         /// <summary>
+        /// Devuelve la cantidad contada si existe; en caso contrario null (no contada)
+        /// Para inventarios inicializados a 0, devuelve 0 si no se ha modificado
+        /// </summary>
+        private decimal? ObtenerCantidadContadaNullable(LineaTemporalInventarioDto linea)
+        {
+            if (linea.CantidadContada.HasValue)
+                return linea.CantidadContada.Value;
+
+            if (!string.IsNullOrWhiteSpace(linea.CantidadContadaTexto) &&
+                decimal.TryParse(linea.CantidadContadaTexto, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+
+            // Si es inventario inicializado a 0 y no se ha modificado, devolver 0
+            if (Inventario?.ConteoACiegas == true)
+            {
+                return 0m;
+            }
+
+            return null; // no contada
+        }
+
+        /// <summary>
         /// Valida que el operario no supere su límite de inventario
         /// </summary>
         private async Task ValidarLimiteOperario(LineaTemporalInventarioDto lineaCambiada)
@@ -582,37 +737,37 @@ namespace SGA_Desktop.ViewModels
                 var cantidadContada = ObtenerCantidadContada(lineaCambiada);
                 var nuevaDiferencia = Math.Abs(cantidadContada - lineaCambiada.StockActual);
 
-                // DEBUG: Log información básica (comentado para producción)
-                // MessageBox.Show($"🔍 VALIDACIÓN LÍMITES\n\n" +
-                //     $"Operario: {operarioId}\n" +
-                //     $"Artículo: {codigoArticulo}\n" +
-                //     $"Stock Actual: {lineaCambiada.StockActual}\n" +
-                //     $"Cantidad Contada: {cantidadContada}\n" +
-                //     $"Nueva Diferencia: {nuevaDiferencia}\n" +
-                //     $"Límite Euros: {LimiteOperarioEuros}\n" +
-                //     $"Límite Unidades: {LimiteOperarioUnidades}", 
-                //     "DEBUG - Datos Básicos");
+                // DEBUG: Log información básica
+                MessageBox.Show($"🔍 VALIDACIÓN LÍMITES\n\n" +
+                    $"Operario: {operarioId}\n" +
+                    $"Artículo: {codigoArticulo}\n" +
+                    $"Stock Actual: {lineaCambiada.StockActual}\n" +
+                    $"Cantidad Contada: {cantidadContada}\n" +
+                    $"Nueva Diferencia: {nuevaDiferencia}\n" +
+                    $"Límite Euros: {LimiteOperarioEuros}\n" +
+                    $"Límite Unidades: {LimiteOperarioUnidades}", 
+                    "DEBUG - Datos Básicos");
 
                 // Obtener diferencias acumuladas del artículo en el día (excluyendo inventario actual)
                 var (unidadesAcumuladas, eurosAcumulados) = await _loginService.ObtenerDiferenciasOperarioArticuloDiaAsync(operarioId, codigoArticulo, Inventario.IdInventario);
-                
+
                 // AÑADIR: diferencias del mismo artículo en la sesión actual (excluyendo la línea que estamos validando)
                 var diferenciasEnSesion = CalcularDiferenciasArticuloEnSesion(codigoArticulo, lineaCambiada.IdTemp);
                 unidadesAcumuladas += diferenciasEnSesion.unidades;
                 eurosAcumulados += diferenciasEnSesion.euros;
 
-                // DEBUG: Log diferencias acumuladas (comentado para producción)
-                // MessageBox.Show($"📊 DIFERENCIAS ACUMULADAS\n\n" +
-                //     $"Diferencias Anteriores Hoy:\n" +
-                //     $"  • Unidades: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
-                //     $"  • Euros: {eurosAcumulados - diferenciasEnSesion.euros:F2}\n\n" +
-                //     $"Diferencias en Sesión Actual:\n" +
-                //     $"  • Unidades: {diferenciasEnSesion.unidades:F2}\n" +
-                //     $"  • Euros: {diferenciasEnSesion.euros:F2}\n\n" +
-                //     $"TOTAL ACUMULADO:\n" +
-                //     $"  • Unidades: {unidadesAcumuladas:F2}\n" +
-                //     $"  • Euros: {eurosAcumulados:F2}", 
-                //     "DEBUG - Acumulados Detallados");
+                // DEBUG: Log diferencias acumuladas
+                MessageBox.Show($"📊 DIFERENCIAS ACUMULADAS\n\n" +
+                    $"Diferencias Anteriores Hoy:\n" +
+                    $"  • Unidades: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
+                    $"  • Euros: {eurosAcumulados - diferenciasEnSesion.euros:F2}\n\n" +
+                    $"Diferencias en Sesión Actual:\n" +
+                    $"  • Unidades: {diferenciasEnSesion.unidades:F2}\n" +
+                    $"  • Euros: {diferenciasEnSesion.euros:F2}\n\n" +
+                    $"TOTAL ACUMULADO:\n" +
+                    $"  • Unidades: {unidadesAcumuladas:F2}\n" +
+                    $"  • Euros: {eurosAcumulados:F2}", 
+                    "DEBUG - Acumulados Detallados");
 
                 // Validar límite de euros (acumulado del día + nueva diferencia)
                 if (LimiteOperarioEuros > 0)
@@ -625,16 +780,16 @@ namespace SGA_Desktop.ViewModels
                     var valorTotalGlobal = await CalcularValorTotalDiferenciasAsync();
                     ValorDiferenciasActual = valorTotalGlobal;
 
-                    // DEBUG: Log cálculos de euros (comentado para producción)
-                    // MessageBox.Show($"💰 VALIDACIÓN EUROS\n\n" +
-                    //     $"Precio Medio: {precioMedio:F4}\n" +
-                    //     $"Nueva Diferencia: {nuevaDiferencia} unidades\n" +
-                    //     $"Nueva Diferencia €: {nuevaDiferenciaEuros:F2}\n" +
-                    //     $"Euros Acumulados: {eurosAcumulados:F2}\n" +
-                    //     $"Total Euros Artículo: {totalEurosArticulo:F2}\n" +
-                    //     $"Límite: {LimiteOperarioEuros:F2}\n" +
-                    //     $"¿Supera límite?: {totalEurosArticulo > LimiteOperarioEuros}", 
-                    //     "DEBUG - Euros");
+                    // DEBUG: Log cálculos de euros
+                    MessageBox.Show($"💰 VALIDACIÓN EUROS\n\n" +
+                        $"Precio Medio: {precioMedio:F4}\n" +
+                        $"Nueva Diferencia: {nuevaDiferencia} unidades\n" +
+                        $"Nueva Diferencia €: {nuevaDiferenciaEuros:F2}\n" +
+                        $"Euros Acumulados: {eurosAcumulados:F2}\n" +
+                        $"Total Euros Artículo: {totalEurosArticulo:F2}\n" +
+                        $"Límite: {LimiteOperarioEuros:F2}\n" +
+                        $"¿Supera límite?: {totalEurosArticulo > LimiteOperarioEuros}", 
+                        "DEBUG - Euros");
 
                     if (totalEurosArticulo > LimiteOperarioEuros)
                     {
@@ -652,16 +807,16 @@ namespace SGA_Desktop.ViewModels
                     var unidadesTotalGlobal = CalcularUnidadesTotalDiferencias();
                     UnidadesDiferenciasActual = unidadesTotalGlobal;
 
-                    // DEBUG: Log cálculos de unidades (comentado para producción)
-                    // MessageBox.Show($"📦 VALIDACIÓN UNIDADES\n\n" +
-                    //     $"Diferencias Anteriores: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
-                    //     $"Diferencias en Sesión: {diferenciasEnSesion.unidades:F2}\n" +
-                    //     $"Nueva Diferencia: {nuevaDiferencia:F2}\n\n" +
-                    //     $"Total Acumulado: {unidadesAcumuladas:F2}\n" +
-                    //     $"Total + Nueva: {totalUnidadesArticulo:F2}\n" +
-                    //     $"Límite: {LimiteOperarioUnidades:F2}\n\n" +
-                    //     $"¿Supera límite?: {totalUnidadesArticulo > LimiteOperarioUnidades}", 
-                    //     "DEBUG - Unidades Detallado");
+                    // DEBUG: Log cálculos de unidades
+                    MessageBox.Show($"📦 VALIDACIÓN UNIDADES\n\n" +
+                        $"Diferencias Anteriores: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
+                        $"Diferencias en Sesión: {diferenciasEnSesion.unidades:F2}\n" +
+                        $"Nueva Diferencia: {nuevaDiferencia:F2}\n\n" +
+                        $"Total Acumulado: {unidadesAcumuladas:F2}\n" +
+                        $"Total + Nueva: {totalUnidadesArticulo:F2}\n" +
+                        $"Límite: {LimiteOperarioUnidades:F2}\n\n" +
+                        $"¿Supera límite?: {totalUnidadesArticulo > LimiteOperarioUnidades}", 
+                        "DEBUG - Unidades Detallado");
 
                     if (totalUnidadesArticulo > LimiteOperarioUnidades)
                     {
@@ -673,12 +828,12 @@ namespace SGA_Desktop.ViewModels
                     }
                 }
 
-                // DEBUG: Log resultado final (comentado para producción)
-                // MessageBox.Show($"🏁 RESULTADO VALIDACIÓN\n\n" +
-                //     $"Límite Euros Superado: {limiteSuperadoEuros}\n" +
-                //     $"Límite Unidades Superado: {limiteSuperadoUnidades}\n" +
-                //     $"Tipo Límite Superado: {tipoLimiteSuperado}", 
-                //     "DEBUG - Resultado");
+                // DEBUG: Log resultado final
+                MessageBox.Show($"🏁 RESULTADO VALIDACIÓN\n\n" +
+                    $"Límite Euros Superado: {limiteSuperadoEuros}\n" +
+                    $"Límite Unidades Superado: {limiteSuperadoUnidades}\n" +
+                    $"Tipo Límite Superado: {tipoLimiteSuperado}", 
+                    "DEBUG - Resultado");
 
                 // Si se supera algún límite
                 if (limiteSuperadoEuros || limiteSuperadoUnidades)
@@ -827,6 +982,79 @@ namespace SGA_Desktop.ViewModels
             {
                 System.Diagnostics.Debug.WriteLine($"Error obteniendo precio medio: {ex.Message}");
                 return 0m; // Sin precio si hay error
+            }
+        }
+
+        /// <summary>
+        /// Valida que el operario no supere sus límites al guardar el inventario
+        /// </summary>
+        private async Task<bool> ValidarLimitesOperarioAntesDeGuardarAsync()
+        {
+            try
+            {
+                if (SessionManager.UsuarioActual?.operario == null) return false;
+
+                var operarioId = SessionManager.UsuarioActual.operario;
+                
+                // Obtener límites del operario
+                var limiteEuros = await _loginService.ObtenerLimiteInventarioOperarioAsync(operarioId);
+                var limiteUnidades = await _loginService.ObtenerLimiteUnidadesOperarioAsync(operarioId);
+                
+                if (limiteEuros <= 0 && limiteUnidades <= 0) return false; // Sin límites
+
+                // Calcular diferencias totales del inventario actual
+                decimal totalEurosDiferencias = 0;
+                decimal totalUnidadesDiferencias = 0;
+                
+                foreach (var linea in ArticulosInventario)
+                {
+                    var cantidadContada = ObtenerCantidadContada(linea);
+                    var diferencia = Math.Abs(cantidadContada - linea.StockActual);
+                    
+                    if (diferencia > 0.01m) // Tolerancia para diferencias mínimas
+                    {
+                        totalUnidadesDiferencias += diferencia;
+                        
+                        if (limiteEuros > 0)
+                        {
+                            var precioMedio = await ObtenerPrecioMedioAsync(linea.CodigoArticulo, linea.CodigoAlmacen ?? "");
+                            totalEurosDiferencias += diferencia * precioMedio;
+                        }
+                    }
+                }
+                
+                // Verificar si se superan los límites
+                bool limiteEurosSuperado = limiteEuros > 0 && totalEurosDiferencias > limiteEuros;
+                bool limiteUnidadesSuperado = limiteUnidades > 0 && totalUnidadesDiferencias > limiteUnidades;
+                
+                if (limiteEurosSuperado || limiteUnidadesSuperado)
+                {
+                    string mensaje = "⚠️ Límite Diario Superado\n\n";
+                    mensaje += "Las diferencias del inventario superan su límite autorizado:\n\n";
+                    
+                    if (limiteEurosSuperado)
+                        mensaje += $"• Euros: {totalEurosDiferencias:C2} / {limiteEuros:C2}\n";
+                    if (limiteUnidadesSuperado)
+                        mensaje += $"• Unidades: {totalUnidadesDiferencias:F2} / {limiteUnidades:F2}\n";
+                    
+                    mensaje += "\nNo se puede guardar el inventario.";
+                    
+                    var warning = new WarningDialog("Límite Superado", mensaje);
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (owner != null && owner != warning)
+                        warning.Owner = owner;
+                    warning.ShowDialog();
+                    
+                    return true; // Límite superado
+                }
+                
+                return false; // No se supera el límite
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error validando límites antes de guardar: {ex.Message}");
+                return false; // En caso de error, permitir guardar
             }
         }
         #endregion

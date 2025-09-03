@@ -25,14 +25,23 @@ namespace SGA_Api.Models.Inventario
         public decimal Diferencia { get; set; }
 
         [Required]
-        [StringLength(10)]
-        public string TipoAjuste { get; set; } = string.Empty;
-
-        [Required]
         public int UsuarioId { get; set; }
 
         [Required]
         public DateTime Fecha { get; set; } = DateTime.Now;
+
+        public Guid? IdConteo { get; set; }
+
+        [Required]
+        public short CodigoEmpresa { get; set; }
+
+        [Required]
+        [StringLength(10)]
+        public string CodigoAlmacen { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(20)]
+        public string Estado { get; set; } = "PENDIENTE_ERP";
 
         // Navigation property
         [ForeignKey("IdInventario")]

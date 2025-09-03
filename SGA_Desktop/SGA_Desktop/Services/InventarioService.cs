@@ -263,80 +263,39 @@ namespace SGA_Desktop.Services
             }
         }
 
+
         /// <summary>
-        /// Obtiene los ajustes de un inventario
+        /// Procesa un ajuste de inventario
         /// </summary>
-        public async Task<List<object>> ObtenerAjustesInventarioAsync(Guid idInventario)
+        public async Task<bool> ProcesarAjusteAsync(Guid idAjuste)
         {
             try
             {
-                return await GetAsync<List<object>>($"Inventario/ajustes/{idInventario}");
+                var response = await _httpClient.PostAsync($"Inventario/procesar-ajuste/{idAjuste}", null);
+                response.EnsureSuccessStatusCode();
+                return true;
             }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            catch (Exception ex)
             {
-                return new List<object>();
+                throw new Exception($"Error al procesar ajuste: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// Obtiene los artículos de un inventario para el conteo
+        /// Rechaza un ajuste de inventario
         /// </summary>
-        public async Task<List<ArticuloInventarioDto>> ObtenerArticulosInventarioAsync(FiltroArticulosInventarioDto filtro)
+        public async Task<bool> RechazarAjusteAsync(Guid idAjuste, string motivo)
         {
             try
             {
-                // Primero obtener el inventario para saber el almacén
-                var inventario = await GetAsync<InventarioCabeceraDto>($"Inventario/{filtro.IdInventario}");
-                
-                if (inventario == null)
-                    return new List<ArticuloInventarioDto>();
-
-                // Construir la URL para el endpoint de Stock SIN incluir stock cero
-                var empresa = SessionManager.EmpresaSeleccionada!.Value;
-                var almacen = inventario.CodigoAlmacen;
-                
-                var url = $"Stock/ubicacion?codigoEmpresa={empresa}&codigoAlmacen={Uri.EscapeDataString(almacen)}&incluirStockCero=false";
-                
-                // Agregar filtro de ubicación si está especificado
-                if (!string.IsNullOrWhiteSpace(filtro.CodigoUbicacion))
-                {
-                    url += $"&codigoUbicacion={Uri.EscapeDataString(filtro.CodigoUbicacion)}";
-                }
-
-                // Obtener stock de las ubicaciones (SIN incluir stock 0)
-                var stockData = await GetAsync<List<StockUbicacionDto>>(url);
-
-                // Convertir a ArticuloInventarioDto
-                var articulos = stockData.Select(s => new ArticuloInventarioDto
-                {
-                    CodigoArticulo = s.CodigoArticulo ?? string.Empty,
-                    DescripcionArticulo = s.DescripcionArticulo ?? string.Empty,
-                    CodigoAlmacen = s.CodigoAlmacen ?? string.Empty,
-                    CodigoUbicacion = s.Ubicacion ?? string.Empty,
-                    Partida = s.Partida ?? string.Empty,
-                    FechaCaducidad = s.FechaCaducidad,
-                    StockActual = s.UnidadSaldo ?? 0,
-                    CantidadInventario = null // Campo vacío para el conteo físico
-                }).ToList();
-
-                // Aplicar filtro de artículo si está especificado
-                if (!string.IsNullOrWhiteSpace(filtro.CodigoArticulo))
-                {
-                    articulos = articulos.Where(a => 
-                        (a.CodigoArticulo?.Contains(filtro.CodigoArticulo, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                        (a.DescripcionArticulo?.Contains(filtro.CodigoArticulo, StringComparison.OrdinalIgnoreCase) ?? false)
-                    ).ToList();
-                }
-
-                return articulos;
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                return new List<ArticuloInventarioDto>();
+                var request = new { motivo };
+                var response = await _httpClient.PostAsJsonAsync($"Inventario/rechazar-ajuste/{idAjuste}", request);
+                response.EnsureSuccessStatusCode();
+                return true;
             }
             catch (Exception ex)
             {
-                throw new Exception($"Error al obtener artículos del inventario: {ex.Message}", ex);
+                throw new Exception($"Error al rechazar ajuste: {ex.Message}");
             }
         }
 
@@ -348,7 +307,15 @@ namespace SGA_Desktop.Services
             try
             {
                 var response = await _httpClient.PostAsJsonAsync("Inventario/guardar-conteo", conteo);
-                response.EnsureSuccessStatusCode();
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Capturar el mensaje específico del error del backend
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    var errorMessage = !string.IsNullOrEmpty(errorContent) ? errorContent : response.ReasonPhrase;
+                    throw new Exception($"Error al guardar conteo: {errorMessage}");
+                }
+                
                 return true;
             }
             catch (Exception ex)

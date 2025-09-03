@@ -63,20 +63,20 @@ namespace SGA_Api.Data
                 .HasColumnName("CodigoAlmacen")
                 .HasMaxLength(10); // o el tamaño real si lo sabes (ej. 5, 50...) 
 
-            //Empresas Asignadas
-            modelBuilder.Entity<OperarioEmpresa>()
-            .ToTable("MRH_SGAOperariosEmpresas")
-            .HasNoKey(); 
+			//Empresas Asignadas
+			modelBuilder.Entity<OperarioEmpresa>(entity =>
+			{
+				entity.ToTable("MRH_SGAOperariosEmpresas");
 
-            modelBuilder.Entity<OperarioEmpresa>()
-                .Property(e => e.Operario)
-                .HasColumnName("Operario");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.Operario, e.EmpresaOrigen });
 
-            modelBuilder.Entity<OperarioEmpresa>()
-                .Property(e => e.Empresa)
-                .HasColumnName("Empresa");
+				entity.Property(e => e.CodigoEmpresa).HasColumnName("CodigoEmpresa");
+				entity.Property(e => e.Operario).HasColumnName("Operario");
+				entity.Property(e => e.EmpresaOrigen).HasColumnName("EmpresaOrigen");
+				entity.Property(e => e.Empresa).HasColumnName("Empresa").HasMaxLength(45);
+			});
 
-            //Almacenes
+			//Almacenes
 			modelBuilder.Entity<Almacenes>()
 		   .HasNoKey()
 		   .ToTable("Almacenes");   

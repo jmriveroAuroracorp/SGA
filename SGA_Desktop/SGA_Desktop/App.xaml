@@ -2,12 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SGA_Desktop"
+             xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
              StartupUri="Views/Login.xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/SGA_Desktop;component/Resources/Estilos.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <helpers:PermisosToVisibilityConverter x:Key="PermisosToVisibilityConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

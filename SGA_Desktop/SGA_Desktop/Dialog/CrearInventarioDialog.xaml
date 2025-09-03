@@ -391,9 +391,43 @@
                                 <StackPanel Margin="10">
                                     <!-- Checkbox para habilitar rangos -->
                                     <CheckBox Content="Especificar rango de ubicaciones" 
-                                              IsChecked="{Binding UsarRangoUbicaciones}"
                                               FontWeight="SemiBold"
-                                              Margin="0,0,0,10"/>
+                                              Margin="0,0,0,10">
+                                        <CheckBox.Style>
+                                            <Style TargetType="CheckBox">
+                                                <Setter Property="IsChecked" Value="{Binding UsarRangoUbicaciones}"/>
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ModoMultialmacen}" Value="True">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                        <Setter Property="IsChecked" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </CheckBox.Style>
+                                    </CheckBox>
+                                    
+                                    <!-- Información para multialmacén -->
+                                    <Border Background="#E3F2FD" 
+                                            BorderBrush="#2196F3" 
+                                            BorderThickness="1" 
+                                            CornerRadius="4" 
+                                            Padding="8"
+                                            Margin="0,0,0,10"
+                                            Visibility="{Binding ModoMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="ℹ️" 
+                                                       FontSize="14" 
+                                                       VerticalAlignment="Top"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock TextWrapping="Wrap" 
+                                                       FontSize="12" 
+                                                       Foreground="#1976D2">
+                                                <Run Text="Inventario multialmacén:"/>
+                                                <Run Text="Los rangos de ubicaciones no están disponibles. El inventario incluirá todas las ubicaciones con stock de los almacenes seleccionados."/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
 
                                     <!-- Rangos por dimensiones -->
                                     <Grid Visibility="{Binding UsarRangoUbicaciones, Converter={StaticResource BoolToVisibilityConverter}}">

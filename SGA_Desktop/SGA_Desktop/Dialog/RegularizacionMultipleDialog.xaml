@@ -232,6 +232,20 @@
             Padding="10,2"/>
                     </StackPanel>
 
+                    <!-- Campo de comentarios -->
+                    <StackPanel Orientation="Vertical" Margin="0,10,0,10">
+                        <TextBlock Text="Comentarios:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
+                        <TextBox Text="{Binding ComentariosTexto, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource EstiloCajaTexto}" 
+                                 Height="60" 
+                                 MaxHeight="60"
+                                 TextWrapping="Wrap" 
+                                 AcceptsReturn="True"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 Margin="0,0,0,12"/>
+                    </StackPanel>
+
                     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="450">
                     <ItemsControl ItemsSource="{Binding LineasPendientes}">
                         <ItemsControl.ItemTemplate>
@@ -297,6 +311,7 @@
                                                         ItemsSource="{Binding UbicacionesDestino}"
                                                         SelectedValue="{Binding UbicacionDestino, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                         SelectedValuePath="Ubicacion"
+                                                        DisplayMemberPath="Ubicacion"
                                                         MinWidth="220"
                                                         MaxWidth="400"
                                                         FontSize="14"

@@ -48,12 +48,7 @@ namespace SGA_Desktop.Services
 				return;
 			}
 
-			// Si llega aquí, todo ok
-			MessageBox.Show(
-				$"Registro insertado correctamente.\nRespuesta del servidor:\n{body}",
-				"Éxito",
-				MessageBoxButton.OK,
-				MessageBoxImage.Information);
+			// Si llega aquí, todo ok - MessageBox eliminado
 		}
 
 		/// <summary>

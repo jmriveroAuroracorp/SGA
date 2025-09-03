@@ -60,10 +60,10 @@ namespace SGA_Api.Models.Inventario
         // Usuario que cierra el inventario
         public int? UsuarioCierreId { get; set; }
 
-        // Nuevas propiedades para información expandida (solo para UI)
-        [NotMapped]
+        // Propiedad para indicar si es conteo ciego (se mapea a la BD)
         public bool? ConteoACiegas { get; set; }
-        
+
+        // Nuevas propiedades para información expandida (solo para UI)
         [NotMapped]
         public string? ArticuloDesde { get; set; }
         

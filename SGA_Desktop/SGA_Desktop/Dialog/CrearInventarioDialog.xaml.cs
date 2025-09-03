@@ -29,14 +29,14 @@ namespace SGA_Desktop.Dialog
                 else
                 {
                     // Modo único: desmarcar todos los demás
-                    foreach (var a in viewModel.AlmacenesDisponibles)
-                    {
-                        a.IsSelected = false;
-                    }
-                    
-                    // Marcar el seleccionado
-                    almacen.IsSelected = true;
-                    viewModel.AlmacenSeleccionado = almacen;
+                foreach (var a in viewModel.AlmacenesDisponibles)
+                {
+                    a.IsSelected = false;
+                }
+                
+                // Marcar el seleccionado
+                almacen.IsSelected = true;
+                viewModel.AlmacenSeleccionado = almacen;
                 }
             }
         }

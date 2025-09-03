@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
         Title="Traspaso de Stock"
-        SizeToContent="WidthAndHeight"
+        Width="600"
+        Height="500"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -79,12 +80,23 @@
                 <TextBlock Text="Ubicación destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <ComboBox ItemsSource="{Binding UbicacionesDestino}"
                           SelectedItem="{Binding UbicacionDestinoSeleccionada, Mode=TwoWay}"
-                          DisplayMemberPath="Ubicacion"
+                          DisplayMemberPath="UbicacionMostrada"
                           Style="{StaticResource EstiloComboBox}" Margin="0,0,0,12"/>
 
                 <TextBlock Text="Cantidad a traspasar:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBox Text="{Binding CantidadATraspasarTexto, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{StaticResource EstiloCajaTexto}" Margin="0,0,0,0"/>
+                         Style="{StaticResource EstiloCajaTexto}" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Comentarios:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
+                <TextBox Text="{Binding ComentariosTexto, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource EstiloCajaTexto}" 
+                         Height="80" 
+                         MaxHeight="80"
+                         TextWrapping="Wrap" 
+                         AcceptsReturn="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         Margin="0,0,0,12"/>
                 <!-- Aquí puedes añadir más campos de destino en el futuro -->
             </StackPanel>
 

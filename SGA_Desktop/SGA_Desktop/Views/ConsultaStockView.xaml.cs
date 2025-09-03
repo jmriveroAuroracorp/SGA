@@ -28,6 +28,26 @@ namespace SGA_Desktop.Views
 			//DataContext = new ConsultaStockViewModel(new ApiService());
 
 		}
+
+		private void TextBox_KeyDown(object sender, KeyEventArgs e)
+		{
+			if (e.Key == Key.Enter)
+			{
+				var viewModel = DataContext as ConsultaStockViewModel;
+				if (viewModel != null)
+				{
+					// Ejecutar el comando de búsqueda según el modo activo
+					if (viewModel.IsArticleMode)
+					{
+						viewModel.BuscarPorArticuloCommand.Execute(null);
+					}
+					else
+					{
+						viewModel.BuscarPorUbicacionCommand.Execute(null);
+					}
+				}
+			}
+		}
 	}
 
 }

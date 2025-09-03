@@ -26,9 +26,12 @@ namespace SGA_Desktop.Models
 		public int? UsuarioFinalizacionId { get; set; }
 		public string UsuarioFinalizacionNombre { get; set; } = "";
 		public string? UbicacionDestino { get; set; }
+		public string? UbicacionOrigen { get; set; }
 		public string? CodigoPalet { get; set; }
 		public string? TipoTraspaso { get; set; }
 		public string? CodigoArticulo { get; set; }
+		public string? DescripcionArticulo { get; set; }
+		public decimal? Cantidad { get; set; }
 		
 		// Líneas del palet
 		public List<LineaPaletDto> LineasPalet { get; set; } = new List<LineaPaletDto>();

@@ -371,7 +371,7 @@ namespace SGA_Api.Controllers.Stock
 						CodigoEmpresa = s.CodigoEmpresa.ToString(),
 						CodigoArticulo = s.CodigoArticulo,
 						CodigoCentro = alm?.CodigoCentro?.ToString(),
-						CodigoAlmacen = s.CodigoAlmacen.ToString(),
+						CodigoAlmacen = !string.IsNullOrEmpty(s.CodigoAlmacen) ? s.CodigoAlmacen : codigoAlmacen,
 						Almacen = alm?.Almacen,
 						Ubicacion = s.Ubicacion,
 						Partida = s.Partida,
@@ -633,7 +633,7 @@ namespace SGA_Api.Controllers.Stock
 		}
 
 		// helper para proyectar
-		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos)
+		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos, string codigoAlmacenFallback = "")
 		{
 			if (datos.Count == 0)
 				return new List<StockUbicacionDto>();
@@ -728,7 +728,7 @@ namespace SGA_Api.Controllers.Stock
 					CodigoArticulo = s.CodigoArticulo,
 					DescripcionArticulo = art?.DescripcionArticulo,
 					CodigoAlternativo = art?.CodigoAlternativo ?? "",
-					CodigoAlmacen = s.CodigoAlmacen,
+					CodigoAlmacen = !string.IsNullOrEmpty(s.CodigoAlmacen) ? s.CodigoAlmacen : codigoAlmacenFallback,
 					Almacen = alm?.Almacen ?? "",
 					Ubicacion = s.Ubicacion,
 					Partida = s.Partida,

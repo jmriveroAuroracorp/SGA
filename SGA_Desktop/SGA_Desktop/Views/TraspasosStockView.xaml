@@ -27,18 +27,25 @@
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Buscador -->
-            <RowDefinition Height="Auto"/> <!-- Tabla de stock -->
-            <RowDefinition Height="Auto"/> <!-- Formulario -->
-            <RowDefinition Height="*"/>   <!-- Últimos traspasos -->
+            <RowDefinition Height="*"/> <!-- Tabla de stock - ocupa todo el espacio disponible -->
+            <RowDefinition Height="Auto"/> <!-- Botón traspasar -->
         </Grid.RowDefinitions>
 
         <!-- Buscador de artículo -->
         <StackPanel Orientation="Horizontal" Margin="0,0,0,16" Grid.Row="0">
             <TextBlock Text="Buscar artículo:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
             <TextBox Width="200" Margin="8,0,0,0" Style="{StaticResource EstiloCajaTexto}"
-                     Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}"/>
+                     Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Return" Command="{Binding BuscarStockCommand}"/>
+                </TextBox.InputBindings>
+            </TextBox>
             <Button Content="🔍" Width="40" Height="40" Margin="8,0,0,0" Style="{StaticResource EstiloBotonPrincipal}"
                     Command="{Binding BuscarStockCommand}"/>
+            <Button Content="Ver Histórico"
+                    Width="140" Height="40" Margin="16,0,0,0"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Command="{Binding VerHistorialCommand}"/>
             <Button Content="Traspaso múltiple"
                     Width="140" Height="40" Margin="16,0,0,0"
                     HorizontalAlignment="Right"
@@ -47,8 +54,8 @@
         </StackPanel>
 
         <!-- Stock disponible: agrupado o clásico -->
-        <GroupBox Header="Stock disponible" Margin="0,0,0,16" Grid.Row="1">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="300">
+        <GroupBox Header="Stock disponible" Margin="0,0,0,16" Grid.Row="1" Grid.RowSpan="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid>
                     <ItemsControl ItemsSource="{Binding ArticulosConUbicaciones}">
                         <ItemsControl.ItemTemplate>
@@ -142,33 +149,11 @@
             </ScrollViewer>
         </GroupBox>
 
-        <!-- Formulario de traspaso -->
+        <!-- Botón traspasar -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,16">
             <Button Content="Traspasar" Width="140" Height="40" Style="{StaticResource EstiloBotonPrincipal}"
                     IsEnabled="{Binding StockSeleccionado, Converter={StaticResource NullToBoolConverter}}"
                     Command="{Binding AbrirDialogoTraspasoCommand}"/>
-        </StackPanel>
-
-        <!-- Feedback y últimos traspasos -->
-        <StackPanel Grid.Row="3">
-            <TextBlock Foreground="Red" FontWeight="Bold" Margin="0,0,0,8"
-                       Text="{Binding Feedback}"/>
-            <GroupBox Header="Últimos traspasos realizados">
-                <DataGrid ItemsSource="{Binding UltimosTraspasos}"
-                          AutoGenerateColumns="False"
-                          Style="{StaticResource EstiloDataGrid}"
-                          ColumnHeaderStyle="{StaticResource EstiloDataGridHeader}"
-                          Height="120">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Fecha" Binding="{Binding Fecha}"/>
-                        <DataGridTextColumn Header="Artículo" Binding="{Binding CodigoArticulo}"/>
-                        <DataGridTextColumn Header="Origen" Binding="{Binding Origen}"/>
-                        <DataGridTextColumn Header="Destino" Binding="{Binding Destino}"/>
-                        <DataGridTextColumn Header="Cantidad" Binding="{Binding Cantidad}"/>
-                        <DataGridTextColumn Header="Estado" Binding="{Binding Estado}"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </GroupBox>
         </StackPanel>
     </Grid>
 </Page> 

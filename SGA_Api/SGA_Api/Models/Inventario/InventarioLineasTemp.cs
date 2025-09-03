@@ -21,6 +21,9 @@ namespace SGA_Api.Models.Inventario
         [StringLength(30)]
         public string CodigoUbicacion { get; set; } = string.Empty;
 
+        [StringLength(30)]
+        public string? CodigoAlmacen { get; set; }
+
         [StringLength(50)]
         public string? Partida { get; set; }
 
@@ -50,8 +53,6 @@ namespace SGA_Api.Models.Inventario
         public DateTime? FechaConsolidacion { get; set; }
 
         public int? UsuarioConsolidacionId { get; set; }
-
-
 
         // Navigation property
         [ForeignKey("IdInventario")]

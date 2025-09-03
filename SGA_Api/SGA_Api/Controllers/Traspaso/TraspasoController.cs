@@ -51,7 +51,7 @@ public class TraspasosController : ControllerBase
 				UsuarioInicioId = dto.UsuarioInicioId,
 				PaletId = dto.PaletId,
 				CodigoPalet = dto.CodigoPalet,
-				FechaInicio = DateTime.Now,
+				FechaInicio = DateTime.Now, // Siempre usar la hora del servidor/API
 				CodigoEstado = "PENDIENTE",
 				EsNotificado = false
 			};
@@ -86,7 +86,7 @@ public class TraspasosController : ControllerBase
 		traspaso.AlmacenDestino = dto.AlmacenDestino;
 		traspaso.UbicacionDestino = dto.UbicacionDestino;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
-		traspaso.FechaFinalizacion = DateTime.Now;
+		traspaso.FechaFinalizacion = DateTime.Now; // Siempre usar la hora del servidor/API
 		traspaso.CodigoEstado = "COMPLETADO";
 
 		await _context.SaveChangesAsync();
@@ -236,7 +236,9 @@ public class TraspasosController : ControllerBase
 				UbicacionOrigen = t.UbicacionOrigen,
 				CodigoPalet = t.CodigoPalet,
 				CodigoArticulo = t.CodigoArticulo,
-				TipoTraspaso = t.TipoTraspaso
+				TipoTraspaso = t.TipoTraspaso,
+				Cantidad = t.Cantidad,
+				DescripcionArticulo = null // Se llenará después si es necesario
 			})
 			.ToListAsync();
 
@@ -245,8 +247,19 @@ public class TraspasosController : ControllerBase
 			if (traspaso.UsuarioInicioId > 0 && nombreDict.TryGetValue(traspaso.UsuarioInicioId, out var nombreInicio))
 				traspaso.UsuarioInicioNombre = nombreInicio;
 
-			if (traspaso.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(traspaso.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
-				traspaso.UsuarioFinalizacionNombre = nombreFinalizacion;
+			// Obtener descripción del artículo desde StockDisponible
+			if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
+			{
+				var stockInfo = await _context.StockDisponible
+					.Where(s => s.CodigoArticulo == traspaso.CodigoArticulo)
+					.Select(s => new { s.DescripcionArticulo })
+					.FirstOrDefaultAsync();
+				
+				if (stockInfo != null)
+				{
+					traspaso.DescripcionArticulo = stockInfo.DescripcionArticulo;
+				}
+			}
 
 			// Cargar líneas del palet
 			if (traspaso.PaletId != Guid.Empty)
@@ -301,7 +314,8 @@ public class TraspasosController : ControllerBase
 				UbicacionOrigen = t.UbicacionOrigen,
 				CodigoPalet = t.CodigoPalet,
 				CodigoArticulo = t.CodigoArticulo,
-				TipoTraspaso = t.TipoTraspaso
+				TipoTraspaso = t.TipoTraspaso,
+				Cantidad = t.Cantidad
 			})
 			.ToListAsync();
 
@@ -310,8 +324,19 @@ public class TraspasosController : ControllerBase
 			if (traspaso.UsuarioInicioId > 0 && nombreDict.TryGetValue(traspaso.UsuarioInicioId, out var nombreInicio))
 				traspaso.UsuarioInicioNombre = nombreInicio;
 
-			if (traspaso.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(traspaso.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
-				traspaso.UsuarioFinalizacionNombre = nombreFinalizacion;
+			// Obtener descripción del artículo desde StockDisponible
+			if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
+			{
+				var stockInfo = await _context.StockDisponible
+					.Where(s => s.CodigoArticulo == traspaso.CodigoArticulo)
+					.Select(s => new { s.DescripcionArticulo })
+					.FirstOrDefaultAsync();
+				
+				if (stockInfo != null)
+				{
+					traspaso.DescripcionArticulo = stockInfo.DescripcionArticulo;
+				}
+			}
 
 			// Cargar líneas del palet
 			if (traspaso.PaletId != Guid.Empty)
@@ -411,7 +436,7 @@ public class TraspasosController : ControllerBase
 					{
 						// Reabrir palet de ORIGEN (igual que haces para destino)
 						palet.Estado = "Abierto";               // normaliza a mayúsculas
-						palet.FechaApertura = DateTime.Now;
+						palet.FechaApertura = DateTime.Now; // Siempre usar la hora del servidor/API
 						palet.UsuarioAperturaId = dto.UsuarioId;
 						palet.FechaCierre = null;
 						palet.UsuarioCierreId = null;
@@ -420,7 +445,7 @@ public class TraspasosController : ControllerBase
 						_context.LogPalet.Add(new LogPalet
 						{                 // (opcional)
 							PaletId = palet.Id,
-							Fecha = DateTime.Now,
+							Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
 							IdUsuario = dto.UsuarioId,
 							Accion = "Reabrir",
 							Detalle = "Reapertura de palet en ORIGEN desde traspaso de artículo"
@@ -568,7 +593,7 @@ public class TraspasosController : ControllerBase
 						var palet = await _context.Palets.FindAsync(paletCerradoEnUbicacion);
 						// Reabrir el palet
 						palet.Estado = "Abierto";
-						palet.FechaApertura = DateTime.Now;
+						palet.FechaApertura = DateTime.Now; // Siempre usar la hora del servidor/API
 						palet.UsuarioAperturaId = dto.UsuarioId;
 						palet.FechaCierre = null;
 						palet.UsuarioCierreId = null;
@@ -576,7 +601,7 @@ public class TraspasosController : ControllerBase
 						_context.LogPalet.Add(new LogPalet
 						{       // (opcional)
 							PaletId = palet.Id,
-							Fecha = DateTime.Now,
+							Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
 							IdUsuario = dto.UsuarioId,
 							Accion = "Reabrir",
 							Detalle = "Reapertura automática al recibir stock en DESTINO"
@@ -595,14 +620,14 @@ public class TraspasosController : ControllerBase
 				AlmacenOrigen = dto.AlmacenOrigen,
 				UbicacionOrigen = dto.UbicacionOrigen,
 				UsuarioInicioId = dto.UsuarioId,
-				FechaInicio = dto.FechaInicio ?? DateTime.Now,
+				FechaInicio = DateTime.Now, // Siempre usar la hora del servidor/API
 				CodigoArticulo = dto.CodigoArticulo,
 				Cantidad = dto.Cantidad,
 				TipoTraspaso = "ARTICULO",
 				CodigoEstado = (dto.Finalizar ?? true) ? "PENDIENTE_ERP" : "PENDIENTE",
 				AlmacenDestino = (dto.Finalizar ?? true) ? dto.AlmacenDestino : null,
 				UbicacionDestino = (dto.Finalizar ?? true) ? dto.UbicacionDestino : null,
-				FechaFinalizacion = (dto.Finalizar ?? true) ? DateTime.Now : null,
+				FechaFinalizacion = (dto.Finalizar ?? true) ? DateTime.Now : null, // Siempre usar la hora del servidor/API
 				UsuarioFinalizacionId = (dto.Finalizar ?? true) ? dto.UsuarioId : null,
 				FechaCaducidad = dto.FechaCaducidad,
 				Partida = dto.Partida,
@@ -610,7 +635,8 @@ public class TraspasosController : ControllerBase
 				MovPosicionDestino = dto.MovPosicionDestino ?? Guid.Empty,
 				CodigoEmpresa = dto.CodigoEmpresa,
 				PaletId = paletIdOrigen ?? Guid.Empty, // ASOCIA EL PALET DE ORIGEN SI EXISTE
-				CodigoPalet = codigoPaletOrigen // OPCIONAL, para trazabilidad
+				CodigoPalet = codigoPaletOrigen, // OPCIONAL, para trazabilidad
+				Comentario = dto.Observaciones // Comentarios del usuario
 			};
 
 			_context.Traspasos.Add(traspaso);
@@ -632,7 +658,7 @@ public class TraspasosController : ControllerBase
 					CodigoAlmacen = dto.AlmacenOrigen,
 					Ubicacion = dto.UbicacionOrigen,
 					UsuarioId = dto.UsuarioId,
-					FechaAgregado = DateTime.Now,
+					FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
 					Observaciones = "Delta origen (traspaso de artículo)",
 					Procesada = false,
 					EsHeredada = false,
@@ -659,7 +685,7 @@ public class TraspasosController : ControllerBase
 					CodigoAlmacen = dto.AlmacenDestino,
 					Ubicacion = dto.UbicacionDestino,
 					UsuarioId = dto.UsuarioId,
-					FechaAgregado = DateTime.Now,
+					FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
 					Observaciones = "", // Comentario vacío
 					Procesada = false,
 					TraspasoId = traspaso.Id // Asociar el Guid del traspaso
@@ -859,7 +885,7 @@ public class TraspasosController : ControllerBase
 		traspaso.AlmacenDestino = almDestino;
 		traspaso.UbicacionDestino = ubiDestino;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioId;
-		traspaso.FechaFinalizacion = DateTime.Now;
+		traspaso.FechaFinalizacion = DateTime.Now; // Siempre usar la hora del servidor/API
 		traspaso.MovPosicionDestino = Guid.NewGuid();
 		traspaso.CodigoEstado = "PENDIENTE_ERP";
 
@@ -881,7 +907,7 @@ public class TraspasosController : ControllerBase
 				if (estadoPalet == "CERRADO")
 				{
 					palet.Estado = "Abierto";
-					palet.FechaApertura = DateTime.Now;
+					palet.FechaApertura = DateTime.Now; // Siempre usar la hora del servidor/API
 					palet.UsuarioAperturaId = dto.UsuarioId;
 					palet.FechaCierre = null;
 					palet.UsuarioCierreId = null;
@@ -890,7 +916,7 @@ public class TraspasosController : ControllerBase
 					_context.LogPalet.Add(new LogPalet
 					{
 						PaletId = palet.Id,
-						Fecha = DateTime.Now,
+						Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
 						IdUsuario = dto.UsuarioId,
 						Accion = "Reabrir",
 						Detalle = "Reapertura automática al agregar artículo (finalización mobility)"
@@ -913,7 +939,7 @@ public class TraspasosController : ControllerBase
 					CodigoAlmacen = almDestino,
 					Ubicacion = ubiDestino,
 					UsuarioId = dto.UsuarioId,
-					FechaAgregado = DateTime.Now,
+					FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
 					Observaciones = "Delta destino (finalización mobility)",
 					Procesada = false,
 					TraspasoId = traspaso.Id,
@@ -1078,20 +1104,20 @@ public class TraspasosController : ControllerBase
 				CodigoPalet = dto.CodigoPalet,
 				TipoTraspaso = "PALET",
 				CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
-				FechaInicio = dto.FechaInicio ?? DateTime.Now,
+				FechaInicio = DateTime.Now, // Siempre usar la hora del servidor/API
 				UsuarioInicioId = dto.UsuarioId,
 				AlmacenOrigen = ultimoTraspaso.AlmacenDestino,
 				AlmacenDestino = dto.AlmacenDestino,
 				UbicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "",
 				UbicacionDestino = dto.UbicacionDestino,
-				FechaFinalizacion = esFinalizado ? DateTime.Now : (DateTime?)null,
+				FechaFinalizacion = esFinalizado ? DateTime.Now : (DateTime?)null, // Siempre usar la hora del servidor/API
 				UsuarioFinalizacionId = esFinalizado ? dto.UsuarioFinalizacionId : (int?)null,
 				CodigoEmpresa = dto.CodigoEmpresa,
 				CodigoArticulo = linea.CodigoArticulo,
 				Cantidad = linea.Cantidad,
 				Partida = linea.Lote,
 				FechaCaducidad = linea.FechaCaducidad,
-				Comentario = dto.Comentario,
+				Comentario = dto.Comentario, // Comentarios del usuario para el palet
 				EsNotificado = esFinalizado ? true : false // Marcar como notificado si es finalizado
 			};
 			_context.Traspasos.Add(traspasoArticulo);
@@ -1116,7 +1142,7 @@ public class TraspasosController : ControllerBase
 				CodigoAlmacen = ultimoTraspaso.AlmacenDestino,
 				Ubicacion = ultimoTraspaso.UbicacionDestino ?? "",
 				UsuarioId = dto.UsuarioId,
-				FechaAgregado = DateTime.Now,
+				FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
 				Observaciones = linea.Observaciones,
 				Procesada = false,
 				TraspasoId = traspasoArticulo.Id,
@@ -1132,11 +1158,11 @@ public class TraspasosController : ControllerBase
 
 	/// <summary>
 
-	/// Finaliza TODOS los traspasos (en “PENDIENTE” o “EN_TRANSITO”) que pertenezcan
+	/// Finaliza TODOS los traspasos (en "PENDIENTE" o "EN_TRANSITO") que pertenezcan
 
 	/// al mismo palet que el traspaso indicado (por traspasoId) o directamente por paletId.
 
-	/// Devuelve la lista de IDs actualizados y el nuevo estado (“PENDIENTE_ERP”).
+	/// Devuelve la lista de IDs actualizados y el nuevo estado ("PENDIENTE_ERP").
 
 	/// </summary>
 
@@ -1182,7 +1208,7 @@ public class TraspasosController : ControllerBase
 
 	//		return BadRequest("No hay traspasos pendientes para este palet.");
 
-	//	//4.Actualizar cada traspaso y marcarlo explícitamente como “Modified”
+	//	//4.Actualizar cada traspaso y marcarlo explícitamente como "Modified"
 
 	//	foreach (var t in traspasosPalet)
 
@@ -1298,7 +1324,7 @@ public class TraspasosController : ControllerBase
 	//}
 
 	/// <summary>
-	/// Finaliza TODOS los traspasos (en “PENDIENTE” o “EN_TRANSITO”) que pertenezcan
+	/// Finaliza TODOS los traspasos (en "PENDIENTE" o "EN_TRANSITO") que pertenezcan
 	/// al mismo palet que el traspaso indicado (por traspasoId) o directamente por paletId.
 	/// </summary>
 	[HttpPut("palet/{paletId}/finalizar")]
@@ -1323,7 +1349,7 @@ public class TraspasosController : ControllerBase
 			t.AlmacenDestino = dto.AlmacenDestino;
 			t.UbicacionDestino = dto.UbicacionDestino;
 			t.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
-			t.FechaFinalizacion = DateTime.Now;
+			t.FechaFinalizacion = DateTime.Now; // Siempre usar la hora del servidor/API
 			t.CodigoEstado = "PENDIENTE_ERP";
 			_context.Entry(t).State = EntityState.Modified;
 		}

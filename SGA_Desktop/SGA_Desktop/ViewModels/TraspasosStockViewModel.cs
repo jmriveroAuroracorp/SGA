@@ -226,6 +226,18 @@ namespace SGA_Desktop.ViewModels
 			dlg.ShowDialog();
 		}
 
+		[RelayCommand]
+		public async Task VerHistorialAsync()
+		{
+			var vm = new TraspasoHistoricoDialogViewModel(_traspasosService);
+			var dlg = new TraspasoHistoricoDialog(vm);
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			if (owner != null && owner != dlg)
+				dlg.Owner = owner;
+			dlg.ShowDialog();
+		}
+
         //  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
         private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
         {

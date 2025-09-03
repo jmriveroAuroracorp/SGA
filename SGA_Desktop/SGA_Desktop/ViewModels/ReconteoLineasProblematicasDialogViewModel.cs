@@ -20,14 +20,20 @@ namespace SGA_Desktop.ViewModels
         #region Fields & Services
         private readonly InventarioService _inventarioService;
         private readonly StockService _stockService;
+        private readonly LoginService _loginService; // ← NUEVO
         private List<Models.LineaProblematicaDto> _todasLasLineas = new();
+        private readonly Dictionary<string, decimal> _cachePreciosMedios = new(); // ← NUEVO
         #endregion
 
         #region Constructor
         public ReconteoLineasProblematicasDialogViewModel(InventarioService inventarioService, StockService stockService)
+            : this(inventarioService, stockService, new LoginService()) { }
+
+        public ReconteoLineasProblematicasDialogViewModel(InventarioService inventarioService, StockService stockService, LoginService loginService)
         {
             _inventarioService = inventarioService;
             _stockService = stockService;
+            _loginService = loginService; // ← NUEVO
             
             LineasProblematicas = new ObservableCollection<LineaProblematicaDto>();
 
@@ -35,7 +41,7 @@ namespace SGA_Desktop.ViewModels
                 _ = InitializeAsync();
         }
 
-        public ReconteoLineasProblematicasDialogViewModel() : this(new InventarioService(), new StockService()) { }
+        public ReconteoLineasProblematicasDialogViewModel() : this(new InventarioService(), new StockService(), new LoginService()) { }
         #endregion
 
         #region Observable Properties
@@ -367,13 +373,148 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(LineasRecontadas));
         }
 
-        private void OnLineaPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        private async Task<decimal> ObtenerPrecioMedioAsync(string codigoArticulo, string codigoAlmacen)
+        {
+            var clave = $"{codigoArticulo}|{codigoAlmacen}";
+            if (_cachePreciosMedios.TryGetValue(clave, out var precio))
+                return precio;
+
+            try
+            {
+                var empresa = SessionManager.EmpresaSeleccionada ?? 1;
+                var valor = await _stockService.ObtenerPrecioMedioAsync(empresa, codigoArticulo, codigoAlmacen);
+                _cachePreciosMedios[clave] = valor;
+                return valor;
+            }
+            catch
+            {
+                return 0m; // si falla, 0€, la validación por € no bloqueará
+            }
+        }
+
+        private async Task ValidarLimiteReconteoAsync(LineaProblematicaDto linea)
+        {
+            try
+            {
+                if (Inventario == null || !linea.CantidadReconteo.HasValue) return;
+                if (SessionManager.UsuarioActual?.operario == null) return;
+
+                var operarioId = SessionManager.UsuarioActual.operario;
+                var codigoArticulo = linea.CodigoArticulo;
+                var diferenciaNueva = Math.Abs(linea.CantidadReconteo.Value - linea.StockActual);
+
+                // DEBUG: Datos de entrada
+                MessageBox.Show($"🔍 VALIDACIÓN LÍMITES RECONTEO\n\n" +
+                    $"Operario: {operarioId}\n" +
+                    $"Artículo: {codigoArticulo}\n" +
+                    $"Stock Actual: {linea.StockActual}\n" +
+                    $"Cantidad Reconteo: {linea.CantidadReconteo.Value}\n" +
+                    $"Nueva Diferencia: {diferenciaNueva}\n" +
+                    $"Inventario ID: {Inventario.IdInventario}",
+                    "DEBUG RECONTEO - Datos Básicos");
+
+                // Diferencias acumuladas del día (excluyendo este inventario)
+                var (unidadesAcum, eurosAcum) = await _loginService.ObtenerDiferenciasOperarioArticuloDiaAsync(
+                    operarioId, codigoArticulo, Inventario.IdInventario);
+
+                // DEBUG: Diferencias acumuladas
+                MessageBox.Show($"📊 DIFERENCIAS ACUMULADAS RECONTEO\n\n" +
+                    $"Unidades Acumuladas Hoy: {unidadesAcum:F2}\n" +
+                    $"Euros Acumulados Hoy: {eurosAcum:F2}\n" +
+                    $"Nueva Diferencia: {diferenciaNueva:F2}",
+                    "DEBUG RECONTEO - Acumulados");
+
+                // Límites del operario
+                var limiteEuros = await _loginService.ObtenerLimiteInventarioOperarioAsync(operarioId);
+                var limiteUnidades = await _loginService.ObtenerLimiteUnidadesOperarioAsync(operarioId);
+
+                bool superaEuros = false;
+                bool superaUnidades = false;
+                string tipo = "";
+
+                if (limiteEuros > 0)
+                {
+                    var precioMedio = await ObtenerPrecioMedioAsync(linea.CodigoArticulo, linea.CodigoAlmacen);
+                    var totalEuros = eurosAcum + (diferenciaNueva * precioMedio);
+                    
+                    // DEBUG: Cálculos de euros
+                    MessageBox.Show($"💰 VALIDACIÓN EUROS RECONTEO\n\n" +
+                        $"Precio Medio: {precioMedio:F4}\n" +
+                        $"Nueva Diferencia €: {diferenciaNueva * precioMedio:F2}\n" +
+                        $"Euros Acumulados: {eurosAcum:F2}\n" +
+                        $"Total Euros: {totalEuros:F2}\n" +
+                        $"Límite Euros: {limiteEuros:F2}\n" +
+                        $"¿Supera límite?: {totalEuros > limiteEuros}",
+                        "DEBUG RECONTEO - Euros");
+
+                    if (totalEuros > limiteEuros)
+                    {
+                        superaEuros = true;
+                        tipo = $"valor en euros para el artículo {linea.CodigoArticulo}";
+                    }
+                }
+
+                if (limiteUnidades > 0)
+                {
+                    var totalUnidades = unidadesAcum + diferenciaNueva;
+                    
+                    // DEBUG: Cálculos de unidades
+                    MessageBox.Show($"📦 VALIDACIÓN UNIDADES RECONTEO\n\n" +
+                        $"Unidades Acumuladas: {unidadesAcum:F2}\n" +
+                        $"Nueva Diferencia: {diferenciaNueva:F2}\n" +
+                        $"Total Unidades: {totalUnidades:F2}\n" +
+                        $"Límite Unidades: {limiteUnidades:F2}\n" +
+                        $"¿Supera límite?: {totalUnidades > limiteUnidades}",
+                        "DEBUG RECONTEO - Unidades");
+
+                    if (totalUnidades > limiteUnidades)
+                    {
+                        superaUnidades = true;
+                        tipo = string.IsNullOrEmpty(tipo) ? $"unidades para el artículo {linea.CodigoArticulo}" : $"valor en euros y unidades para el artículo {linea.CodigoArticulo}";
+                    }
+                }
+
+                // DEBUG: Resultado final
+                MessageBox.Show($"🏁 RESULTADO VALIDACIÓN RECONTEO\n\n" +
+                    $"Límite Euros Superado: {superaEuros}\n" +
+                    $"Límite Unidades Superado: {superaUnidades}\n" +
+                    $"Tipo Límite Superado: {tipo}",
+                    "DEBUG RECONTEO - Resultado");
+
+                if (superaEuros || superaUnidades)
+                {
+                    // Revertir al stock actual
+                    linea.CantidadReconteoTexto = linea.StockActual.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
+
+                    var warning = new WarningDialog(
+                        "⚠️ Límite Diario Superado",
+                        $"Las diferencias diarias superan su límite autorizado de {tipo}.\n\n" +
+                        $"Se ha restablecido la cantidad a: {linea.StockActual:F4}\n\n" +
+                        $"• Artículo: {linea.CodigoArticulo} - {linea.DescripcionArticulo}\n" +
+                        $"• Ubicación: {linea.CodigoUbicacion}");
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                 ?? Application.Current.MainWindow;
+                    if (owner != null && owner != warning)
+                        warning.Owner = owner;
+                    warning.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"❌ ERROR VALIDANDO LÍMITE RECONTEO\n\n{ex.Message}", "ERROR DEBUG");
+                System.Diagnostics.Debug.WriteLine($"Error validando límite de reconteo: {ex.Message}");
+            }
+        }
+
+        private async void OnLineaPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(LineaProblematicaDto.CantidadReconteo))
             {
                 // Solo validar si no está cargando para evitar validaciones innecesarias
                 if (!IsCargando)
                 {
+                    if (sender is LineaProblematicaDto l)
+                        await ValidarLimiteReconteoAsync(l); // ← NUEVO
                     ValidarFormulario();
                 }
             }

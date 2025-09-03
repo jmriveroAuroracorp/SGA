@@ -21,6 +21,10 @@ namespace SGA_Api.Models.Inventario
 		[StringLength(30)]
 		public string CodigoUbicacion { get; set; } = string.Empty;
 
+		// NUEVO: Campo para preservar el almacén de cada línea individual
+		[StringLength(30)]
+		public string? CodigoAlmacen { get; set; }
+
 		[Required]
 		[Column(TypeName = "decimal(18,4)")]
 		public decimal StockTeorico { get; set; } = 0;
@@ -50,6 +54,7 @@ namespace SGA_Api.Models.Inventario
 
 		/// <summary>
 		/// Ajuste final calculado: StockContado - StockActual
+		/// Representa la diferencia entre lo que contó el usuario y lo que hay actualmente en el sistema
 		/// </summary>
 		[Column(TypeName = "decimal(18,4)")]
 		public decimal? AjusteFinal { get; set; }

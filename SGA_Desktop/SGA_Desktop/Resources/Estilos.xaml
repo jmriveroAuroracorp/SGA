@@ -2,6 +2,13 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:helpers="clr-namespace:SGA_Desktop.Helpers">
 
+    <!-- 🔧 Convertidores -->
+    <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+    <helpers:BoolToVisibilityConverter x:Key="BoolToVis"/>
+    <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+    <helpers:ProgressWidthConverter x:Key="ProgressWidthConverter"/>
+
     <!-- 🎨 Colores -->
     <!--<Color x:Key="ColorPrincipal">#0067C3</Color>-->
     <Color x:Key="ColorPrincipal">#0067C3</Color>

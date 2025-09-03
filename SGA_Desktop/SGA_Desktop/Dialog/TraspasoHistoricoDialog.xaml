@@ -1,0 +1,265 @@
+<Window x:Class="SGA_Desktop.Dialog.TraspasoHistoricoDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
+        Title="Historial de Traspasos"
+        Width="1400"
+        Height="900"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- Carga de estilos globales -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Filtros - más compactos -->
+                <RowDefinition Height="*"/> <!-- Tabla de traspasos - ocupa todo el espacio disponible -->
+                <RowDefinition Height="Auto"/> <!-- Botones -->
+            </Grid.RowDefinitions>
+
+            <!-- Filtros - más compactos -->
+            <GroupBox Header="Filtros" Grid.Row="0" Margin="0,0,0,16">
+                <Grid Margin="15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Primera fila de filtros - más compacta -->
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,15,0">
+                        <TextBlock Text="Fecha desde:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <DatePicker SelectedDate="{Binding FechaDesde}" Style="{StaticResource EstiloDatePicker}" Height="30"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="5,0">
+                        <TextBlock Text="Fecha hasta:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <DatePicker SelectedDate="{Binding FechaHasta}" Style="{StaticResource EstiloDatePicker}" Height="30"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="2" Margin="5,0">
+                        <TextBlock Text="Código artículo:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding CodigoArticulo, UpdateSourceTrigger=PropertyChanged}" 
+                                 Style="{StaticResource EstiloCajaTexto}" Height="30"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="3" Margin="10,0,0,0">
+                        <TextBlock Text="Estado:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding Estados}"
+                                  SelectedItem="{Binding EstadoSeleccionado}"
+                                  DisplayMemberPath="Descripcion"
+                                  Style="{StaticResource EstiloComboBox}" Height="30"/>
+                    </StackPanel>
+
+                    <!-- Segunda fila de filtros -->
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,10,10,0">
+                        <TextBlock Text="Almacén origen:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding AlmacenesOrigen}"
+                                  SelectedItem="{Binding AlmacenOrigenSeleccionado}"
+                                  DisplayMemberPath="DescripcionCombo"
+                                  Style="{StaticResource EstiloComboBox}" Height="30"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="5,10,5,0">
+                        <TextBlock Text="Almacén destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <ComboBox ItemsSource="{Binding AlmacenesDestino}"
+                                  SelectedItem="{Binding AlmacenDestinoSeleccionado}"
+                                  DisplayMemberPath="DescripcionCombo"
+                                  Style="{StaticResource EstiloComboBox}" Height="30"/>
+                    </StackPanel>
+
+                    <!-- Botones de filtros en la segunda fila -->
+                    <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <Button Content="Limpiar Filtros" 
+                                Command="{Binding LimpiarFiltrosCommand}"
+                                Style="{StaticResource EstiloBotonSecundario}" 
+                                Width="120" Height="30" Margin="0,0,10,0"/>
+                        <Button Content="Aplicar Filtros" 
+                                Command="{Binding AplicarFiltrosCommand}"
+                                Style="{StaticResource EstiloBotonPrincipal}" 
+                                Width="120" Height="30"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- Historial de traspasos con formato de cards -->
+            <GroupBox Header="Historial de Traspasos" Grid.Row="1" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Lista de traspasos con cards de una línea -->
+                    <ScrollViewer Grid.Row="1" 
+                                  VerticalScrollBarVisibility="Auto" 
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Margin="20,0,20,20">
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding Traspasos}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="White"
+                                                CornerRadius="6" 
+                                                Padding="12" 
+                                                Margin="0,0,0,8" 
+                                                BorderThickness="1" 
+                                                BorderBrush="{StaticResource BrushIntermedio}"
+                                                Cursor="Hand">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.15"/>
+                                            </Border.Effect>
+                                            
+                                            <!-- Layout de una sola línea -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="80"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="80"/>
+                                                    <ColumnDefinition Width="100"/>
+                                                    <ColumnDefinition Width="140"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <!-- Fecha -->
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="FECHA" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="{Binding FechaInicio, StringFormat=dd/MM/yyyy HH:mm}" 
+                                                               FontSize="13" FontWeight="Bold" 
+                                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                                </StackPanel>
+                                                
+                                                <!-- Artículo -->
+                                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                    <TextBlock Text="ARTÍCULO" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="{Binding CodigoArticulo}" FontSize="13" FontWeight="Bold" 
+                                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                                </StackPanel>
+                                                
+                                                <!-- Descripción -->
+                                                <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                                                    <TextBlock Text="DESCRIPCIÓN" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="{Binding DescripcionArticulo}" FontSize="13" 
+                                                               Foreground="Black" TextWrapping="Wrap" 
+                                                               FontWeight="Medium"/>
+                                                </StackPanel>
+                                                
+                                                <!-- Origen -->
+                                                <StackPanel Grid.Column="3" Margin="8,0,0,0">
+                                                    <TextBlock Text="ORIGEN" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding AlmacenOrigen}" FontSize="12" 
+                                                                   FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                        <TextBlock Text=" - " FontSize="12" Foreground="Gray" Margin="3,0"/>
+                                                        <TextBlock Text="{Binding UbicacionOrigen}" FontSize="12" 
+                                                                   Foreground="Black" FontWeight="Medium"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                                
+                                                <!-- Destino -->
+                                                <StackPanel Grid.Column="4" Margin="8,0,0,0">
+                                                    <TextBlock Text="DESTINO" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding AlmacenDestino}" FontSize="12" 
+                                                                   FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                        <TextBlock Text=" - " FontSize="12" Foreground="Gray" Margin="3,0"/>
+                                                        <TextBlock Text="{Binding UbicacionDestino}" FontSize="12" 
+                                                                   Foreground="Black" FontWeight="Medium"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                                
+                                                <!-- Cantidad -->
+                                                <StackPanel Grid.Column="5" Margin="8,0,0,0">
+                                                    <TextBlock Text="CANTIDAD" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Cantidad, StringFormat=F2}" FontSize="13" 
+                                                               FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
+                                                               HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                
+                                                <!-- Estado -->
+                                                <StackPanel Grid.Column="6" Margin="8,0,0,0">
+                                                    <TextBlock Text="ESTADO" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4" HorizontalAlignment="Center"/>
+                                                    <Border Background="#E8F5E8" BorderBrush="#28A745" BorderThickness="1" 
+                                                            CornerRadius="4" Padding="6,3" HorizontalAlignment="Center">
+                                                        <TextBlock Text="{Binding CodigoEstado}" FontSize="11" FontWeight="Bold" 
+                                                                   Foreground="#198754" HorizontalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="COMPLETADO">
+                                                                            <Setter Property="Foreground" Value="#198754"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="PENDIENTE">
+                                                                            <Setter Property="Foreground" Value="#FD7E14"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="CANCELADO">
+                                                                            <Setter Property="Foreground" Value="#DC3545"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="ERROR">
+                                                                            <Setter Property="Foreground" Value="#DC3545"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Border>
+                                                </StackPanel>
+                                                
+                                                <!-- Usuario -->
+                                                <StackPanel Grid.Column="7" Margin="8,0,0,0">
+                                                    <TextBlock Text="USUARIO" FontSize="11" FontWeight="Bold" 
+                                                               Foreground="Gray" Margin="0,0,0,4" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding UsuarioInicioNombre}" FontSize="12" 
+                                                               Foreground="Black" TextWrapping="Wrap" 
+                                                               HorizontalAlignment="Center" FontWeight="Medium"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </GroupBox>
+
+            <!-- Botones -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="Cerrar" Width="90" Margin="0,0,10,0" 
+                        IsCancel="True" Command="{Binding CerrarCommand}" 
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Ver Detalles" Width="120" Height="35" 
+                        Command="{Binding VerDetallesCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window> 

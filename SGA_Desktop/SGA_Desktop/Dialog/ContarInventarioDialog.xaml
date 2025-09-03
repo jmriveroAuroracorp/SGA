@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
         xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
-        Title="CONTEO DE INVENTARIO"
+        Title="INVENTARIO FÍSICO"
         Width="1400"
         Height="900"
         WindowStartupLocation="CenterOwner"
@@ -29,6 +29,7 @@
             <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
             <helpers:DecimalInputConverter x:Key="DecimalInputConverter"/>
             <helpers:NegativeValueColorConverter x:Key="NegativeValueColorConverter"/>
+            <helpers:CantidadDisplayConverter x:Key="CantidadDisplayConverter"/>
             
             <!-- Template para el header del expander -->
             <DataTemplate x:Key="ExpanderHeaderTemplate">
@@ -63,7 +64,7 @@
             <Border Grid.Row="0" 
                     Background="{StaticResource BrushPrincipal}" 
                     CornerRadius="6,6,0,0">
-                <TextBlock Text="CONTEO DE INVENTARIO" 
+                <TextBlock Text="INVENTARIO" 
                            FontSize="16" 
                            FontWeight="Bold" 
                            Foreground="White"
@@ -106,16 +107,57 @@
                                        Foreground="{StaticResource BrushPrincipal}"/>
                         </StackPanel>
 
-                        <!-- Almacén -->
+                        <!-- Almacenes -->
                         <StackPanel Grid.Column="1" Margin="0,0,15,0">
-                            <TextBlock Text="Almacén:" 
+                            <TextBlock Text="Almacenes:" 
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"
                                        Margin="0,0,0,5"/>
-                            <TextBlock Text="{Binding Inventario.CodigoAlmacen}" 
-                                       FontWeight="Bold" 
-                                       FontSize="14" 
-                                       Foreground="{StaticResource BrushPrincipal}"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Inventario.DescripcionAlmacenes}"
+                                           FontWeight="Bold" 
+                                           FontSize="14" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                                
+                                <!-- Badge para multialmacén -->
+                                <Border Background="#E8F4FD" 
+                                        BorderBrush="#3498DB" 
+                                        BorderThickness="1" 
+                                        CornerRadius="12" 
+                                        Padding="6,2"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding Inventario.EsMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock Text="MULTI" 
+                                               FontSize="9" 
+                                               FontWeight="Bold" 
+                                               Foreground="#2980B9"/>
+                                </Border>
+                                
+                                <!-- Badge para almacén único -->
+                                <Border Background="#F8F9FA" 
+                                        BorderBrush="#6C757D" 
+                                        BorderThickness="1" 
+                                        CornerRadius="12" 
+                                        Padding="6,2"
+                                        VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Inventario.EsMultialmacen}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="ÚNICO" 
+                                               FontSize="9" 
+                                               FontWeight="Bold" 
+                                               Foreground="#6C757D"/>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- Tipo -->
@@ -244,7 +286,7 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0"
-                                       Text="📋 Artículos para Conteo" 
+                                       Text="📋 Artículos para Inventario" 
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}"/>
 
@@ -289,13 +331,13 @@
                                         
                                         <TextBlock Grid.Column="0" Text="Código" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
                                         <TextBlock Grid.Column="1" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
-                                        <TextBlock Grid.Column="2" Text="Almacén" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="Almacén" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" Visibility="{Binding Inventario.EsMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         <TextBlock Grid.Column="3" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="4" Text="Partida" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="5" Text="Caducidad" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="6" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="7" Text="Palets" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="8" Text="Inventario" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="8" Text="Inventariado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                     </Grid>
                                 </Border>
 
@@ -369,7 +411,8 @@
                                                                FontSize="12" 
                                                                Foreground="Black"
                                                                VerticalAlignment="Center"
-                                                               HorizontalAlignment="Center"/>
+                                                               HorizontalAlignment="Center"
+                                                               Visibility="{Binding DataContext.Inventario.EsMultialmacen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     
                                                     <!-- Ubicación -->
                                                     <TextBlock Grid.Column="3" 
@@ -416,7 +459,6 @@
                                                     
                                                     <!-- Inventario (editable) -->
                                                     <TextBox Grid.Column="8" 
-                                                             Text="{Binding CantidadContadaTexto, UpdateSourceTrigger=LostFocus}" 
                                                              Width="80" 
                                                              Height="24"
                                                              FontSize="12"
@@ -428,7 +470,16 @@
                                                              Padding="4,2"
                                                              BorderThickness="1"
                                                              BorderBrush="Gray"
-                                                             PreviewTextInput="TextBox_PreviewTextInput"/>
+                                                             PreviewTextInput="TextBox_PreviewTextInput">
+                                                        <TextBox.Text>
+                                                            <MultiBinding Converter="{StaticResource CantidadDisplayConverter}" UpdateSourceTrigger="LostFocus" Mode="TwoWay">
+                                                                <Binding Path="CantidadContada"/>
+                                                                <Binding Path="CantidadContadaTexto" Mode="TwoWay"/>
+                                                                <Binding Path="StockActual"/>
+                                                                <Binding Path="DataContext.Inventario.ConteoACiegas" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                            </MultiBinding>
+                                                        </TextBox.Text>
+                                                    </TextBox>
                                                 </Grid>
 
 
@@ -449,9 +500,10 @@
                     CornerRadius="0,0,6,6"
                     BorderThickness="0,1,0,0"
                     BorderBrush="{StaticResource BrushIntermedio}">
-                <Grid Margin="15,8">
+                <Grid Margin="20,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -471,21 +523,33 @@
                                    Foreground="Green"/>
                     </StackPanel>
 
-                    <!-- Botón Guardar -->
+                    <!-- Botón Guardar y Continuar -->
                     <Button Grid.Column="1"
-                            Content="💾 GUARDAR"
+                            Content="💾 GUARDAR Y CONTINUAR INVENTARIANDO"
+                            Command="{Binding GuardarYContinuarCommand}"
+                            IsEnabled="{Binding PuedeGuardar}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="180" Height="35"
+                            Margin="0,0,10,0"
+                            ToolTip="Guarda el progreso actual y permite continuar inventariando"/>
+
+                    <!-- Botón Finalizar -->
+                    <Button Grid.Column="2"
+                            Content="✅ FINALIZAR INVENTARIO"
                             Command="{Binding GuardarConteoCommand}"
                             IsEnabled="{Binding PuedeGuardar}"
                             Style="{StaticResource EstiloBotonPrincipal}"
                             Width="120" Height="35"
-                            Margin="0,0,10,0"/>
+                            Margin="0,0,10,0"
+                            ToolTip="Guarda el inventario y cierra el diálogo"/>
 
-                    <!-- Botón Cancelar -->
-                    <Button Grid.Column="2"
-                            Content="❌ CANCELAR"
+                    <!-- Botón Salir -->
+                    <Button Grid.Column="3"
+                            Content="🚪 SALIR"
                             Command="{Binding CancelarCommand}"
                             Style="{StaticResource EstiloBotonSecundario}"
-                            Width="120" Height="35"/>
+                            Width="120" Height="35"
+                            ToolTip="Cierra el diálogo sin guardar cambios"/>
                 </Grid>
             </Border>
         </Grid>

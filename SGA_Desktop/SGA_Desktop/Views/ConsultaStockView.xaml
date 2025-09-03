@@ -80,7 +80,8 @@
                         <TextBlock Text="Artículo" FontWeight="Bold" Margin="0,0,0,4"/>
                         <TextBox Width="150"
                          Style="{StaticResource EstiloCajaTexto}"
-                         Text="{Binding FiltroArticulo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                         Text="{Binding FiltroArticulo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
 
                     <!-- Partida -->
@@ -89,7 +90,8 @@
                         <TextBox Width="120"
                          Style="{StaticResource EstiloCajaTexto}"
                          Text="{Binding FiltroPartida, Mode=TwoWay}"
-                         IsEnabled="{Binding CanEnableInputs}"/>
+                         IsEnabled="{Binding CanEnableInputs}"
+                         KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
 
                     <!-- Almacén -->
@@ -143,7 +145,8 @@
                         <ComboBox Width="120"
                           Style="{StaticResource EstiloComboBox}"
                           ItemsSource="{Binding Ubicaciones}"
-                          SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"/>
+                          SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
+                          KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                         <TextBox Width="250"
@@ -151,7 +154,8 @@
                          Margin="0,0,0,0"
                          Text="{Binding FiltroBusqueda, UpdateSourceTrigger=PropertyChanged}"
                          ToolTip="Buscar por código o descripción"
-                          Style="{StaticResource EstiloCajaTexto}"/>
+                          Style="{StaticResource EstiloCajaTexto}"
+                         KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>

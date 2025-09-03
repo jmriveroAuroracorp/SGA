@@ -365,9 +365,12 @@ namespace SGA_Api.Data
                 ent.Property(i => i.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
                 ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
                 ent.Property(i => i.Diferencia).HasColumnName("Diferencia").HasColumnType("DECIMAL(18,4)");
-                ent.Property(i => i.TipoAjuste).HasColumnName("TipoAjuste").HasMaxLength(10);
                 ent.Property(i => i.UsuarioId).HasColumnName("UsuarioId");
                 ent.Property(i => i.Fecha).HasColumnName("Fecha").HasColumnType("DATETIME");
+                ent.Property(i => i.IdConteo).HasColumnName("IdConteo");
+                ent.Property(i => i.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
+                ent.Property(i => i.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
+                ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20);
 
                 ent.HasOne(i => i.Inventario)
                     .WithMany(ic => ic.Ajustes)

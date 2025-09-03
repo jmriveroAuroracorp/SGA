@@ -9,7 +9,7 @@
         ResizeMode="CanResize"
         Background="{StaticResource BrushFondo}">
 
-    <!-- No DataContext en XAML, lo asignamos en code‐behind -->
+
 
     <Grid>
         <!-- Barra de título personalizada -->
@@ -134,20 +134,24 @@
                     Command="{Binding IrAConsultaStockCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConsultaStock}" -->
                     <Button Content="Ubicaciones"
                     Command="{Binding IrAUbicacionesCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Ubicaciones}" -->
                     <!-- Nuevo botón para traspasos de stock -->
                     <Button Content="Traspasos de Stock"
                     Command="{Binding IrATraspasosStockCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosStock}" -->
                     <!-- Renombrar el botón de traspasos actual -->
                     <Button Content="Traspasos de Palet"
                     Command="{Binding IrATraspasosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosPalet}" -->
                     <!--<Button Content="Inventario" …/>-->
                     <Button Content="Etiquetas"
                     Command="{Binding IrAEtiquetasCommand}"
@@ -158,14 +162,17 @@
                     Command="{Binding IrAInventarioCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}" -->
                     <Button Content="Controles Rotativos"
                     Command="{Binding IrAControlesRotativosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}" -->
                     <Button Content="Empresa"
                     Command="{Binding IrASeleccionEmpresaCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Empresa}" -->
                     <Button Content="Salir"
                     Command="{Binding CerrarSesionCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

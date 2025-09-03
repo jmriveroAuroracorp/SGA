@@ -130,6 +130,9 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("codigoUbicacion")]
         public string CodigoUbicacion { get; set; } = string.Empty;
 
+        [JsonPropertyName("codigoAlmacen")]
+        public string CodigoAlmacen { get; set; } = string.Empty;
+
         [JsonPropertyName("cantidadContada")]
         public decimal CantidadContada { get; set; }
 

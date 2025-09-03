@@ -229,7 +229,7 @@
                                         <TextBlock Grid.Column="4" Text="Caducidad" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="5" Text="Stock Teórico" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="6" Text="Stock Actual" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="7" Text="Stock Contado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="7" Text="Stock Inventariado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="8" Text="Ajuste Final" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="9" Text="Palets" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                     </Grid>
