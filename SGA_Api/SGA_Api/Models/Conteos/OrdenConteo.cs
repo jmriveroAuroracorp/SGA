@@ -4,7 +4,6 @@ namespace SGA_Api.Models.Conteos
 {
     public class OrdenConteo
     {
-        public long Id { get; set; }
         public int CodigoEmpresa { get; set; } = 1;
         public string Titulo { get; set; } = string.Empty;
         public string Visibilidad { get; set; } = string.Empty;
@@ -29,9 +28,10 @@ namespace SGA_Api.Models.Conteos
         public DateTime? FechaAsignacion { get; set; }
         public DateTime? FechaInicio { get; set; }
         public DateTime? FechaCierre { get; set; }
+        public Guid GuidID { get; set; } = Guid.NewGuid();
 
         // Navigation properties
         public ICollection<LecturaConteo> Lecturas { get; set; } = new List<LecturaConteo>();
-        public ResultadoConteo? Resultado { get; set; }
+        public ICollection<ResultadoConteo> Resultados { get; set; } = new List<ResultadoConteo>();
     }
 } 

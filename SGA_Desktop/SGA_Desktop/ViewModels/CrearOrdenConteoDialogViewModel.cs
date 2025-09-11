@@ -21,13 +21,15 @@ namespace SGA_Desktop.ViewModels
         #region Fields & Services
         private readonly ConteosService _conteosService;
         private readonly StockService _stockService;
+        private readonly LoginService _loginService;
         #endregion
 
         #region Constructor
-        public CrearOrdenConteoDialogViewModel(ConteosService conteosService, StockService stockService)
+        public CrearOrdenConteoDialogViewModel(ConteosService conteosService, StockService stockService, LoginService loginService)
         {
             _conteosService = conteosService;
             _stockService = stockService;
+            _loginService = loginService;
             
             // Inicializar colecciones
             AlcancesDisponibles = new ObservableCollection<string>
@@ -49,25 +51,37 @@ namespace SGA_Desktop.ViewModels
                 new() { Valor = 5, Texto = "5 - Muy Alta" }
             };
 
+            VisibilidadesDisponibles = new ObservableCollection<VisibilidadItem>
+            {
+                new() { Valor = "VISIBLE", Texto = "Conteo Visible", Descripcion = "El operario puede ver las cantidades en stock" },
+                new() { Valor = "CIEGO", Texto = "Conteo Ciego", Descripcion = "El operario NO puede ver las cantidades en stock" }
+            };
+
             AlmacenesDisponibles = new ObservableCollection<AlmacenDto>();
+            OperariosDisponibles = new ObservableCollection<OperariosAccesoDto>();
 
             // Valores por defecto
             AlcanceSeleccionado = "ALMACEN";
             PrioridadSeleccionada = PrioridadesDisponibles.FirstOrDefault(p => p.Valor == 3);
+            VisibilidadSeleccionada = VisibilidadesDisponibles.FirstOrDefault(v => v.Valor == "VISIBLE");
             FechaPlan = DateTime.Today.AddDays(1);
+            
+            // Establecer operario actual como seleccionado por defecto (se actualizará cuando se carguen los operarios)
             CodigoOperario = SessionManager.UsuarioActual?.operario.ToString() ?? "";
 
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
                 _ = InitializeAsync();
         }
 
-        public CrearOrdenConteoDialogViewModel() : this(new ConteosService(), new StockService()) { }
+        public CrearOrdenConteoDialogViewModel() : this(new ConteosService(), new StockService(), new LoginService()) { }
         #endregion
 
         #region Observable Properties
         public ObservableCollection<string> AlcancesDisponibles { get; }
         public ObservableCollection<PrioridadItem> PrioridadesDisponibles { get; }
+        public ObservableCollection<VisibilidadItem> VisibilidadesDisponibles { get; }
         public ObservableCollection<AlmacenDto> AlmacenesDisponibles { get; }
+        public ObservableCollection<OperariosAccesoDto> OperariosDisponibles { get; }
 
         [ObservableProperty]
         private string titulo = string.Empty;
@@ -79,15 +93,19 @@ namespace SGA_Desktop.ViewModels
         private PrioridadItem? prioridadSeleccionada;
 
         [ObservableProperty]
+        private VisibilidadItem? visibilidadSeleccionada;
+
+        [ObservableProperty]
         private AlmacenDto? almacenSeleccionado;
+
+        [ObservableProperty]
+        private OperariosAccesoDto? operarioSeleccionado;
 
         [ObservableProperty]
         private string codigoOperario = string.Empty;
 
         [ObservableProperty]
         private DateTime? fechaPlan;
-
-
 
         [ObservableProperty]
         private string comentario = string.Empty;
@@ -130,7 +148,7 @@ namespace SGA_Desktop.ViewModels
         #endregion
 
         #region Computed Properties
-        public bool PuedeCrearOrden => !IsCargando && !string.IsNullOrWhiteSpace(Titulo);
+        public bool PuedeCrearOrden => !IsCargando && !string.IsNullOrWhiteSpace(Titulo) && OperarioSeleccionado != null;
 
         public bool MostrarFiltrosUbicacion => AlcanceSeleccionado is "PASILLO" or "ESTANTERIA" or "UBICACION";
         public bool MostrarFiltroArticulo => AlcanceSeleccionado == "ARTICULO";
@@ -160,7 +178,7 @@ namespace SGA_Desktop.ViewModels
                 {
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada ?? 1,
                     Titulo = Titulo.Trim(),
-                    Visibilidad = "VISIBLE",
+                    Visibilidad = VisibilidadSeleccionada?.Valor ?? "VISIBLE",
                     Estado = "ASIGNADO",
                     ModoGeneracion = "AUTOMATICO",
                     Alcance = AlcanceSeleccionado,
@@ -168,7 +186,7 @@ namespace SGA_Desktop.ViewModels
                     FechaPlan = FechaPlan,
                     CreadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString() ?? "ADMIN",
                     Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
-                    CodigoOperario = string.IsNullOrWhiteSpace(CodigoOperario) ? null : CodigoOperario.Trim(),
+                    CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
                     CodigoAlmacen = AlmacenSeleccionado?.CodigoAlmacen,
                     Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim()
                 };
@@ -185,7 +203,7 @@ namespace SGA_Desktop.ViewModels
                 // Mostrar mensaje de éxito
                 var successDialog = new WarningDialog(
                     "Orden Creada", 
-                    $"La orden #{ordenCreada.Id} '{ordenCreada.Titulo}' ha sido creada exitosamente.");
+                    $"La orden #{ordenCreada.GuidID} '{ordenCreada.Titulo}' ha sido creada exitosamente.");
                 successDialog.ShowDialog();
 
                 // Cerrar el diálogo
@@ -326,6 +344,7 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 await CargarAlmacenes();
+                await CargarOperarios();
             }
             catch (Exception ex)
             {
@@ -363,6 +382,48 @@ namespace SGA_Desktop.ViewModels
                 };
                 AlmacenesDisponibles.Add(almacenDefecto);
                 AlmacenSeleccionado = almacenDefecto;
+            }
+        }
+
+        private async Task CargarOperarios()
+        {
+            try
+            {
+                var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+
+                Debug.WriteLine($"Operarios obtenidos del API: {operarios.Count()}");
+                foreach (var op in operarios)
+                {
+                    Debug.WriteLine($"  - ID: {op.Operario}, Nombre: {op.NombreOperario}");
+                }
+
+                OperariosDisponibles.Clear();
+
+                foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
+                {
+                    OperariosDisponibles.Add(operario);
+                }
+
+                // Seleccionar el operario actual si está en la lista
+                var operarioActual = SessionManager.UsuarioActual?.operario;
+                if (operarioActual.HasValue)
+                {
+                    OperarioSeleccionado = OperariosDisponibles.FirstOrDefault(o => o.Operario == operarioActual.Value);
+                }
+                
+                // Si no se encontró, no seleccionar ninguno (forzar selección manual)
+                if (OperarioSeleccionado == null && OperariosDisponibles.Count > 0)
+                {
+                    // No seleccionar automáticamente - el usuario debe elegir
+                    OperarioSeleccionado = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error cargando operarios: {ex.Message}");
+                // En caso de error, dejar la lista vacía
+                OperariosDisponibles.Clear();
+                OperarioSeleccionado = null;
             }
         }
 
@@ -450,6 +511,11 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(PuedeCrearOrden));
         }
 
+        partial void OnOperarioSeleccionadoChanged(OperariosAccesoDto? value)
+        {
+            OnPropertyChanged(nameof(PuedeCrearOrden));
+        }
+
         partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? value)
         {
             if (value != null)
@@ -482,5 +548,13 @@ namespace SGA_Desktop.ViewModels
     {
         public byte Valor { get; set; }
         public string Texto { get; set; } = string.Empty;
+    }
+
+    // Clase auxiliar para visibilidades
+    public class VisibilidadItem
+    {
+        public string Valor { get; set; } = string.Empty;
+        public string Texto { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
     }
 } 

@@ -98,18 +98,15 @@ namespace SGA_Api.Controllers.Login
 
 			//Permisos de Empresa
 			// Permisos de Empresa  (DESPUÉS)
-			var empresas = await _context.OperariosEmpresas
-	.Where(oe => oe.Operario == operario.Id)
-	.Select(oe => new EmpresaDto
-	{
-		Codigo = oe.EmpresaOrigen,   // 👈 aquí usas EmpresaOrigen como código visible
-		Nombre = oe.Empresa          // el texto de esa fila
-	})
-	.Distinct()
-	.ToListAsync();
-
-
-
+		var empresas = await _context.OperariosEmpresas
+            .Where(oe => oe.Operario == operario.Id)
+            .Select(oe => new EmpresaDto
+            {
+                Codigo = oe.EmpresaOrigen,   // 👈 aquí usas EmpresaOrigen como código visible
+                Nombre = oe.Empresa          // el texto de esa fila
+            })
+            .Distinct()
+            .ToListAsync();
 
 			return Ok(new LoginResponseDto
             {

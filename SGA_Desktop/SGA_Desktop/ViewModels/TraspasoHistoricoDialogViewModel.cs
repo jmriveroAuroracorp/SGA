@@ -26,6 +26,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private AlmacenDto? almacenOrigenSeleccionado;
         [ObservableProperty] private AlmacenDto? almacenDestinoSeleccionado;
         [ObservableProperty] private EstadoTraspasoDto? estadoSeleccionado;
+        [ObservableProperty] private bool estaCargando = false;
 
         // Colecciones para filtros
         public ObservableCollection<AlmacenDto> AlmacenesOrigen { get; } = new();
@@ -62,13 +63,36 @@ namespace SGA_Desktop.ViewModels
 
         public TraspasoHistoricoDialogViewModel() : this(new TraspasosService()) { }
 
+        // Aplicar filtros automáticamente cuando cambien las propiedades
+        partial void OnFechaDesdeChanged(DateTime? oldValue, DateTime? newValue)
+        {
+            if (newValue.HasValue && FechaHasta.HasValue && FechaHasta.Value < newValue.Value)
+            {
+                FechaHasta = newValue.Value;
+            }
+            _ = AplicarFiltrosAsync();
+        }
+
+        partial void OnFechaHastaChanged(DateTime? oldValue, DateTime? newValue)
+        {
+            if (newValue.HasValue && FechaDesde.HasValue && newValue.Value < FechaDesde.Value)
+            {
+                FechaHasta = FechaDesde.Value;
+            }
+            _ = AplicarFiltrosAsync();
+        }
+
+        partial void OnEstadoSeleccionadoChanged(EstadoTraspasoDto? value) => _ = AplicarFiltrosAsync();
+        partial void OnAlmacenOrigenSeleccionadoChanged(AlmacenDto? value) => _ = AplicarFiltrosAsync();
+        partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto? value) => _ = AplicarFiltrosAsync();
+
         private async Task InitializeAsync()
         {
             try
             {
-                // Establecer fechas por defecto (último mes)
-                FechaDesde = DateTime.Today.AddMonths(-1);
-                FechaHasta = DateTime.Today;
+                // Establecer fechas por defecto (últimos días para ver traspasos recientes)
+                FechaDesde = DateTime.Today.AddDays(-2); // Últimos 2 días como InventarioViewModel
+                FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
 
                 // Cargar almacenes
                 await CargarAlmacenesAsync();
@@ -139,26 +163,56 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
+                EstaCargando = true;
                 var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                
+                // Asegurar que las fechas estén bien configuradas (misma lógica que InventarioViewModel)
+                var fechaDesde = FechaDesde ?? DateTime.Today.AddDays(-2);
+                var fechaHasta = FechaHasta ?? DateTime.Today;
+                
+                System.Diagnostics.Debug.WriteLine($"Cargando traspasos desde: {fechaDesde:yyyy-MM-dd} hasta: {fechaHasta:yyyy-MM-dd}");
                 
                 var traspasos = await _traspasosService.ObtenerTraspasosFiltradosAsync(
                     estado: EstadoSeleccionado?.CodigoEstado,
                     codigoPalet: null, // No filtramos por palet en este caso
                     almacenOrigen: AlmacenOrigenSeleccionado?.CodigoAlmacen,
                     almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
-                    fechaInicioDesde: FechaDesde,
-                    fechaInicioHasta: FechaHasta?.AddDays(1) // Incluir todo el día hasta
+                    fechaInicioDesde: fechaDesde.Date, // Solo la fecha, hora 00:00:00
+                    fechaInicioHasta: fechaHasta.Date // Solo la fecha, la API se encarga de incluir todo el día
                 );
 
+                System.Diagnostics.Debug.WriteLine($"API devolvió {traspasos.Count} traspasos");
+
                 Traspasos.Clear();
-                foreach (var traspaso in traspasos.OrderByDescending(t => t.FechaInicio))
+                
+                // Aplicar filtro de código de artículo si está especificado
+                var traspasosFiltrados = traspasos;
+                if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                {
+                    traspasosFiltrados = traspasos.Where(t => 
+                        !string.IsNullOrWhiteSpace(t.CodigoArticulo) && 
+                        t.CodigoArticulo.Contains(CodigoArticulo, StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+                    
+                    System.Diagnostics.Debug.WriteLine($"Después del filtro de artículo: {traspasosFiltrados.Count} traspasos");
+                }
+
+                foreach (var traspaso in traspasosFiltrados.OrderByDescending(t => t.FechaInicio))
                 {
                     Traspasos.Add(traspaso);
+                    System.Diagnostics.Debug.WriteLine($"Traspaso: {traspaso.CodigoArticulo} - {traspaso.FechaInicio:yyyy-MM-dd HH:mm}");
                 }
+                
+                System.Diagnostics.Debug.WriteLine($"Total final: {Traspasos.Count} traspasos");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error cargando traspasos: {ex.Message}");
+                // Aquí podrías mostrar un mensaje de error al usuario
+            }
+            finally
+            {
+                EstaCargando = false;
             }
         }
 
@@ -169,8 +223,8 @@ namespace SGA_Desktop.ViewModels
 
         private void LimpiarFiltros()
         {
-            FechaDesde = DateTime.Today.AddMonths(-1);
-            FechaHasta = DateTime.Today;
+            FechaDesde = DateTime.Today.AddDays(-2); // Últimos 2 días
+            FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
             CodigoArticulo = "";
             AlmacenOrigenSeleccionado = null;
             AlmacenDestinoSeleccionado = null;

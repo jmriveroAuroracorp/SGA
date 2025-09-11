@@ -90,6 +90,10 @@
 
                     <!-- Botones de filtros en la segunda fila -->
                     <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <Button Content="Recargar" 
+                                Command="{Binding AplicarFiltrosCommand}"
+                                Style="{StaticResource EstiloBotonSecundario}" 
+                                Width="100" Height="30" Margin="0,0,10,0"/>
                         <Button Content="Limpiar Filtros" 
                                 Command="{Binding LimpiarFiltrosCommand}"
                                 Style="{StaticResource EstiloBotonSecundario}" 
@@ -102,18 +106,32 @@
                 </Grid>
             </GroupBox>
 
+            <!-- Indicador de carga -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                <TextBlock Text="Cargando..." 
+                           Foreground="{StaticResource BrushPrincipal}" 
+                           FontWeight="Bold" 
+                           Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            </StackPanel>
+
             <!-- Historial de traspasos con formato de cards -->
             <GroupBox Header="Historial de Traspasos" Grid.Row="1" Margin="0,0,0,16">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-
-                    <!-- Lista de traspasos con cards de una línea -->
-                    <ScrollViewer Grid.Row="1" 
-                                  VerticalScrollBarVisibility="Auto" 
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Margin="20,0,20,20">
+                    
+                    <!-- Contador de resultados -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,20,10">
+                        <TextBlock Text="{Binding Traspasos.Count, StringFormat='{}{0} traspasos encontrados'}" 
+                                   Foreground="{StaticResource BrushPrincipal}" 
+                                   FontWeight="Bold" 
+                                   FontSize="12"/>
+                    </StackPanel>
+                    
+                    <!-- Lista de traspasos -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="20,0,20,20">
                         <StackPanel>
                             <ItemsControl ItemsSource="{Binding Traspasos}">
                                 <ItemsControl.ItemTemplate>
@@ -172,26 +190,20 @@
                                                 <StackPanel Grid.Column="3" Margin="8,0,0,0">
                                                     <TextBlock Text="ORIGEN" FontSize="11" FontWeight="Bold" 
                                                                Foreground="Gray" Margin="0,0,0,4"/>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding AlmacenOrigen}" FontSize="12" 
-                                                                   FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                        <TextBlock Text=" - " FontSize="12" Foreground="Gray" Margin="3,0"/>
-                                                        <TextBlock Text="{Binding UbicacionOrigen}" FontSize="12" 
-                                                                   Foreground="Black" FontWeight="Medium"/>
-                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding AlmacenOrigen}" FontSize="12" 
+                                                               FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                    <TextBlock Text="{Binding UbicacionOrigen}" FontSize="11" 
+                                                               Foreground="Black" FontWeight="Medium"/>
                                                 </StackPanel>
                                                 
                                                 <!-- Destino -->
                                                 <StackPanel Grid.Column="4" Margin="8,0,0,0">
                                                     <TextBlock Text="DESTINO" FontSize="11" FontWeight="Bold" 
                                                                Foreground="Gray" Margin="0,0,0,4"/>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding AlmacenDestino}" FontSize="12" 
-                                                                   FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                        <TextBlock Text=" - " FontSize="12" Foreground="Gray" Margin="3,0"/>
-                                                        <TextBlock Text="{Binding UbicacionDestino}" FontSize="12" 
-                                                                   Foreground="Black" FontWeight="Medium"/>
-                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding AlmacenDestino}" FontSize="12" 
+                                                               FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                    <TextBlock Text="{Binding UbicacionDestino}" FontSize="11" 
+                                                               Foreground="Black" FontWeight="Medium"/>
                                                 </StackPanel>
                                                 
                                                 <!-- Cantidad -->
@@ -253,7 +265,7 @@
 
             <!-- Botones -->
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button Content="Cerrar" Width="90" Margin="0,0,10,0" 
+                <Button Content="Cerrar" Width="120" Height="35" Margin="0,0,10,0" 
                         IsCancel="True" Command="{Binding CerrarCommand}" 
                         Style="{StaticResource EstiloBotonPrincipal}"/>
                 <Button Content="Ver Detalles" Width="120" Height="35" 

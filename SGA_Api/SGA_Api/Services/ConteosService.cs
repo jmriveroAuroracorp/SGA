@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Conteos;
+using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Stock;
 using SGA_Api.Models.Almacen;
 
@@ -98,9 +99,9 @@ namespace SGA_Api.Services
                     CreadoPorCodigo = dto.CreadoPorCodigo,
                     Estado = !string.IsNullOrEmpty(dto.CodigoOperario) ? "ASIGNADO" : "PLANIFICADO",
                     Prioridad = dto.Prioridad,
-                    FechaCreacion = DateTime.UtcNow,
+                    FechaCreacion = DateTime.Now,
                     CodigoOperario = dto.CodigoOperario,
-                    FechaAsignacion = !string.IsNullOrEmpty(dto.CodigoOperario) ? DateTime.UtcNow : null,
+                    FechaAsignacion = !string.IsNullOrEmpty(dto.CodigoOperario) ? DateTime.Now : null,
                     CodigoAlmacen = codigoAlmacen,
                     CodigoUbicacion = codigoUbicacion,
                     CodigoArticulo = codigoArticulo
@@ -108,7 +109,10 @@ namespace SGA_Api.Services
 
                 _context.OrdenesConteo.Add(orden);
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Orden guardada con ID: {Id}", orden.Id);
+                _logger.LogInformation("Orden guardada con Guid: {Guid}", orden.GuidID);
+
+                // NO generar lecturas automáticas - se generan dinámicamente cuando se solicitan
+                _logger.LogInformation("Orden creada sin generar lecturas automáticas. Se generarán dinámicamente cuando se soliciten.");
 
                 return MapToOrdenDto(orden);
             }
@@ -119,10 +123,12 @@ namespace SGA_Api.Services
             }
         }
 
-        public async Task<OrdenDto?> ObtenerOrdenAsync(long id)
+        public async Task<OrdenDto?> ObtenerOrdenAsync(Guid guid)
         {
             var orden = await _context.OrdenesConteo
-                .FirstOrDefaultAsync(o => o.Id == id);
+                .Include(o => o.Lecturas)
+                .Include(o => o.Resultados)
+                .FirstOrDefaultAsync(o => o.GuidID == guid);
 
             return orden != null ? MapToOrdenDto(orden) : null;
         }
@@ -160,18 +166,18 @@ namespace SGA_Api.Services
             }
         }
 
-        public async Task<OrdenDto> IniciarOrdenAsync(long id, string codigoOperario)
+        public async Task<OrdenDto> IniciarOrdenAsync(Guid guid, string codigoOperario)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             
             try
             {
                 var orden = await _context.OrdenesConteo
-                    .FirstOrDefaultAsync(o => o.Id == id);
+                    .FirstOrDefaultAsync(o => o.GuidID == guid);
 
                 if (orden == null)
                 {
-                    throw new InvalidOperationException($"No se encontró la orden con ID {id}");
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {guid}");
                 }
 
                 if (orden.Estado != "ASIGNADO" && orden.Estado != "PLANIFICADO")
@@ -187,14 +193,13 @@ namespace SGA_Api.Services
 
                 orden.Estado = "EN_PROCESO";
                 orden.CodigoOperario = codigoOperario;
-                orden.FechaInicio = DateTime.UtcNow;
-                orden.FechaAsignacion = orden.FechaAsignacion ?? DateTime.UtcNow;
+                orden.FechaInicio = DateTime.Now;
+                orden.FechaAsignacion = orden.FechaAsignacion ?? DateTime.Now;
 
                 await _context.SaveChangesAsync();
-                await GenerarLecturasAutomaticasAsync(orden);
                 await transaction.CommitAsync();
 
-                _logger.LogInformation("Orden {Id} iniciada por operario {Operario}", id, codigoOperario);
+                _logger.LogInformation("Orden {Guid} iniciada por operario {Operario}", guid, codigoOperario);
                 return MapToOrdenDto(orden);
             }
             catch
@@ -204,18 +209,18 @@ namespace SGA_Api.Services
             }
         }
 
-        public async Task<OrdenDto> AsignarOperarioAsync(long id, AsignarOperarioDto dto)
+        public async Task<OrdenDto> AsignarOperarioAsync(Guid guid, AsignarOperarioDto dto)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             
             try
             {
                 var orden = await _context.OrdenesConteo
-                    .FirstOrDefaultAsync(o => o.Id == id);
+                    .FirstOrDefaultAsync(o => o.GuidID == guid);
 
                 if (orden == null)
                 {
-                    throw new InvalidOperationException($"No se encontró la orden con ID {id}");
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {guid}");
                 }
 
                 if (orden.Estado != "PLANIFICADO" && orden.Estado != "ASIGNADO")
@@ -231,7 +236,7 @@ namespace SGA_Api.Services
 
                 orden.CodigoOperario = dto.CodigoOperario;
                 orden.Estado = "ASIGNADO";
-                orden.FechaAsignacion = DateTime.UtcNow;
+                orden.FechaAsignacion = DateTime.Now;
                 
                 if (!string.IsNullOrEmpty(dto.Comentario))
                 {
@@ -241,7 +246,7 @@ namespace SGA_Api.Services
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                _logger.LogInformation("Orden {Id} asignada al operario {Operario}", id, dto.CodigoOperario);
+                _logger.LogInformation("Orden {Guid} asignada al operario {Operario}", guid, dto.CodigoOperario);
                 return MapToOrdenDto(orden);
             }
             catch
@@ -268,7 +273,7 @@ namespace SGA_Api.Services
 
                 if (string.IsNullOrEmpty(codigoAlmacen))
                 {
-                    _logger.LogWarning("No se pudo determinar el almacén para la orden {Id}", orden.Id);
+                    _logger.LogWarning("No se pudo determinar el almacén para la orden {Guid}", orden.GuidID);
                     return;
                 }
 
@@ -307,13 +312,13 @@ namespace SGA_Api.Services
                 {
                     _context.LecturasConteo.AddRange(lecturasGeneradas);
                     await _context.SaveChangesAsync();
-                    _logger.LogInformation("Generadas {Count} lecturas automáticas para orden {Id}", 
-                        lecturasGeneradas.Count, orden.Id);
+                    _logger.LogInformation("Generadas {Count} lecturas automáticas para orden {Guid}", 
+                        lecturasGeneradas.Count, orden.GuidID);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generando lecturas automáticas para orden {Id}", orden.Id);
+                _logger.LogError(ex, "Error generando lecturas automáticas para orden {Guid}", orden.GuidID);
                 throw;
             }
         }
@@ -354,7 +359,7 @@ namespace SGA_Api.Services
                     {
                         lecturasGeneradas.Add(new LecturaConteo
                         {
-                            OrdenId = orden.Id,
+                            OrdenGuid = orden.GuidID,
                             CodigoAlmacen = codigoAlmacen,
                             CodigoUbicacion = stock.Ubicacion,
                             CodigoArticulo = stock.CodigoArticulo,
@@ -363,7 +368,7 @@ namespace SGA_Api.Services
                             CantidadContada = null,
                             CantidadStock = stock.UnidadSaldo,
                             UsuarioCodigo = orden.CodigoOperario ?? "",
-                            Fecha = DateTime.UtcNow
+                            Fecha = DateTime.Now
                         });
                     }
                 }
@@ -416,7 +421,7 @@ namespace SGA_Api.Services
                     
                     lecturasGeneradas.Add(new LecturaConteo
                     {
-                        OrdenId = orden.Id,
+                        OrdenGuid = orden.GuidID,
                         CodigoAlmacen = codigoAlmacen,
                         CodigoUbicacion = stock.Ubicacion,
                         CodigoArticulo = stock.CodigoArticulo,
@@ -425,7 +430,7 @@ namespace SGA_Api.Services
                         CantidadContada = null,
                         CantidadStock = stock.UnidadSaldo,
                         UsuarioCodigo = orden.CodigoOperario ?? "",
-                        Fecha = DateTime.UtcNow
+                        Fecha = DateTime.Now
                     });
                 }
             }
@@ -469,7 +474,7 @@ namespace SGA_Api.Services
                         
                         lecturasGeneradas.Add(new LecturaConteo
                         {
-                            OrdenId = orden.Id,
+                            OrdenGuid = orden.GuidID,
                             CodigoAlmacen = codigoAlmacen,
                             CodigoUbicacion = stock.Ubicacion,
                             CodigoArticulo = stock.CodigoArticulo,
@@ -478,7 +483,7 @@ namespace SGA_Api.Services
                             CantidadContada = null,
                             CantidadStock = stock.UnidadSaldo,
                             UsuarioCodigo = orden.CodigoOperario ?? "",
-                            Fecha = DateTime.UtcNow
+                            Fecha = DateTime.Now
                         });
                     }
                 }
@@ -496,32 +501,8 @@ namespace SGA_Api.Services
 
             if (ejercicio == 0) return;
 
-                         // Si el alcance es UBICACION, obtener la ubicación específica desde los filtros
-             string? ubicacionEspecifica = null;
-             if (orden.Alcance == "UBICACION")
-             {
-                 // Primero intentar extraer ubicación directa del filtro (para ubicaciones especiales)
-                 ubicacionEspecifica = ExtraerUbicacionDelFiltro(orden.FiltrosJson);
-                 
-                 // Si no hay ubicación directa, construir a partir de los componentes
-                 if (ubicacionEspecifica == null)
-                 {
-                     var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
-                     var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
-                     var altura = ExtraerAlturaDelFiltro(orden.FiltrosJson);
-                     var posicion = ExtraerPosicionDelFiltro(orden.FiltrosJson);
-                     
-                     if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
-                     {
-                         var pasilloFormateado = pasillo.PadLeft(3, '0');
-                         var estanteriaFormateada = estanteria.PadLeft(3, '0');
-                         var alturaFormateada = altura?.PadLeft(3, '0') ?? "001";
-                         var posicionFormateada = posicion?.PadLeft(3, '0') ?? "001";
-                         
-                         ubicacionEspecifica = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
-                     }
-                 }
-             }
+            // Para alcance UBICACION, usar directamente la ubicación que ya se construyó en la orden
+            string? ubicacionEspecifica = orden.Alcance == "UBICACION" ? orden.CodigoUbicacion : null;
 
             _logger.LogInformation("UBICACION_DEBUG: Ubicación específica extraída = '{UbicacionEspecifica}'", ubicacionEspecifica);
             
@@ -564,7 +545,7 @@ namespace SGA_Api.Services
                     
                     lecturasGeneradas.Add(new LecturaConteo
                     {
-                        OrdenId = orden.Id,
+                        OrdenGuid = orden.GuidID,
                         CodigoAlmacen = codigoAlmacen,
                         CodigoUbicacion = stock.Ubicacion,
                         CodigoArticulo = stock.CodigoArticulo,
@@ -573,7 +554,7 @@ namespace SGA_Api.Services
                         CantidadContada = null,
                         CantidadStock = stock.UnidadSaldo,
                         UsuarioCodigo = orden.CodigoOperario ?? "",
-                        Fecha = DateTime.UtcNow
+                        Fecha = DateTime.Now
                     });
                     
                     _logger.LogInformation("UBICACION_DEBUG: Lectura generada para ubicación '{Ubicacion}', artículo {Articulo}", 
@@ -636,7 +617,7 @@ namespace SGA_Api.Services
                         
                         lecturasGeneradas.Add(new LecturaConteo
                         {
-                            OrdenId = orden.Id,
+                            OrdenGuid = orden.GuidID,
                             CodigoAlmacen = codigoAlmacen,
                             CodigoUbicacion = stock.Ubicacion,
                             CodigoArticulo = stock.CodigoArticulo,
@@ -645,7 +626,7 @@ namespace SGA_Api.Services
                             CantidadContada = null,
                             CantidadStock = stock.UnidadSaldo,
                             UsuarioCodigo = orden.CodigoOperario ?? "",
-                            Fecha = DateTime.UtcNow
+                            Fecha = DateTime.Now
                         });
                     }
                 }
@@ -684,7 +665,7 @@ namespace SGA_Api.Services
                     
                     lecturasGeneradas.Add(new LecturaConteo
                     {
-                        OrdenId = orden.Id,
+                        OrdenGuid = orden.GuidID,
                         CodigoAlmacen = codigoAlmacen,
                         CodigoUbicacion = stock.Ubicacion,
                         CodigoArticulo = stock.CodigoArticulo,
@@ -693,7 +674,7 @@ namespace SGA_Api.Services
                         CantidadContada = null,
                         CantidadStock = stock.UnidadSaldo,
                         UsuarioCodigo = orden.CodigoOperario ?? "",
-                        Fecha = DateTime.UtcNow
+                        Fecha = DateTime.Now
                     });
                 }
             }
@@ -741,7 +722,7 @@ namespace SGA_Api.Services
         {
             return new OrdenDto
             {
-                Id = orden.Id,
+                GuidID = orden.GuidID,
                 CodigoEmpresa = orden.CodigoEmpresa,
                 Titulo = orden.Titulo,
                 Visibilidad = orden.Visibilidad,
@@ -869,62 +850,167 @@ namespace SGA_Api.Services
         }
 
         // TODO: Implementar métodos restantes
-        public async Task<LecturaResponseDto> CrearLecturaAsync(long ordenId, LecturaDto dto)
+        public async Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            
+            using var tx = await _context.Database.BeginTransactionAsync();
             try
             {
-                var orden = await _context.OrdenesConteo
-                    .FirstOrDefaultAsync(o => o.Id == ordenId);
-
-                if (orden == null)
-                {
-                    throw new InvalidOperationException($"No se encontró la orden con ID {ordenId}");
-                }
-
-                // Verificar que la orden esté en proceso
+                var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == ordenGuid);
+                if (orden is null)
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {ordenGuid}");
                 if (orden.Estado != "EN_PROCESO")
-                {
                     throw new InvalidOperationException($"No se puede crear lecturas para una orden en estado {orden.Estado}");
-                }
 
-                // Buscar la lectura pendiente existente
-                var lecturaExistente = await _context.LecturasConteo
-                    .Where(l => l.OrdenId == ordenId && 
-                                l.CodigoArticulo == dto.CodigoArticulo && 
-                                l.LotePartida == dto.LotePartida && 
-                                l.CodigoUbicacion == dto.CodigoUbicacion &&
-                                l.CantidadContada == null)
+                // Obtener el almacén de la orden (la ubicación viene del frontend)
+                var almacenOrden = orden.CodigoAlmacen ?? ExtraerAlmacenDelFiltro(orden.FiltrosJson);
+
+                // Obtener el stock actual del artículo
+                var ejercicio = await _sageDbContext.Periodos
+                    .Where(p => p.CodigoEmpresa == orden.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .OrderByDescending(p => p.Fechainicio)
+                    .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
 
-                if (lecturaExistente == null)
+                if (ejercicio == 0)
+                    throw new InvalidOperationException("No se encontró ejercicio válido");
+
+                var stockActual = await _storageControlContext.AcumuladoStockUbicacion
+                    .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+                               x.Ejercicio == ejercicio &&
+                               x.CodigoAlmacen == almacenOrden &&
+                               x.Ubicacion == dto.CodigoUbicacion &&
+                               x.CodigoArticulo == dto.CodigoArticulo &&
+                               (string.IsNullOrEmpty(dto.LotePartida) || x.Partida == dto.LotePartida))
+                    .Select(x => x.UnidadSaldo ?? 0m)
+                    .FirstOrDefaultAsync();
+
+                // Operario (para límites)
+                var operarioCodigo = !string.IsNullOrEmpty(orden.CodigoOperario) ? orden.CodigoOperario : dto.UsuarioCodigo;
+                var operario = await _sageDbContext.Operarios.AsNoTracking().FirstOrDefaultAsync(o => o.Id.ToString() == operarioCodigo);
+                var limUnidades = operario?.MRH_LimiteInventarioUnidades ?? 0m;
+                var limEuros    = operario?.MRH_LimiteInventarioEuros    ?? 0m;
+
+                // Descripción del artículo (siempre obtenerla del servicio)
+                var descripcionArticulo = !string.IsNullOrEmpty(dto.CodigoArticulo)
+                    ? await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, dto.CodigoArticulo)
+                    : "";
+
+                // Crear SIEMPRE una lectura nueva (no actualizar "pendientes")
+                var lectura = new LecturaConteo
                 {
-                    throw new InvalidOperationException($"No se encontró una lectura pendiente para el artículo {dto.CodigoArticulo}, lote {dto.LotePartida} en ubicación {dto.CodigoUbicacion}");
+                    OrdenGuid = orden.GuidID,
+                    CodigoAlmacen = almacenOrden,
+                    CodigoUbicacion = dto.CodigoUbicacion,
+                    CodigoArticulo = dto.CodigoArticulo,
+                    DescripcionArticulo = descripcionArticulo,
+                    LotePartida = dto.LotePartida,
+                    CantidadContada = dto.CantidadContada,
+                    CantidadStock = stockActual,
+                    UsuarioCodigo = dto.UsuarioCodigo,
+                    Comentario = dto.Comentario,
+                    Fecha = DateTime.Now
+                };
+                _context.LecturasConteo.Add(lectura);
+                await _context.SaveChangesAsync();
+
+                // Diferencia y acción
+                var diferencia = (dto.CantidadContada ?? 0m) - stockActual;
+                if (Math.Abs(diferencia) >= 0.0001m)
+                {
+                    // Calcular acción considerando límites por unidades y por euros (precio medio)
+                    var diferenciaAbs = Math.Abs(diferencia);
+                    decimal? precioMedio = null;
+                    try
+                    {
+                        precioMedio = await _sageDbContext.AcumuladoStock
+                            .Where(a => a.CodigoEmpresa == orden.CodigoEmpresa
+                                    && a.Ejercicio == ejercicio
+                                    && a.CodigoArticulo == dto.CodigoArticulo)
+                            .Select(a => a.PrecioMedio)
+                            .FirstOrDefaultAsync();
+                    }
+                    catch { /* si falla el precio, tratamos como 0 */ }
+
+                    var superaUnidades = diferenciaAbs > limUnidades;
+                    var superaEuros = false;
+                    if (limEuros > 0m && precioMedio.HasValue)
+                    {
+                        superaEuros = diferenciaAbs * precioMedio.Value > limEuros;
+                    }
+
+                    var accion = (superaUnidades || superaEuros) ? "SUPERVISION" : "AJUSTE";
+
+                    // Crear un nuevo ResultadoConteo para cada lectura
+                    var resultado = new ResultadoConteo
+                        {
+                            OrdenGuid = orden.GuidID,
+                            CodigoAlmacen = lectura.CodigoAlmacen,
+                            CodigoUbicacion = lectura.CodigoUbicacion,
+                            CodigoArticulo = lectura.CodigoArticulo,
+                            DescripcionArticulo = lectura.DescripcionArticulo,
+                            LotePartida = lectura.LotePartida,
+                            CantidadContada = lectura.CantidadContada,
+                            CantidadStock = lectura.CantidadStock,
+                            UsuarioCodigo = lectura.UsuarioCodigo,
+                            Diferencia = diferencia,
+                            AccionFinal = accion,
+                            FechaEvaluacion = DateTime.Now,
+                            AjusteAplicado = false
+                        };
+                        _context.ResultadosConteo.Add(resultado);
+
+                    await _context.SaveChangesAsync();
+
+                    // Si la acción es AJUSTE, crear registro en InventarioAjustes
+                    if (accion == "AJUSTE")
+                    {
+                        var inventarioAjuste = new InventarioAjustes
+                        {
+                            IdInventario = null, // Para ajustes de conteo no necesitamos InventarioCabecera
+                            CodigoArticulo = resultado.CodigoArticulo,
+                            CodigoUbicacion = resultado.CodigoUbicacion,
+                            Diferencia = resultado.Diferencia,
+                            UsuarioId = int.Parse(resultado.UsuarioCodigo), // Convertir string a int
+                            Fecha = DateTime.Now,
+                            IdConteo = resultado.OrdenGuid,
+                            CodigoEmpresa = (short)orden.CodigoEmpresa, // Convertir int a short
+                            CodigoAlmacen = resultado.CodigoAlmacen,
+                            Estado = "PENDIENTE_ERP"
+                        };
+
+                        _context.InventarioAjustes.Add(inventarioAjuste);
+                        await _context.SaveChangesAsync();
+                        
+                        _logger.LogInformation("InventarioAjustes creado para resultado {ResultadoGuid} con diferencia {Diferencia}", resultado.GuidID, diferencia);
+                    }
                 }
 
-                // Actualizar la lectura existente
-                lecturaExistente.CantidadContada = dto.CantidadContada;
-                lecturaExistente.UsuarioCodigo = dto.UsuarioCodigo;
-                lecturaExistente.Comentario = dto.Comentario;
-                lecturaExistente.Fecha = DateTime.UtcNow;
+                // TEMPORAL: Comentar verificación de lecturas pendientes para debug
+                
+                var lecturasPendientes = await ObtenerLecturasPendientesAsync(orden.GuidID, dto.UsuarioCodigo);
+                
+                if (!lecturasPendientes.Any())
+                {
+                    // No quedan lecturas pendientes, cerrar la orden automáticamente
+                    orden.Estado = "CERRADO";
+                    orden.FechaCierre = DateTime.Now;
+                    await _context.SaveChangesAsync();
+                    
+                    _logger.LogInformation("Orden {OrdenGuid} cerrada automáticamente al completar todas las lecturas", orden.GuidID);
+                }
+                
 
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                _logger.LogInformation("Lectura actualizada para orden {OrdenId} por usuario {Usuario} - Artículo: {Articulo}, Lote: {Lote}, Ubicación: {Ubicacion}, Cantidad: {Cantidad}", 
-                    ordenId, dto.UsuarioCodigo, dto.CodigoArticulo, dto.LotePartida, dto.CodigoUbicacion, dto.CantidadContada);
-
-                return MapToLecturaResponseDto(lecturaExistente);
+                await tx.CommitAsync();
+                return MapToLecturaResponseDto(lectura);
             }
             catch
             {
-                await transaction.RollbackAsync();
+                await tx.RollbackAsync();
                 throw;
             }
         }
 
-        public async Task<CerrarOrdenResponseDto> CerrarOrdenAsync(long id)
+        public async Task<CerrarOrdenResponseDto> CerrarOrdenAsync(Guid guid)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             
@@ -932,11 +1018,11 @@ namespace SGA_Api.Services
             {
                 var orden = await _context.OrdenesConteo
                     .Include(o => o.Lecturas)
-                    .FirstOrDefaultAsync(o => o.Id == id);
+                    .FirstOrDefaultAsync(o => o.GuidID == guid);
 
                 if (orden == null)
                 {
-                    throw new InvalidOperationException($"No se encontró la orden con ID {id}");
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {guid}");
                 }
 
                 // Verificar que la orden esté en proceso
@@ -971,57 +1057,24 @@ namespace SGA_Api.Services
                 // Obtener todas las lecturas completadas
                 var lecturasCompletadas = orden.Lecturas.Where(l => l.CantidadContada.HasValue).ToList();
                 
-                // Crear registros en ResultadoConteo solo para las lecturas que requieren acción
-                var resultadosCreados = 0;
-                foreach (var lectura in lecturasCompletadas)
-                {
-                    // Calcular la diferencia entre cantidad contada y stock
-                    var diferencia = lectura.CantidadContada.Value - (lectura.CantidadStock ?? 0);
-                    
-                    // Solo crear resultado si hay diferencia significativa (requiere acción)
-                    if (Math.Abs(diferencia) >= 0.0001m)
-                    {
-                        // Verificar si ya existe un resultado para esta orden
-                        var resultadoExistente = await _context.ResultadosConteo
-                            .FirstOrDefaultAsync(r => r.OrdenId == id);
-
-                        if (resultadoExistente == null)
-                        {
-                            var resultado = new ResultadoConteo
-                            {
-                                OrdenId = id,
-                                CodigoAlmacen = lectura.CodigoAlmacen,
-                                CodigoUbicacion = lectura.CodigoUbicacion,
-                                CodigoArticulo = lectura.CodigoArticulo,
-                                DescripcionArticulo = lectura.DescripcionArticulo,
-                                LotePartida = lectura.LotePartida,
-                                CantidadContada = lectura.CantidadContada,
-                                CantidadStock = lectura.CantidadStock,
-                                UsuarioCodigo = lectura.UsuarioCodigo,
-                                Diferencia = diferencia,
-                                AccionFinal = "SUPERVISION",
-                                FechaEvaluacion = DateTime.UtcNow
-                            };
-
-                            _context.ResultadosConteo.Add(resultado);
-                            resultadosCreados++;
-                        }
-                    }
-                }
+                // Contar los resultados ya creados durante las lecturas
+                var resultadosCreados = await _context.ResultadosConteo
+                    .Where(r => r.OrdenGuid == orden.GuidID)
+                    .CountAsync();
 
                 // Actualizar la orden
                 orden.Estado = "CERRADO";
-                orden.FechaCierre = DateTime.UtcNow;
+                orden.FechaCierre = DateTime.Now;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                _logger.LogInformation("Orden {Id} cerrada. Total lecturas: {TotalLecturas}, Resultados creados: {ResultadosCreados}", 
-                    id, lecturasCompletadas.Count, resultadosCreados);
+                _logger.LogInformation("Orden {Guid} cerrada. Total lecturas: {TotalLecturas}, Resultados creados: {ResultadosCreados}", 
+                    guid, lecturasCompletadas.Count, resultadosCreados);
 
                 return new CerrarOrdenResponseDto
                 {
-                    OrdenId = id,
+                    OrdenGuid = orden.GuidID,
                     TotalLecturas = lecturasCompletadas.Count,
                     ResultadosCreados = resultadosCreados,
                     FechaCierre = orden.FechaCierre.Value
@@ -1034,32 +1087,258 @@ namespace SGA_Api.Services
             }
         }
 
-        public async Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasPendientesAsync(long ordenId, string? codigoOperario = null)
+        public async Task<ResultadoConteoDetalladoDto> ActualizarAprobadorAsync(Guid resultadoGuid, ActualizarAprobadorDto dto)
         {
             try
             {
-                _logger.LogInformation("Buscando lecturas pendientes para orden {OrdenId} con operario {Operario}", ordenId, codigoOperario);
+                _logger.LogInformation("Actualizando aprobador para resultado {ResultadoGuid} con operario {Aprobador}", resultadoGuid, dto.AprobadoPorCodigo);
                 
-                var query = _context.LecturasConteo
-                    .Where(l => l.OrdenId == ordenId && l.CantidadContada == null);
+                // Buscar el ResultadoConteo por GuidID
+                var resultado = await _context.ResultadosConteo
+                    .Include(r => r.Orden)
+                    .FirstOrDefaultAsync(r => r.GuidID == resultadoGuid);
 
-                if (!string.IsNullOrEmpty(codigoOperario))
+                if (resultado == null)
                 {
-                    query = query.Where(l => l.UsuarioCodigo == codigoOperario);
+                    throw new InvalidOperationException($"No se encontró el resultado de conteo con Guid {resultadoGuid}");
                 }
 
-                var lecturas = await query
-                    .OrderBy(l => l.CodigoUbicacion)
-                    .ThenBy(l => l.CodigoArticulo)
-                    .ToListAsync();
+                // Verificar que la acción sea SUPERVISION
+                if (resultado.AccionFinal != "SUPERVISION")
+                {
+                    throw new InvalidOperationException($"Solo se puede actualizar el aprobador para resultados con AccionFinal = SUPERVISION. El resultado actual tiene AccionFinal = {resultado.AccionFinal}");
+                }
 
-                _logger.LogInformation("Se encontraron {Count} lecturas pendientes", lecturas.Count);
+                // Verificar que el resultado no tenga ya un aprobador asignado
+                if (!string.IsNullOrEmpty(resultado.AprobadoPorCodigo))
+                {
+                    throw new InvalidOperationException($"El resultado de conteo ya tiene un aprobador asignado: {resultado.AprobadoPorCodigo}");
+                }
+
+                // Actualizar el campo AprobadoPorCodigo
+                resultado.AprobadoPorCodigo = dto.AprobadoPorCodigo;
                 
-                return lecturas.Select(MapToLecturaResponseDto);
+                await _context.SaveChangesAsync();
+                
+                _logger.LogInformation("Aprobador actualizado correctamente para resultado {ResultadoGuid}", resultadoGuid);
+                
+                return MapToResultadoConteoDetalladoDto(resultado);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error en ObtenerLecturasPendientesAsync: {Message}", ex.Message);
+                _logger.LogError(ex, "Error en ActualizarAprobadorAsync: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<ResultadoConteoDetalladoDto>> ObtenerResultadosConteoAsync(string? accion = null)
+        {
+            try
+            {
+                _logger.LogInformation("Obteniendo resultados de conteo con filtro de acción: {Accion}", accion ?? "TODOS");
+                
+                var query = _context.ResultadosConteo
+                    .Include(r => r.Orden)
+                    .AsQueryable();
+
+                // Aplicar filtro por acción si se especifica
+                if (!string.IsNullOrEmpty(accion))
+                {
+                    query = query.Where(r => r.AccionFinal == accion);
+                }
+
+                var resultados = await query
+                    .OrderByDescending(r => r.FechaEvaluacion)
+                    .ToListAsync();
+
+                _logger.LogInformation("Se encontraron {Count} resultados de conteo", resultados.Count);
+                
+                return resultados.Select(MapToResultadoConteoDetalladoDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ObtenerResultadosConteoAsync: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasPendientesAsync(Guid ordenGuid, string? codigoOperario = null)
+        {
+            try
+            {
+                _logger.LogInformation("Generando lecturas pendientes dinámicamente para orden {OrdenGuid} con operario {Operario}", ordenGuid, codigoOperario);
+                
+                // Obtener la orden
+                var orden = await _context.OrdenesConteo
+                    .FirstOrDefaultAsync(o => o.GuidID == ordenGuid);
+                
+                if (orden == null)
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {ordenGuid}");
+
+                if (orden.Estado != "EN_PROCESO" && orden.Estado != "CERRADO")
+                    throw new InvalidOperationException($"No se pueden obtener lecturas para una orden en estado {orden.Estado}");
+
+                // Si la orden está cerrada, no hay lecturas pendientes
+                if (orden.Estado == "CERRADO")
+                {
+                    _logger.LogInformation("Orden {OrdenGuid} está cerrada, no hay lecturas pendientes", ordenGuid);
+                    return new List<LecturaResponseDto>();
+                }
+
+                // Obtener ejercicio actual
+                var ejercicio = await _sageDbContext.Periodos
+                    .Where(p => p.CodigoEmpresa == orden.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .OrderByDescending(p => p.Fechainicio)
+                    .Select(p => p.Ejercicio)
+                    .FirstOrDefaultAsync();
+
+                if (ejercicio == 0)
+                    throw new InvalidOperationException("No se encontró ejercicio válido");
+
+                // Generar lecturas dinámicamente según el alcance
+                var lecturasGeneradas = new List<LecturaResponseDto>();
+                var codigoAlmacen = orden.CodigoAlmacen;
+                
+                if (string.IsNullOrEmpty(codigoAlmacen))
+                {
+                    codigoAlmacen = ExtraerAlmacenDelFiltro(orden.FiltrosJson);
+                }
+
+                if (string.IsNullOrEmpty(codigoAlmacen))
+                    throw new InvalidOperationException("No se pudo determinar el almacén para la orden");
+
+                // Construir query base según alcance
+                var query = _storageControlContext.AcumuladoStockUbicacion
+                    .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+                               x.Ejercicio == ejercicio &&
+                               x.CodigoAlmacen == codigoAlmacen &&
+                               x.UnidadSaldo > 0);
+
+                // Aplicar filtros según alcance
+                switch (orden.Alcance?.ToUpper())
+                {
+                    case "ARTICULO":
+                        var codigoArticulo = orden.CodigoArticulo ?? ExtraerArticuloDelFiltro(orden.FiltrosJson);
+                        if (!string.IsNullOrEmpty(codigoArticulo))
+                        {
+                            query = query.Where(x => x.CodigoArticulo == codigoArticulo);
+                        }
+                        break;
+                    case "UBICACION":
+                    {
+                        // 1) Prioriza la ubicación guardada en la orden (incluye "" como válida)
+                        string? ubicacion = null;
+                        if (orden.CodigoUbicacion != null || orden.CodigoUbicacion == "")
+                        {
+                            ubicacion = orden.CodigoUbicacion;
+                        }
+                        else
+                        {
+                            // 2) Intenta extraer "ubicacion" directa del filtro
+                            ubicacion = ExtraerUbicacionDelFiltro(orden.FiltrosJson);
+
+                            // 3) Si no hay, reconstruye desde pasillo/estanteria/altura/posicion
+                            if (ubicacion == null)
+                            {
+                                var ubicacionPasillo    = ExtraerPasilloDelFiltro(orden.FiltrosJson);
+                                var ubicacionEstanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
+                                var altura     = ExtraerAlturaDelFiltro(orden.FiltrosJson);
+                                var posicion   = ExtraerPosicionDelFiltro(orden.FiltrosJson);
+
+                                if (!string.IsNullOrEmpty(ubicacionPasillo) &&
+                                    !string.IsNullOrEmpty(ubicacionEstanteria) &&
+                                    !string.IsNullOrEmpty(altura) &&
+                                    !string.IsNullOrEmpty(posicion))
+                                {
+                                    ubicacion = $"UB{ubicacionPasillo.PadLeft(3,'0')}{ubicacionEstanteria.PadLeft(3,'0')}{altura.PadLeft(3,'0')}{posicion.PadLeft(3,'0')}";
+                                }
+                            }
+                        }
+
+                        if (ubicacion != null)
+                        {
+                            query = query.Where(x => x.Ubicacion == ubicacion);
+                            _logger.LogInformation("Pendientes (UBICACION): filtrando por '{Ubicacion}'", ubicacion);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Pendientes (UBICACION): no se pudo resolver la ubicación; el resultado podría ser muy grande.");
+                            // Si quieres devolver vacío en este caso, descomenta la siguiente línea y ajusta el tipo de retorno:
+                            // return new List<LecturaResponseDto>();
+                        }
+                        break;
+                    }
+                    case "ESTANTERIA":
+                        var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
+                        var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
+                        if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                        {
+                            var pasilloFormateado = pasillo.PadLeft(3, '0');
+                            var estanteriaFormateada = estanteria.PadLeft(3, '0');
+                            var prefijoEstanteria = $"UB{pasilloFormateado}{estanteriaFormateada}";
+                            query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoEstanteria));
+                        }
+                        break;
+                    case "PASILLO":
+                        var pasilloFiltro = ExtraerPasilloDelFiltro(orden.FiltrosJson);
+                        if (!string.IsNullOrEmpty(pasilloFiltro))
+                        {
+                            var prefijoPasillo = $"UB{pasilloFiltro.PadLeft(3, '0')}";
+                            query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoPasillo));
+                        }
+                        break;
+                    // ALMACEN y PALET no necesitan filtros adicionales
+                }
+
+                // Obtener stock y generar lecturas
+                var stockData = await query.ToListAsync();
+                
+                // Obtener lecturas ya creadas para excluirlas
+                var lecturasCreadas = await _context.LecturasConteo
+                    .Where(l => l.OrdenGuid == orden.GuidID)
+                    .Select(l => new { l.CodigoAlmacen, l.CodigoUbicacion, l.CodigoArticulo, l.LotePartida })
+                    .ToListAsync();
+
+                foreach (var stock in stockData)
+                {
+                    if (EsUbicacionValidaParaConteo(stock.Ubicacion))
+                    {
+                        // Verificar si ya existe una lectura para esta combinación
+                        var yaExiste = lecturasCreadas.Any(l => 
+                            l.CodigoAlmacen == codigoAlmacen &&
+                            l.CodigoUbicacion == stock.Ubicacion &&
+                            l.CodigoArticulo == stock.CodigoArticulo &&
+                            (string.IsNullOrEmpty(stock.Partida) || l.LotePartida == stock.Partida));
+                        
+                        if (!yaExiste)
+                        {
+                            var descripcionArticulo = await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, stock.CodigoArticulo);
+                            
+                            lecturasGeneradas.Add(new LecturaResponseDto
+                            {
+                                GuidID = Guid.Empty, // No se persiste, es dinámico
+                                OrdenGuid = orden.GuidID,
+                                CodigoAlmacen = codigoAlmacen,
+                                CodigoUbicacion = stock.Ubicacion,
+                                CodigoArticulo = stock.CodigoArticulo,
+                                DescripcionArticulo = descripcionArticulo,
+                                LotePartida = stock.Partida,
+                                CantidadContada = null, // Pendiente de conteo
+                                CantidadStock = stock.UnidadSaldo,
+                                UsuarioCodigo = codigoOperario ?? "",
+                                Fecha = DateTime.Now,
+                                Comentario = null
+                            });
+                        }
+                    }
+                }
+
+                _logger.LogInformation("Generadas {Count} lecturas dinámicas para orden {OrdenGuid}", lecturasGeneradas.Count, ordenGuid);
+                return lecturasGeneradas;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generando lecturas dinámicas para orden {OrdenGuid}: {Message}", ordenGuid, ex.Message);
                 throw;
             }
         }
@@ -1068,8 +1347,8 @@ namespace SGA_Api.Services
         {
             return new LecturaResponseDto
             {
-                Id = lectura.Id,
-                OrdenId = lectura.OrdenId,
+                GuidID = lectura.GuidID,
+                OrdenGuid = lectura.OrdenGuid,
                 CodigoAlmacen = lectura.CodigoAlmacen,
                 CodigoUbicacion = lectura.CodigoUbicacion,
                 CodigoArticulo = lectura.CodigoArticulo,
@@ -1081,6 +1360,157 @@ namespace SGA_Api.Services
                 Fecha = lectura.Fecha,
                 Comentario = lectura.Comentario
             };
+        }
+
+        /// <summary>
+        /// Parsea una ubicación escaneada en formato "ALM$UBIC" y retorna (almacen, ubicacion)
+        /// </summary>
+        private (string almacen, string ubicacion) ParsearUbicacionEscaneada(string? ubicacionEscaneada)
+        {
+            if (string.IsNullOrEmpty(ubicacionEscaneada))
+                return ("", "");
+
+            var partes = ubicacionEscaneada.Split('$');
+            if (partes.Length != 2)
+                throw new InvalidOperationException($"Formato de ubicación inválido: {ubicacionEscaneada}. Debe ser 'ALMACEN$UBICACION'");
+
+            return (partes[0], partes[1]);
+        }
+
+        private static ResultadoConteoDetalladoDto MapToResultadoConteoDetalladoDto(ResultadoConteo resultado)
+        {
+            return new ResultadoConteoDetalladoDto
+            {
+                // Campos de ResultadoConteo
+                GuidID = resultado.GuidID,
+                OrdenGuid = resultado.OrdenGuid,
+                CodigoAlmacen = resultado.CodigoAlmacen,
+                CodigoUbicacion = resultado.CodigoUbicacion,
+                CodigoArticulo = resultado.CodigoArticulo,
+                DescripcionArticulo = resultado.DescripcionArticulo,
+                LotePartida = resultado.LotePartida,
+                CantidadContada = resultado.CantidadContada,
+                CantidadStock = resultado.CantidadStock,
+                UsuarioCodigo = resultado.UsuarioCodigo,
+                Diferencia = resultado.Diferencia,
+                AccionFinal = resultado.AccionFinal,
+                AprobadoPorCodigo = resultado.AprobadoPorCodigo,
+                FechaEvaluacion = resultado.FechaEvaluacion,
+                AjusteAplicado = resultado.AjusteAplicado,
+
+                // Campos de OrdenConteo
+                CodigoEmpresa = resultado.Orden?.CodigoEmpresa ?? 0,
+                Titulo = resultado.Orden?.Titulo ?? string.Empty,
+                Visibilidad = resultado.Orden?.Visibilidad ?? string.Empty
+            };
+        }
+
+        public async Task<OrdenDto> ReasignarLineaAsync(Guid resultadoGuid, ReasignarLineaDto dto)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            
+            try
+            {
+                _logger.LogInformation("Iniciando reasignación de línea para resultado {ResultadoGuid} al operario {Operario}", resultadoGuid, dto.CodigoOperario);
+                
+                // Buscar el ResultadoConteo por GuidID
+                var resultado = await _context.ResultadosConteo
+                    .Include(r => r.Orden)
+                    .FirstOrDefaultAsync(r => r.GuidID == resultadoGuid);
+
+                if (resultado == null)
+                {
+                    throw new InvalidOperationException($"No se encontró el resultado de conteo con Guid {resultadoGuid}");
+                }
+
+                // Verificar que la acción sea SUPERVISION
+                if (resultado.AccionFinal != "SUPERVISION")
+                {
+                    throw new InvalidOperationException($"Solo se puede reasignar resultados con AccionFinal = SUPERVISION. El resultado actual tiene AccionFinal = {resultado.AccionFinal}");
+                }
+
+                // Crear nueva orden basada en el resultado original
+                var nuevaOrden = new OrdenConteo
+                {
+                    CodigoEmpresa = resultado.Orden.CodigoEmpresa,
+                    Titulo = $"REASIGNACIÓN - {resultado.Orden.Titulo}",
+                    Visibilidad = resultado.Orden.Visibilidad,
+                    ModoGeneracion = "REASIGNA", // Solo 10 caracteres máximo
+                    Alcance = "UBICACION",
+                    FiltrosJson = GenerarFiltrosJsonParaReasignacion(resultado),
+                    FechaPlan = DateTime.UtcNow,
+                    SupervisorCodigo = dto.SupervisorCodigo,
+                    CreadoPorCodigo = dto.SupervisorCodigo ?? "SISTEMA",
+                    Estado = "ASIGNADO",
+                    Prioridad = 1,
+                    FechaCreacion = DateTime.UtcNow,
+                    CodigoOperario = dto.CodigoOperario,
+                    FechaAsignacion = DateTime.UtcNow,
+                    CodigoAlmacen = resultado.CodigoAlmacen,
+                    CodigoUbicacion = resultado.CodigoUbicacion,
+                    CodigoArticulo = resultado.CodigoArticulo
+                };
+
+                _context.OrdenesConteo.Add(nuevaOrden);
+                await _context.SaveChangesAsync();
+
+                // Marcar el resultado original como reasignado
+                resultado.AprobadoPorCodigo = dto.CodigoOperario;
+                resultado.AccionFinal = "REASIGNADO";
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+                
+                _logger.LogInformation("Línea reasignada exitosamente. Nueva orden creada con Guid: {NuevaOrdenGuid}", nuevaOrden.GuidID);
+                
+                return MapToOrdenDto(nuevaOrden);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Error en ReasignarLineaAsync: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        private string GenerarFiltrosJsonParaReasignacion(ResultadoConteo resultado)
+        {
+            var filtros = new Dictionary<string, object>
+            {
+                ["almacen"] = resultado.CodigoAlmacen
+            };
+
+            if (!string.IsNullOrEmpty(resultado.CodigoUbicacion))
+            {
+                filtros["ubicacion"] = resultado.CodigoUbicacion;
+            }
+
+            if (!string.IsNullOrEmpty(resultado.CodigoArticulo))
+            {
+                filtros["articulo"] = resultado.CodigoArticulo;
+            }
+
+            return System.Text.Json.JsonSerializer.Serialize(filtros);
+        }
+
+        private string TruncarTitulo(string titulo, int maxLength)
+        {
+            if (string.IsNullOrEmpty(titulo))
+                return "REASIGNACIÓN";
+                
+            return titulo.Length <= maxLength 
+                ? titulo 
+                : titulo.Substring(0, maxLength - 3) + "...";
+        }
+
+        private string TruncarComentario(string comentario, int maxLength)
+        {
+            if (string.IsNullOrEmpty(comentario))
+                return string.Empty;
+                
+            return comentario.Length <= maxLength 
+                ? comentario 
+                : comentario.Substring(0, maxLength - 3) + "...";
         }
     }
 } 

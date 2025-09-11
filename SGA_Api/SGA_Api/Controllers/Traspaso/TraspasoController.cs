@@ -207,7 +207,7 @@ public class TraspasosController : ControllerBase
 		if (fechaDesde.HasValue)
 			q = q.Where(t => t.FechaInicio >= fechaDesde.Value);
 		if (fechaHasta.HasValue)
-			q = q.Where(t => t.FechaInicio <= fechaHasta.Value);
+			q = q.Where(t => t.FechaInicio <= fechaHasta.Value.AddDays(1).AddSeconds(-1)); // Incluir todo el día hasta 23:59:59
 		if (usuarioId.HasValue)
 			q = q.Where(t => t.UsuarioInicioId == usuarioId.Value || t.UsuarioFinalizacionId == usuarioId.Value);
 		if (!string.IsNullOrWhiteSpace(codigoPalet))
@@ -620,7 +620,7 @@ public class TraspasosController : ControllerBase
 				AlmacenOrigen = dto.AlmacenOrigen,
 				UbicacionOrigen = dto.UbicacionOrigen,
 				UsuarioInicioId = dto.UsuarioId,
-				FechaInicio = DateTime.Now, // Siempre usar la hora del servidor/API
+				FechaInicio = dto.FechaInicio ?? DateTime.Now,
 				CodigoArticulo = dto.CodigoArticulo,
 				Cantidad = dto.Cantidad,
 				TipoTraspaso = "ARTICULO",
@@ -636,7 +636,7 @@ public class TraspasosController : ControllerBase
 				CodigoEmpresa = dto.CodigoEmpresa,
 				PaletId = paletIdOrigen ?? Guid.Empty, // ASOCIA EL PALET DE ORIGEN SI EXISTE
 				CodigoPalet = codigoPaletOrigen, // OPCIONAL, para trazabilidad
-				Comentario = dto.Observaciones // Comentarios del usuario
+				Comentario = dto.Comentario
 			};
 
 			_context.Traspasos.Add(traspaso);
@@ -773,13 +773,22 @@ public class TraspasosController : ControllerBase
 	public async Task<IActionResult> PrecheckFinalizarArticulo(
 	[FromQuery] short codigoEmpresa,
 	[FromQuery] string almacenDestino,
-	[FromQuery] string ubicacionDestino)
+	[FromQuery] string? ubicacionDestino = null)
 	{
-		if (string.IsNullOrWhiteSpace(almacenDestino) || string.IsNullOrWhiteSpace(ubicacionDestino))
-			return BadRequest("Debe indicar almacén y ubicación de destino.");
+		if (string.IsNullOrWhiteSpace(almacenDestino))
+			return BadRequest("Debe indicar almacén de destino.");
+
+		// Normalizar ubicación: null o vacío = "sin ubicar" (igual que en FinalizarTraspasoArticulo)
+		var ubicacionDestinoNormalizada = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino.Trim();
+
+		// Si la ubicación está vacía (sin ubicar), no hay palets específicos en esa ubicación
+		if (string.IsNullOrWhiteSpace(ubicacionDestinoNormalizada))
+		{
+			return Ok(new { existe = false });
+		}
 
 		var almKey = almacenDestino.Trim().ToUpperInvariant();
-		var ubiKey = ubicacionDestino.Trim().ToUpperInvariant();
+		var ubiKey = ubicacionDestinoNormalizada.ToUpperInvariant();
 
 		// Último PALET COMPLETADO en esa ubicación
 		var palet = await (
@@ -787,8 +796,8 @@ public class TraspasosController : ControllerBase
 			join p in _context.Palets.AsNoTracking() on t.PaletId equals p.Id
 			where t.TipoTraspaso == "PALET"
 			   && t.CodigoEstado == "COMPLETADO"
-			   && (t.AlmacenDestino ?? "").ToUpper() == almKey
-			   && (t.UbicacionDestino ?? "").ToUpper() == ubiKey
+			   && (t.AlmacenDestino ?? "").ToUpperInvariant() == almKey
+			   && (t.UbicacionDestino ?? "").ToUpperInvariant() == ubiKey
 			   && p.CodigoEmpresa == codigoEmpresa
 			orderby t.FechaFinalizacion descending
 			select p
@@ -805,13 +814,11 @@ public class TraspasosController : ControllerBase
 			codigoPalet = palet.Codigo,
 			cerrado,
 			aviso = cerrado
-				? $"Hay un palet CERRADO en {almacenDestino}-{ubicacionDestino} (Código: {palet.Codigo}). Se abrirá y quedará ABIERTO; el artículo quedará paletizado."
-				: $"Hay un palet ABIERTO en {almacenDestino}-{ubicacionDestino} (Código: {palet.Codigo}). El artículo quedará paletizado."
+				? $"Hay un palet CERRADO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {palet.Codigo}). Se abrirá y quedará ABIERTO; el artículo quedará paletizado."
+				: $"Hay un palet ABIERTO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {palet.Codigo}). El artículo quedará paletizado."
 		});
 	}
 
-	/// <summary>
-	/// Finalizar traspaso de artículo individual (mobility, segunda fase).
 	/// </summary>
 	[HttpPut("articulo/{id}/finalizar")]
 	public async Task<IActionResult> FinalizarTraspasoArticulo(Guid id, [FromBody] FinalizarTraspasoArticuloDto dto)
@@ -830,28 +837,34 @@ public class TraspasosController : ControllerBase
 		if (!string.Equals(traspaso.CodigoEstado, "PENDIENTE", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El traspaso no está en estado pendiente.");
 
-		if (string.IsNullOrWhiteSpace(dto.AlmacenDestino) || string.IsNullOrWhiteSpace(dto.UbicacionDestino))
-			return BadRequest("Debe indicar almacén y ubicación de destino.");
+		if (string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+			return BadRequest("Debe indicar el almacén de destino.");
+
+		// Normalizar ubicación: null o vacío = "sin ubicar" (igual que en Stock)
+		var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
 
 		// Normalizamos claves de comparación (pero guardamos el valor limpio, no en mayúsculas)
 		var almDestino = dto.AlmacenDestino.Trim();
-		var ubiDestino = dto.UbicacionDestino.Trim();
+		var ubiDestino = ubicacionDestino;  // Ya normalizada arriba
 		var almKey = almDestino.ToUpperInvariant();
 		var ubiKey = ubiDestino.ToUpperInvariant();
 
 		// ─────────────────────────────────────────────────────────────────────────────
-		// NUEVO (mínimo cambio): si hay palet en destino, pedir confirmación SIEMPRE,
-		// esté ABIERTO o CERRADO. No tocamos nada si no confirman.
+		// Si la ubicación está vacía (sin ubicar), no hay palets específicos en esa ubicación
 		// ─────────────────────────────────────────────────────────────────────────────
-		Guid? paletDestinoIdPre = await (
-			from t in _context.Traspasos.AsNoTracking()
-			where t.TipoTraspaso == "PALET"
-				  && t.CodigoEstado == "COMPLETADO"
-				  && (t.AlmacenDestino ?? "").ToUpper() == almKey
-				  && ((t.UbicacionDestino ?? "").ToUpper()) == ubiKey
-			orderby t.FechaFinalizacion descending
-			select (Guid?)t.PaletId
-		).FirstOrDefaultAsync();
+		Guid? paletDestinoIdPre = null;
+		if (!string.IsNullOrWhiteSpace(ubiDestino))
+		{
+			paletDestinoIdPre = await (
+				from t in _context.Traspasos.AsNoTracking()
+				where t.TipoTraspaso == "PALET"
+					  && t.CodigoEstado == "COMPLETADO"
+					  && (t.AlmacenDestino ?? "").ToUpper() == almKey
+					  && ((t.UbicacionDestino ?? "").ToUpper()) == ubiKey
+				orderby t.FechaFinalizacion descending
+				select (Guid?)t.PaletId
+			).FirstOrDefaultAsync();
+		}
 
 		bool hayPaletEnDestino = paletDestinoIdPre.HasValue && paletDestinoIdPre.Value != Guid.Empty;
 		if (hayPaletEnDestino)
@@ -885,7 +898,7 @@ public class TraspasosController : ControllerBase
 		traspaso.AlmacenDestino = almDestino;
 		traspaso.UbicacionDestino = ubiDestino;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioId;
-		traspaso.FechaFinalizacion = DateTime.Now; // Siempre usar la hora del servidor/API
+		traspaso.FechaFinalizacion = DateTime.Now;
 		traspaso.MovPosicionDestino = Guid.NewGuid();
 		traspaso.CodigoEstado = "PENDIENTE_ERP";
 
@@ -1104,7 +1117,7 @@ public class TraspasosController : ControllerBase
 				CodigoPalet = dto.CodigoPalet,
 				TipoTraspaso = "PALET",
 				CodigoEstado = esFinalizado ? "PENDIENTE_ERP" : "PENDIENTE",
-				FechaInicio = DateTime.Now, // Siempre usar la hora del servidor/API
+				FechaInicio = dto.FechaInicio ?? DateTime.Now, // Siempre usar la hora del servidor/API
 				UsuarioInicioId = dto.UsuarioId,
 				AlmacenOrigen = ultimoTraspaso.AlmacenDestino,
 				AlmacenDestino = dto.AlmacenDestino,
@@ -1375,7 +1388,7 @@ public class TraspasosController : ControllerBase
 
 		// 2. Buscar traspasos completados agrupados por palet
 		var traspasosCompletados = await _context.Traspasos
-			.Where(t => t.CodigoEstado == "COMPLETADO")
+			.Where(t => t.CodigoEstado == "COMPLETADO" && t.TipoTraspaso == "PALET")
 			.OrderByDescending(t => t.FechaFinalizacion)
 			.ToListAsync();
 

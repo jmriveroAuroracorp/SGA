@@ -9,6 +9,9 @@ using System.Windows;
 using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Newtonsoft.Json.Linq;
 
 namespace SGA_Desktop.Services
 {
@@ -219,7 +222,7 @@ namespace SGA_Desktop.Services
 		/// Obtiene el stock disponible (con Reservado y Disponible) por artículo y/o descripción.
 		/// Llama a /api/stock/articulo/disponible
 		/// </summary>
-		public async Task<List<StockDisponibleDto>> ObtenerStockDisponibleAsync(string codigoArticulo, string descripcion)
+		public async Task<List<StockDisponibleDto>> ObtenerStockDisponibleAsync(string? codigoArticulo, string? descripcion)
 		{
 			var queryParams = new Dictionary<string, string>();
 
@@ -236,10 +239,40 @@ namespace SGA_Desktop.Services
 			var url = $"/api/stock/articulo/disponible?{queryString}";
 
 			var response = await _httpClient.GetAsync(url);
-			response.EnsureSuccessStatusCode();
-
-			var json = await response.Content.ReadAsStringAsync();
-			return JsonConvert.DeserializeObject<List<StockDisponibleDto>>(json) ?? new List<StockDisponibleDto>();
+			if (response.IsSuccessStatusCode)
+			{
+				var json = await response.Content.ReadAsStringAsync();
+				var stockData = JsonConvert.DeserializeObject<List<object>>(json);
+				
+				var resultado = new List<StockDisponibleDto>();
+				foreach (var item in stockData)
+				{
+					var jObject = JObject.FromObject(item);
+					var stock = new StockDisponibleDto
+					{
+						// Campos originales
+						DescripcionArticulo = jObject["descripcionArticulo"]?.ToString(),
+						CodigoArticulo = jObject["codigoArticulo"]?.ToString(),
+						CodigoAlmacen = jObject["codigoAlmacen"]?.ToString(),
+						Ubicacion = jObject["ubicacion"]?.ToString(),
+						Partida = jObject["partida"]?.ToString(),
+						FechaCaducidad = jObject["fechaCaducidad"]?.ToObject<DateTime?>(),
+						UnidadSaldo = jObject["unidadSaldo"]?.ToObject<decimal>() ?? 0,
+						Reservado = jObject["reservado"]?.ToObject<decimal>() ?? 0,
+						Disponible = jObject["disponible"]?.ToObject<decimal>() ?? 0,
+						
+						// 🔷 NUEVOS CAMPOS
+						TipoStock = jObject["tipoStock"]?.ToString() ?? "Suelto",
+						PaletId = jObject["paletId"]?.ToObject<Guid?>(),
+						CodigoPalet = jObject["codigoPalet"]?.ToString(),
+						EstadoPalet = jObject["estadoPalet"]?.ToString()
+					};
+					resultado.Add(stock);
+				}
+				return resultado;
+			}
+			
+			return new List<StockDisponibleDto>();
 		}
 
 		/// <summary>

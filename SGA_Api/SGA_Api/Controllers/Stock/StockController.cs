@@ -371,7 +371,7 @@ namespace SGA_Api.Controllers.Stock
 						CodigoEmpresa = s.CodigoEmpresa.ToString(),
 						CodigoArticulo = s.CodigoArticulo,
 						CodigoCentro = alm?.CodigoCentro?.ToString(),
-						CodigoAlmacen = !string.IsNullOrEmpty(s.CodigoAlmacen) ? s.CodigoAlmacen : codigoAlmacen,
+						CodigoAlmacen = s.CodigoAlmacen.ToString(),
 						Almacen = alm?.Almacen,
 						Ubicacion = s.Ubicacion,
 						Partida = s.Partida,
@@ -530,48 +530,124 @@ namespace SGA_Api.Controllers.Stock
 		/// </summary>
 		[HttpGet("articulo/disponible")]
 		public async Task<IActionResult> PorArticuloDisponible(
-			[FromQuery] short codigoEmpresa,
-			[FromQuery] string? codigoArticulo = null,
-			[FromQuery] string? descripcion = null,
-			[FromQuery] string? partida = null,
-			[FromQuery] string? codigoAlmacen = null,
-			[FromQuery] string? codigoUbicacion = null)
-		{
-			if (string.IsNullOrWhiteSpace(codigoArticulo) && string.IsNullOrWhiteSpace(descripcion))
-				return BadRequest("Falta codigoArticulo o descripción");
+    [FromQuery] short codigoEmpresa,
+    [FromQuery] string? codigoArticulo = null,
+    [FromQuery] string? descripcion = null,
+    [FromQuery] string? partida = null,
+    [FromQuery] string? codigoAlmacen = null,
+    [FromQuery] string? codigoUbicacion = null)
+{
+    if (string.IsNullOrWhiteSpace(codigoArticulo) && string.IsNullOrWhiteSpace(descripcion))
+        return BadRequest("Falta codigoArticulo o descripción");
 
-			var q = _auroraSgaContext.StockDisponible
-				.Where(a => a.CodigoEmpresa == codigoEmpresa);
+    var q = _auroraSgaContext.StockDisponible
+        .Where(a => a.CodigoEmpresa == codigoEmpresa);
 
-			// Filtro por código o descripción
-			if (!string.IsNullOrWhiteSpace(codigoArticulo))
-			{
-				q = q.Where(a => a.CodigoArticulo == codigoArticulo);
-			}
-			else if (!string.IsNullOrWhiteSpace(descripcion))
-			{
-				var codigosArticulos = await ObtenerCodigosArticulosPorDescripcion(descripcion, codigoEmpresa);
-				if (!codigosArticulos.Any())
-					return Ok(new List<StockDisponible>());
-				q = q.Where(a => codigosArticulos.Contains(a.CodigoArticulo));
-			}
+    // Filtro por código o descripción
+    if (!string.IsNullOrWhiteSpace(codigoArticulo))
+    {
+        q = q.Where(a => a.CodigoArticulo == codigoArticulo);
+    }
+    else if (!string.IsNullOrWhiteSpace(descripcion))
+    {
+        var codigosArticulos = await ObtenerCodigosArticulosPorDescripcion(descripcion, codigoEmpresa);
+        if (!codigosArticulos.Any())
+            return Ok(new List<object>());
+        q = q.Where(a => codigosArticulos.Contains(a.CodigoArticulo));
+    }
 
-			// Filtros adicionales opcionales
-			if (!string.IsNullOrWhiteSpace(partida))
-				q = q.Where(a => a.Partida == partida);
+    // Filtros adicionales opcionales
+    if (!string.IsNullOrWhiteSpace(partida))
+        q = q.Where(a => a.Partida == partida);
 
-			if (!string.IsNullOrWhiteSpace(codigoAlmacen))
-				q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
+    if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+        q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
 
-			if (!string.IsNullOrWhiteSpace(codigoUbicacion))
-				q = q.Where(a => a.Ubicacion == codigoUbicacion);
+    // 🔷 CAMBIO: Solo filtrar por ubicación si se especifica explícitamente
+    if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+        q = q.Where(a => a.Ubicacion == codigoUbicacion);
 
-			// 🔷 aquí filtramos solo los registros con disponible > 0
-			q = q.Where(a => a.Disponible > 0);
+    // 🔷 aquí filtramos solo los registros con disponible > 0
+    q = q.Where(a => a.Disponible > 0);
 
-			var datos = await q.ToListAsync();
-			return Ok(datos);
-		}
+    var datos = await q.ToListAsync();
+    
+    // 🔷 NUEVA LÓGICA: Crear opciones separadas para stock suelto y paletizado
+    var resultado = new List<object>();
+    
+    foreach (var item in datos)
+    {
+        // Buscar stock paletizado para este artículo/ubicación
+        var stockPaletizado = await _auroraSgaContext.PaletLineas
+            .Where(pl => pl.CodigoEmpresa == item.CodigoEmpresa &&
+                        pl.CodigoArticulo == item.CodigoArticulo &&
+                        pl.CodigoAlmacen == item.CodigoAlmacen &&
+                        pl.Ubicacion == item.Ubicacion &&
+                        pl.Lote == item.Partida)
+            .Include(pl => pl.Palet)
+            .Where(pl => pl.Palet.Estado == "Abierto" || pl.Palet.Estado == "Cerrado")
+            .Select(pl => new
+            {
+                PaletId = pl.PaletId,
+                CodigoPalet = pl.Palet.Codigo,
+                EstadoPalet = pl.Palet.Estado,
+                CantidadEnPalet = pl.Cantidad
+            })
+            .ToListAsync();
+
+        var stockSuelto = item.Disponible - stockPaletizado.Sum(p => p.CantidadEnPalet);
+
+        // 🔷 Opción 1: Stock suelto (si hay)
+        if (stockSuelto > 0)
+        {
+            resultado.Add(new
+            {
+                // Campos originales
+                item.DescripcionArticulo,
+                item.CodigoArticulo,
+                item.CodigoAlmacen,
+                item.Ubicacion,
+                item.Partida,
+                item.FechaCaducidad,
+                item.UnidadSaldo,
+                item.Reservado,
+                Disponible = stockSuelto,
+                
+                // 🔷 NUEVOS CAMPOS
+                TipoStock = "Suelto",
+                PaletId = (Guid?)null,
+                CodigoPalet = (string?)null,
+                EstadoPalet = (string?)null
+            });
+        }
+
+        // 🔷 Opción 2: Stock paletizado (por cada palet)
+        foreach (var palet in stockPaletizado)
+        {
+            resultado.Add(new
+            {
+                // Campos originales
+                item.DescripcionArticulo,
+                item.CodigoArticulo,
+                item.CodigoAlmacen,
+                item.Ubicacion,
+                item.Partida,
+                item.FechaCaducidad,
+                item.UnidadSaldo,
+                item.Reservado,
+                Disponible = palet.CantidadEnPalet,
+                
+                // 🔷 NUEVOS CAMPOS
+                TipoStock = "Paletizado",
+                PaletId = palet.PaletId,
+                CodigoPalet = palet.CodigoPalet,
+                EstadoPalet = palet.EstadoPalet
+            });
+        }
+    }
+
+    return Ok(resultado);
+}
 
 		/// <summary>
 		/// GET api/Stock/precio-medio
@@ -633,7 +709,7 @@ namespace SGA_Api.Controllers.Stock
 		}
 
 		// helper para proyectar
-		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos, string codigoAlmacenFallback = "")
+		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos)
 		{
 			if (datos.Count == 0)
 				return new List<StockUbicacionDto>();
@@ -728,7 +804,7 @@ namespace SGA_Api.Controllers.Stock
 					CodigoArticulo = s.CodigoArticulo,
 					DescripcionArticulo = art?.DescripcionArticulo,
 					CodigoAlternativo = art?.CodigoAlternativo ?? "",
-					CodigoAlmacen = !string.IsNullOrEmpty(s.CodigoAlmacen) ? s.CodigoAlmacen : codigoAlmacenFallback,
+					CodigoAlmacen = s.CodigoAlmacen,
 					Almacen = alm?.Almacen ?? "",
 					Ubicacion = s.Ubicacion,
 					Partida = s.Partida,

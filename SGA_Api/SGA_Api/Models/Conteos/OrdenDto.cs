@@ -2,7 +2,7 @@ namespace SGA_Api.Models.Conteos
 {
     public class OrdenDto
     {
-        public long Id { get; set; }
+        public Guid GuidID { get; set; }
         public int CodigoEmpresa { get; set; }
         public string Titulo { get; set; } = string.Empty;
         public string Visibilidad { get; set; } = string.Empty;

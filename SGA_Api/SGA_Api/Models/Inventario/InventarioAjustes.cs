@@ -10,8 +10,7 @@ namespace SGA_Api.Models.Inventario
         [Key]
         public Guid IdAjuste { get; set; }
 
-        [Required]
-        public Guid IdInventario { get; set; }
+        public Guid? IdInventario { get; set; }
 
         [Required]
         [StringLength(30)]

@@ -18,6 +18,7 @@
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <Helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -54,6 +55,16 @@
 
                 <TextBlock Text="Ubicación Origen:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBlock Text="{Binding UbicacionOrigen}" Margin="0,0,0,12"/>
+
+                <!--  NUEVO: Información del palet -->
+                <TextBlock Text="Tipo de Stock:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="{Binding TipoStock}" FontWeight="Bold" Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding InformacionPalet}" 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontWeight="Bold"
+                               Visibility="{Binding EsStockPaletizado, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </StackPanel>
 
                 <TextBlock Text="Cantidad disponible:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBlock Text="{Binding CantidadDisponible}" Margin="0,0,0,12"/>

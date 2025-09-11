@@ -13,6 +13,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.Generic;
 using System.Linq;
 using SGA_Desktop.Dialog;
+using System.Windows;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -30,6 +31,38 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private string comentariosTexto = "";
+
+        //  NUEVAS PROPIEDADES para mostrar información del palet
+        [ObservableProperty]
+        private string codigoPalet;
+
+        [ObservableProperty]
+        private string estadoPalet;
+
+        [ObservableProperty]
+        private string tipoStock;
+
+        public bool EsStockPaletizado => TipoStock == "Paletizado";
+        public bool EsStockSuelto => TipoStock == "Suelto";
+        public string InformacionPalet => EsStockPaletizado ? $"{CodigoPalet} ({EstadoPalet})" : "";
+
+        // Métodos para notificar cambios en las propiedades computadas
+        partial void OnTipoStockChanged(string value)
+        {
+            OnPropertyChanged(nameof(EsStockPaletizado));
+            OnPropertyChanged(nameof(EsStockSuelto));
+            OnPropertyChanged(nameof(InformacionPalet));
+        }
+
+        partial void OnCodigoPaletChanged(string value)
+        {
+            OnPropertyChanged(nameof(InformacionPalet));
+        }
+
+        partial void OnEstadoPaletChanged(string value)
+        {
+            OnPropertyChanged(nameof(InformacionPalet));
+        }
 
         partial void OnCantidadATraspasarTextoChanged(string value)
         {
@@ -90,6 +123,12 @@ namespace SGA_Desktop.ViewModels
             AlmacenesDestino = new ObservableCollection<AlmacenDto>();
             _traspasoService = traspasoService;
             _fechaBusqueda = fechaBusqueda;
+            
+            // 🔷 NUEVO: Cargar información del palet
+            TipoStock = stockSeleccionado.TipoStock;
+            CodigoPalet = stockSeleccionado.CodigoPalet ?? "";
+            EstadoPalet = stockSeleccionado.EstadoPalet ?? "";
+            
             _ = InitializeAsync();
         }
 
@@ -150,30 +189,33 @@ namespace SGA_Desktop.ViewModels
 			// --- ORIGEN ---
 			bool reabrirOrigen = false; // ← se enviará al DTO si el usuario acepta
 			var ubicacionOrigen = _stockSeleccionado.Ubicacion ?? "";
-			if (!string.IsNullOrWhiteSpace(ubicacionOrigen))
+			var estadoOrigen = await _traspasoService.ConsultarEstadoPaletOrigenAsync(
+				empresa,
+				_stockSeleccionado.CodigoAlmacen,
+				ubicacionOrigen
+			);
+
+			if (string.Equals(estadoOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase))
 			{
-				var estadoOrigen = await _traspasoService.ConsultarEstadoPaletOrigenAsync(
-					empresa,
-					_stockSeleccionado.CodigoAlmacen,
-					ubicacionOrigen
+				var confirmOrigen = new ConfirmationDialog(
+					"Palet de origen cerrado",
+					"El palet de ORIGEN está CERRADO. ¿Deseas reabrirlo para poder extraer stock?"
 				);
 
-				if (string.Equals(estadoOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase))
-				{
-					var confirmOrigen = new ConfirmationDialog(
-						"Palet de origen cerrado",
-						"El palet de ORIGEN está CERRADO. ¿Deseas reabrirlo para poder extraer stock?"
-					);
+				// 🔷 MEJORADO: Centrar el diálogo
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						 ?? Application.Current.MainWindow;
+				if (owner != null && owner != confirmOrigen)
+					confirmOrigen.Owner = owner;
 
-					if (confirmOrigen.ShowDialog() == true)
-					{
-						reabrirOrigen = true; // ← que lo reabra el backend
-					}
-					else
-					{
-						Feedback = "Operación cancelada: palet de origen cerrado.";
-						return;
-					}
+				if (confirmOrigen.ShowDialog() == true)
+				{
+					reabrirOrigen = true; // ← que lo reabra el backend
+				}
+				else
+				{
+					Feedback = "Operación cancelada: palet de origen cerrado.";
+					return;
 				}
 			}
 
@@ -248,7 +290,9 @@ namespace SGA_Desktop.ViewModels
 			}
 			else
 			{
-				new WarningDialog("Error al traspasar", resultado.ErrorMessage ?? "Error al realizar el traspaso.").ShowDialog();
+				// 🔷 CORREGIDO: Usar ShowCenteredDialog en lugar de ShowDialog directo
+				var errorDialog = new WarningDialog("Error al traspasar", resultado.ErrorMessage ?? "Error al realizar el traspaso.");
+				ShowCenteredDialog(errorDialog);
 				Feedback = resultado.ErrorMessage ?? "Error al realizar el traspaso.";
 			}
 		}
@@ -272,6 +316,27 @@ namespace SGA_Desktop.ViewModels
         private void Cancelar()
         {
             RequestClose?.Invoke(false);
+        }
+
+        // NUEVO: Método para centrar diálogos (como en ControlesRotativosViewModel)
+        private void ShowCenteredDialog(WarningDialog dialog)
+        {
+            // Configurar el owner para centrar el diálogo
+            var mainWindow = Application.Current.Windows.OfType<Window>()
+                .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+            
+            if (mainWindow != null && mainWindow != dialog)
+            {
+                dialog.Owner = mainWindow;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+            else
+            {
+                // Si no hay ventana principal, centrar en pantalla
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+                
+            dialog.ShowDialog();
         }
 
         // No es necesario implementar PropertyChanged, lo gestiona ObservableObject

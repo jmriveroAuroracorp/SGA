@@ -163,6 +163,11 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
                     <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}" -->
+                    <Button Content="Órdenes de Trabajo"
+                    Command="{Binding IrAOrdenTrabajoCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=OrdenTrabajo}" -->
                     <Button Content="Controles Rotativos"
                     Command="{Binding IrAControlesRotativosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

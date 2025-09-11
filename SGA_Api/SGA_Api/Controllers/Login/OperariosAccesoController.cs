@@ -36,6 +36,24 @@ namespace SGA_Api.Controllers.Login
             return Ok(resultado);
         }
 
+        [HttpGet("conteos")]
+        public async Task<IActionResult> GetOperariosConAccesoConteos()
+        {
+            var resultado = await (from o in _context.Operarios
+                                   join a in _context.AccesosOperarios
+                                       on o.Id equals a.Operario
+                                   where o.FechaBaja == null && a.MRH_CodigoAplicacion == 13
+                                   select new OperariosAccesoDto
+                                   {
+                                       Operario = o.Id,
+                                       NombreOperario = o.Nombre!,
+                                       Contraseña = o.Contraseña,
+                                       MRH_CodigoAplicacion = a.MRH_CodigoAplicacion
+                                   }).ToListAsync();
+
+            return Ok(resultado);
+        }
+
         /// <summary>
         /// GET api/OperariosAcceso/limite-inventario/{operario}
         /// Obtiene el límite de inventario en euros para un operario específico
@@ -123,45 +141,47 @@ namespace SGA_Api.Controllers.Login
                 decimal totalUnidades = 0;
                 decimal totalValorEuros = 0;
 
-                // Precio medio a nivel de artículo (si no existe o es 0, el valor € será 0)
-                var precioMedio = await _context.AcumuladoStock
-                    .Where(a => a.CodigoArticulo == codigoArticulo)
-                    .OrderByDescending(a => a.Ejercicio)
-                    .Select(a => a.PrecioMedio)
-                    .FirstOrDefaultAsync();
-                precioMedio ??= 0m;
+                // DEBUG: Log información inicial
+                Console.WriteLine($"=== INICIO DEBUG - Operario: {operario}, Artículo: {codigoArticulo} ===");
+                Console.WriteLine($"Líneas temporales encontradas: {lineasTemp.Count}");
 
                 foreach (var linea in lineasTemp)
                 {
-                    if (!linea.CantidadContada.HasValue) continue; // sin conteo no hay diferencia real
-
-                    var diferencia = Math.Abs(linea.CantidadContada.Value - linea.StockActual);
-                    Console.WriteLine($"TEMP: Inv={linea.IdInventario}, Contado={linea.CantidadContada}, Stock={linea.StockActual}, Diff={diferencia}, Fecha={linea.FechaConteo:yyyy-MM-dd HH:mm}");
-                    if (diferencia > 0.01m)
+                    // SOLO procesar líneas que tienen un conteo real (CantidadContada no null)
+                    // Si no se ha contado, no hay diferencia que considerar
+                    if (!linea.CantidadContada.HasValue)
                     {
-                        totalUnidades += diferencia;
-                        totalValorEuros += diferencia * precioMedio.Value;
+                        Console.WriteLine($"Línea {linea.IdTemp}: Sin contar - OMITIDA");
+                        continue;
                     }
-                }
-
-                // === NUEVO: Incluir también líneas consolidadas del día para el mismo operario y artículo ===
-                var lineasConsolidadas = await _sgaContext.InventarioLineas
-                    .Where(l => l.UsuarioValidacionId == operario &&
-                                l.CodigoArticulo == codigoArticulo &&
-                                l.IdInventario != idInventarioActual &&
-                                l.FechaValidacion >= fechaHoy &&
-                                l.FechaValidacion < fechaManana)
-                    .Select(l => new { l.StockContado, l.StockActual })
-                    .ToListAsync();
-
-                foreach (var l in lineasConsolidadas)
-                {
-                    var diferencia = Math.Abs((l.StockContado ?? 0m) - l.StockActual);
-                    Console.WriteLine($"CONSOLIDADA: Contado={l.StockContado}, Stock={l.StockActual}, Diff={diferencia}");
+                    
+                    var cantidadContada = linea.CantidadContada.Value;
+                    var diferencia = Math.Abs(cantidadContada - linea.StockActual);
+                    
+                    Console.WriteLine($"Línea {linea.IdTemp}: Ubicación={linea.CodigoUbicacion}, Stock={linea.StockActual}, Contada={cantidadContada}, Diferencia={diferencia}");
+                    
                     if (diferencia > 0.01m)
                     {
+                        Console.WriteLine($"  -> ANTES de sumar: diferencia={diferencia}, totalUnidades={totalUnidades}");
+                        
                         totalUnidades += diferencia;
-                        totalValorEuros += diferencia * precioMedio.Value;
+                        
+                        Console.WriteLine($"  -> DESPUÉS de sumar: totalUnidades={totalUnidades}");
+                        
+                        // Para el valor en euros, necesitamos el precio medio
+                        var precioMedio = await _context.AcumuladoStock
+                            .Where(a => a.CodigoArticulo == codigoArticulo)
+                            .OrderByDescending(a => a.Ejercicio)
+                            .Select(a => a.PrecioMedio)
+                            .FirstOrDefaultAsync();
+
+                        totalValorEuros += diferencia * (precioMedio ?? 0);
+                        
+                        Console.WriteLine($"  -> FINAL: Diferencia aplicada: {diferencia}, Total acumulado: {totalUnidades}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"  -> Diferencia despreciada (< 0.01): {diferencia}");
                     }
                 }
 
@@ -174,14 +194,7 @@ namespace SGA_Api.Controllers.Login
                     fecha = fechaHoy,
                     totalUnidades,
                     totalValorEuros,
-                    lineasTemporales = lineasTemp.Count,
-                    lineasConsolidadas = lineasConsolidadas.Count,
-                    lineasEncontradas = lineasTemp.Count + lineasConsolidadas.Count,
-                    debug = new {
-                        fechaDesde = fechaHoy,
-                        fechaHasta = fechaManana,
-                        inventarioExcluido = idInventarioActual
-                    }
+                    lineasEncontradas = lineasTemp.Count
                 });
             }
             catch (Exception ex)

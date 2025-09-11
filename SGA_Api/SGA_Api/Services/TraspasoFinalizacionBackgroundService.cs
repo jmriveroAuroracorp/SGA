@@ -73,7 +73,7 @@ namespace SGA_Api.Services
 									if (!temp.EsHeredada)
 										existente.Cantidad += temp.Cantidad;  // ← DELTA (+/-)
 
-									if (existente.Cantidad == 0m)
+									if (existente.Cantidad <= 0m)  // CAMBIO: <= en lugar de ==
 									{
 										dbContext.PaletLineas.Remove(existente);
 									}

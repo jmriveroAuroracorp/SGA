@@ -33,7 +33,7 @@ namespace SGA_Api.Controllers
             try
             {
                 var orden = await _conteosService.CrearOrdenAsync(dto);
-                return CreatedAtAction(nameof(ObtenerOrden), new { id = orden.Id }, orden);
+                return CreatedAtAction(nameof(ObtenerOrden), new { guid = orden.GuidID }, orden);
             }
             catch (Exception ex)
             {
@@ -48,24 +48,24 @@ namespace SGA_Api.Controllers
         }
 
         /// <summary>
-        /// Obtener una orden de conteo por ID
+        /// Obtener una orden de conteo por Guid
         /// </summary>
-        /// <param name="id">ID de la orden</param>
+        /// <param name="guid">Guid de la orden</param>
         /// <returns>Orden con sus detalles</returns>
-        [HttpGet("ordenes/{id:long}")]
+        [HttpGet("ordenes/{guid:guid}")]
         [ProducesResponseType(typeof(OrdenDto), 200)]
         [ProducesResponseType(typeof(ProblemDetails), 404)]
-        public async Task<IActionResult> ObtenerOrden(long id)
+        public async Task<IActionResult> ObtenerOrden(Guid guid)
         {
             try
             {
-                var orden = await _conteosService.ObtenerOrdenAsync(id);
+                var orden = await _conteosService.ObtenerOrdenAsync(guid);
                 if (orden == null)
                 {
                     return NotFound(new ProblemDetails
                     {
                         Title = "Orden no encontrada",
-                        Detail = $"No se encontró la orden de conteo con ID {id}",
+                        Detail = $"No se encontró la orden de conteo con Guid {guid}",
                         Status = 404
                     });
                 }
@@ -74,7 +74,7 @@ namespace SGA_Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener orden de conteo {Id}", id);
+                _logger.LogError(ex, "Error al obtener orden de conteo {Guid}", guid);
                 return StatusCode(500, new ProblemDetails
                 {
                     Title = "Error interno del servidor",
@@ -116,14 +116,14 @@ namespace SGA_Api.Controllers
         /// <summary>
         /// Iniciar una orden de conteo
         /// </summary>
-        /// <param name="id">ID de la orden</param>
+        /// <param name="guid">Guid de la orden</param>
         /// <param name="codigoOperario">Código del operario que inicia la orden</param>
         /// <returns>Orden actualizada</returns>
-        [HttpPost("ordenes/{id:long}/start")]
+        [HttpPost("ordenes/{guid:guid}/start")]
         [ProducesResponseType(typeof(OrdenDto), 200)]
         [ProducesResponseType(typeof(ProblemDetails), 400)]
         [ProducesResponseType(typeof(ProblemDetails), 404)]
-        public async Task<IActionResult> IniciarOrden(long id, [FromQuery] string codigoOperario)
+        public async Task<IActionResult> IniciarOrden(Guid guid, [FromQuery] string codigoOperario)
         {
             try
             {
@@ -137,12 +137,12 @@ namespace SGA_Api.Controllers
                     });
                 }
 
-                var orden = await _conteosService.IniciarOrdenAsync(id, codigoOperario);
+                var orden = await _conteosService.IniciarOrdenAsync(guid, codigoOperario);
                 return Ok(orden);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning(ex, "Error de validación al iniciar orden {Id}", id);
+                _logger.LogWarning(ex, "Error de validación al iniciar orden {Guid}", guid);
                 return BadRequest(new ProblemDetails
                 {
                     Title = "Error de validación",
@@ -152,7 +152,7 @@ namespace SGA_Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al iniciar orden de conteo {Id}", id);
+                _logger.LogError(ex, "Error al iniciar orden de conteo {Guid}", guid);
                 return StatusCode(500, new ProblemDetails
                 {
                     Title = "Error interno del servidor",
@@ -165,23 +165,23 @@ namespace SGA_Api.Controllers
         /// <summary>
         /// Asignar un operario a una orden de conteo
         /// </summary>
-        /// <param name="id">ID de la orden</param>
+        /// <param name="guid">Guid de la orden</param>
         /// <param name="dto">Datos de la asignación</param>
         /// <returns>Orden actualizada</returns>
-        [HttpPost("ordenes/{id:long}/asignar")]
+        [HttpPost("ordenes/{guid:guid}/asignar")]
         [ProducesResponseType(typeof(OrdenDto), 200)]
         [ProducesResponseType(typeof(ProblemDetails), 400)]
         [ProducesResponseType(typeof(ProblemDetails), 404)]
-        public async Task<IActionResult> AsignarOperario(long id, [FromBody] AsignarOperarioDto dto)
+        public async Task<IActionResult> AsignarOperario(Guid guid, [FromBody] AsignarOperarioDto dto)
         {
             try
             {
-                var orden = await _conteosService.AsignarOperarioAsync(id, dto);
+                var orden = await _conteosService.AsignarOperarioAsync(guid, dto);
                 return Ok(orden);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning(ex, "Error de validación al asignar operario a orden {Id}", id);
+                _logger.LogWarning(ex, "Error de validación al asignar operario a orden {Guid}", guid);
                 return BadRequest(new ProblemDetails
                 {
                     Title = "Error de validación",
@@ -191,7 +191,7 @@ namespace SGA_Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al asignar operario a orden de conteo {Id}", id);
+                _logger.LogError(ex, "Error al asignar operario a orden de conteo {Guid}", guid);
                 return StatusCode(500, new ProblemDetails
                 {
                     Title = "Error interno del servidor",
@@ -204,23 +204,23 @@ namespace SGA_Api.Controllers
         /// <summary>
         /// Crear una nueva lectura de conteo
         /// </summary>
-        /// <param name="id">ID de la orden</param>
+        /// <param name="guid">Guid de la orden</param>
         /// <param name="dto">Datos de la lectura</param>
         /// <returns>Lectura creada</returns>
-        [HttpPost("ordenes/{id:long}/lecturas")]
+        [HttpPost("ordenes/{guid:guid}/lecturas")]
         [ProducesResponseType(typeof(LecturaResponseDto), 201)]
         [ProducesResponseType(typeof(ProblemDetails), 400)]
         [ProducesResponseType(typeof(ProblemDetails), 404)]
-        public async Task<IActionResult> CrearLectura(long id, [FromBody] LecturaDto dto)
+        public async Task<IActionResult> CrearLectura(Guid guid, [FromBody] LecturaDto dto)
         {
             try
             {
-                var lectura = await _conteosService.CrearLecturaAsync(id, dto);
-                return CreatedAtAction(nameof(ObtenerOrden), new { id = id }, lectura);
+                var lectura = await _conteosService.CrearLecturaAsync(guid, dto);
+                return CreatedAtAction(nameof(ObtenerOrden), new { guid = guid }, lectura);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning(ex, "Error de validación al crear lectura para orden {Id}", id);
+                _logger.LogWarning(ex, "Error de validación al crear lectura para orden {Guid}", guid);
                 return BadRequest(new ProblemDetails
                 {
                     Title = "Error de validación",
@@ -230,7 +230,7 @@ namespace SGA_Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al crear lectura para orden {Id}", id);
+                _logger.LogError(ex, "Error al crear lectura para orden {Guid}", guid);
                 return StatusCode(500, new ProblemDetails
                 {
                     Title = "Error interno del servidor",
@@ -243,22 +243,22 @@ namespace SGA_Api.Controllers
         /// <summary>
         /// Cerrar una orden de conteo
         /// </summary>
-        /// <param name="id">ID de la orden</param>
+        /// <param name="guid">Guid de la orden</param>
         /// <returns>Resultado del cierre de la orden</returns>
-        [HttpPost("ordenes/{id:long}/cerrar")]
+        [HttpPost("ordenes/{guid:guid}/cerrar")]
         [ProducesResponseType(typeof(CerrarOrdenResponseDto), 200)]
         [ProducesResponseType(typeof(ProblemDetails), 400)]
         [ProducesResponseType(typeof(ProblemDetails), 404)]
-        public async Task<IActionResult> CerrarOrden(long id)
+        public async Task<IActionResult> CerrarOrden(Guid guid)
         {
             try
             {
-                var resultado = await _conteosService.CerrarOrdenAsync(id);
+                var resultado = await _conteosService.CerrarOrdenAsync(guid);
                 return Ok(resultado);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogWarning(ex, "Error de validación al cerrar orden {Id}", id);
+                _logger.LogWarning(ex, "Error de validación al cerrar orden {Guid}", guid);
                 return BadRequest(new ProblemDetails
                 {
                     Title = "Error de validación",
@@ -268,7 +268,7 @@ namespace SGA_Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al cerrar orden de conteo {Id}", id);
+                _logger.LogError(ex, "Error al cerrar orden de conteo {Guid}", guid);
                 return StatusCode(500, new ProblemDetails
                 {
                     Title = "Error interno del servidor",
@@ -281,26 +281,130 @@ namespace SGA_Api.Controllers
         /// <summary>
         /// Obtener las lecturas pendientes de una orden
         /// </summary>
-        /// <param name="id">ID de la orden</param>
+        /// <param name="guid">Guid de la orden</param>
         /// <param name="codigoOperario">Código del operario (opcional)</param>
         /// <returns>Lista de lecturas pendientes</returns>
-        [HttpGet("ordenes/{id:long}/lecturas-pendientes")]
+        [HttpGet("ordenes/{guid:guid}/lecturas-pendientes")]
         [ProducesResponseType(typeof(IEnumerable<LecturaResponseDto>), 200)]
         [ProducesResponseType(typeof(ProblemDetails), 404)]
-        public async Task<IActionResult> ObtenerLecturasPendientes(long id, [FromQuery] string? codigoOperario = null)
+        public async Task<IActionResult> ObtenerLecturasPendientes(Guid guid, [FromQuery] string? codigoOperario = null)
         {
             try
             {
-                var lecturas = await _conteosService.ObtenerLecturasPendientesAsync(id, codigoOperario);
+                var lecturas = await _conteosService.ObtenerLecturasPendientesAsync(guid, codigoOperario);
                 return Ok(lecturas);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener lecturas pendientes para orden {Id}: {Message}", id, ex.Message);
+                _logger.LogError(ex, "Error al obtener lecturas pendientes para orden {Guid}: {Message}", guid, ex.Message);
                 return StatusCode(500, new ProblemDetails
                 {
                     Title = "Error interno del servidor",
                     Detail = $"Ocurrió un error al obtener las lecturas pendientes: {ex.Message}",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Obtener resultados de conteo con filtro opcional por acción
+        /// </summary>
+        /// <param name="accion">Filtro por acción (SUPERVISION, AJUSTE) - opcional</param>
+        /// <returns>Lista de resultados de conteo ordenados por fecha más reciente</returns>
+        [HttpGet("resultados")]
+        [ProducesResponseType(typeof(IEnumerable<ResultadoConteoDetalladoDto>), 200)]
+        public async Task<IActionResult> ObtenerResultadosConteo([FromQuery] string? accion = null)
+        {
+            try
+            {
+                var resultados = await _conteosService.ObtenerResultadosConteoAsync(accion);
+                return Ok(resultados);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener resultados de conteo con filtro {Accion}: {Message}", accion, ex.Message);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al obtener los resultados de conteo",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Actualizar el aprobador de un resultado de conteo (solo para SUPERVISION)
+        /// </summary>
+        /// <param name="resultadoGuid">GuidID del ResultadoConteo</param>
+        /// <param name="dto">Datos del aprobador</param>
+        /// <returns>Resultado de conteo actualizado</returns>
+        [HttpPost("resultados/{resultadoGuid:guid}/aprobador")]
+        [ProducesResponseType(typeof(ResultadoConteoDetalladoDto), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> ActualizarAprobador(Guid resultadoGuid, [FromBody] ActualizarAprobadorDto dto)
+        {
+            try
+            {
+                var resultado = await _conteosService.ActualizarAprobadorAsync(resultadoGuid, dto);
+                return Ok(resultado);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Error de validación al actualizar aprobador para resultado {ResultadoGuid}", resultadoGuid);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Error de validación",
+                    Detail = ex.Message,
+                    Status = 400
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al actualizar aprobador para resultado {ResultadoGuid}: {Message}", resultadoGuid, ex.Message);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al actualizar el aprobador del resultado de conteo",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Reasignar una línea de conteo creando una nueva orden automáticamente
+        /// </summary>
+        /// <param name="resultadoGuid">GuidID del ResultadoConteo</param>
+        /// <param name="dto">Datos de la reasignación</param>
+        /// <returns>Nueva orden creada para la reasignación</returns>
+        [HttpPost("resultados/{resultadoGuid:guid}/reasignar")]
+        [ProducesResponseType(typeof(OrdenDto), 201)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> ReasignarLinea(Guid resultadoGuid, [FromBody] ReasignarLineaDto dto)
+        {
+            try
+            {
+                var nuevaOrden = await _conteosService.ReasignarLineaAsync(resultadoGuid, dto);
+                return CreatedAtAction(nameof(ObtenerOrden), new { guid = nuevaOrden.GuidID }, nuevaOrden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Error de validación al reasignar línea para resultado {ResultadoGuid}", resultadoGuid);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Error de validación",
+                    Detail = ex.Message,
+                    Status = 400
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al reasignar línea para resultado {ResultadoGuid}: {Message}", resultadoGuid, ex.Message);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al reasignar la línea de conteo",
                     Status = 500
                 });
             }

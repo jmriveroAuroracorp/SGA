@@ -86,6 +86,7 @@
                                                                                 <Grid.RowDefinitions>
                                                                                     <RowDefinition Height="Auto"/>
                                                                                     <RowDefinition Height="Auto"/>
+                                                                                    <RowDefinition Height="Auto"/>
                                                                                 </Grid.RowDefinitions>
                                                                                 <Grid.ColumnDefinitions>
                                                                                     <ColumnDefinition Width="*"/>
@@ -104,16 +105,46 @@
                                                                                     <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}" Margin="2,0,0,0"/>
                                                                                 </StackPanel>
 
-                                                                                <!-- Fila 2: Total, Reservado -->
-                                                                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
-                                                                                    <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}" Margin="2,0,12,0"/>
-                                                                                    <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
-                                                                                    <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="2,0,0,0" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+                                                                                <!-- NUEVA FILA: Información del palet (solo si es paletizado) -->
+                                                                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0"
+                                                                                            Visibility="{Binding EsStockPaletizado, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                                    <TextBlock Text="Palet:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="{Binding CodigoPalet}" 
+                                                                                               FontWeight="Bold" 
+                                                                                               Margin="2,0,6,0"/>
+                                                                                    <Ellipse Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                                                        <Ellipse.Style>
+                                                                                            <Style TargetType="Ellipse">
+                                                                                                <Setter Property="Fill" Value="Gray"/>
+                                                                                                <Style.Triggers>
+                                                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Cerrado">
+                                                                                                        <Setter Property="Fill" Value="Red"/>
+                                                                                                    </DataTrigger>
+                                                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Abierto">
+                                                                                                        <Setter Property="Fill" Value="Green"/>
+                                                                                                    </DataTrigger>
+                                                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Vaciado">
+                                                                                                        <Setter Property="Fill" Value="Orange"/>
+                                                                                                    </DataTrigger>
+                                                                                                </Style.Triggers>
+                                                                                            </Style>
+                                                                                        </Ellipse.Style>
+                                                                                    </Ellipse>
+                                                                                    <TextBlock Text="{Binding EstadoPalet}" 
+                                                                                               FontWeight="Bold" 
+                                                                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                </StackPanel>
+
+                                                                                <!-- Fila 2: Solo Reservado (si hay) -->
+                                                                                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
+                                                                                    <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
+                                                                                               Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+                                                                                    <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="2,0,0,0" 
+                                                                                               Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
                                                                                 </StackPanel>
 
                                                                                 <!-- Disponible destacado a la derecha -->
-                                                                                <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Background="#F0F6FF" CornerRadius="6" Padding="12,4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                                                <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Background="#F0F6FF" CornerRadius="6" Padding="12,4" HorizontalAlignment="Right" VerticalAlignment="Center">
                                                                                     <StackPanel Orientation="Horizontal">
                                                                                         <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="15" Margin="0,0,4,0"/>
                                                                                         <TextBlock Text="{Binding Disponible, StringFormat=F4}"  FontWeight="Bold" FontSize="22"/>

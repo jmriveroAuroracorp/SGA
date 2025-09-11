@@ -41,6 +41,7 @@ builder.Services.AddScoped<IConteosService>(provider =>
         provider.GetRequiredService<StorageControlDbContext>(),
         provider.GetRequiredService<ILogger<ConteosService>>()
     ));
+builder.Services.AddScoped<IOrdenTraspasoService, OrdenTraspasoService>();
 builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
 
 // CORS aqu

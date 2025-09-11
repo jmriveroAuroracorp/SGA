@@ -101,9 +101,9 @@ namespace SGA_Desktop.Services
 			if (!string.IsNullOrWhiteSpace(almacenDestino))
 				query.Add($"almacenDestino={almacenDestino}");
 			if (fechaInicioDesde.HasValue)
-				query.Add($"fechaInicioDesde={fechaInicioDesde:yyyy-MM-dd}");
+				query.Add($"fechaDesde={fechaInicioDesde:yyyy-MM-dd}");
 			if (fechaInicioHasta.HasValue)
-				query.Add($"fechaInicioHasta={fechaInicioHasta:yyyy-MM-dd}");
+				query.Add($"fechaHasta={fechaInicioHasta:yyyy-MM-dd}"); // API ahora maneja el fin de día automáticamente
 
 			var url = "traspasos";
 			if (query.Count > 0)
@@ -171,8 +171,6 @@ namespace SGA_Desktop.Services
 
 		private async Task<string> ConsultarEstadoPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
 		{
-			if (string.IsNullOrWhiteSpace(ubicacion)) return "NINGUNO";
-
 			var url = $"palet/estado-en-ubicacion?codigoEmpresa={codigoEmpresa}&codigoAlmacen={codigoAlmacen}&ubicacion={ubicacion}";
 			var resp = await _httpClient.GetAsync(url);
 			var text = await resp.Content.ReadAsStringAsync();

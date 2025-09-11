@@ -4,7 +4,7 @@ namespace SGA_Desktop.Models
 {
     public class ResultadoConteoDto
     {
-        public long OrdenId { get; set; }
+        public Guid OrdenGuid { get; set; }
         public decimal Diferencia { get; set; }
         public string AccionFinal { get; set; } = string.Empty;
         public string? AprobadoPorCodigo { get; set; }

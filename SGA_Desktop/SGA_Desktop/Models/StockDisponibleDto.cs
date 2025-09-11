@@ -86,4 +86,18 @@ public class StockDisponibleDto : INotifyPropertyChanged
     public ObservableCollection<UbicacionDto> UbicacionesDestino { get; set; } = new();
 	public string? EstadoPaletDestino { get; set; }
 	public string? EstadoPaletOrigen { get; set; }
+
+    //  NUEVAS PROPIEDADES para información de palets
+    public string TipoStock { get; set; } = "Suelto";
+    public Guid? PaletId { get; set; }
+    public string? CodigoPalet { get; set; }
+    public string? EstadoPalet { get; set; }
+    
+    //  PROPIEDADES COMPUTADAS
+    public bool EsStockPaletizado => TipoStock == "Paletizado";
+    public bool EsStockSuelto => TipoStock == "Suelto";
+    public string InformacionPalet => EsStockPaletizado ? $"{CodigoPalet} ({EstadoPalet})" : "";
+    
+    //  NUEVA: Para compatibilidad con el patrón de ConsultaStockView
+    public bool EstaPaletizado => EsStockPaletizado;
 }

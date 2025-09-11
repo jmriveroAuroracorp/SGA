@@ -5,7 +5,7 @@ namespace SGA_Desktop.Models
 {
     public class OrdenConteoDto
     {
-        public long Id { get; set; }
+        public Guid GuidID { get; set; }
         public int CodigoEmpresa { get; set; }
         public string Titulo { get; set; } = string.Empty;
         public string Visibilidad { get; set; } = string.Empty;
@@ -80,6 +80,13 @@ namespace SGA_Desktop.Models
                 };
             }
         }
+
+        // Propiedad para el nombre del operario (se asigna desde el ViewModel)
+        public string? NombreOperario { get; set; }
+        
+        public string OperarioDisplay => string.IsNullOrEmpty(NombreOperario) 
+            ? (string.IsNullOrEmpty(CodigoOperario) ? "Sin asignar" : CodigoOperario)
+            : NombreOperario;
 
         // Propiedades para mostrar información resumida
         public bool PuedeAsignar => Estado == "PLANIFICADO";

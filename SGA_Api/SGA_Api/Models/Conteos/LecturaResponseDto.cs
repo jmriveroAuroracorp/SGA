@@ -2,8 +2,8 @@ namespace SGA_Api.Models.Conteos
 {
     public class LecturaResponseDto
     {
-        public long Id { get; set; }
-        public long OrdenId { get; set; }
+        public Guid GuidID { get; set; }
+        public Guid OrdenGuid { get; set; }
         public string CodigoAlmacen { get; set; } = string.Empty;
         public string? CodigoUbicacion { get; set; }
         public string? CodigoArticulo { get; set; }

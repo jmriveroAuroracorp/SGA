@@ -78,6 +78,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -129,17 +130,40 @@
 
                             <!-- Operario -->
                             <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,10">
-                                <TextBlock Text="Operario Asignado" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <TextBox Text="{Binding CodigoOperario, UpdateSourceTrigger=PropertyChanged}"
-                                         Height="35"
-                                         FontSize="14"
-                                         Padding="8"
-                                         BorderThickness="1"
-                                         BorderBrush="{StaticResource BrushInputBorde}"/>
+                                <TextBlock Text="Operario Asignado *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding OperariosDisponibles}"
+                                          DisplayMemberPath="NombreCompleto"
+                                          SelectedItem="{Binding OperarioSeleccionado}"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8"/>
+                            </StackPanel>
+
+                            <!-- Tipo de Conteo -->
+                            <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,10,10">
+                                <TextBlock Text="Tipo de Conteo *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding VisibilidadesDisponibles}"
+                                          SelectedItem="{Binding VisibilidadSeleccionada}"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Texto}" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding Descripcion}" 
+                                                           FontSize="11" 
+                                                           Foreground="Gray" 
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
                             <!-- Fecha -->
-                            <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,0,0,0">
+                            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,0">
                                 <TextBlock Text="Fecha Planificada" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <DatePicker SelectedDate="{Binding FechaPlan}"
                                            Height="35"

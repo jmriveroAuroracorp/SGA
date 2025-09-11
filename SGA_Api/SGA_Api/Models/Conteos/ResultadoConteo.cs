@@ -2,7 +2,7 @@ namespace SGA_Api.Models.Conteos
 {
     public class ResultadoConteo
     {
-        public long OrdenId { get; set; }
+        public Guid OrdenGuid { get; set; }
         public string CodigoAlmacen { get; set; } = string.Empty;
         public string? CodigoUbicacion { get; set; }
         public string? CodigoArticulo { get; set; }
@@ -16,8 +16,10 @@ namespace SGA_Api.Models.Conteos
         public string? AprobadoPorCodigo { get; set; }
         public DateTime FechaEvaluacion { get; set; }
         public bool AjusteAplicado { get; set; } = false;
+        public Guid GuidID { get; set; } = Guid.NewGuid();
 
         // Navigation property
         public OrdenConteo Orden { get; set; } = null!;
+
     }
 } 

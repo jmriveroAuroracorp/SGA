@@ -5,12 +5,15 @@ namespace SGA_Api.Services
     public interface IConteosService
     {
         Task<OrdenDto> CrearOrdenAsync(CrearOrdenDto dto);
-        Task<OrdenDto?> ObtenerOrdenAsync(long id);
+        Task<OrdenDto?> ObtenerOrdenAsync(Guid guid);
         Task<IEnumerable<OrdenDto>> ListarOrdenesAsync(string? codigoOperario = null, string? estado = null);
-        Task<OrdenDto> IniciarOrdenAsync(long id, string codigoOperario);
-        Task<OrdenDto> AsignarOperarioAsync(long id, AsignarOperarioDto dto);
-        Task<LecturaResponseDto> CrearLecturaAsync(long ordenId, LecturaDto dto);
-        Task<CerrarOrdenResponseDto> CerrarOrdenAsync(long id);
-        Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasPendientesAsync(long ordenId, string? codigoOperario = null);
+        Task<OrdenDto> IniciarOrdenAsync(Guid guid, string codigoOperario);
+        Task<OrdenDto> AsignarOperarioAsync(Guid guid, AsignarOperarioDto dto);
+        Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto);
+        Task<CerrarOrdenResponseDto> CerrarOrdenAsync(Guid guid);
+        Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasPendientesAsync(Guid ordenGuid, string? codigoOperario = null);
+        Task<IEnumerable<ResultadoConteoDetalladoDto>> ObtenerResultadosConteoAsync(string? accion = null);
+        Task<ResultadoConteoDetalladoDto> ActualizarAprobadorAsync(Guid resultadoGuid, ActualizarAprobadorDto dto);
+        Task<OrdenDto> ReasignarLineaAsync(Guid resultadoGuid, ReasignarLineaDto dto);
     }
 } 

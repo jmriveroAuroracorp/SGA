@@ -2,8 +2,7 @@ namespace SGA_Api.Models.Conteos
 {
     public class LecturaConteo
     {
-        public long Id { get; set; }
-        public long OrdenId { get; set; }
+        public Guid OrdenGuid { get; set; }
         public string CodigoAlmacen { get; set; } = string.Empty;
         public string? CodigoUbicacion { get; set; }
         public string? CodigoArticulo { get; set; }
@@ -14,6 +13,7 @@ namespace SGA_Api.Models.Conteos
         public string UsuarioCodigo { get; set; } = string.Empty;
         public DateTime Fecha { get; set; }
         public string? Comentario { get; set; }
+        public Guid GuidID { get; set; } = Guid.NewGuid();
 
         // Navigation property
         public OrdenConteo Orden { get; set; } = null!;

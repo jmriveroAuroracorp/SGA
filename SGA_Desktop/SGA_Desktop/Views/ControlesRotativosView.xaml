@@ -15,379 +15,872 @@
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <helpers:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility"/>
+        <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
     </Page.Resources>
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
-            <!-- 0: Título y botón crear -->
+            <!-- 0: Botones de pestañas -->
             <RowDefinition Height="Auto" />
-            <!-- 1: Filtros -->
-            <RowDefinition Height="Auto" />
-            <!-- 2: Lista de controles rotativos -->
+            <!-- 1: Contenido -->
             <RowDefinition Height="*" />
-            <!-- 3: Botones de acción -->
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- TÍTULO Y BOTÓN CREAR -->
-        <Grid Grid.Row="0" Margin="0,0,0,20">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="🔄 CONTROLES ROTATIVOS"
-                           FontFamily="{StaticResource FuentePrincipal}"
-                           FontSize="24"
-                           FontWeight="Bold"
-                           Foreground="{StaticResource BrushPrincipal}"/>
-            </StackPanel>
-
-            <Button Grid.Column="1"
-                    Content="➕ Crear Orden de Conteo"
-                    Command="{Binding CrearControlRotativoCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
+        <!-- BOTONES DE PESTAÑAS -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <Button Content="📋 Órdenes de Conteo"
+                    Command="{Binding CambiarAOrdenesCommand}"
+                    Width="180"
+                    Height="35"
+                    Margin="0,0,5,0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoOrdenes}" Value="True">
+                                <Setter Property="Background" Value="#3498DB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            
+            <Button Content="🔍 Supervisión de Conteos"
+                    Command="{Binding CambiarASupervisionCommand}"
                     Width="200"
-                    Height="40"
-                    FontSize="14"
-                    FontWeight="Bold"
-                    IsEnabled="{Binding CanEnableInputs}"/>
-        </Grid>
+                    Height="35">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoSupervision}" Value="True">
+                                <Setter Property="Background" Value="#3498DB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
 
-        <!-- FILTROS -->
-        <GroupBox Grid.Row="1" Header="🔍 Filtros de Búsqueda" Margin="0,0,0,20">
-            <Grid Margin="15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <!-- CONTENIDO DE ÓRDENES DE CONTEO -->
+        <Border Grid.Row="1" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                                 Visibility="{Binding MostrandoOrdenes, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <!-- 0: Botón crear -->
+                        <RowDefinition Height="Auto" />
+                        <!-- 1: Filtros -->
+                        <RowDefinition Height="Auto" />
+                        <!-- 2: Lista de órdenes -->
+                        <RowDefinition Height="*" />
+                        <!-- 3: Botones de acción -->
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <!-- Almacén -->
-                <StackPanel Grid.Column="0" Margin="0,0,15,0">
-                    <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <ComboBox 
-                              ItemsSource="{Binding AlmacenesCombo}"
-                              DisplayMemberPath="DescripcionCombo"
-                              SelectedItem="{Binding AlmacenSeleccionadoCombo}"
-                              Style="{StaticResource EstiloComboBox}"
-                              Height="30"/>
-                </StackPanel>
+                    <!-- BOTÓN CREAR -->
+                    <Button Grid.Row="0"
+                            Content="➕ Crear Orden de Conteo"
+                            Command="{Binding CrearControlRotativoCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="200"
+                            Height="40"
+                            FontSize="14"
+                            FontWeight="Bold"
+                            IsEnabled="{Binding CanEnableInputs}"
+                            HorizontalAlignment="Right"
+                            Margin="0,0,0,20"/>
 
-                <!-- Fecha desde -->
-                <StackPanel Grid.Column="1" Margin="0,0,15,0">
-                    <TextBlock Text="Desde" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <DatePicker 
-                            SelectedDate="{Binding FechaDesde}" 
-                            Style="{StaticResource EstiloDatePicker}"
-                            Height="30"/>
-                </StackPanel>
+                    <!-- FILTROS -->
+                    <GroupBox Grid.Row="1" Header="🔍 Filtros de Búsqueda" Margin="0,0,0,20">
+                        <Grid Margin="15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                <!-- Fecha hasta -->
-                <StackPanel Grid.Column="2" Margin="0,0,15,0">
-                    <TextBlock Text="Hasta" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <DatePicker 
-                            SelectedDate="{Binding FechaHasta}" 
-                            Style="{StaticResource EstiloDatePicker}"
-                            Height="30"/>
-                </StackPanel>
+                            <!-- Almacén -->
+                            <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                                <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                                <ComboBox ItemsSource="{Binding AlmacenesCombo}"
+                                          DisplayMemberPath="DescripcionCombo"
+                                          SelectedItem="{Binding AlmacenSeleccionadoCombo}"
+                                          Style="{StaticResource EstiloComboBox}"
+                                          Height="30"/>
+                            </StackPanel>
 
-                <!-- Estado -->
-                <StackPanel Grid.Column="3" Margin="0,0,15,0">
-                    <TextBlock Text="Estado" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <ComboBox 
-                          ItemsSource="{Binding EstadosCombo}"
-                          SelectedItem="{Binding EstadoFiltro}"
-                          Style="{StaticResource EstiloComboBox}"
-                          Height="30"/>
-                </StackPanel>
+                            <!-- Fecha desde -->
+                            <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                                <TextBlock Text="Desde" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                                <DatePicker SelectedDate="{Binding FechaDesde}" 
+                                            Style="{StaticResource EstiloDatePicker}"
+                                            Height="30"/>
+                            </StackPanel>
 
-                <!-- Botón cargar -->
-                <StackPanel Grid.Column="4" VerticalAlignment="Center">
-                    <Button 
-                            Content="🔄 Cargar"
-                        Command="{Binding CargarControlesCommand}"
-                        Style="{StaticResource EstiloBoton}"
-                            Width="100"
-                        Height="30"
-                            IsEnabled="{Binding CanCargarControles}"/>
-                </StackPanel>
-            </Grid>
-        </GroupBox>
+                            <!-- Fecha hasta -->
+                            <StackPanel Grid.Column="2" Margin="0,0,15,0">
+                                <TextBlock Text="Hasta" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                                <DatePicker SelectedDate="{Binding FechaHasta}" 
+                                            Style="{StaticResource EstiloDatePicker}"
+                                            Height="30"/>
+                            </StackPanel>
 
-        <!-- LISTA DE ÓRDENES DE CONTEO -->
-        <GroupBox Grid.Row="2" Header="📋 Órdenes de Conteo Registradas">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+                            <!-- Estado -->
+                            <StackPanel Grid.Column="3" Margin="0,0,15,0">
+                                <TextBlock Text="Estado" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                                <ComboBox ItemsSource="{Binding EstadosCombo}"
+                                          SelectedItem="{Binding EstadoFiltro}"
+                                          Style="{StaticResource EstiloComboBox}"
+                                          Height="30"/>
+                            </StackPanel>
 
-                <!-- Estado de carga -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" 
-                            Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}">
-                    <ProgressBar Width="20" Height="20" 
-                                 IsIndeterminate="True" 
-                                 Margin="0,0,10,0"/>
-                    <TextBlock Text="{Binding MensajeEstado}" 
-                               VerticalAlignment="Center"
-                               Foreground="{StaticResource BrushSecundario}"
-                               FontStyle="Italic"/>
-                </StackPanel>
+                            <!-- Botón cargar -->
+                            <Button Grid.Column="4"
+                                    Content="🔄 Cargar"
+                                    Command="{Binding CargarControlesCommand}"
+                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                    Width="100"
+                                    Height="30"
+                                    IsEnabled="{Binding CanCargarControles}"/>
+                        </Grid>
+                    </GroupBox>
 
-                <!-- Lista de cards de órdenes de conteo -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding OrdenesConteoView}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Style="{StaticResource EstiloTarjeta}" 
-                                        Width="350" 
-                                        Height="200" 
-                                        Margin="6"
-                                        Cursor="Hand">
-                                    <Grid>
+                    <!-- LISTA DE ÓRDENES DE CONTEO -->
+                    <GroupBox Grid.Row="2" Header="📋 Órdenes de Conteo Registradas" Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Estado de carga -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" 
+                                        Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}">
+                                <ProgressBar Width="20" Height="20" 
+                                             IsIndeterminate="True" 
+                                             Margin="0,0,10,0"/>
+                                <TextBlock Text="{Binding MensajeEstado}" 
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource BrushSecundario}"
+                                           FontStyle="Italic"/>
+                            </StackPanel>
+
+                            <!-- Lista de cards de órdenes de conteo -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding OrdenesConteoView}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource EstiloTarjeta}" 
+                                                    Width="350" 
+                                                    Height="200" 
+                                                    Margin="6"
+                                                    Cursor="Hand">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <!-- Header con ID y Estado -->
+                                                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        
+                                                        <!-- ID -->
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="ID: " 
+                                                                           FontWeight="Bold" 
+                                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                                           FontSize="14" 
+                                                                           VerticalAlignment="Top"/>
+                                                                <TextBlock Text="{Binding Titulo}" 
+                                                                           FontWeight="Bold" 
+                                                                           Foreground="#2C3E50"
+                                                                           FontSize="14" 
+                                                                           TextWrapping="Wrap"
+                                                                           MaxWidth="250"
+                                                                           LineHeight="18"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+
+                                                        <!-- Estado Badge -->
+                                                        <Border Grid.Column="1" 
+                                                                Background="#F8F9FA" 
+                                                                BorderBrush="#DEE2E6" 
+                                                                BorderThickness="1" 
+                                                                CornerRadius="3" 
+                                                                Padding="6,3"
+                                                                VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding EstadoFormateado}" 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       HorizontalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Estado}" Value="PLANIFICADO">
+                                                                                <Setter Property="Foreground" Value="#0D6EFD"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Estado}" Value="ASIGNADO">
+                                                                                <Setter Property="Foreground" Value="#FD7E14"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
+                                                                                <Setter Property="Foreground" Value="#198754"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Estado}" Value="CERRADO">
+                                                                                <Setter Property="Foreground" Value="#6C757D"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Estado}" Value="CANCELADO">
+                                                                                <Setter Property="Foreground" Value="#DC3545"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Estado}" Value="PLANIFICADO">
+                                                                            <Setter Property="Background" Value="#CFE2FF"/>
+                                                                            <Setter Property="BorderBrush" Value="#0D6EFD"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Estado}" Value="ASIGNADO">
+                                                                            <Setter Property="Background" Value="#FFF3CD"/>
+                                                                            <Setter Property="BorderBrush" Value="#FD7E14"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
+                                                                            <Setter Property="Background" Value="#D1E7DD"/>
+                                                                            <Setter Property="BorderBrush" Value="#198754"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Estado}" Value="CERRADO">
+                                                                            <Setter Property="Background" Value="#F8F9FA"/>
+                                                                            <Setter Property="BorderBrush" Value="#6C757D"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Estado}" Value="CANCELADO">
+                                                                            <Setter Property="Background" Value="#F8D7DA"/>
+                                                                            <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                        </Border>
+                                                    </Grid>
+                                                    
+                                                    <!-- Contenido principal -->
+                                                    <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                                        <!-- Almacén y Alcance -->
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Grid.Column="0" Text="Almacén: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding CodigoAlmacen}" 
+                                                                       FontWeight="Bold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#34495E"/>
+                                                            <TextBlock Grid.Column="2" Text="Alcance: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"
+                                                                       Margin="10,0,0,0"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding AlcanceFormateado}" 
+                                                                       FontWeight="Bold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#34495E"/>
+                                                        </Grid>
+
+                                                        <!-- Prioridad y Operario -->
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Grid.Column="0" Text="Prioridad: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding PrioridadTexto}" 
+                                                                       FontSize="12"
+                                                                       Foreground="#34495E"/>
+                                                            <TextBlock Grid.Column="2" Text="Operario: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"
+                                                                       Margin="10,0,0,0"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding OperarioDisplay}" 
+                                                                       FontSize="12"
+                                                                       Foreground="#34495E"/>
+                                                        </Grid>
+
+                                                        <!-- Fechas -->
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Grid.Column="0" Text="Creación: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="11"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding FechaCreacion, StringFormat=dd/MM/yyyy HH:mm}" 
+                                                                       FontFamily="Consolas"
+                                                                       FontSize="11"
+                                                                       Foreground="#7F8C8D"/>
+                                                        </Grid>
+                                                    </StackPanel>
+
+                                                    <!-- Botones de acción -->
+                                                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                                        <!-- Botón Ver -->
+                                                        <Button Content="👁️ Ver"
+                                                                Command="{Binding DataContext.VerOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Style="{StaticResource EstiloBoton}"
+                                                                Width="60"
+                                                                Height="30"
+                                                                FontSize="11"
+                                                                FontWeight="Medium"
+                                                                Margin="0,0,4,0"
+                                                                Visibility="{Binding PuedeVer, Converter={StaticResource BoolToVis}}"/>
+                                                        
+                                                        <!-- Botón Editar -->
+                                                        <Button Content="✏️ Editar"
+                                                                Command="{Binding DataContext.EditarOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Style="{StaticResource EstiloBotonSecundario}"
+                                                                Width="70"
+                                                                Height="30"
+                                                                FontSize="11"
+                                                                FontWeight="Medium"
+                                                                Visibility="{Binding PuedeEditar, Converter={StaticResource BoolToVis}}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- BOTONES DE ACCIÓN ÓRDENES -->
+                    <StackPanel Grid.Row="3" 
+                                Orientation="Horizontal" 
+                                HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding TotalOrdenes}" 
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,20,0"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushSecundario}"/>
+
+                        <Button Content="👁️ Ver Orden"
+                                Command="{Binding VerOrdenCommand}"
+                                CommandParameter="{Binding OrdenSeleccionada}"
+                                Style="{StaticResource EstiloBoton}"
+                                Width="120"
+                                Height="35"
+                                IsEnabled="{Binding OrdenSeleccionada, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Margin="0,0,20,0"/>
+
+                        <Button Content="✏️ Editar Orden"
+                                Command="{Binding EditarOrdenCommand}"
+                                CommandParameter="{Binding OrdenSeleccionada}"
+                                Style="{StaticResource EstiloBoton}"
+                                Width="120"
+                                Height="35"
+                                IsEnabled="{Binding OrdenSeleccionada, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Margin="0,0,20,0"/>
+
+                        <Button Content="👁️ Exportar a Excel"
+                                Command="{Binding ExportarControlesCommand}"
+                                Style="{StaticResource EstiloBoton}"
+                                Width="150"
+                                Height="35"
+                                IsEnabled="{Binding CanEnableInputs}"/>
+                    </StackPanel>
+                </Grid>
+        </Border>
+
+        <!-- CONTENIDO DE SUPERVISIÓN DE CONTEOS -->
+        <Border Grid.Row="1" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Visibility="{Binding MostrandoSupervision, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <!-- 0: Header con estadísticas -->
+                        <RowDefinition Height="Auto" />
+                        <!-- 1: Filtros y controles -->
+                        <RowDefinition Height="Auto" />
+                        <!-- 2: Lista de resultados -->
+                        <RowDefinition Height="*" />
+                        <!-- 3: Panel de acciones - ELIMINAR ESTA FILA -->
+                    </Grid.RowDefinitions>
+
+                    <!-- HEADER CON ESTADÍSTICAS -->
+                    <Border Grid.Row="0" 
+                            Background="{StaticResource BrushPrincipal}" 
+                            Padding="20,15"
+                            Margin="0,0,0,20"
+                            CornerRadius="5">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="🔍 SUPERVISIÓN DE CONTEOS" 
+                                           FontSize="18" 
+                                           FontWeight="Bold" 
+                                           Foreground="White"/>
+                                <TextBlock Text="{Binding EmpresaActual}" 
+                                           FontSize="12" 
+                                           Foreground="White" 
+                                           Opacity="0.8"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Border Background="White" 
+                                        CornerRadius="15" 
+                                        Padding="15,8" 
+                                        Margin="0,0,10,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📊" FontSize="16" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding TotalResultados}" 
+                                                   FontWeight="Bold" 
+                                                   FontSize="14" 
+                                                   Foreground="{StaticResource BrushPrincipal}"/>
+                                        <TextBlock Text=" Total" 
+                                                   FontSize="12" 
+                                                   Foreground="{StaticResource BrushSecundario}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="Orange" 
+                                        CornerRadius="15" 
+                                        Padding="15,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⚠️" FontSize="16" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding ResultadosPendientes}" 
+                                                   FontWeight="Bold" 
+                                                   FontSize="14" 
+                                                   Foreground="White"/>
+                                        <TextBlock Text=" Pendientes" 
+                                                   FontSize="12" 
+                                                   Foreground="White"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- FILTROS Y CONTROLES SUPERVISIÓN -->
+                    <Border Grid.Row="1" 
+                            Background="White" 
+                            BorderBrush="{StaticResource BrushSecundario}" 
+                            BorderThickness="1" 
+                            CornerRadius="5" 
+                            Padding="15" 
+                            Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Filtro Artículo -->
+                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                <TextBlock Text="Filtrar por Artículo" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding FiltroArticuloSupervision, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"
+                                         IsEnabled="{Binding CanEnableInputs}"/>
+                            </StackPanel>
+
+                            <!-- Filtro Almacén -->
+                            <StackPanel Grid.Column="1" Margin="10,0,10,0">
+                                <TextBlock Text="Filtrar por Almacén" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding FiltroAlmacenSupervision, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"
+                                         IsEnabled="{Binding CanEnableInputs}"/>
+                            </StackPanel>
+
+                            <!-- Operario Aprobador -->
+                            <StackPanel Grid.Column="2" Margin="10,0,10,0">
+                                <TextBlock Text="Operario Aprobador" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding OperariosDisponibles}"
+                                          DisplayMemberPath="NombreCompleto"
+                                          SelectedItem="{Binding OperarioAprobadorSeleccionado}"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8"
+                                          IsEnabled="{Binding CanEnableInputs}"/>
+                            </StackPanel>
+
+                            <!-- Botones -->
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                <Button Content="🔄 Actualizar"
+                                        Command="{Binding CargarResultadosSupervisionCommand}"
+                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                        Width="120"
+                                        Height="35"
+                                        Margin="0,0,10,0"
+                                        IsEnabled="{Binding CanEnableInputs}"/>
+                                
+                                <Button Content="🧹 Limpiar"
+                                        Command="{Binding LimpiarFiltrosSupervisionCommand}"
+                                        Style="{StaticResource EstiloBotonSecundario}"
+                                        Width="100"
+                                        Height="35"
+                                        IsEnabled="{Binding CanEnableInputs}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- LISTA DE RESULTADOS SUPERVISIÓN -->
+                    <GroupBox Grid.Row="2" Header="🔍 Resultados de Supervisión" Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Estado de carga -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" 
+                                        Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}">
+                                <ProgressBar Width="20" Height="20" 
+                                             IsIndeterminate="True" 
+                                             Margin="0,0,10,0"/>
+                                <TextBlock Text="{Binding MensajeEstado}" 
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource BrushSecundario}"
+                                           FontStyle="Italic"/>
+                            </StackPanel>
+
+                            <!-- Lista de cards de resultados de supervisión -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding ResultadosView}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource EstiloTarjeta}" 
+                                Width="400" 
+                                Height="280" 
+                                Margin="6"
+                                Cursor="Hand">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Header con Orden y Estado -->
+                                <Grid Grid.Row="0" Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Orden -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                                        <TextBlock Text="{Binding Titulo}" 
+                                                   FontWeight="Bold" 
+                                                   Foreground="{StaticResource BrushPrincipal}"
+                                                   FontSize="14" 
+                                                   TextWrapping="Wrap"
+                                                   MaxWidth="280"
+                                                   LineHeight="18"/>
+                                    </StackPanel>
+
+                                    <!-- Estado Badge -->
+                                    <Border Grid.Column="1" 
+                                            Background="#F8F9FA" 
+                                            BorderBrush="#DEE2E6" 
+                                            BorderThickness="1" 
+                                            CornerRadius="3" 
+                                            Padding="6,3"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding AccionFormateada}" 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="12"
+                                                   HorizontalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding AccionFinal}" Value="SUPERVISION">
+                                                            <Setter Property="Foreground" Value="#FD7E14"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding AccionFinal}" Value="AJUSTE">
+                                                            <Setter Property="Foreground" Value="#198754"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding AccionFinal}" Value="APROBADO">
+                                                            <Setter Property="Foreground" Value="#0D6EFD"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding AccionFinal}" Value="SUPERVISION">
+                                                        <Setter Property="Background" Value="#FFF3CD"/>
+                                                        <Setter Property="BorderBrush" Value="#FD7E14"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding AccionFinal}" Value="AJUSTE">
+                                                        <Setter Property="Background" Value="#D1E7DD"/>
+                                                        <Setter Property="BorderBrush" Value="#198754"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding AccionFinal}" Value="APROBADO">
+                                                        <Setter Property="Background" Value="#CFE2FF"/>
+                                                        <Setter Property="BorderBrush" Value="#0D6EFD"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </Grid>
+                                
+                                <!-- Contenido principal -->
+                                <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                    <!-- Artículo y Descripción -->
+                                    <Grid Margin="0,0,0,8">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="*"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
-                                        <!-- Header con ID y Estado -->
-                                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                                        <Grid Grid.Row="0">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <!-- ID -->
-                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="ID: " 
-                                                           FontWeight="Bold" 
-                                                           Foreground="{StaticResource BrushPrincipal}"
-                                                           FontSize="14"
-                                                           VerticalAlignment="Center"/>
-                                                <TextBlock Text="{Binding Id}" 
-                                                           FontFamily="Consolas"
-                                                           FontWeight="Bold"
-                                                           Foreground="#2C3E50"
-                                                           FontSize="14"
-                                                           VerticalAlignment="Center"/>
-                                            </StackPanel>
+                                            <TextBlock Grid.Column="0" Text="Artículo: " 
+                                                       FontWeight="SemiBold" 
+                                                       FontSize="12"
+                                                       Foreground="#7F8C8D"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding CodigoArticulo}" 
+                                                       FontWeight="Bold" 
+                                                       FontSize="12"
+                                                       Foreground="#34495E"/>
+                                        </Grid>
 
-                                            <!-- Estado Badge -->
-                                            <Border Grid.Column="1" 
-                                                    Background="#F8F9FA" 
-                                                    BorderBrush="#DEE2E6" 
-                                                    BorderThickness="1" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding EstadoFormateado}" 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           HorizontalAlignment="Center">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="PLANIFICADO">
-                                                                    <Setter Property="Foreground" Value="#0D6EFD"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="ASIGNADO">
-                                                                    <Setter Property="Foreground" Value="#FD7E14"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
-                                                                    <Setter Property="Foreground" Value="#198754"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="CERRADO">
-                                                                    <Setter Property="Foreground" Value="#6C757D"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="CANCELADO">
-                                                                    <Setter Property="Foreground" Value="#DC3545"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
+                                        <TextBlock Grid.Row="1" Text="{Binding DescripcionArticulo}" 
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"
+                                                   TextWrapping="Wrap"
+                                                   MaxHeight="40"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="0,2,0,0"/>
+                                    </Grid>
+
+                                    <!-- Almacén y Ubicación -->
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="Almacén: " 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="12"
+                                                   Foreground="#7F8C8D"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding CodigoAlmacen}" 
+                                                   FontWeight="Bold" 
+                                                   FontSize="12"
+                                                   Foreground="#34495E"/>
+                                        <TextBlock Grid.Column="2" Text="Ubicación: " 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="12"
+                                                   Foreground="#7F8C8D"
+                                                   Margin="10,0,0,0"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding CodigoUbicacion}" 
+                                                   FontWeight="Bold" 
+                                                   FontSize="12"
+                                                   Foreground="#34495E"/>
+                                    </Grid>
+
+                                    <!-- Cantidades -->
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="Stock: " 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="12"
+                                                   Foreground="#7F8C8D"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding CantidadStock, StringFormat=N2}" 
+                                                   FontSize="12"
+                                                   Foreground="#34495E"/>
+                                        <TextBlock Grid.Column="2" Text="Contado: " 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="12"
+                                                   Foreground="#7F8C8D"
+                                                   Margin="10,0,0,0"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding CantidadContada, StringFormat=N2}" 
+                                                   FontSize="12"
+                                                   Foreground="#34495E"/>
+                                    </Grid>
+
+                                    <!-- Diferencia destacada -->
+                                    <Border Background="#F8F9FA" 
+                                            BorderBrush="#DEE2E6" 
+                                            BorderThickness="1" 
+                                            CornerRadius="3" 
+                                            Padding="8,4"
+                                            Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0" Text="Diferencia: " 
+                                                       FontWeight="Bold" 
+                                                       FontSize="12"
+                                                       Foreground="#7F8C8D"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding DiferenciaFormateada}" 
+                                                       FontWeight="Bold" 
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Right">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="PLANIFICADO">
-                                                                <Setter Property="Background" Value="#CFE2FF"/>
-                                                                <Setter Property="BorderBrush" Value="#0D6EFD"/>
+                                                            <DataTrigger Binding="{Binding Diferencia}" Value="0">
+                                                                <Setter Property="Foreground" Value="Gray"/>
                                                             </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="ASIGNADO">
-                                                                <Setter Property="Background" Value="#FFF3CD"/>
-                                                                <Setter Property="BorderBrush" Value="#FD7E14"/>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
-                                                                <Setter Property="Background" Value="#D1E7DD"/>
-                                                                <Setter Property="BorderBrush" Value="#198754"/>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="CERRADO">
-                                                                <Setter Property="Background" Value="#F8F9FA"/>
-                                                                <Setter Property="BorderBrush" Value="#6C757D"/>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="CANCELADO">
-                                                                <Setter Property="Background" Value="#F8D7DA"/>
-                                                                <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                            <DataTrigger Binding="{Binding Diferencia}" Value="">
+                                                                <Setter Property="Foreground" Value="Gray"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </Border.Style>
-                                            </Border>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                         </Grid>
+                                    </Border>
 
-                                        <!-- Contenido principal -->
-                                        <StackPanel Grid.Row="1" Margin="0,0,0,12">
-                                            <!-- Título -->
-                                            <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
+                                    <!-- Fechas y Operario -->
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                                <TextBlock Grid.Column="0" Text="Título: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding Titulo}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"
-                                                           TextWrapping="Wrap"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                            </Grid>
-
-                                            <!-- Almacén y Alcance -->
-                                            <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <TextBlock Grid.Column="0" Text="Almacén: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding CodigoAlmacen}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
-                                                <TextBlock Grid.Column="2" Text="Alcance: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"
-                                                           Margin="10,0,0,0"/>
-                                                <TextBlock Grid.Column="3" Text="{Binding AlcanceFormateado}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
-                                            </Grid>
-
-                                            <!-- Prioridad y Operario -->
-                                            <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <TextBlock Grid.Column="0" Text="Prioridad: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding PrioridadTexto}" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
-                                                <TextBlock Grid.Column="2" Text="Operario: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"
-                                                           Margin="10,0,0,0"/>
-                                                <TextBlock Grid.Column="3" Text="{Binding CodigoOperario}" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
-                                            </Grid>
-
-                                            <!-- Fechas -->
-                                            <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <TextBlock Grid.Column="0" Text="Creación: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="11"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding FechaCreacion, StringFormat=dd/MM/yyyy HH:mm}" 
-                                                           FontFamily="Consolas"
-                                                           FontSize="11"
-                                                           Foreground="#7F8C8D"/>
-                                            </Grid>
-                                        </StackPanel>
-
-                                        <!-- Botones de acción -->
-                                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                                            <!-- Botón Ver -->
-                                            <Button Content="👁️ Ver"
-                                                    Command="{Binding DataContext.VerOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding}"
-                                                    Style="{StaticResource EstiloBoton}"
-                                                    Width="60"
-                                                    Height="30"
-                                                    FontSize="11"
-                                                    FontWeight="Medium"
-                                                    Margin="0,0,4,0"
-                                                    Visibility="{Binding PuedeVer, Converter={StaticResource BoolToVis}}"/>
-                                            
-                                            
-                                            
-                                            <!-- Botón Editar -->
-                                            <Button Content="✏️ Editar"
-                                                    Command="{Binding DataContext.EditarOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding}"
-                                                    Style="{StaticResource EstiloBotonSecundario}"
-                                                    Width="70"
-                                                    Height="30"
-                                                    FontSize="11"
-                                                    FontWeight="Medium"
-                                                    Visibility="{Binding PuedeEditar, Converter={StaticResource BoolToVis}}"/>
-                                        </StackPanel>
+                                        <TextBlock Grid.Column="0" Text="Fecha: " 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding FechaEvaluacion, StringFormat=dd/MM/yyyy HH:mm}" 
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"/>
                                     </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </GroupBox>
 
-        <!-- BOTONES DE ACCIÓN -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-            <TextBlock Text="{Binding TotalOrdenes}" 
-                       FontWeight="Bold" 
-                       VerticalAlignment="Center"
-                       Margin="0,0,20,0"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-            <Button Content="📊 Exportar a Excel"
-                    Command="{Binding ExportarControlesCommand}"
-                    Style="{StaticResource EstiloBoton}"
-                    Width="150"
-                    Height="35"
-                    IsEnabled="{Binding CanEnableInputs}"/>
-        </StackPanel>
+                                        <TextBlock Grid.Column="0" Text="Operario: " 
+                                                   FontWeight="SemiBold" 
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding UsuarioCodigo}" 
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- Botones de acción -->
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <!-- Botón Ver Detalles -->
+                                    <Button Content="👁️ Ver"
+                                            Command="{Binding DataContext.VerDetallesResultadoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Style="{StaticResource EstiloBoton}"
+                                            Width="60"
+                                            Height="30"
+                                            FontSize="11"
+                                            FontWeight="Medium"
+                                            Margin="0,0,4,0"/>
+                                    
+                                    <!-- Botón Reasignar -->
+                                    <Button Content="🔄 Reasignar"
+                                            Command="{Binding DataContext.ReasignarLineaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Style="{StaticResource EstiloBotonSecundario}"
+                                            Width="80"
+                                            Height="30"
+                                            FontSize="11"
+                                            FontWeight="Medium"
+                                            Visibility="{Binding RequiereAprobacion, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</GroupBox>
+
+                </Grid>
+        </Border>
     </Grid>
 </Page> 

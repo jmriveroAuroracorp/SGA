@@ -21,6 +21,7 @@ namespace SGA_Api.Models.Traspasos
 		public string? DescripcionArticulo { get; set; }
 		public string? UnidadMedida { get; set; }
 		public string? Observaciones { get; set; }
+		public string? Comentario { get; set; }
 
 		public bool? ReabrirSiCerradoOrigen { get; set; }  // default null/false
 	}

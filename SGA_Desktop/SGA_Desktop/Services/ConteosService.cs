@@ -9,22 +9,10 @@ using System.Threading.Tasks;
 
 namespace SGA_Desktop.Services
 {
-    public class ConteosService
+    public class ConteosService : ApiService
     {
-        private readonly HttpClient _httpClient;
-        private readonly string _baseUrl;
-
-        public ConteosService()
+        public ConteosService() : base()
         {
-            _httpClient = new HttpClient();
-            _baseUrl = "http://10.0.0.175:5234/api/conteos";
-            
-            // Configurar headers comunes
-            if (!string.IsNullOrEmpty(SessionManager.Token))
-            {
-                _httpClient.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SessionManager.Token);
-            }
         }
 
         /// <summary>
@@ -37,7 +25,7 @@ namespace SGA_Desktop.Services
                 var json = JsonConvert.SerializeObject(dto);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync($"{_baseUrl}/ordenes", content);
+                var response = await _httpClient.PostAsync("conteos/ordenes", content);
                 response.EnsureSuccessStatusCode();
 
                 var responseContent = await response.Content.ReadAsStringAsync();
@@ -56,13 +44,13 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
-        /// Obtener una orden de conteo por ID
+        /// Obtener una orden de conteo por GUID
         /// </summary>
-        public async Task<OrdenConteoDto?> ObtenerOrdenAsync(long id)
+        public async Task<OrdenConteoDto?> ObtenerOrdenAsync(Guid guid)
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{_baseUrl}/ordenes/{id}");
+                var response = await _httpClient.GetAsync($"conteos/ordenes/{guid}");
                 
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
@@ -91,7 +79,7 @@ namespace SGA_Desktop.Services
         {
             try
             {
-                var url = $"{_baseUrl}/ordenes";
+                var url = "conteos/ordenes";
                 var queryParams = new List<string>();
 
                 if (!string.IsNullOrEmpty(codigoOperario))
@@ -121,18 +109,16 @@ namespace SGA_Desktop.Services
             }
         }
 
-
-
         /// <summary>
         /// Cerrar una orden de conteo
         /// </summary>
-        public async Task<bool> CerrarOrdenAsync(long id)
+        public async Task<bool> CerrarOrdenAsync(Guid guid)
         {
             try
             {
                 var content = new StringContent("", Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.PostAsync($"{_baseUrl}/ordenes/{id}/cerrar", content);
+                var response = await _httpClient.PostAsync($"conteos/ordenes/{guid}/cerrar", content);
                 response.EnsureSuccessStatusCode();
 
                 return true;
@@ -148,11 +134,127 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
-        /// Liberar recursos
+        /// Obtener resultados de conteo que requieren supervisión
         /// </summary>
-        public void Dispose()
+        public async Task<List<ResultadoConteoDetalladoDto>> ObtenerResultadosSupervisionAsync()
         {
-            _httpClient?.Dispose();
+            try
+            {
+                var response = await _httpClient.GetAsync("conteos/resultados?accion=SUPERVISION");
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var resultados = JsonConvert.DeserializeObject<List<ResultadoConteoDetalladoDto>>(responseContent);
+                
+                return resultados ?? new List<ResultadoConteoDetalladoDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener resultados de supervisión: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtener todos los resultados de conteo con filtro opcional
+        /// </summary>
+        public async Task<List<ResultadoConteoDetalladoDto>> ObtenerResultadosConteoAsync(string? accion = null)
+        {
+            try
+            {
+                var url = "conteos/resultados";
+                if (!string.IsNullOrEmpty(accion))
+                {
+                    url += $"?accion={Uri.EscapeDataString(accion)}";
+                }
+
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var resultados = JsonConvert.DeserializeObject<List<ResultadoConteoDetalladoDto>>(responseContent);
+                
+                return resultados ?? new List<ResultadoConteoDetalladoDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener resultados de conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Aprobar un resultado de conteo que requiere supervisión
+        /// </summary>
+        public async Task<ResultadoConteoDetalladoDto> AprobarResultadoAsync(Guid resultadoGuid, string aprobadoPorCodigo)
+        {
+            try
+            {
+                var dto = new ActualizarAprobadorDto
+                {
+                    AprobadoPorCodigo = aprobadoPorCodigo
+                };
+
+                var json = JsonConvert.SerializeObject(dto);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync($"conteos/resultados/{resultadoGuid}/aprobador", content);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var resultado = JsonConvert.DeserializeObject<ResultadoConteoDetalladoDto>(responseContent);
+                
+                return resultado ?? throw new Exception("Error al deserializar la respuesta");
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al aprobar resultado de conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Reasignar una línea de conteo creando una nueva orden automáticamente
+        /// </summary>
+        public async Task<OrdenConteoDto> ReasignarLineaAsync(Guid resultadoGuid, string codigoOperario, string? comentario = null, string? supervisorCodigo = null)
+        {
+            try
+            {
+                var dto = new ReasignarLineaDto
+                {
+                    CodigoOperario = codigoOperario,
+                    Comentario = comentario,
+                    SupervisorCodigo = supervisorCodigo
+                };
+
+                var json = JsonConvert.SerializeObject(dto);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync($"conteos/resultados/{resultadoGuid}/reasignar", content);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var nuevaOrden = JsonConvert.DeserializeObject<OrdenConteoDto>(responseContent);
+                
+                return nuevaOrden ?? throw new Exception("Error al deserializar la respuesta");
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al reasignar línea de conteo: {ex.Message}", ex);
+            }
         }
     }
 } 

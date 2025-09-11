@@ -1306,60 +1306,81 @@ public class PaletController : ControllerBase
 	}
 	[HttpGet("estado-en-ubicacion")]
 	public async Task<IActionResult> GetEstadoPaletEnUbicacion(
-	[FromQuery] int codigoEmpresa,
-	[FromQuery] string codigoAlmacen,
-	[FromQuery] string ubicacion)
-	{
-		var codigoAlmacenNorm = codigoAlmacen.Trim().ToUpper();
-		var ubicacionNorm = ubicacion.Trim().ToUpper();
+[FromQuery] int codigoEmpresa,
+[FromQuery] string codigoAlmacen,
+[FromQuery] string? ubicacion = null)
+{
+    var codigoAlmacenNorm = codigoAlmacen.Trim().ToUpper();
+    
+    // Buscar palet Abierto en la ubicación destino
+    var paletAbierto = string.IsNullOrWhiteSpace(ubicacion) 
+        ? await (
+            from p in _auroraSgaContext.Palets
+            join l in _auroraSgaContext.PaletLineas on p.Id equals l.PaletId
+            where p.CodigoEmpresa == codigoEmpresa
+                && l.CodigoAlmacen.Trim().ToUpper() == codigoAlmacenNorm
+                && (l.Ubicacion == null || l.Ubicacion == "" || l.Ubicacion.Trim() == "")
+                && p.Estado == "Abierto"
+            orderby p.FechaApertura descending
+            select new { p.Id, p.Codigo, p.Estado }
+        ).FirstOrDefaultAsync()
+        : await (
+            from p in _auroraSgaContext.Palets
+            join l in _auroraSgaContext.PaletLineas on p.Id equals l.PaletId
+            where p.CodigoEmpresa == codigoEmpresa
+                && l.CodigoAlmacen.Trim().ToUpper() == codigoAlmacenNorm
+                && l.Ubicacion.Trim().ToUpper() == ubicacion.Trim().ToUpper()
+                && p.Estado == "Abierto"
+            orderby p.FechaApertura descending
+            select new { p.Id, p.Codigo, p.Estado }
+        ).FirstOrDefaultAsync();
 
-		// Buscar palet Abierto en la ubicación destino
-		var paletAbierto = await (
-			from p in _auroraSgaContext.Palets
-			join l in _auroraSgaContext.PaletLineas on p.Id equals l.PaletId
-			where p.CodigoEmpresa == codigoEmpresa
-				&& l.CodigoAlmacen.Trim().ToUpper() == codigoAlmacenNorm
-				&& l.Ubicacion.Trim().ToUpper() == ubicacionNorm
-				&& p.Estado == "Abierto"
-			orderby p.FechaApertura descending
-			select new { p.Id, p.Codigo, p.Estado }
-		).FirstOrDefaultAsync();
+    if (paletAbierto != null)
+    {
+        return Ok(new
+        {
+            estado = "Abierto",
+            paletId = paletAbierto.Id,
+            codigo = paletAbierto.Codigo
+        });
+    }
 
-		if (paletAbierto != null)
-		{
-			return Ok(new
-			{
-				estado = "Abierto",
-				paletId = paletAbierto.Id,
-				codigo = paletAbierto.Codigo
-			});
-		}
+    // Buscar palet Cerrado en la ubicación destino
+    var paletCerrado = string.IsNullOrWhiteSpace(ubicacion) 
+        ? await (
+            from p in _auroraSgaContext.Palets
+            join l in _auroraSgaContext.PaletLineas on p.Id equals l.PaletId
+            where p.CodigoEmpresa == codigoEmpresa
+                && l.CodigoAlmacen.Trim().ToUpper() == codigoAlmacenNorm
+                && (l.Ubicacion == null || l.Ubicacion == "" || l.Ubicacion.Trim() == "")
+                && p.Estado == "Cerrado"
+            orderby p.FechaCierre descending
+            select new { p.Id, p.Codigo, p.Estado }
+        ).FirstOrDefaultAsync()
+        : await (
+            from p in _auroraSgaContext.Palets
+            join l in _auroraSgaContext.PaletLineas on p.Id equals l.PaletId
+            where p.CodigoEmpresa == codigoEmpresa
+                && l.CodigoAlmacen.Trim().ToUpper() == codigoAlmacenNorm
+                && l.Ubicacion.Trim().ToUpper() == ubicacion.Trim().ToUpper()
+                && p.Estado == "Cerrado"
+            orderby p.FechaCierre descending
+            select new { p.Id, p.Codigo, p.Estado }
+        ).FirstOrDefaultAsync();
 
-		// Buscar palet Cerrado en la ubicación destino
-		var paletCerrado = await (
-			from p in _auroraSgaContext.Palets
-			join l in _auroraSgaContext.PaletLineas on p.Id equals l.PaletId
-			where p.CodigoEmpresa == codigoEmpresa
-				&& l.CodigoAlmacen.Trim().ToUpper() == codigoAlmacenNorm
-				&& l.Ubicacion.Trim().ToUpper() == ubicacionNorm
-				&& p.Estado == "Cerrado"
-			orderby p.FechaCierre descending
-			select new { p.Id, p.Codigo, p.Estado }
-		).FirstOrDefaultAsync();
+    if (paletCerrado != null)
+    {
+        return Ok(new
+        {
+            estado = "Cerrado",
+            paletId = paletCerrado.Id,
+            codigo = paletCerrado.Codigo
+        });
+    }
 
-		if (paletCerrado != null)
-		{
-			return Ok(new
-			{
-				estado = "Cerrado",
-				paletId = paletCerrado.Id,
-				codigo = paletCerrado.Codigo
-			});
-		}
-
-		// No hay palet
-		return Ok(new { estado = "NINGUNO" });
-	}
+    // No hay palet
+    return Ok(new { estado = "NINGUNO" });
+}
 	[HttpPost("{id}/marcar-vaciado")]
 	public async Task<IActionResult> MarcarVaciado(Guid id, [FromQuery] int usuarioId, [FromQuery] bool forzar = false)
 	{
