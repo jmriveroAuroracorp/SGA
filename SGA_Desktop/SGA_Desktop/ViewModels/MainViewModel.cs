@@ -88,8 +88,8 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		public void IrAOrdenTrabajo()
 		{
-			NavigationStore.Navigate("OrdenTrabajo");
-			CurrentHeader = "ÓRDENES DE TRABAJO";
+			NavigationStore.Navigate("OrdenTraspaso");
+			CurrentHeader = "ÓRDENES DE TRASPASO";
 		}
 
 		[RelayCommand]

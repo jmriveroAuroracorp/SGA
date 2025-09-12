@@ -61,6 +61,9 @@ namespace SGA_Api.Data
 		{
 			base.OnModelCreating(modelBuilder);
 
+			// Configurar convenciones por defecto para evitar conflictos
+			modelBuilder.HasDefaultSchema("dbo");
+
 			// --- Dispositivo ---
 			modelBuilder.Entity<Dispositivo>()
 				.ToTable("dispositivos")
@@ -380,6 +383,9 @@ namespace SGA_Api.Data
                 ent.Property(i => i.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
                 //ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20).HasDefaultValue("PENDIENTE_ERP");
                 ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20);
+                ent.Property(i => i.EstadoErp).HasColumnName("EstadoErp").HasMaxLength(500).IsRequired(false);
+                ent.Property(i => i.FechaCaducidad).HasColumnName("FechaCaducidad").HasColumnType("DATETIME").IsRequired(false);
+                ent.Property(i => i.Partida).HasColumnName("Partida").HasMaxLength(50).IsRequired(false);
                 ent.HasOne(i => i.Inventario)
                     .WithMany(ic => ic.Ajustes)
                     .HasForeignKey(i => i.IdInventario)
@@ -415,6 +421,12 @@ namespace SGA_Api.Data
             {
                 entity.ToTable("OrdenConteo");
                 entity.HasKey(e => e.GuidID);
+                
+                // Configuración explícita para evitar convenciones por defecto
+                entity.Property(e => e.GuidID).HasColumnName("GuidID").HasDefaultValueSql("NEWID()");
+                
+                // Asegurar que no hay propiedades Id ocultas
+                entity.Ignore("Id");
                 entity.Property(e => e.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("int").HasDefaultValue(1);
                 entity.Property(e => e.Titulo).HasColumnName("Titulo").HasMaxLength(120).IsRequired();
                 entity.Property(e => e.Visibilidad).HasColumnName("Visibilidad").HasMaxLength(10).IsRequired();
@@ -439,7 +451,6 @@ namespace SGA_Api.Data
                 entity.Property(e => e.FechaAsignacion).HasColumnName("FechaAsignacion");
                 entity.Property(e => e.FechaInicio).HasColumnName("FechaInicio");
                 entity.Property(e => e.FechaCierre).HasColumnName("FechaCierre");
-                entity.Property(e => e.GuidID).HasColumnName("GuidID").HasDefaultValueSql("NEWID()");
             });
 
             // LecturaConteo
@@ -447,6 +458,12 @@ namespace SGA_Api.Data
             {
                 entity.ToTable("LecturaConteo");
                 entity.HasKey(e => e.GuidID);
+                
+                // Configuración explícita para evitar convenciones por defecto
+                entity.Property(e => e.GuidID).HasColumnName("GuidID").HasDefaultValueSql("NEWID()");
+                
+                // Asegurar que no hay propiedades Id ocultas
+                entity.Ignore("Id");
                 entity.Property(e => e.OrdenGuid).HasColumnName("OrdenGuid");
                 entity.Property(e => e.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10).IsRequired();
                 entity.Property(e => e.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
@@ -458,8 +475,7 @@ namespace SGA_Api.Data
                 entity.Property(e => e.UsuarioCodigo).HasColumnName("UsuarioCodigo").HasMaxLength(50).IsRequired();
                 entity.Property(e => e.Fecha).HasColumnName("Fecha").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.Comentario).HasColumnName("Comentario").HasMaxLength(500);
-                entity.Property(e => e.GuidID).HasColumnName("GuidID").HasDefaultValueSql("NEWID()");
-                entity.Property(e => e.OrdenGuid).HasColumnName("OrdenGuid");
+                entity.Property(e => e.FechaCaducidad).HasColumnName("FechaCaducidad").HasColumnType("date");
 
                 // Foreign key relationship
                 entity.HasOne(e => e.Orden)
@@ -477,10 +493,9 @@ namespace SGA_Api.Data
                 entity.ToTable("ResultadoConteo");
                 entity.HasKey(e => e.GuidID);
 
-                entity.Property(e => e.OrdenGuid)
-                      .HasColumnName("OrdenGuid")
-                      .IsRequired();
-
+                // Configuración explícita para evitar convenciones por defecto
+                entity.Property(e => e.GuidID).HasColumnName("GuidID").HasDefaultValueSql("NEWID()");
+                entity.Property(e => e.OrdenGuid).HasColumnName("OrdenGuid").IsRequired();
                 entity.Property(e => e.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10).IsRequired();
                 entity.Property(e => e.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
                 entity.Property(e => e.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
@@ -494,8 +509,6 @@ namespace SGA_Api.Data
                 entity.Property(e => e.AprobadoPorCodigo).HasColumnName("AprobadoPorCodigo").HasMaxLength(50);
                 entity.Property(e => e.FechaEvaluacion).HasColumnName("FechaEvaluacion").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.AjusteAplicado).HasColumnName("AjusteAplicado").HasDefaultValue(false);
-                entity.Property(e => e.GuidID).HasColumnName("GuidID").HasDefaultValueSql("NEWID()");
-                entity.Property(e => e.OrdenGuid).HasColumnName("OrdenGuid");
 
                 // ✅ Relación única y explícita usando SOLO OrdenGuid
                 entity.HasOne(r => r.Orden)

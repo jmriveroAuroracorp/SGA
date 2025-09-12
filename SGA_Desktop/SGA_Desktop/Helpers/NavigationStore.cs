@@ -28,7 +28,7 @@ namespace SGA_Desktop.Helpers
 					"Paletizacion" => new PaletizacionView(),
 					"TraspasosStock" => new TraspasosStockView(),
 					"Inventario" => new InventarioView(),
-					//"OrdenTrabajo" => new OrdenTraspasoView(),
+					"OrdenTraspaso" => new OrdenTraspasoView(),
 					"ControlesRotativos" => new ControlesRotativosView(),
 
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")

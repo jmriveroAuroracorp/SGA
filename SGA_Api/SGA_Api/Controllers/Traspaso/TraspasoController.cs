@@ -775,50 +775,87 @@ public class TraspasosController : ControllerBase
 	[FromQuery] string almacenDestino,
 	[FromQuery] string? ubicacionDestino = null)
 	{
-		if (string.IsNullOrWhiteSpace(almacenDestino))
-			return BadRequest("Debe indicar almacén de destino.");
-
-		// Normalizar ubicación: null o vacío = "sin ubicar" (igual que en FinalizarTraspasoArticulo)
-		var ubicacionDestinoNormalizada = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino.Trim();
-
-		// Si la ubicación está vacía (sin ubicar), no hay palets específicos en esa ubicación
-		if (string.IsNullOrWhiteSpace(ubicacionDestinoNormalizada))
+		try
 		{
-			return Ok(new { existe = false });
+			_logger.LogInformation("PrecheckFinalizarArticulo iniciado - CodigoEmpresa: {CodigoEmpresa}, AlmacenDestino: '{AlmacenDestino}', UbicacionDestino: '{UbicacionDestino}'",
+				codigoEmpresa, almacenDestino, ubicacionDestino);
+
+			if (string.IsNullOrWhiteSpace(almacenDestino))
+				return BadRequest("Debe indicar almacén de destino.");
+
+			// Normalizar ubicación: null o vacío = "sin ubicar" (igual que en FinalizarTraspasoArticulo)
+			var ubicacionDestinoNormalizada = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino.Trim();
+
+			var almKey = almacenDestino.Trim().ToUpper();
+			var ubiKey = ubicacionDestinoNormalizada.ToUpper();
+
+			_logger.LogInformation("Parámetros normalizados - almKey: '{almKey}', ubiKey: '{ubiKey}'", almKey, ubiKey);
+
+			// Verificar si hay traspasos de tipo PALET en esa ubicación
+			var traspasosCount = await _context.Traspasos.AsNoTracking()
+				.CountAsync(t => t.TipoTraspaso == "PALET" && t.CodigoEstado == "COMPLETADO");
+
+			_logger.LogInformation("Total de traspasos PALET completados: {Count}", traspasosCount);
+
+			// Buscar traspasos que coincidan con la ubicación
+			var traspasosEnUbicacion = await _context.Traspasos.AsNoTracking()
+				.Where(t => t.TipoTraspaso == "PALET"
+				   && t.CodigoEstado == "COMPLETADO"
+				   && (t.AlmacenDestino ?? "").ToUpper() == almKey
+				   && (t.UbicacionDestino ?? "").ToUpper() == ubiKey
+				   && t.PaletId != Guid.Empty)
+				.OrderByDescending(t => t.FechaFinalizacion)
+				.Take(5)
+				.Select(t => new { t.PaletId, t.FechaFinalizacion, t.AlmacenDestino, t.UbicacionDestino })
+				.ToListAsync();
+
+			_logger.LogInformation("Traspasos encontrados en ubicación: {Count}", traspasosEnUbicacion.Count);
+
+			if (traspasosEnUbicacion.Count == 0)
+			{
+				_logger.LogInformation("No se encontraron traspasos en la ubicación especificada");
+				return Ok(new { existe = false });
+			}
+
+			var ultimoTraspaso = traspasosEnUbicacion.First();
+			_logger.LogInformation("Último traspaso encontrado - PaletId: {PaletId}, FechaFinalizacion: {FechaFinalizacion}",
+				ultimoTraspaso.PaletId, ultimoTraspaso.FechaFinalizacion);
+
+			// Buscar el palet por separado para evitar problemas de join
+			var paletEntity = await _context.Palets.AsNoTracking()
+				.FirstOrDefaultAsync(p => p.Id == ultimoTraspaso.PaletId && p.CodigoEmpresa == codigoEmpresa);
+
+			if (paletEntity == null)
+			{
+				_logger.LogWarning("Palet no encontrado - PaletId: {PaletId}, CodigoEmpresa: {CodigoEmpresa}",
+					ultimoTraspaso.PaletId, codigoEmpresa);
+				return Ok(new { existe = false });
+			}
+
+			_logger.LogInformation("Palet encontrado - Id: {Id}, Codigo: {Codigo}, Estado: {Estado}",
+				paletEntity.Id, paletEntity.Codigo, paletEntity.Estado);
+
+			var cerrado = string.Equals(paletEntity.Estado ?? "", "CERRADO", StringComparison.OrdinalIgnoreCase);
+			return Ok(new
+			{
+				existe = true,
+				paletId = paletEntity.Id,
+				codigoPalet = paletEntity.Codigo,
+				cerrado,
+				aviso = cerrado
+					? $"Hay un palet CERRADO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {paletEntity.Codigo}). Se abrirá y quedará ABIERTO; el artículo quedará paletizado."
+					: $"Hay un palet ABIERTO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {paletEntity.Codigo}). El artículo quedará paletizado."
+			});
 		}
-
-		var almKey = almacenDestino.Trim().ToUpperInvariant();
-		var ubiKey = ubicacionDestinoNormalizada.ToUpperInvariant();
-
-		// Último PALET COMPLETADO en esa ubicación
-		var palet = await (
-			from t in _context.Traspasos.AsNoTracking()
-			join p in _context.Palets.AsNoTracking() on t.PaletId equals p.Id
-			where t.TipoTraspaso == "PALET"
-			   && t.CodigoEstado == "COMPLETADO"
-			   && (t.AlmacenDestino ?? "").ToUpperInvariant() == almKey
-			   && (t.UbicacionDestino ?? "").ToUpperInvariant() == ubiKey
-			   && p.CodigoEmpresa == codigoEmpresa
-			orderby t.FechaFinalizacion descending
-			select p
-		).FirstOrDefaultAsync();
-
-		if (palet == null)
-			return Ok(new { existe = false });
-
-		var cerrado = string.Equals(palet.Estado ?? "", "CERRADO", StringComparison.OrdinalIgnoreCase);
-		return Ok(new
+		catch (Exception ex)
 		{
-			existe = true,
-			paletId = palet.Id,
-			codigoPalet = palet.Codigo,
-			cerrado,
-			aviso = cerrado
-				? $"Hay un palet CERRADO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {palet.Codigo}). Se abrirá y quedará ABIERTO; el artículo quedará paletizado."
-				: $"Hay un palet ABIERTO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {palet.Codigo}). El artículo quedará paletizado."
-		});
+			_logger.LogError(ex, "Error en PrecheckFinalizarArticulo - CodigoEmpresa: {CodigoEmpresa}, AlmacenDestino: '{AlmacenDestino}', UbicacionDestino: '{UbicacionDestino}'",
+				codigoEmpresa, almacenDestino, ubicacionDestino);
+			return Problem(detail: ex.ToString(), statusCode: 500, title: "Error en precheck de finalización");
+		}
 	}
-
+	/// <summary>
+	/// Finalizar traspaso de artículo individual (mobility, segunda fase).
 	/// </summary>
 	[HttpPut("articulo/{id}/finalizar")]
 	public async Task<IActionResult> FinalizarTraspasoArticulo(Guid id, [FromBody] FinalizarTraspasoArticuloDto dto)
@@ -846,25 +883,22 @@ public class TraspasosController : ControllerBase
 		// Normalizamos claves de comparación (pero guardamos el valor limpio, no en mayúsculas)
 		var almDestino = dto.AlmacenDestino.Trim();
 		var ubiDestino = ubicacionDestino;  // Ya normalizada arriba
-		var almKey = almDestino.ToUpperInvariant();
-		var ubiKey = ubiDestino.ToUpperInvariant();
+		var almKey = almDestino.ToUpper();
+		var ubiKey = ubiDestino.ToUpper();
 
 		// ─────────────────────────────────────────────────────────────────────────────
-		// Si la ubicación está vacía (sin ubicar), no hay palets específicos en esa ubicación
+		// NUEVO (mínimo cambio): si hay palet en destino, pedir confirmación SIEMPRE,
+		// esté ABIERTO o CERRADO. No tocamos nada si no confirman.
 		// ─────────────────────────────────────────────────────────────────────────────
-		Guid? paletDestinoIdPre = null;
-		if (!string.IsNullOrWhiteSpace(ubiDestino))
-		{
-			paletDestinoIdPre = await (
-				from t in _context.Traspasos.AsNoTracking()
-				where t.TipoTraspaso == "PALET"
-					  && t.CodigoEstado == "COMPLETADO"
-					  && (t.AlmacenDestino ?? "").ToUpper() == almKey
-					  && ((t.UbicacionDestino ?? "").ToUpper()) == ubiKey
-				orderby t.FechaFinalizacion descending
-				select (Guid?)t.PaletId
-			).FirstOrDefaultAsync();
-		}
+		Guid? paletDestinoIdPre = await (
+			from t in _context.Traspasos.AsNoTracking()
+			where t.TipoTraspaso == "PALET"
+				  && t.CodigoEstado == "COMPLETADO"
+				  && (t.AlmacenDestino ?? "").ToUpper() == almKey
+				  && ((t.UbicacionDestino ?? "").ToUpper()) == ubiKey
+			orderby t.FechaFinalizacion descending
+			select (Guid?)t.PaletId
+		).FirstOrDefaultAsync();
 
 		bool hayPaletEnDestino = paletDestinoIdPre.HasValue && paletDestinoIdPre.Value != Guid.Empty;
 		if (hayPaletEnDestino)
@@ -916,7 +950,7 @@ public class TraspasosController : ControllerBase
 			var palet = await _context.Palets.FindAsync(paletDestinoId.Value);
 			if (palet != null)
 			{
-				var estadoPalet = (palet.Estado ?? string.Empty).ToUpperInvariant();
+				var estadoPalet = (palet.Estado ?? string.Empty).ToUpper();
 				if (estadoPalet == "CERRADO")
 				{
 					palet.Estado = "Abierto";

@@ -42,6 +42,14 @@ namespace SGA_Api.Models.Inventario
         [StringLength(20)]
         public string Estado { get; set; } = "PENDIENTE_ERP";
 
+        [StringLength(500)]
+        public string? EstadoErp { get; set; }
+
+        public DateTime? FechaCaducidad { get; set; }
+
+        [StringLength(50)]
+        public string? Partida { get; set; }
+
         // Navigation property
         [ForeignKey("IdInventario")]
         public virtual InventarioCabecera Inventario { get; set; } = null!;

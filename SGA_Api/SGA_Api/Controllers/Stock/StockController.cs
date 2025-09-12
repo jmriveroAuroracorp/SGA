@@ -283,108 +283,146 @@ namespace SGA_Api.Controllers.Stock
 
 		//	return Ok(resultado);
 		//}
-
 		[HttpGet("consulta-stock")]
 		public async Task<IActionResult> ConsultarStock(
-	[FromQuery] short codigoEmpresa,
-	[FromQuery] string? codigoUbicacion,
-	[FromQuery] string? codigoAlmacen,
-	[FromQuery] string? codigoArticulo,
-	[FromQuery] string? codigoCentro,
-	[FromQuery] string? almacen,
-	[FromQuery] string? partida)
+			[FromQuery] short codigoEmpresa,
+			[FromQuery] string? codigoUbicacion,
+			[FromQuery] string? codigoAlmacen,
+			[FromQuery] string? codigoArticulo,
+			[FromQuery] string? codigoCentro,
+			[FromQuery] string? almacen,
+			[FromQuery] string? partida,
+			[FromQuery] string? codigoOperario = null)
 		{
-			// 🔹 Normalizar: si llega null → lo tratamos como "" (sin ubicar)
-			if (codigoUbicacion == null)
-				codigoUbicacion = "";
-
-			Console.WriteLine("📥 Petición recibida -------------------------");
-			Console.WriteLine($"codigoEmpresa: {codigoEmpresa}");
-			Console.WriteLine($"codigoAlmacen: '{codigoAlmacen ?? "null"}'");
-			Console.WriteLine($"codigoUbicacion: '{codigoUbicacion}'"); // nunca será null aquí
-			Console.WriteLine($"codigoArticulo: '{codigoArticulo ?? "null"}'");
-			Console.WriteLine($"codigoCentro: '{codigoCentro ?? "null"}'");
-			Console.WriteLine($"almacen: '{almacen ?? "null"}'");
-			Console.WriteLine($"partida: '{partida ?? "null"}'");
-
 			var flujoUbicacion = !string.IsNullOrWhiteSpace(codigoAlmacen);
 			var flujoArticulo = !string.IsNullOrWhiteSpace(codigoArticulo);
 
-			Console.WriteLine($"flujoUbicacion: {flujoUbicacion}");
-			Console.WriteLine($"flujoArticulo: {flujoArticulo}");
-
 			if (!flujoUbicacion && !flujoArticulo)
 			{
-				Console.WriteLine("❌ BadRequest -> no se indicó ubicación+almacén ni artículo.");
 				return BadRequest("Debe indicar ubicación + código de almacén, o un código de artículo.");
 			}
 
-			var ejercicioActual = await _sageContext.Periodos
-				.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
-				.OrderByDescending(p => p.Fechainicio)
-				.Select(p => p.Ejercicio)
-				.FirstOrDefaultAsync();
-
-			Console.WriteLine($"ejercicioActual: {ejercicioActual}");
-
-			if (ejercicioActual == 0)
+			// Obtener almacenes autorizados del operario si se proporciona
+			List<string> almacenesAutorizados = new List<string>();
+			if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
 			{
-				Console.WriteLine("❌ BadRequest -> no se encontró ejercicio válido.");
-				return BadRequest("No se encontró un ejercicio válido para la empresa.");
+				almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioId, codigoEmpresa);
+				
+				// Si el operario no tiene almacenes autorizados, no mostrar resultados
+				if (!almacenesAutorizados.Any())
+				{
+					return Ok(new List<object>());
+				}
 			}
 
-			var stockData = await _storageContext.AcumuladoStockUbicacion
-				.Where(a =>
-					a.CodigoEmpresa == codigoEmpresa &&
-					a.Ejercicio == ejercicioActual &&
-					a.UnidadSaldo != 0 &&
-					(
-						(flujoUbicacion &&
-						 a.CodigoAlmacen == codigoAlmacen &&
-						 a.Ubicacion == codigoUbicacion)
-						||
-						(flujoArticulo && a.CodigoArticulo == codigoArticulo)
-					) &&
-					(partida == null || a.Partida == partida))
-				.ToListAsync();
+			var q = _auroraSgaContext.StockDisponible
+				.Where(a => a.CodigoEmpresa == codigoEmpresa);
 
-			Console.WriteLine($"📊 StockData recuperado: {stockData.Count} registros");
+			if (flujoUbicacion)
+			{
+				q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
 
-			var almacenes = await _sageContext.Almacenes
-				.Where(a =>
-					a.CodigoEmpresa == codigoEmpresa &&
-					(codigoCentro == null || a.CodigoCentro == codigoCentro) &&
-					(almacen == null || a.Almacen == almacen))
-				.ToListAsync();
+				if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+					q = q.Where(a => a.Ubicacion == codigoUbicacion);
 
-			Console.WriteLine($"📦 Almacenes recuperados: {almacenes.Count}");
+				if (flujoArticulo)
+					q = q.Where(a => a.CodigoArticulo == codigoArticulo);
+			}
+			else if (flujoArticulo)
+			{
+				q = q.Where(a => a.CodigoArticulo == codigoArticulo);
+			}
 
-			var resultado = stockData
-				.Select(s =>
-				{
-					var alm = almacenes.FirstOrDefault(a =>
-						a.CodigoEmpresa == s.CodigoEmpresa &&
-						a.CodigoAlmacen == s.CodigoAlmacen);
+			if (!string.IsNullOrWhiteSpace(partida))
+				q = q.Where(a => a.Partida == partida);
 
-					return new StockUbicacionDto
+			q = q.Where(a => a.Disponible > 0);
+
+			var datos = await q.ToListAsync();
+
+			// Filtrar por almacenes autorizados si se proporcionó operario
+			if (almacenesAutorizados.Any())
+			{
+				datos = datos.Where(d => almacenesAutorizados.Contains(d.CodigoAlmacen)).ToList();
+			}
+
+			var resultado = new List<object>();
+
+			foreach (var item in datos)
+			{
+				var stockPaletizado = await _auroraSgaContext.PaletLineas
+					.Where(pl => pl.CodigoEmpresa == item.CodigoEmpresa &&
+								pl.CodigoArticulo == item.CodigoArticulo &&
+								pl.CodigoAlmacen == item.CodigoAlmacen &&
+								pl.Ubicacion == item.Ubicacion &&
+								pl.Lote == item.Partida)
+					.Include(pl => pl.Palet)
+					.Where(pl => pl.Palet.Estado == "Abierto" || pl.Palet.Estado == "Cerrado")
+					.Select(pl => new
 					{
-						CodigoEmpresa = s.CodigoEmpresa.ToString(),
-						CodigoArticulo = s.CodigoArticulo,
-						CodigoCentro = alm?.CodigoCentro?.ToString(),
-						CodigoAlmacen = s.CodigoAlmacen.ToString(),
-						Almacen = alm?.Almacen,
-						Ubicacion = s.Ubicacion,
-						Partida = s.Partida,
-						FechaCaducidad = s.FechaCaducidad,
-						UnidadSaldo = s.UnidadSaldo
-					};
-				})
-				.ToList();
+						PaletId = pl.PaletId,
+						CodigoPalet = pl.Palet.Codigo,
+						EstadoPalet = pl.Palet.Estado,
+						CantidadEnPalet = pl.Cantidad
+					})
+					.ToListAsync();
 
-			Console.WriteLine($"✅ Resultado final: {resultado.Count} registros");
-			Console.WriteLine("--------------------------------------------------");
+				var stockSuelto = item.Disponible - stockPaletizado.Sum(p => p.CantidadEnPalet);
 
-			return Ok(resultado);
+				if (stockSuelto > 0)
+				{
+					resultado.Add(new
+					{
+						CodigoEmpresa = item.CodigoEmpresa.ToString(),
+						CodigoArticulo = item.CodigoArticulo,
+						DescripcionArticulo = item.DescripcionArticulo,
+						CodigoAlmacen = item.CodigoAlmacen,
+						Almacen = item.Almacen,
+						Ubicacion = item.Ubicacion,
+						Partida = item.Partida,
+						FechaCaducidad = item.FechaCaducidad,
+						UnidadSaldo = item.UnidadSaldo,
+						Reservado = item.Reservado,
+						Disponible = stockSuelto,
+						TipoStock = "Suelto",
+						PaletId = (Guid?)null,
+						CodigoPalet = (string?)null,
+						EstadoPalet = (string?)null
+					});
+				}
+
+				foreach (var palet in stockPaletizado)
+				{
+					resultado.Add(new
+					{
+						CodigoEmpresa = item.CodigoEmpresa.ToString(),
+						CodigoArticulo = item.CodigoArticulo,
+						DescripcionArticulo = item.DescripcionArticulo,
+						CodigoAlmacen = item.CodigoAlmacen,
+						Almacen = item.Almacen,
+						Ubicacion = item.Ubicacion,
+						Partida = item.Partida,
+						FechaCaducidad = item.FechaCaducidad,
+						UnidadSaldo = item.UnidadSaldo,
+						Reservado = item.Reservado,
+						Disponible = palet.CantidadEnPalet,
+						TipoStock = "Paletizado",
+						PaletId = palet.PaletId,
+						CodigoPalet = palet.CodigoPalet,
+						EstadoPalet = palet.EstadoPalet
+					});
+				}
+			}
+
+			// TEMPORAL: Debug para ver qué está pasando
+			return Ok(new
+			{
+				AlmacenesAutorizados = almacenesAutorizados,
+				TotalDatosOriginales = q.Count(),
+				TotalDatosFiltrados = datos.Count,
+				DatosFiltrados = datos.Select(d => new { d.CodigoAlmacen, d.Almacen }).ToList(),
+				Resultado = resultado
+			});
 		}
 
 
@@ -649,6 +687,7 @@ namespace SGA_Api.Controllers.Stock
     return Ok(resultado);
 }
 
+
 		/// <summary>
 		/// GET api/Stock/precio-medio
 		/// Obtiene el precio medio de un artículo desde la tabla AcumuladoStock en Sage
@@ -706,6 +745,49 @@ namespace SGA_Api.Controllers.Stock
 				.ToListAsync();
 
 			return articulos;
+		}
+
+		// Helper para obtener almacenes autorizados (individuales + centro logístico)
+		private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync(int operarioId, int codigoEmpresa)
+		{
+			try
+			{
+				// 1. Obtener almacenes individuales del operario
+				var almacenesIndividuales = await _sageContext.OperariosAlmacenes
+					.Where(a => a.Operario == operarioId && a.CodigoEmpresa == codigoEmpresa)
+					.Select(a => a.CodigoAlmacen!)
+					.Where(a => a != null) // Filtrar nulls
+					.ToListAsync();
+
+				// 2. Obtener el centro logístico del operario
+				var operario = await _sageContext.Operarios
+					.Where(o => o.Id == operarioId)
+					.Select(o => o.CodigoCentro)
+					.FirstOrDefaultAsync();
+
+				var todosLosAlmacenes = new List<string>(almacenesIndividuales);
+
+				// 3. Si el operario tiene centro logístico, obtener sus almacenes
+				if (!string.IsNullOrEmpty(operario))
+				{
+					var almacenesCentro = await _sageContext.Almacenes
+						.Where(a => a.CodigoCentro == operario && a.CodigoEmpresa == codigoEmpresa)
+						.Select(a => a.CodigoAlmacen!)
+						.Where(a => a != null)
+						.ToListAsync();
+
+					todosLosAlmacenes.AddRange(almacenesCentro);
+				}
+
+				// 4. Eliminar duplicados y devolver
+				return todosLosAlmacenes.Distinct().ToList();
+			}
+			catch (Exception ex)
+			{
+				// En caso de error, devolver lista vacía para no bloquear la consulta
+				Console.WriteLine($"ERROR en ObtenerAlmacenesAutorizadosAsync: {ex.Message}");
+				return new List<string>();
+			}
 		}
 
 		// helper para proyectar

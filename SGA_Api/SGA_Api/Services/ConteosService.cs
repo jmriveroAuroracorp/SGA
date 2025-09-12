@@ -31,30 +31,38 @@ namespace SGA_Api.Services
             try
             {
                 _logger.LogInformation("Iniciando creación de orden de conteo: {Titulo}", dto.Titulo);
-                
+               
                 // Extraer valores del FiltrosJson
                 var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
                 var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
-                
+               
                 // Primero intentar extraer ubicación directa del filtro (para ubicaciones especiales)
                 var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
-                
+               
                 // Extraer componentes para determinar el alcance automáticamente
                 var pasillo = ExtraerPasilloDelFiltro(dto.FiltrosJson);
                 var estanteria = ExtraerEstanteriaDelFiltro(dto.FiltrosJson);
                 var altura = ExtraerAlturaDelFiltro(dto.FiltrosJson);
                 var posicion = ExtraerPosicionDelFiltro(dto.FiltrosJson);
-                
-                                 // Determinar el alcance automáticamente según los componentes disponibles
-                 // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
-                 string alcanceDeterminado = "ALMACEN"; // Default
-                
-                                 if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
-                 {
-                     // Si hay ubicación directa (incluyendo ubicación vacía ""), el alcance es UBICACION
-                     alcanceDeterminado = "UBICACION";
-                 }
-                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) && 
+               
+                // Determinar el alcance automáticamente según los componentes disponibles
+                // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
+                string alcanceDeterminado = "ALMACEN"; // Default
+               
+                if (!string.IsNullOrEmpty(codigoArticulo) &&
+                    string.IsNullOrEmpty(codigoUbicacion) &&
+                    string.IsNullOrEmpty(pasillo) &&
+                    string.IsNullOrEmpty(estanteria))
+                {
+                    // Si solo se especifica artículo (sin ubicación, pasillo, estantería), es ARTICULO
+                    alcanceDeterminado = "ARTICULO";
+                }
+                else if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
+                {
+                    // Si hay ubicación directa (incluyendo ubicación vacía ""), el alcance es UBICACION
+                    alcanceDeterminado = "UBICACION";
+                }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
                          !string.IsNullOrEmpty(altura) && !string.IsNullOrEmpty(posicion))
                 {
                     // Si están todos los componentes, es UBICACION
@@ -64,8 +72,14 @@ namespace SGA_Api.Services
                     var estanteriaFormateada = estanteria.PadLeft(3, '0');
                     var alturaFormateada = altura.PadLeft(3, '0');
                     var posicionFormateada = posicion.PadLeft(3, '0');
-                    
+                   
                     codigoUbicacion = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
+                }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
+                         !string.IsNullOrEmpty(altura))
+                {
+                    // Si hay pasillo, estantería y altura (sin posición), es ALTURA
+                    alcanceDeterminado = "ALTURA";
                 }
                 else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
                 {
@@ -78,13 +92,13 @@ namespace SGA_Api.Services
                     alcanceDeterminado = "PASILLO";
                 }
                 // Si solo hay almacén, el alcance es ALMACEN (default)
-                
-                                 _logger.LogInformation("ALCANCE_AUTO: Alcance determinado automáticamente: '{AlcanceDeterminado}' para filtros: almacen='{Almacen}', pasillo='{Pasillo}', estanteria='{Estanteria}', altura='{Altura}', posicion='{Posicion}', ubicacion='{Ubicacion}'", 
+               
+                _logger.LogInformation("ALCANCE_AUTO: Alcance determinado automáticamente: '{AlcanceDeterminado}' para filtros: almacen='{Almacen}', pasillo='{Pasillo}', estanteria='{Estanteria}', altura='{Altura}', posicion='{Posicion}', ubicacion='{Ubicacion}'",
                      alcanceDeterminado, codigoAlmacen, pasillo, estanteria, altura, posicion, codigoUbicacion);
                  
-                 _logger.LogInformation("ALCANCE_AUTO: Detalles de determinación - codigoUbicacion='{CodigoUbicacion}', esVacio={EsVacio}, esNull={EsNull}", 
+                 _logger.LogInformation("ALCANCE_AUTO: Detalles de determinación - codigoUbicacion='{CodigoUbicacion}', esVacio={EsVacio}, esNull={EsNull}",
                      codigoUbicacion, codigoUbicacion == "", codigoUbicacion == null);
-
+ 
                 var orden = new OrdenConteo
                 {
                     CodigoEmpresa = dto.CodigoEmpresa,
@@ -106,14 +120,14 @@ namespace SGA_Api.Services
                     CodigoUbicacion = codigoUbicacion,
                     CodigoArticulo = codigoArticulo
                 };
-
+ 
                 _context.OrdenesConteo.Add(orden);
                 await _context.SaveChangesAsync();
                 _logger.LogInformation("Orden guardada con Guid: {Guid}", orden.GuidID);
-
+ 
                 // NO generar lecturas automáticas - se generan dinámicamente cuando se solicitan
                 _logger.LogInformation("Orden creada sin generar lecturas automáticas. Se generarán dinámicamente cuando se soliciten.");
-
+ 
                 return MapToOrdenDto(orden);
             }
             catch (Exception ex)
@@ -342,13 +356,16 @@ namespace SGA_Api.Services
 
             if (!string.IsNullOrEmpty(codigoArticulo))
             {
+                // Para conteos por artículo, NO filtrar por almacén - buscar en TODOS los almacenes
                 var stockArticulo = await _storageControlContext.AcumuladoStockUbicacion
                     .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
                                x.Ejercicio == ejercicio &&
-                               x.CodigoAlmacen == codigoAlmacen &&
                                x.CodigoArticulo == codigoArticulo &&
                                x.UnidadSaldo > 0)
                     .ToListAsync();
+
+                _logger.LogInformation("ARTICULO_DEBUG: Encontrados {Count} registros de stock para artículo {CodigoArticulo} en todos los almacenes", 
+                    stockArticulo.Count, codigoArticulo);
 
                 var descripcionArticulo = await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, codigoArticulo);
 
@@ -360,7 +377,7 @@ namespace SGA_Api.Services
                         lecturasGeneradas.Add(new LecturaConteo
                         {
                             OrdenGuid = orden.GuidID,
-                            CodigoAlmacen = codigoAlmacen,
+                            CodigoAlmacen = stock.CodigoAlmacen, // Usar el almacén real del stock
                             CodigoUbicacion = stock.Ubicacion,
                             CodigoArticulo = stock.CodigoArticulo,
                             DescripcionArticulo = descripcionArticulo,
@@ -370,6 +387,9 @@ namespace SGA_Api.Services
                             UsuarioCodigo = orden.CodigoOperario ?? "",
                             Fecha = DateTime.Now
                         });
+                        
+                        _logger.LogInformation("ARTICULO_DEBUG: Lectura generada para artículo {CodigoArticulo} en almacén {CodigoAlmacen}, ubicación '{Ubicacion}'", 
+                            stock.CodigoArticulo, stock.CodigoAlmacen, stock.Ubicacion);
                     }
                 }
             }
@@ -849,6 +869,9 @@ namespace SGA_Api.Services
             }
         }
 
+
+
+
         // TODO: Implementar métodos restantes
         public async Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto)
         {
@@ -1204,14 +1227,24 @@ namespace SGA_Api.Services
                     codigoAlmacen = ExtraerAlmacenDelFiltro(orden.FiltrosJson);
                 }
 
-                if (string.IsNullOrEmpty(codigoAlmacen))
-                    throw new InvalidOperationException("No se pudo determinar el almacén para la orden");
+                // Obtener almacenes autorizados para el operario
+                List<string> almacenesAutorizados = new List<string>();
+                if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
+                {
+                    almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioId, orden.CodigoEmpresa);
+                    
+                    // Si el operario no tiene almacenes autorizados, no mostrar lecturas
+                    if (!almacenesAutorizados.Any())
+                    {
+                        _logger.LogWarning("Operario {Operario} no tiene almacenes autorizados", codigoOperario);
+                        return new List<LecturaResponseDto>();
+                    }
+                }
 
                 // Construir query base según alcance
                 var query = _storageControlContext.AcumuladoStockUbicacion
                     .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
                                x.Ejercicio == ejercicio &&
-                               x.CodigoAlmacen == codigoAlmacen &&
                                x.UnidadSaldo > 0);
 
                 // Aplicar filtros según alcance
@@ -1222,10 +1255,51 @@ namespace SGA_Api.Services
                         if (!string.IsNullOrEmpty(codigoArticulo))
                         {
                             query = query.Where(x => x.CodigoArticulo == codigoArticulo);
+                            
+                            // Si se especifica almacén específico
+                            if (!string.IsNullOrEmpty(codigoAlmacen))
+                            {
+                                // Verificar que el operario tenga acceso al almacén específico
+                                if (!almacenesAutorizados.Contains(codigoAlmacen))
+                                {
+                                    _logger.LogWarning("Operario {Operario} no tiene acceso al almacén {Almacen}", codigoOperario, codigoAlmacen);
+                                    return new List<LecturaResponseDto>();
+                                }
+                                
+                                query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
+                                _logger.LogInformation("Pendientes (ARTICULO): filtrando artículo '{Articulo}' en almacén '{Almacen}'", codigoArticulo, codigoAlmacen);
+                            }
+                            else
+                            {
+                                // Si no se especifica almacén, filtrar por almacenes autorizados
+                                if (almacenesAutorizados.Any())
+                                {
+                                    query = query.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen));
+                                    _logger.LogInformation("Pendientes (ARTICULO): filtrando artículo '{Articulo}' en almacenes autorizados: {Almacenes}", 
+                                        codigoArticulo, string.Join(", ", almacenesAutorizados));
+                                }
+                                else
+                                {
+                                    _logger.LogInformation("Pendientes (ARTICULO): filtrando artículo '{Articulo}' en TODOS los almacenes (sin restricciones)", codigoArticulo);
+                                }
+                            }
                         }
                         break;
                     case "UBICACION":
                     {
+                        // Para ubicación, siempre necesitamos un almacén específico
+                        if (string.IsNullOrEmpty(codigoAlmacen))
+                            throw new InvalidOperationException("Para alcance UBICACION se requiere especificar un almacén");
+
+                        // Verificar que el operario tenga acceso al almacén
+                        if (!almacenesAutorizados.Contains(codigoAlmacen))
+                        {
+                            _logger.LogWarning("Operario {Operario} no tiene acceso al almacén {Almacen} para ubicación específica", codigoOperario, codigoAlmacen);
+                            return new List<LecturaResponseDto>();
+                        }
+
+                        query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
+                        
                         // 1) Prioriza la ubicación guardada en la orden (incluye "" como válida)
                         string? ubicacion = null;
                         if (orden.CodigoUbicacion != null || orden.CodigoUbicacion == "")
@@ -1258,7 +1332,7 @@ namespace SGA_Api.Services
                         if (ubicacion != null)
                         {
                             query = query.Where(x => x.Ubicacion == ubicacion);
-                            _logger.LogInformation("Pendientes (UBICACION): filtrando por '{Ubicacion}'", ubicacion);
+                            _logger.LogInformation("Pendientes (UBICACION): filtrando por almacén '{CodigoAlmacen}' y ubicación '{Ubicacion}'", codigoAlmacen, ubicacion);
                         }
                         else
                         {
@@ -1269,6 +1343,18 @@ namespace SGA_Api.Services
                         break;
                     }
                     case "ESTANTERIA":
+                        if (string.IsNullOrEmpty(codigoAlmacen))
+                            throw new InvalidOperationException("Para alcance ESTANTERIA se requiere especificar un almacén");
+
+                        // Verificar que el operario tenga acceso al almacén
+                        if (!almacenesAutorizados.Contains(codigoAlmacen))
+                        {
+                            _logger.LogWarning("Operario {Operario} no tiene acceso al almacén {Almacen} para estantería", codigoOperario, codigoAlmacen);
+                            return new List<LecturaResponseDto>();
+                        }
+
+                        query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
+                        
                         var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
                         var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
                         if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
@@ -1280,6 +1366,18 @@ namespace SGA_Api.Services
                         }
                         break;
                     case "PASILLO":
+                        if (string.IsNullOrEmpty(codigoAlmacen))
+                            throw new InvalidOperationException("Para alcance PASILLO se requiere especificar un almacén");
+
+                        // Verificar que el operario tenga acceso al almacén
+                        if (!almacenesAutorizados.Contains(codigoAlmacen))
+                        {
+                            _logger.LogWarning("Operario {Operario} no tiene acceso al almacén {Almacen} para pasillo", codigoOperario, codigoAlmacen);
+                            return new List<LecturaResponseDto>();
+                        }
+
+                        query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
+                        
                         var pasilloFiltro = ExtraerPasilloDelFiltro(orden.FiltrosJson);
                         if (!string.IsNullOrEmpty(pasilloFiltro))
                         {
@@ -1287,7 +1385,22 @@ namespace SGA_Api.Services
                             query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoPasillo));
                         }
                         break;
-                    // ALMACEN y PALET no necesitan filtros adicionales
+                    case "ALMACEN":
+                    case "PALET":
+                    default:
+                        if (string.IsNullOrEmpty(codigoAlmacen))
+                            throw new InvalidOperationException("Para alcance ALMACEN se requiere especificar un almacén");
+
+                        // Verificar que el operario tenga acceso al almacén
+                        if (!almacenesAutorizados.Contains(codigoAlmacen))
+                        {
+                            _logger.LogWarning("Operario {Operario} no tiene acceso al almacén {Almacen}", codigoOperario, codigoAlmacen);
+                            return new List<LecturaResponseDto>();
+                        }
+
+                        query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
+                        _logger.LogInformation("Pendientes (ALMACEN): filtrando almacén '{Almacen}'", codigoAlmacen);
+                        break;
                 }
 
                 // Obtener stock y generar lecturas
@@ -1305,7 +1418,7 @@ namespace SGA_Api.Services
                     {
                         // Verificar si ya existe una lectura para esta combinación
                         var yaExiste = lecturasCreadas.Any(l => 
-                            l.CodigoAlmacen == codigoAlmacen &&
+                            l.CodigoAlmacen == stock.CodigoAlmacen &&
                             l.CodigoUbicacion == stock.Ubicacion &&
                             l.CodigoArticulo == stock.CodigoArticulo &&
                             (string.IsNullOrEmpty(stock.Partida) || l.LotePartida == stock.Partida));
@@ -1318,7 +1431,7 @@ namespace SGA_Api.Services
                             {
                                 GuidID = Guid.Empty, // No se persiste, es dinámico
                                 OrdenGuid = orden.GuidID,
-                                CodigoAlmacen = codigoAlmacen,
+                                CodigoAlmacen = stock.CodigoAlmacen, // Usar el almacén real del stock
                                 CodigoUbicacion = stock.Ubicacion,
                                 CodigoArticulo = stock.CodigoArticulo,
                                 DescripcionArticulo = descripcionArticulo,
@@ -1511,6 +1624,53 @@ namespace SGA_Api.Services
             return comentario.Length <= maxLength 
                 ? comentario 
                 : comentario.Substring(0, maxLength - 3) + "...";
+        }
+
+        private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync(int operarioId, int codigoEmpresa)
+        {
+            try
+            {
+                // 1. Obtener almacenes individuales del operario
+                var almacenesIndividuales = await _sageDbContext.OperariosAlmacenes
+                    .Where(a => a.Operario == operarioId && a.CodigoEmpresa == codigoEmpresa)
+                    .Select(a => a.CodigoAlmacen!)
+                    .Where(a => a != null) // Filtrar nulls
+                    .ToListAsync();
+
+                // 2. Obtener el centro logístico del operario
+                var operario = await _sageDbContext.Operarios
+                    .Where(o => o.Id == operarioId)
+                    .Select(o => o.CodigoCentro)
+                    .FirstOrDefaultAsync();
+
+                var todosLosAlmacenes = new List<string>(almacenesIndividuales);
+
+                // 3. Si el operario tiene centro logístico, obtener sus almacenes
+                if (!string.IsNullOrEmpty(operario))
+                {
+                    var almacenesCentro = await _sageDbContext.Almacenes
+                        .Where(a => a.CodigoCentro == operario && a.CodigoEmpresa == codigoEmpresa)
+                        .Select(a => a.CodigoAlmacen!)
+                        .Where(a => a != null)
+                        .ToListAsync();
+
+                    todosLosAlmacenes.AddRange(almacenesCentro);
+                }
+
+                // 4. Eliminar duplicados y devolver
+                var resultado = todosLosAlmacenes.Distinct().ToList();
+
+                _logger.LogInformation("Operario {Operario} tiene acceso a {Count} almacenes (individuales: {Individuales}, centro: {Centro}): {Almacenes}", 
+                    operarioId, resultado.Count, almacenesIndividuales.Count, 
+                    !string.IsNullOrEmpty(operario) ? "SÍ" : "NO", string.Join(", ", resultado));
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo almacenes autorizados para operario {Operario}", operarioId);
+                return new List<string>();
+            }
         }
     }
 } 

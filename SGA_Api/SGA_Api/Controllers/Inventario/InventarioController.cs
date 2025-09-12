@@ -448,7 +448,9 @@ namespace SGA_Api.Controllers.Inventario
                             IdConteo = Guid.Empty,
                             CodigoEmpresa = inventario.CodigoEmpresa,
                             CodigoAlmacen = linea.CodigoAlmacen ?? inventario.CodigoAlmacen,
-                            Estado = "PENDIENTE_ERP"
+                            Estado = "PENDIENTE_ERP",
+                            FechaCaducidad = linea.FechaCaducidad,
+                            Partida = linea.Partida
                         };
 
                         _context.InventarioAjustes.Add(ajuste);

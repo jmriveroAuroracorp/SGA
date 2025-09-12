@@ -32,16 +32,6 @@ namespace SGA_Desktop.ViewModels
             _loginService = loginService;
             
             // Inicializar colecciones
-            AlcancesDisponibles = new ObservableCollection<string>
-            {
-                "ALMACEN",
-                "PASILLO", 
-                "ESTANTERIA",
-                "UBICACION",
-                "ARTICULO",
-                "PALET"
-            };
-
             PrioridadesDisponibles = new ObservableCollection<PrioridadItem>
             {
                 new() { Valor = 1, Texto = "1 - Muy Baja" },
@@ -61,12 +51,12 @@ namespace SGA_Desktop.ViewModels
             OperariosDisponibles = new ObservableCollection<OperariosAccesoDto>();
 
             // Valores por defecto
-            AlcanceSeleccionado = "ALMACEN";
+            EsConteoUbicacion = true; // Por defecto, conteo por ubicación
             PrioridadSeleccionada = PrioridadesDisponibles.FirstOrDefault(p => p.Valor == 3);
             VisibilidadSeleccionada = VisibilidadesDisponibles.FirstOrDefault(v => v.Valor == "VISIBLE");
             FechaPlan = DateTime.Today.AddDays(1);
             
-            // Establecer operario actual como seleccionado por defecto (se actualizará cuando se carguen los operarios)
+            // Establecer operario actual como seleccionado por defecto
             CodigoOperario = SessionManager.UsuarioActual?.operario.ToString() ?? "";
 
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
@@ -77,7 +67,6 @@ namespace SGA_Desktop.ViewModels
         #endregion
 
         #region Observable Properties
-        public ObservableCollection<string> AlcancesDisponibles { get; }
         public ObservableCollection<PrioridadItem> PrioridadesDisponibles { get; }
         public ObservableCollection<VisibilidadItem> VisibilidadesDisponibles { get; }
         public ObservableCollection<AlmacenDto> AlmacenesDisponibles { get; }
@@ -86,8 +75,9 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string titulo = string.Empty;
 
+        // Propiedades para separar los dos flujos
         [ObservableProperty]
-        private string alcanceSeleccionado = "ALMACEN";
+        private bool esConteoUbicacion = true; // true = conteo por ubicación, false = conteo por artículo
 
         [ObservableProperty]
         private PrioridadItem? prioridadSeleccionada;
@@ -110,7 +100,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string comentario = string.Empty;
 
-        // Filtros específicos
+        // Filtros para conteos por ubicación
         [ObservableProperty]
         private string pasillo = string.Empty;
 
@@ -123,6 +113,10 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string posicion = string.Empty;
 
+        [ObservableProperty]
+        private string ubicacionDirecta = string.Empty; // Para ubicaciones específicas
+
+        // Filtros para conteos por artículo
         [ObservableProperty]
         private string codigoArticulo = string.Empty;
 
@@ -150,8 +144,12 @@ namespace SGA_Desktop.ViewModels
         #region Computed Properties
         public bool PuedeCrearOrden => !IsCargando && !string.IsNullOrWhiteSpace(Titulo) && OperarioSeleccionado != null;
 
-        public bool MostrarFiltrosUbicacion => AlcanceSeleccionado is "PASILLO" or "ESTANTERIA" or "UBICACION";
-        public bool MostrarFiltroArticulo => AlcanceSeleccionado == "ARTICULO";
+        // Visibilidad para conteos por ubicación
+        public bool MostrarConteoUbicacion => EsConteoUbicacion;
+        public bool MostrarConteoArticulo => !EsConteoUbicacion;
+        // Propiedad computada para el radio button
+        public bool EsConteoArticulo => !EsConteoUbicacion;
+        // Visibilidad para búsqueda de artículos
         public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
         #endregion
@@ -181,18 +179,19 @@ namespace SGA_Desktop.ViewModels
                     Visibilidad = VisibilidadSeleccionada?.Valor ?? "VISIBLE",
                     Estado = "ASIGNADO",
                     ModoGeneracion = "AUTOMATICO",
-                    Alcance = AlcanceSeleccionado,
+                    Alcance = EsConteoUbicacion ? "ALMACEN" : "ARTICULO", // Determinar alcance según flujo
                     FiltrosJson = GenerarFiltrosJson(),
                     FechaPlan = FechaPlan,
                     CreadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString() ?? "ADMIN",
                     Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
                     CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
-                    CodigoAlmacen = AlmacenSeleccionado?.CodigoAlmacen,
+                    CodigoAlmacen = EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null, // Solo para conteos por ubicación
                     Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim()
                 };
 
+
                 // Si el alcance es ARTICULO, agregar el código del artículo
-                if (AlcanceSeleccionado == "ARTICULO" && !string.IsNullOrWhiteSpace(CodigoArticulo))
+                if (!EsConteoUbicacion && !string.IsNullOrWhiteSpace(CodigoArticulo))
                 {
                     dto.CodigoArticulo = CodigoArticulo.Trim();
                 }
@@ -236,7 +235,8 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
-                if (AlmacenSeleccionado == null)
+                // En modo "Por Artículo" no requerimos almacén específico
+                if (EsConteoUbicacion && AlmacenSeleccionado == null)
                 {
                     var warningDialog = new WarningDialog("Buscar artículo", "Primero selecciona un almacén.");
                     warningDialog.ShowDialog();
@@ -259,7 +259,7 @@ namespace SGA_Desktop.ViewModels
                     resultados = await _stockService.ObtenerPorArticuloAsync(
                         empresa,
                         codigoArticulo: terminoBusqueda,
-                        codigoAlmacen: AlmacenSeleccionado.CodigoAlmacen
+                        codigoAlmacen: EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null
                     );
                 }
 
@@ -272,7 +272,7 @@ namespace SGA_Desktop.ViewModels
                     resultados = await _stockService.ObtenerPorArticuloAsync(
                         empresa,
                         codigoArticulo: null,
-                        codigoAlmacen: AlmacenSeleccionado.CodigoAlmacen,
+                        codigoAlmacen: EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null,
                         descripcion: terminoBusqueda
                     );
                 }
@@ -310,11 +310,28 @@ namespace SGA_Desktop.ViewModels
                 }
                 else
                 {
-                    var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por {tipoBusqueda} en el almacén {AlmacenSeleccionado.CodigoAlmacen}.\n\n";
+                    var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por {tipoBusqueda}";
+                    if (EsConteoUbicacion && AlmacenSeleccionado != null)
+                    {
+                        mensaje += $" en el almacén {AlmacenSeleccionado.CodigoAlmacen}";
+                    }
+                    else
+                    {
+                        mensaje += " en ningún almacén";
+                    }
+                    mensaje += ".\n\n";
+                    
                     mensaje += "💡 Consejos:\n";
                     mensaje += "• Para buscar por código: introduce el código exacto (ej: 10000)\n";
                     mensaje += "• Para buscar por descripción: introduce parte de la descripción (ej: azúcar)\n";
-                    mensaje += "• Verifica que el artículo tiene stock en este almacén";
+                    if (EsConteoUbicacion)
+                    {
+                        mensaje += "• Verifica que el artículo tiene stock en este almacén";
+                    }
+                    else
+                    {
+                        mensaje += "• Verifica que el artículo tiene stock en algún almacén";
+                    }
                     
                     var warningDialog = new WarningDialog("Sin resultados", mensaje);
                     warningDialog.ShowDialog();
@@ -427,34 +444,26 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        private string? GenerarFiltrosJson()
-        {
-            try
+       private string GenerarFiltrosJson()
             {
                 var filtros = new Dictionary<string, object>();
 
-                // Agregar almacén si está seleccionado
-                if (AlmacenSeleccionado != null)
+                // Solo agregar almacén si es conteo por ubicación
+                if (EsConteoUbicacion && AlmacenSeleccionado != null)
                 {
                     filtros["almacen"] = AlmacenSeleccionado.CodigoAlmacen;
                 }
 
-                // Agregar filtros específicos según el alcance
-                switch (AlcanceSeleccionado)
+                if (EsConteoUbicacion)
                 {
-                    case "PASILLO":
-                        if (!string.IsNullOrWhiteSpace(Pasillo))
-                            filtros["pasillo"] = Pasillo.Trim();
-                        break;
-
-                    case "ESTANTERIA":
-                        if (!string.IsNullOrWhiteSpace(Pasillo))
-                            filtros["pasillo"] = Pasillo.Trim();
-                        if (!string.IsNullOrWhiteSpace(Estanteria))
-                            filtros["estanteria"] = Estanteria.Trim();
-                        break;
-
-                    case "UBICACION":
+                    // FLUJO 1: Conteo por ubicación
+                    if (!string.IsNullOrWhiteSpace(UbicacionDirecta))
+                    {
+                        filtros["ubicacion"] = UbicacionDirecta.Trim();
+                    }
+                    else
+                    {
+                        // Filtros por componentes de ubicación
                         if (!string.IsNullOrWhiteSpace(Pasillo))
                             filtros["pasillo"] = Pasillo.Trim();
                         if (!string.IsNullOrWhiteSpace(Estanteria))
@@ -463,40 +472,48 @@ namespace SGA_Desktop.ViewModels
                             filtros["altura"] = Altura.Trim();
                         if (!string.IsNullOrWhiteSpace(Posicion))
                             filtros["posicion"] = Posicion.Trim();
-                        break;
-
-                    case "ARTICULO":
-                        if (!string.IsNullOrWhiteSpace(CodigoArticulo))
-                            filtros["articulo"] = CodigoArticulo.Trim();
-                        break;
+                    }
+                }
+                else
+                {
+                    // FLUJO 2: Conteo por artículo
+                    if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                        filtros["articulo"] = CodigoArticulo.Trim();
                 }
 
-                return filtros.Count > 0 ? JsonSerializer.Serialize(filtros) : null;
+                return JsonSerializer.Serialize(filtros);
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error generando filtros JSON: {ex.Message}");
-                return null;
-            }
-        }
-
         // Métodos de cambio de propiedades
-        partial void OnAlcanceSeleccionadoChanged(string value)
+        partial void OnEsConteoUbicacionChanged(bool value)
         {
-            OnPropertyChanged(nameof(MostrarFiltrosUbicacion));
-            OnPropertyChanged(nameof(MostrarFiltroArticulo));
+            OnPropertyChanged(nameof(MostrarConteoUbicacion));
+            OnPropertyChanged(nameof(MostrarConteoArticulo));
             
-            // Limpiar filtros cuando cambia el alcance
-            Pasillo = string.Empty;
-            Estanteria = string.Empty;
-            Altura = string.Empty;
-            Posicion = string.Empty;
-            CodigoArticulo = string.Empty;
+            // Limpiar filtros cuando cambia el tipo de conteo
+            if (value)
+            {
+                // Cambió a conteo por ubicación, limpiar campos de artículo
+                CodigoArticulo = string.Empty;
+                ArticuloBuscado = string.Empty;
+                ArticulosEncontrados.Clear();
+                ArticuloSeleccionado = null;
+            }
+            else
+            {
+                // Cambió a conteo por artículo, limpiar campos de ubicación
+                Pasillo = string.Empty;
+                Estanteria = string.Empty;
+                Altura = string.Empty;
+                Posicion = string.Empty;
+                UbicacionDirecta = string.Empty;
+                
+                // Asegurar que hay un almacén seleccionado para conteos por artículo
+                if (AlmacenSeleccionado == null && AlmacenesDisponibles.Any())
+                {
+                    AlmacenSeleccionado = AlmacenesDisponibles.FirstOrDefault();
+                }
+            }
             
-            // Limpiar búsqueda de artículos
-            ArticuloBuscado = string.Empty;
-            ArticulosEncontrados.Clear();
-            ArticuloSeleccionado = null;
             OnPropertyChanged(nameof(MostrarListaArticulos));
             OnPropertyChanged(nameof(MostrarInfoArticulo));
         }

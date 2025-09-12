@@ -96,14 +96,20 @@
                                          BorderBrush="{StaticResource BrushInputBorde}"/>
                             </StackPanel>
 
-                            <!-- Alcance -->
+                           <!-- Tipo de Conteo -->
                             <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,10">
-                                <TextBlock Text="Alcance *" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <ComboBox ItemsSource="{Binding AlcancesDisponibles}"
-                                          SelectedItem="{Binding AlcanceSeleccionado}"
-                                          Height="35"
-                                          FontSize="14"
-                                          Padding="8"/>
+                                <TextBlock Text="Tipo de Conteo *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Content="Por Ubicación" 
+                                               IsChecked="{Binding EsConteoUbicacion}"
+                                               GroupName="TipoConteo"
+                                               Margin="0,0,15,0"
+                                               VerticalAlignment="Center"/>
+                                    <RadioButton Content="Por Artículo" 
+                                               
+                                               GroupName="TipoConteo"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <!-- Prioridad -->
@@ -118,7 +124,8 @@
                             </StackPanel>
 
                             <!-- Almacén -->
-                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10">
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10"
+                                       Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
                                           DisplayMemberPath="DescripcionCombo"
@@ -139,28 +146,7 @@
                                           Padding="8"/>
                             </StackPanel>
 
-                            <!-- Tipo de Conteo -->
-                            <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,10,10">
-                                <TextBlock Text="Tipo de Conteo *" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <ComboBox ItemsSource="{Binding VisibilidadesDisponibles}"
-                                          SelectedItem="{Binding VisibilidadSeleccionada}"
-                                          Height="35"
-                                          FontSize="14"
-                                          Padding="8">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Texto}" FontWeight="Bold"/>
-                                                <TextBlock Text="{Binding Descripcion}" 
-                                                           FontSize="11" 
-                                                           Foreground="Gray" 
-                                                           TextWrapping="Wrap"
-                                                           Margin="0,2,0,0"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </StackPanel>
+
 
                             <!-- Fecha -->
                             <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,0">
@@ -181,6 +167,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -191,7 +178,7 @@
 
                             <!-- Filtros por ubicación -->
                             <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,5,10"
-                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                       Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Pasillo" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Pasillo, UpdateSourceTrigger=PropertyChanged}"
                                          Height="35"
@@ -200,7 +187,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Row="0" Grid.Column="1" Margin="5,0,5,10"
-                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                       Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Estantería" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Estanteria, UpdateSourceTrigger=PropertyChanged}"
                                          Height="35"
@@ -209,7 +196,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Row="0" Grid.Column="2" Margin="5,0,5,10"
-                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                       Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Altura" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Altura, UpdateSourceTrigger=PropertyChanged}"
                                          Height="35"
@@ -218,7 +205,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Row="0" Grid.Column="3" Margin="5,0,0,10"
-                                       Visibility="{Binding MostrarFiltrosUbicacion, Converter={StaticResource BoolToVis}}">
+                                       Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Posición" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Posicion, UpdateSourceTrigger=PropertyChanged}"
                                          Height="35"
@@ -226,10 +213,25 @@
                                          Padding="8"/>
                             </StackPanel>
 
+                            <!-- Ubicación Directa -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,5,10"
+                                    Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Ubicación Directa" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding UbicacionDirecta, UpdateSourceTrigger=PropertyChanged}"
+                                        Height="35"
+                                        FontSize="14"
+                                        Padding="8"/>
+                            </StackPanel>
+
                             <!-- Filtro por artículo -->
-                            <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Margin="0,0,0,10"
-                                       Visibility="{Binding MostrarFiltroArticulo, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Margin="0,0,0,10"
+                                       Visibility="{Binding MostrarConteoArticulo, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Buscar Artículo" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBlock Text="ℹ️ Se buscará el artículo en todos los almacenes donde tenga stock" 
+                                           FontSize="12" 
+                                           Foreground="#6C757D" 
+                                           FontStyle="Italic" 
+                                           Margin="0,0,0,10"/>
                                 
                                 <!-- Campo de búsqueda con botón -->
                                 <Grid Margin="0,0,0,10">
@@ -296,7 +298,7 @@
                             </StackPanel>
 
                             <!-- Comentario -->
-                            <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Margin="0,0,0,0">
+                            <StackPanel Grid.Row="3" Grid.ColumnSpan="4" Margin="0,0,0,0">
                                 <TextBlock Text="Comentarios" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Comentario, UpdateSourceTrigger=PropertyChanged}"
                                          Height="60"

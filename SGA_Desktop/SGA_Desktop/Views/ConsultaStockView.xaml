@@ -374,9 +374,37 @@ CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
 
                                 <!-- Totales debajo -->
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                    <TextBlock Text="Global:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                    <TextBlock Text="Global:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.ToolTip>
+                                            <ToolTip>
+                                                <TextBlock>
+                                                    <Run Text="Cantidad "/>
+                                                    <Run Text="total" FontWeight="Bold"/>
+                                                    <Run Text=" de "/>
+                                                    <Run Text="este" FontWeight="Bold"/>
+                                                    <Run Text=" artículo por lote y fecha de caducidad en "/>
+                                                    <Run Text="todos" FontWeight="Bold"/>
+                                                    <Run Text=" los almacenes"/>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat=N4}" Margin="4,0,12,0"/>
-                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.ToolTip>
+                                            <ToolTip>
+                                                <TextBlock>
+                                                    <Run Text="Cantidad "/>
+                                                    <Run Text="total" FontWeight="Bold"/>
+                                                    <Run Text=" de "/>
+                                                    <Run Text="este" FontWeight="Bold"/>
+                                                    <Run Text=" artículo por lote y fecha de caducidad en "/>
+                                                    <Run Text="este" FontWeight="Bold"/>
+                                                    <Run Text=" almacén específico"/>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat=N4}" Margin="4,0,0,0"/>
                                 </StackPanel>
                             </StackPanel>
@@ -571,9 +599,37 @@ CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
 
                                 <!-- Totales debajo -->
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                    <TextBlock Text="Global:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                    <TextBlock Text="Global:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.ToolTip>
+                                            <ToolTip>
+                                                <TextBlock>
+                                                    <Run Text="Cantidad "/>
+                                                    <Run Text="total" FontWeight="Bold"/>
+                                                    <Run Text=" de "/>
+                                                    <Run Text="este" FontWeight="Bold"/>
+                                                    <Run Text=" artículo por lote y fecha de caducidad en "/>
+                                                    <Run Text="todos" FontWeight="Bold"/>
+                                                    <Run Text=" los almacenes"/>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat=N4}" Margin="4,0,12,0"/>
-                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.ToolTip>
+                                            <ToolTip>
+                                                <TextBlock>
+                                                    <Run Text="Cantidad "/>
+                                                    <Run Text="total" FontWeight="Bold"/>
+                                                    <Run Text=" de "/>
+                                                    <Run Text="este" FontWeight="Bold"/>
+                                                    <Run Text=" artículo por lote y fecha de caducidad en "/>
+                                                    <Run Text="este" FontWeight="Bold"/>
+                                                    <Run Text=" almacén específico"/>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat=N4}" Margin="4,0,0,0"/>
                                 </StackPanel>
                             </StackPanel>
