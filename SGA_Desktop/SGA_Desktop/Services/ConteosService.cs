@@ -44,6 +44,34 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
+        /// Actualizar una orden de conteo existente
+        /// </summary>
+        public async Task<OrdenConteoDto> ActualizarOrdenAsync(Guid guid, CrearOrdenConteoDto dto)
+        {
+            try
+            {
+                var json = JsonConvert.SerializeObject(dto);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PutAsync($"conteos/ordenes/{guid}", content);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var orden = JsonConvert.DeserializeObject<OrdenConteoDto>(responseContent);
+                
+                return orden ?? throw new Exception("Error al deserializar la respuesta");
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al actualizar la orden de conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Obtener una orden de conteo por GUID
         /// </summary>
         public async Task<OrdenConteoDto?> ObtenerOrdenAsync(Guid guid)
@@ -91,6 +119,7 @@ namespace SGA_Desktop.Services
                 if (queryParams.Count > 0)
                     url += "?" + string.Join("&", queryParams);
 
+               
                 var response = await _httpClient.GetAsync(url);
                 response.EnsureSuccessStatusCode();
 
@@ -106,6 +135,41 @@ namespace SGA_Desktop.Services
             catch (Exception ex)
             {
                 throw new Exception($"Error al listar las órdenes de conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Listar todas las órdenes de conteo con filtros (para Desktop)
+        /// </summary>
+        public async Task<List<OrdenConteoDto>> ListarTodasLasOrdenesAsync(string? estado = null)
+        {
+            try
+            {
+                var url = "conteos/ordenes/todas";
+                var queryParams = new List<string>();
+
+                if (!string.IsNullOrEmpty(estado))
+                    queryParams.Add($"estado={Uri.EscapeDataString(estado)}");
+
+                if (queryParams.Count > 0)
+                    url += "?" + string.Join("&", queryParams);
+
+               
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var ordenes = JsonConvert.DeserializeObject<List<OrdenConteoDto>>(responseContent);
+                
+                return ordenes ?? new List<OrdenConteoDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al listar todas las órdenes de conteo: {ex.Message}", ex);
             }
         }
 

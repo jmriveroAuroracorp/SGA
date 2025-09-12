@@ -408,25 +408,7 @@
                                    FontWeight="Bold"
                                    Foreground="{StaticResource BrushSecundario}"/>
 
-                        <Button Content="👁️ Ver Orden"
-                                Command="{Binding VerOrdenCommand}"
-                                CommandParameter="{Binding OrdenSeleccionada}"
-                                Style="{StaticResource EstiloBoton}"
-                                Width="120"
-                                Height="35"
-                                IsEnabled="{Binding OrdenSeleccionada, Converter={StaticResource BoolToVisibilityConverter}}"
-                                Margin="0,0,20,0"/>
-
-                        <Button Content="✏️ Editar Orden"
-                                Command="{Binding EditarOrdenCommand}"
-                                CommandParameter="{Binding OrdenSeleccionada}"
-                                Style="{StaticResource EstiloBoton}"
-                                Width="120"
-                                Height="35"
-                                IsEnabled="{Binding OrdenSeleccionada, Converter={StaticResource BoolToVisibilityConverter}}"
-                                Margin="0,0,20,0"/>
-
-                        <Button Content="👁️ Exportar a Excel"
+                        <Button Content="📊 Exportar a Excel"
                                 Command="{Binding ExportarControlesCommand}"
                                 Style="{StaticResource EstiloBoton}"
                                 Width="150"

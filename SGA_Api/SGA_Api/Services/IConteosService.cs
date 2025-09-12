@@ -5,8 +5,10 @@ namespace SGA_Api.Services
     public interface IConteosService
     {
         Task<OrdenDto> CrearOrdenAsync(CrearOrdenDto dto);
+        Task<OrdenDto> ActualizarOrdenAsync(Guid guid, CrearOrdenConteoDto dto);
         Task<OrdenDto?> ObtenerOrdenAsync(Guid guid);
         Task<IEnumerable<OrdenDto>> ListarOrdenesAsync(string? codigoOperario = null, string? estado = null);
+        Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null);
         Task<OrdenDto> IniciarOrdenAsync(Guid guid, string codigoOperario);
         Task<OrdenDto> AsignarOperarioAsync(Guid guid, AsignarOperarioDto dto);
         Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto);

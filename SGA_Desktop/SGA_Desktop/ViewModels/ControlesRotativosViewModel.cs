@@ -149,7 +149,7 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 // Crear el ViewModel del diálogo
-                var dialogViewModel = new CrearOrdenConteoDialogViewModel(_conteosService, _stockService, new LoginService());
+                var dialogViewModel = new CrearOrdenConteoDialogViewModel(_conteosService, _stockService, new LoginService(), new InventarioService(), new UbicacionesService());
                 
                 // Crear y mostrar el diálogo
                 var dialog = new CrearOrdenConteoDialog(dialogViewModel);
@@ -187,7 +187,9 @@ namespace SGA_Desktop.ViewModels
                 // Filtrar por estado si no es "TODOS"
                 var estadoFiltro = EstadoFiltro == "TODOS" ? null : EstadoFiltro;
 
-                var ordenes = await _conteosService.ListarOrdenesAsync(null, estadoFiltro);
+                Debug.WriteLine($"CargarControles - EstadoFiltro: '{EstadoFiltro}', estadoFiltro enviado: '{estadoFiltro}'");
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estadoFiltro);
+                Debug.WriteLine($"CargarControles - Se obtuvieron {ordenes.Count} órdenes");
 
                 // Asegurar que tenemos los operarios cargados para el mapeo de nombres
                 if (OperariosDisponibles.Count == 0)
@@ -264,14 +266,78 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
-        private void EditarOrden(OrdenConteoDto orden)
+        private async Task EditarOrden(OrdenConteoDto orden)
         {
             if (orden == null) return;
 
-            var dialog = new WarningDialog(
-                "Editar Orden de Conteo", 
-                $"Funcionalidad para editar la orden '{orden.Titulo}' (GUID: {orden.GuidID}) en desarrollo.");
-            dialog.ShowDialog();
+            try
+            {
+                // PRIMER CHECK: Consultar el estado actual de la orden desde la base de datos
+                // (no usar los datos de la interfaz que pueden estar desactualizados)
+                Debug.WriteLine($"PRIMER CHECK - Consultando estado actual de la orden desde BD...");
+                var ordenActual = await _conteosService.ObtenerOrdenAsync(orden.GuidID);
+                
+                if (ordenActual == null)
+                {
+                    Debug.WriteLine($"PRIMER CHECK - ERROR: No se pudo obtener la orden desde BD");
+                    var dialog = new WarningDialog(
+                        "Error", 
+                        "No se pudo obtener la información actual de la orden.");
+                    ShowCenteredDialog(dialog);
+                    return;
+                }
+                
+                Debug.WriteLine($"PRIMER CHECK - Estado en interfaz: '{orden.Estado}'");
+                Debug.WriteLine($"PRIMER CHECK - Estado actual en BD: '{ordenActual.Estado}'");
+                Debug.WriteLine($"PRIMER CHECK - Estado formateado: '{ordenActual.EstadoFormateado}'");
+                
+                if (ordenActual.Estado != "PLANIFICADO" && ordenActual.Estado != "ASIGNADO")
+                {
+                    Debug.WriteLine($"PRIMER CHECK - BLOQUEANDO edición porque estado actual '{ordenActual.Estado}' no es editable");
+                    var dialog = new WarningDialog(
+                        "No se puede editar", 
+                        $"La orden '{ordenActual.Titulo}' está en estado '{ordenActual.EstadoFormateado}' y no se puede editar.\n\nSolo se pueden editar órdenes en estado 'Asignado'.");
+                    ShowCenteredDialog(dialog);
+                    
+                    // Refrescar la lista para actualizar los estados
+                    Debug.WriteLine("PRIMER CHECK - Refrescando lista después del aviso...");
+                    await CargarControles();
+                    return;
+                }
+                
+                Debug.WriteLine($"PRIMER CHECK - PERMITIENDO edición porque estado actual '{ordenActual.Estado}' es editable");
+
+                // Crear el ViewModel del diálogo de edición
+                var dialogViewModel = new EditarOrdenConteoDialogViewModel(_conteosService, _stockService, new LoginService(), new InventarioService(), new UbicacionesService());
+                
+                // Cargar los datos de la orden
+                await dialogViewModel.CargarOrdenAsync(orden.GuidID);
+                
+                // Crear y mostrar el diálogo
+                var editDialog = new EditarOrdenConteoDialog();
+                editDialog.DataContext = dialogViewModel;
+                
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                editDialog.Owner = mainWindow;
+                
+                // Mostrar el diálogo
+                var result = editDialog.ShowDialog();
+                
+                // Si se guardó correctamente, refrescar la lista
+                if (result == true)
+                {
+                    await CargarControles();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al editar orden", 
+                    $"No se pudo editar la orden: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
         }
 
 

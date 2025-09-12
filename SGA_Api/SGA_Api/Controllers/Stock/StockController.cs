@@ -285,14 +285,13 @@ namespace SGA_Api.Controllers.Stock
 		//}
 		[HttpGet("consulta-stock")]
 		public async Task<IActionResult> ConsultarStock(
-			[FromQuery] short codigoEmpresa,
-			[FromQuery] string? codigoUbicacion,
-			[FromQuery] string? codigoAlmacen,
-			[FromQuery] string? codigoArticulo,
-			[FromQuery] string? codigoCentro,
-			[FromQuery] string? almacen,
-			[FromQuery] string? partida,
-			[FromQuery] string? codigoOperario = null)
+	[FromQuery] short codigoEmpresa,
+	[FromQuery] string? codigoUbicacion,
+	[FromQuery] string? codigoAlmacen,
+	[FromQuery] string? codigoArticulo,
+	[FromQuery] string? codigoCentro,
+	[FromQuery] string? almacen,
+	[FromQuery] string? partida)
 		{
 			var flujoUbicacion = !string.IsNullOrWhiteSpace(codigoAlmacen);
 			var flujoArticulo = !string.IsNullOrWhiteSpace(codigoArticulo);
@@ -300,19 +299,6 @@ namespace SGA_Api.Controllers.Stock
 			if (!flujoUbicacion && !flujoArticulo)
 			{
 				return BadRequest("Debe indicar ubicación + código de almacén, o un código de artículo.");
-			}
-
-			// Obtener almacenes autorizados del operario si se proporciona
-			List<string> almacenesAutorizados = new List<string>();
-			if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
-			{
-				almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioId, codigoEmpresa);
-				
-				// Si el operario no tiene almacenes autorizados, no mostrar resultados
-				if (!almacenesAutorizados.Any())
-				{
-					return Ok(new List<object>());
-				}
 			}
 
 			var q = _auroraSgaContext.StockDisponible
@@ -339,12 +325,6 @@ namespace SGA_Api.Controllers.Stock
 			q = q.Where(a => a.Disponible > 0);
 
 			var datos = await q.ToListAsync();
-
-			// Filtrar por almacenes autorizados si se proporcionó operario
-			if (almacenesAutorizados.Any())
-			{
-				datos = datos.Where(d => almacenesAutorizados.Contains(d.CodigoAlmacen)).ToList();
-			}
 
 			var resultado = new List<object>();
 
@@ -414,15 +394,7 @@ namespace SGA_Api.Controllers.Stock
 				}
 			}
 
-			// TEMPORAL: Debug para ver qué está pasando
-			return Ok(new
-			{
-				AlmacenesAutorizados = almacenesAutorizados,
-				TotalDatosOriginales = q.Count(),
-				TotalDatosFiltrados = datos.Count,
-				DatosFiltrados = datos.Select(d => new { d.CodigoAlmacen, d.Almacen }).ToList(),
-				Resultado = resultado
-			});
+			return Ok(resultado);
 		}
 
 

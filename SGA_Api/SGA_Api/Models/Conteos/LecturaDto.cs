@@ -28,5 +28,7 @@ namespace SGA_Api.Models.Conteos
 
 		[StringLength(500, ErrorMessage = "El comentario no puede exceder 500 caracteres")]
 		public string? Comentario { get; set; }
+
+		public DateTime? FechaCaducidad { get; set; }
 	}
 }

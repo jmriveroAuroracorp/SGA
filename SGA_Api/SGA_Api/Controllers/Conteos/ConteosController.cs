@@ -48,6 +48,45 @@ namespace SGA_Api.Controllers
         }
 
         /// <summary>
+        /// Actualizar una orden de conteo existente
+        /// </summary>
+        /// <param name="guid">Guid de la orden</param>
+        /// <param name="dto">Datos actualizados de la orden</param>
+        /// <returns>Orden actualizada</returns>
+        [HttpPut("ordenes/{guid:guid}")]
+        [ProducesResponseType(typeof(OrdenDto), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> ActualizarOrden(Guid guid, [FromBody] CrearOrdenConteoDto dto)
+        {
+            try
+            {
+                var orden = await _conteosService.ActualizarOrdenAsync(guid, dto);
+                return Ok(orden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Error de validación al actualizar orden {Guid}", guid);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Error de validación",
+                    Detail = ex.Message,
+                    Status = 400
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al actualizar orden de conteo {Guid}", guid);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al actualizar la orden de conteo",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
         /// Obtener una orden de conteo por Guid
         /// </summary>
         /// <param name="guid">Guid de la orden</param>
@@ -85,7 +124,7 @@ namespace SGA_Api.Controllers
         }
 
         /// <summary>
-        /// Listar órdenes de conteo con filtros opcionales
+        /// Listar órdenes de conteo con filtros opcionales (para Mobility)
         /// </summary>
         /// <param name="codigoOperario">Código del operario para filtrar</param>
         /// <param name="estado">Estado de la orden para filtrar</param>
@@ -108,6 +147,32 @@ namespace SGA_Api.Controllers
                 {
                     Title = "Error interno del servidor",
                     Detail = "Ocurrió un error al listar las órdenes de conteo",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Listar todas las órdenes de conteo con filtros opcionales (para Desktop)
+        /// </summary>
+        /// <param name="estado">Estado de la orden para filtrar</param>
+        /// <returns>Lista de todas las órdenes que cumplen con los filtros</returns>
+        [HttpGet("ordenes/todas")]
+        [ProducesResponseType(typeof(IEnumerable<OrdenDto>), 200)]
+        public async Task<IActionResult> ListarTodasLasOrdenes([FromQuery] string? estado = null)
+        {
+            try
+            {
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado);
+                return Ok(ordenes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al listar todas las órdenes de conteo");
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al listar todas las órdenes de conteo",
                     Status = 500
                 });
             }

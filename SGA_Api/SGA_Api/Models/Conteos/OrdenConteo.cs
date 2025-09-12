@@ -1,9 +1,7 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.Conteos
 {
-    [Table("OrdenConteo")]
     public class OrdenConteo
     {
         public int CodigoEmpresa { get; set; } = 1;
@@ -30,8 +28,6 @@ namespace SGA_Api.Models.Conteos
         public DateTime? FechaAsignacion { get; set; }
         public DateTime? FechaInicio { get; set; }
         public DateTime? FechaCierre { get; set; }
-        [Key]
-        [Column("GuidID")]
         public Guid GuidID { get; set; } = Guid.NewGuid();
 
         // Navigation properties

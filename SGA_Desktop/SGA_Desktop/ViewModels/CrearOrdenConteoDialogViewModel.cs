@@ -16,20 +16,33 @@ using System.Windows;
 
 namespace SGA_Desktop.ViewModels
 {
+    // Clase para representar la opción "Todos" en los ComboBox
+    public class OpcionTodos
+    {
+        public string Texto { get; set; } = "Todos";
+        public int? Valor { get; set; } = null;
+        
+        public override string ToString() => Texto;
+    }
+
     public partial class CrearOrdenConteoDialogViewModel : ObservableObject
     {
         #region Fields & Services
         private readonly ConteosService _conteosService;
         private readonly StockService _stockService;
         private readonly LoginService _loginService;
+        private readonly InventarioService _inventarioService;
+        private readonly UbicacionesService _ubicacionesService;
         #endregion
 
         #region Constructor
-        public CrearOrdenConteoDialogViewModel(ConteosService conteosService, StockService stockService, LoginService loginService)
+        public CrearOrdenConteoDialogViewModel(ConteosService conteosService, StockService stockService, LoginService loginService, InventarioService inventarioService, UbicacionesService ubicacionesService)
         {
             _conteosService = conteosService;
             _stockService = stockService;
             _loginService = loginService;
+            _inventarioService = inventarioService;
+            _ubicacionesService = ubicacionesService;
             
             // Inicializar colecciones
             PrioridadesDisponibles = new ObservableCollection<PrioridadItem>
@@ -63,7 +76,7 @@ namespace SGA_Desktop.ViewModels
                 _ = InitializeAsync();
         }
 
-        public CrearOrdenConteoDialogViewModel() : this(new ConteosService(), new StockService(), new LoginService()) { }
+        public CrearOrdenConteoDialogViewModel() : this(new ConteosService(), new StockService(), new LoginService(), new InventarioService(), new UbicacionesService()) { }
         #endregion
 
         #region Observable Properties
@@ -102,19 +115,53 @@ namespace SGA_Desktop.ViewModels
 
         // Filtros para conteos por ubicación
         [ObservableProperty]
-        private string pasillo = string.Empty;
+        private object? pasillo;
 
         [ObservableProperty]
-        private string estanteria = string.Empty;
+        private object? estanteria;
 
         [ObservableProperty]
-        private string altura = string.Empty;
+        private object? altura;
 
         [ObservableProperty]
-        private string posicion = string.Empty;
+        private object? posicion;
 
         [ObservableProperty]
         private string ubicacionDirecta = string.Empty; // Para ubicaciones específicas
+
+        // Ubicaciones disponibles para el ComboBox
+        [ObservableProperty]
+        private ObservableCollection<string> ubicacionesDisponibles = new();
+
+        // Propiedades para controlar el estado de los ComboBox
+        [ObservableProperty]
+        private bool estanteriaHabilitada = true;
+
+        [ObservableProperty]
+        private bool alturaHabilitada = true;
+
+        [ObservableProperty]
+        private bool posicionHabilitada = true;
+
+        // Propiedades para controlar el modo de selección
+        [ObservableProperty]
+        private bool usarUbicacionDirecta = false;
+
+        // Propiedad calculada para mostrar/ocultar filtros secuenciales
+        public bool MostrarFiltrosSecuenciales => !UsarUbicacionDirecta;
+
+        // Rangos disponibles (para los combos automáticos)
+        [ObservableProperty]
+        private ObservableCollection<object> pasillosDisponibles = new();
+
+        [ObservableProperty]
+        private ObservableCollection<object> estanteriasDisponibles = new();
+
+        [ObservableProperty]
+        private ObservableCollection<object> alturasDisponibles = new();
+
+        [ObservableProperty]
+        private ObservableCollection<object> posicionesDisponibles = new();
 
         // Filtros para conteos por artículo
         [ObservableProperty]
@@ -444,6 +491,90 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
+        private async Task CargarRangosDisponiblesAsync()
+        {
+            try
+            {
+                if (AlmacenSeleccionado == null) return;
+
+                var rangos = await _inventarioService.ObtenerRangosDisponiblesAsync(
+                    SessionManager.EmpresaSeleccionada!.Value,
+                    AlmacenSeleccionado.CodigoAlmacen
+                );
+
+                // Limpiar y cargar las colecciones
+                PasillosDisponibles.Clear();
+                EstanteriasDisponibles.Clear();
+                AlturasDisponibles.Clear();
+                PosicionesDisponibles.Clear();
+
+                // Agregar opción "Todos" al principio de cada lista
+                PasillosDisponibles.Add(new OpcionTodos { Texto = "Todos los pasillos" });
+                EstanteriasDisponibles.Add(new OpcionTodos { Texto = "Todas las estanterías" });
+                AlturasDisponibles.Add(new OpcionTodos { Texto = "Todas las alturas" });
+                PosicionesDisponibles.Add(new OpcionTodos { Texto = "Todas las posiciones" });
+
+                foreach (var pasillo in rangos.Pasillos ?? new List<int>())
+                    PasillosDisponibles.Add(pasillo);
+
+                foreach (var estanteria in rangos.Estanterias ?? new List<int>())
+                    EstanteriasDisponibles.Add(estanteria);
+
+                foreach (var altura in rangos.Alturas ?? new List<int>())
+                    AlturasDisponibles.Add(altura);
+
+                foreach (var posicion in rangos.Posiciones ?? new List<int>())
+                    PosicionesDisponibles.Add(posicion);
+
+                // NO establecer valores por defecto - los filtros son opcionales
+                // El usuario puede seleccionar solo los filtros que necesite
+                // Si no selecciona nada, se hace conteo de todo el almacén
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error cargando rangos disponibles: {ex.Message}");
+                // En caso de error, limpiar las colecciones
+                PasillosDisponibles.Clear();
+                EstanteriasDisponibles.Clear();
+                AlturasDisponibles.Clear();
+                PosicionesDisponibles.Clear();
+            }
+        }
+
+        private async Task CargarUbicacionesDisponiblesAsync()
+        {
+            try
+            {
+                if (AlmacenSeleccionado == null) return;
+
+                var ubicaciones = await _ubicacionesService.ObtenerUbicacionesAsync(
+                    AlmacenSeleccionado.CodigoAlmacen,
+                    SessionManager.EmpresaSeleccionada!.Value,
+                    soloConStock: false // Cargar todas las ubicaciones, no solo las que tienen stock
+                );
+
+                UbicacionesDisponibles.Clear();
+
+                // Agregar opción "SIN UBICAR" al principio
+                UbicacionesDisponibles.Add("SIN UBICAR");
+
+                // Agregar todas las ubicaciones ordenadas (filtrar vacías)
+                foreach (var ubicacion in ubicaciones
+                    .Where(u => !string.IsNullOrWhiteSpace(u.Ubicacion))
+                    .OrderBy(u => u.Ubicacion))
+                {
+                    UbicacionesDisponibles.Add(ubicacion.Ubicacion);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error cargando ubicaciones disponibles: {ex.Message}");
+                // En caso de error, mantener solo "SIN UBICAR"
+                UbicacionesDisponibles.Clear();
+                UbicacionesDisponibles.Add("SIN UBICAR");
+            }
+        }
+
        private string GenerarFiltrosJson()
             {
                 var filtros = new Dictionary<string, object>();
@@ -457,21 +588,31 @@ namespace SGA_Desktop.ViewModels
                 if (EsConteoUbicacion)
                 {
                     // FLUJO 1: Conteo por ubicación
-                    if (!string.IsNullOrWhiteSpace(UbicacionDirecta))
+                    if (UsarUbicacionDirecta)
                     {
-                        filtros["ubicacion"] = UbicacionDirecta.Trim();
+                        if (UbicacionDirecta == "SIN UBICAR")
+                        {
+                            // Para "Sin ubicar", enviar ubicación vacía explícitamente
+                            filtros["ubicacion"] = "";
+                        }
+                        else if (!string.IsNullOrWhiteSpace(UbicacionDirecta))
+                        {
+                            // Modo ubicación directa: usar solo la ubicación específica
+                            filtros["ubicacion"] = UbicacionDirecta.Trim();
+                        }
                     }
                     else
                     {
-                        // Filtros por componentes de ubicación
-                        if (!string.IsNullOrWhiteSpace(Pasillo))
-                            filtros["pasillo"] = Pasillo.Trim();
-                        if (!string.IsNullOrWhiteSpace(Estanteria))
-                            filtros["estanteria"] = Estanteria.Trim();
-                        if (!string.IsNullOrWhiteSpace(Altura))
-                            filtros["altura"] = Altura.Trim();
-                        if (!string.IsNullOrWhiteSpace(Posicion))
-                            filtros["posicion"] = Posicion.Trim();
+                        // Filtros por componentes de ubicación (opcionales)
+                        // Si no se especifica nada, se hace conteo de todo el almacén
+                        if (Pasillo is int pasilloValor)
+                            filtros["pasillo"] = pasilloValor.ToString();
+                        if (Estanteria is int estanteriaValor)
+                            filtros["estanteria"] = estanteriaValor.ToString();
+                        if (Altura is int alturaValor)
+                            filtros["altura"] = alturaValor.ToString();
+                        if (Posicion is int posicionValor)
+                            filtros["posicion"] = posicionValor.ToString();
                     }
                 }
                 else
@@ -501,11 +642,16 @@ namespace SGA_Desktop.ViewModels
             else
             {
                 // Cambió a conteo por artículo, limpiar campos de ubicación
-                Pasillo = string.Empty;
-                Estanteria = string.Empty;
-                Altura = string.Empty;
-                Posicion = string.Empty;
-                UbicacionDirecta = string.Empty;
+                Pasillo = null;
+                Estanteria = null;
+                Altura = null;
+                Posicion = null;
+                UbicacionDirecta = "SIN UBICAR";
+                
+                // Resetear estado de habilitación
+                EstanteriaHabilitada = true;
+                AlturaHabilitada = true;
+                PosicionHabilitada = true;
                 
                 // Asegurar que hay un almacén seleccionado para conteos por artículo
                 if (AlmacenSeleccionado == null && AlmacenesDisponibles.Any())
@@ -556,6 +702,116 @@ namespace SGA_Desktop.ViewModels
             CodigoArticulo = string.Empty;
             OnPropertyChanged(nameof(MostrarListaArticulos));
             OnPropertyChanged(nameof(MostrarInfoArticulo));
+
+            // Cargar rangos disponibles y ubicaciones cuando se selecciona un almacén
+            if (value != null)
+            {
+                _ = CargarRangosDisponiblesAsync();
+                _ = CargarUbicacionesDisponiblesAsync();
+            }
+        }
+
+        partial void OnPasilloChanged(object? value)
+        {
+            // Si se selecciona "Todos los pasillos", bloquear y limpiar los filtros más específicos
+            if (value is OpcionTodos)
+            {
+                EstanteriaHabilitada = false;
+                AlturaHabilitada = false;
+                PosicionHabilitada = false;
+                Estanteria = null;
+                Altura = null;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se selecciona un pasillo específico, habilitar estantería
+                EstanteriaHabilitada = true;
+                // Re-evaluar el estado de altura y posición basado en estantería
+                ActualizarEstadoFiltros();
+            }
+        }
+
+        partial void OnEstanteriaChanged(object? value)
+        {
+            // Si se selecciona "Todas las estanterías", bloquear y limpiar los filtros más específicos
+            if (value is OpcionTodos)
+            {
+                AlturaHabilitada = false;
+                PosicionHabilitada = false;
+                Altura = null;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se selecciona una estantería específica, habilitar altura
+                AlturaHabilitada = true;
+                // Re-evaluar el estado de posición basado en altura
+                ActualizarEstadoFiltros();
+            }
+        }
+
+        partial void OnAlturaChanged(object? value)
+        {
+            // Si se selecciona "Todas las alturas", bloquear y limpiar el filtro más específico
+            if (value is OpcionTodos)
+            {
+                PosicionHabilitada = false;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se selecciona una altura específica, habilitar posición
+                PosicionHabilitada = true;
+            }
+        }
+
+        partial void OnPosicionChanged(object? value)
+        {
+            // No hay filtros más específicos que la posición
+        }
+
+        partial void OnUsarUbicacionDirectaChanged(bool value)
+        {
+            if (value)
+            {
+                // Si se activa ubicación directa, limpiar filtros secuenciales
+                Pasillo = null;
+                Estanteria = null;
+                Altura = null;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se desactiva ubicación directa, establecer "Sin ubicar" por defecto
+                UbicacionDirecta = "SIN UBICAR";
+            }
+            
+            // Notificar cambio en la visibilidad
+            OnPropertyChanged(nameof(MostrarFiltrosSecuenciales));
+        }
+
+        private void ActualizarEstadoFiltros()
+        {
+            // Re-evaluar el estado de altura basado en estantería
+            if (Estanteria is OpcionTodos)
+            {
+                AlturaHabilitada = false;
+                PosicionHabilitada = false;
+            }
+            else if (Estanteria != null)
+            {
+                AlturaHabilitada = true;
+                // Re-evaluar posición basado en altura
+                if (Altura is OpcionTodos)
+                {
+                    PosicionHabilitada = false;
+                }
+                else if (Altura != null)
+                {
+                    PosicionHabilitada = true;
+                }
+            }
         }
         #endregion
     }

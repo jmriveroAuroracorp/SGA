@@ -14,6 +14,7 @@ namespace SGA_Api.Models.Conteos
         public string UsuarioCodigo { get; set; } = string.Empty;
         public DateTime Fecha { get; set; }
         public string? Comentario { get; set; }
+        public DateTime? FechaCaducidad { get; set; }
         
         // Campos calculados
         public decimal? Diferencia => CantidadContada.HasValue && CantidadStock.HasValue 

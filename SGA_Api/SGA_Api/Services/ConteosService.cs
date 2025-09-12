@@ -137,6 +137,113 @@ namespace SGA_Api.Services
             }
         }
 
+        public async Task<OrdenDto> ActualizarOrdenAsync(Guid guid, CrearOrdenConteoDto dto)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                _logger.LogInformation("Iniciando actualización de orden de conteo: {Guid}", guid);
+
+                var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == guid);
+                if (orden == null)
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {guid}");
+
+                // Solo se puede editar si está en estado PLANIFICADO o ASIGNADO
+                if (orden.Estado != "PLANIFICADO" && orden.Estado != "ASIGNADO")
+                    throw new InvalidOperationException($"No se puede editar una orden en estado {orden.Estado}");
+
+                // Actualizar campos básicos
+                orden.Titulo = dto.Titulo;
+                orden.Prioridad = dto.Prioridad;
+                orden.FechaPlan = dto.FechaPlan;
+                orden.Comentario = dto.Comentario;
+
+                // Actualizar filtros
+                orden.FiltrosJson = dto.FiltrosJson;
+
+                // Extraer valores del FiltrosJson para actualizar campos específicos
+                var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
+                var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
+                var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
+
+                // Actualizar campos específicos
+                orden.CodigoAlmacen = codigoAlmacen;
+                orden.CodigoArticulo = codigoArticulo;
+                orden.CodigoUbicacion = codigoUbicacion;
+
+                // Determinar el alcance automáticamente
+                var pasillo = ExtraerPasilloDelFiltro(dto.FiltrosJson);
+                var estanteria = ExtraerEstanteriaDelFiltro(dto.FiltrosJson);
+                var altura = ExtraerAlturaDelFiltro(dto.FiltrosJson);
+                var posicion = ExtraerPosicionDelFiltro(dto.FiltrosJson);
+
+                // Determinar el alcance automáticamente según los componentes disponibles
+                // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
+                string alcanceDeterminado = "ALMACEN"; // Default
+               
+                if (!string.IsNullOrEmpty(codigoArticulo) &&
+                    string.IsNullOrEmpty(codigoUbicacion) &&
+                    string.IsNullOrEmpty(pasillo) &&
+                    string.IsNullOrEmpty(estanteria))
+                {
+                    // Si solo se especifica artículo (sin ubicación, pasillo, estantería), es ARTICULO
+                    alcanceDeterminado = "ARTICULO";
+                }
+                else if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
+                {
+                    // Si hay ubicación directa (incluyendo ubicación vacía ""), el alcance es UBICACION
+                    alcanceDeterminado = "UBICACION";
+                }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
+                         !string.IsNullOrEmpty(altura) && !string.IsNullOrEmpty(posicion))
+                {
+                    // Si están todos los componentes, es UBICACION
+                    alcanceDeterminado = "UBICACION";
+                    // Construir ubicación en formato UB + pasillo + estanteria + altura + posicion
+                    var pasilloFormateado = pasillo.PadLeft(3, '0');
+                    var estanteriaFormateada = estanteria.PadLeft(3, '0');
+                    var alturaFormateada = altura.PadLeft(3, '0');
+                    var posicionFormateada = posicion.PadLeft(3, '0');
+                   
+                    codigoUbicacion = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
+                }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
+                         !string.IsNullOrEmpty(altura))
+                {
+                    // Si hay pasillo, estantería y altura (sin posición), es ALTURA
+                    alcanceDeterminado = "ALTURA";
+                }
+                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                {
+                    // Si hay pasillo y estantería, es ESTANTERIA
+                    alcanceDeterminado = "ESTANTERIA";
+                }
+                else if (!string.IsNullOrEmpty(pasillo))
+                {
+                    // Si solo hay pasillo, es PASILLO
+                    alcanceDeterminado = "PASILLO";
+                }
+                // Si solo hay almacén, el alcance es ALMACEN (default)
+
+                _logger.LogInformation("ALCANCE_AUTO_UPDATE: Alcance determinado automáticamente: '{AlcanceDeterminado}' para filtros: almacen='{Almacen}', pasillo='{Pasillo}', estanteria='{Estanteria}', altura='{Altura}', posicion='{Posicion}', ubicacion='{Ubicacion}'",
+                     alcanceDeterminado, codigoAlmacen, pasillo, estanteria, altura, posicion, codigoUbicacion);
+
+                orden.Alcance = alcanceDeterminado;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Orden {Guid} actualizada correctamente", guid);
+                return MapToOrdenDto(orden);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Error en ActualizarOrdenAsync: {Message}", ex.Message);
+                throw;
+            }
+        }
+
         public async Task<OrdenDto?> ObtenerOrdenAsync(Guid guid)
         {
             var orden = await _context.OrdenesConteo
@@ -176,6 +283,37 @@ namespace SGA_Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en ListarOrdenesAsync: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Listar todas las órdenes de conteo sin restricciones de usuario (para Desktop)
+        /// </summary>
+        public async Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null)
+        {
+            try
+            {
+                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}", estado);
+                
+                var query = _context.OrdenesConteo.AsQueryable();
+
+                // Solo aplicar filtro de estado si se especifica
+                if (!string.IsNullOrEmpty(estado))
+                {
+                    query = query.Where(o => o.Estado == estado);
+                }
+
+                var ordenes = await query
+                    .OrderByDescending(o => o.FechaCreacion)
+                    .ToListAsync();
+
+                _logger.LogInformation("Se encontraron {Count} órdenes de conteo (todas)", ordenes.Count);
+                return ordenes.Select(MapToOrdenDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ListarTodasLasOrdenesAsync: {Message}", ex.Message);
                 throw;
             }
         }
@@ -385,7 +523,8 @@ namespace SGA_Api.Services
                             CantidadContada = null,
                             CantidadStock = stock.UnidadSaldo,
                             UsuarioCodigo = orden.CodigoOperario ?? "",
-                            Fecha = DateTime.Now
+                            Fecha = DateTime.Now,
+                            FechaCaducidad = stock.FechaCaducidad
                         });
                         
                         _logger.LogInformation("ARTICULO_DEBUG: Lectura generada para artículo {CodigoArticulo} en almacén {CodigoAlmacen}, ubicación '{Ubicacion}'", 
@@ -450,7 +589,8 @@ namespace SGA_Api.Services
                         CantidadContada = null,
                         CantidadStock = stock.UnidadSaldo,
                         UsuarioCodigo = orden.CodigoOperario ?? "",
-                        Fecha = DateTime.Now
+                        Fecha = DateTime.Now,
+                        FechaCaducidad = stock.FechaCaducidad
                     });
                 }
             }
@@ -574,7 +714,8 @@ namespace SGA_Api.Services
                         CantidadContada = null,
                         CantidadStock = stock.UnidadSaldo,
                         UsuarioCodigo = orden.CodigoOperario ?? "",
-                        Fecha = DateTime.Now
+                        Fecha = DateTime.Now,
+                        FechaCaducidad = stock.FechaCaducidad
                     });
                     
                     _logger.LogInformation("UBICACION_DEBUG: Lectura generada para ubicación '{Ubicacion}', artículo {Articulo}", 
@@ -694,7 +835,8 @@ namespace SGA_Api.Services
                         CantidadContada = null,
                         CantidadStock = stock.UnidadSaldo,
                         UsuarioCodigo = orden.CodigoOperario ?? "",
-                        Fecha = DateTime.Now
+                        Fecha = DateTime.Now,
+                        FechaCaducidad = stock.FechaCaducidad
                     });
                 }
             }
@@ -931,7 +1073,8 @@ namespace SGA_Api.Services
                     CantidadStock = stockActual,
                     UsuarioCodigo = dto.UsuarioCodigo,
                     Comentario = dto.Comentario,
-                    Fecha = DateTime.Now
+                    Fecha = DateTime.Now,
+                    FechaCaducidad = dto.FechaCaducidad
                 };
                 _context.LecturasConteo.Add(lectura);
                 await _context.SaveChangesAsync();
@@ -978,7 +1121,8 @@ namespace SGA_Api.Services
                             Diferencia = diferencia,
                             AccionFinal = accion,
                             FechaEvaluacion = DateTime.Now,
-                            AjusteAplicado = false
+                            AjusteAplicado = false,
+                            FechaCaducidad = lectura.FechaCaducidad
                         };
                         _context.ResultadosConteo.Add(resultado);
 
@@ -998,7 +1142,9 @@ namespace SGA_Api.Services
                             IdConteo = resultado.OrdenGuid,
                             CodigoEmpresa = (short)orden.CodigoEmpresa, // Convertir int a short
                             CodigoAlmacen = resultado.CodigoAlmacen,
-                            Estado = "PENDIENTE_ERP"
+                            Estado = "PENDIENTE_ERP",
+                            FechaCaducidad = resultado.FechaCaducidad,
+                            Partida = resultado.LotePartida
                         };
 
                         _context.InventarioAjustes.Add(inventarioAjuste);
@@ -1471,7 +1617,8 @@ namespace SGA_Api.Services
                 CantidadStock = lectura.CantidadStock,
                 UsuarioCodigo = lectura.UsuarioCodigo,
                 Fecha = lectura.Fecha,
-                Comentario = lectura.Comentario
+                Comentario = lectura.Comentario,
+                FechaCaducidad = lectura.FechaCaducidad
             };
         }
 

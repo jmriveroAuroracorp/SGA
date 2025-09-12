@@ -1,9 +1,5 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SGA_Api.Models.Conteos
 {
-    [Table("LecturaConteo")]
     public class LecturaConteo
     {
         public Guid OrdenGuid { get; set; }
@@ -17,8 +13,6 @@ namespace SGA_Api.Models.Conteos
         public string UsuarioCodigo { get; set; } = string.Empty;
         public DateTime Fecha { get; set; }
         public string? Comentario { get; set; }
-        [Key]
-        [Column("GuidID")]
         public Guid GuidID { get; set; } = Guid.NewGuid();
         public DateTime? FechaCaducidad { get; set; }
 
