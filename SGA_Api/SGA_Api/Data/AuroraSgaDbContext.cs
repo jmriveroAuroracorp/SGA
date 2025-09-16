@@ -55,7 +55,6 @@ namespace SGA_Api.Data
 		// Entidades de Órdenes de Traspaso
 		public DbSet<OrdenTraspasoCabecera> OrdenTraspasoCabecera { get; set; }
 		public DbSet<OrdenTraspasoLinea> OrdenTraspasoLinea { get; set; }
-		public DbSet<OrdenTraspasoMovimiento> OrdenTraspasoMovimiento { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{

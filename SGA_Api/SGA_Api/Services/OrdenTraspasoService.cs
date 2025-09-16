@@ -13,7 +13,7 @@ namespace SGA_Api.Services
             _context = context;
         }
 
-        public async Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null, int? usuarioAsignado = null)
+        public async Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null)
         {
             var query = _context.OrdenTraspasoCabecera
                 .Include(o => o.Lineas)
@@ -25,8 +25,6 @@ namespace SGA_Api.Services
             if (!string.IsNullOrEmpty(estado))
                 query = query.Where(o => o.Estado == estado);
 
-            if (usuarioAsignado.HasValue)
-                query = query.Where(o => o.UsuarioAsignado == usuarioAsignado.Value);
 
             var ordenes = await query.OrderByDescending(o => o.FechaCreacion).ToListAsync();
 
@@ -37,7 +35,7 @@ namespace SGA_Api.Services
         {
             var orden = await _context.OrdenTraspasoCabecera
                 .Include(o => o.Lineas)
-                .FirstOrDefaultAsync(o => o.IdOrdenTrabajo == id);
+                .FirstOrDefaultAsync(o => o.IdOrdenTraspaso == id);
 
             return orden != null ? MapToDto(orden) : null;
         }
@@ -51,11 +49,11 @@ namespace SGA_Api.Services
                 Prioridad = dto.Prioridad,
                 FechaPlan = dto.FechaPlan,
                 TipoOrigen = dto.TipoOrigen,
-                IdOrigen = dto.IdOrigen,
                 UsuarioCreacion = dto.UsuarioCreacion,
-                UsuarioAsignado = dto.UsuarioAsignado,
                 Comentarios = dto.Comentarios,
-                FechaCreacion = DateTime.Now
+                FechaCreacion = DateTime.Now,
+                CodigoOrden = await GenerarCodigoOrdenAsync(dto.CodigoEmpresa),
+                CodigoAlmacenDestino = dto.CodigoAlmacenDestino
             };
 
             _context.OrdenTraspasoCabecera.Add(orden);
@@ -63,25 +61,27 @@ namespace SGA_Api.Services
             // Agregar líneas
             foreach (var lineaDto in dto.Lineas)
             {
+                // Debug: verificar IdOperarioAsignado
+                System.Diagnostics.Debug.WriteLine($"API - Línea: {lineaDto.CodigoArticulo} - IdOperarioAsignado: {lineaDto.IdOperarioAsignado}");
                 var linea = new OrdenTraspasoLinea
                 {
-                    IdOrdenTrabajo = orden.IdOrdenTrabajo,
-                    Orden = lineaDto.Orden,
+                    IdOrdenTraspaso = orden.IdOrdenTraspaso,
+                    NumeroLinea = lineaDto.Orden,
                     CodigoArticulo = lineaDto.CodigoArticulo,
                     DescripcionArticulo = lineaDto.DescripcionArticulo,
-                    UM = lineaDto.UM,
+                    FechaCaducidad = lineaDto.FechaCaducidad,
                     CantidadPlan = lineaDto.CantidadPlan,
                     CodigoAlmacenOrigen = lineaDto.CodigoAlmacenOrigen,
                     UbicacionOrigen = lineaDto.UbicacionOrigen,
-                    PartidaOrigen = lineaDto.PartidaOrigen,
+                    Partida = lineaDto.Partida,
                     PaletOrigen = lineaDto.PaletOrigen,
                     CodigoAlmacenDestino = lineaDto.CodigoAlmacenDestino,
                     UbicacionDestino = lineaDto.UbicacionDestino,
-                    PartidaDestino = lineaDto.PartidaDestino,
                     PaletDestino = lineaDto.PaletDestino,
                     Estado = "PENDIENTE",
                     CantidadMovida = 0,
-                    Completada = false
+                    Completada = false,
+                    IdOperarioAsignado = lineaDto.IdOperarioAsignado
                 };
 
                 _context.OrdenTraspasoLinea.Add(linea);
@@ -106,8 +106,6 @@ namespace SGA_Api.Services
             if (dto.FechaPlan.HasValue)
                 orden.FechaPlan = dto.FechaPlan.Value;
 
-            if (dto.UsuarioAsignado.HasValue)
-                orden.UsuarioAsignado = dto.UsuarioAsignado.Value;
 
             if (dto.Comentarios != null)
                 orden.Comentarios = dto.Comentarios;
@@ -130,8 +128,8 @@ namespace SGA_Api.Services
             if (dto.Completada.HasValue)
                 linea.Completada = dto.Completada.Value;
 
-            if (dto.IdOperarioAsignado.HasValue)
-                linea.IdOperarioAsignado = dto.IdOperarioAsignado.Value;
+            if (dto.IdOperarioAsignado > 0)
+                linea.IdOperarioAsignado = dto.IdOperarioAsignado;
 
             if (dto.FechaInicio.HasValue)
                 linea.FechaInicio = dto.FechaInicio.Value;
@@ -142,8 +140,6 @@ namespace SGA_Api.Services
             if (dto.IdTraspaso.HasValue)
                 linea.IdTraspaso = dto.IdTraspaso.Value;
 
-            if (dto.IdLineaTraspaso.HasValue)
-                linea.IdLineaTraspaso = dto.IdLineaTraspaso.Value;
 
             await _context.SaveChangesAsync();
             return true;
@@ -183,29 +179,12 @@ namespace SGA_Api.Services
             return true;
         }
 
-        public async Task<bool> RegistrarMovimientoAsync(RegistrarMovimientoDto dto)
-        {
-            var movimiento = new OrdenTraspasoMovimiento
-            {
-                IdOrdenTrabajo = dto.IdLineaOrden, // TODO: Obtener el ID de la orden desde la línea
-                IdLineaOrden = dto.IdLineaOrden,
-                IdTraspaso = dto.IdTraspaso,
-                IdLineaTraspaso = dto.IdLineaTraspaso,
-                FechaMovimiento = DateTime.Now,
-                IdOperario = dto.IdOperario,
-                Comentarios = dto.Comentarios
-            };
-
-            _context.OrdenTraspasoMovimiento.Add(movimiento);
-            await _context.SaveChangesAsync();
-            return true;
-        }
 
         private static OrdenTraspasoDto MapToDto(OrdenTraspasoCabecera orden)
         {
             return new OrdenTraspasoDto
             {
-                IdOrdenTrabajo = orden.IdOrdenTrabajo,
+                IdOrdenTraspaso = orden.IdOrdenTraspaso,
                 CodigoEmpresa = orden.CodigoEmpresa,
                 Estado = orden.Estado,
                 Prioridad = orden.Prioridad,
@@ -213,11 +192,11 @@ namespace SGA_Api.Services
                 FechaInicio = orden.FechaInicio,
                 FechaFinalizacion = orden.FechaFinalizacion,
                 TipoOrigen = orden.TipoOrigen,
-                IdOrigen = orden.IdOrigen,
                 UsuarioCreacion = orden.UsuarioCreacion,
-                UsuarioAsignado = orden.UsuarioAsignado,
                 Comentarios = orden.Comentarios,
                 FechaCreacion = orden.FechaCreacion,
+                CodigoOrden = orden.CodigoOrden,
+                CodigoAlmacenDestino = orden.CodigoAlmacenDestino,
                 Lineas = orden.Lineas.Select(MapLineaToDto).ToList()
             };
         }
@@ -226,20 +205,19 @@ namespace SGA_Api.Services
         {
             return new LineaOrdenTraspasoDetalleDto
             {
-                IdLineaOrden = linea.IdLineaOrden,
-                IdOrdenTrabajo = linea.IdOrdenTrabajo,
-                Orden = linea.Orden,
+                IdLineaOrden = linea.IdLineaOrdenTraspaso,
+                IdOrdenTraspaso = linea.IdOrdenTraspaso,
+                Orden = linea.NumeroLinea,
                 CodigoArticulo = linea.CodigoArticulo,
                 DescripcionArticulo = linea.DescripcionArticulo,
-                UM = linea.UM,
+                FechaCaducidad = linea.FechaCaducidad,
                 CantidadPlan = linea.CantidadPlan,
                 CodigoAlmacenOrigen = linea.CodigoAlmacenOrigen,
                 UbicacionOrigen = linea.UbicacionOrigen,
-                PartidaOrigen = linea.PartidaOrigen,
+                Partida = linea.Partida,
                 PaletOrigen = linea.PaletOrigen,
                 CodigoAlmacenDestino = linea.CodigoAlmacenDestino,
                 UbicacionDestino = linea.UbicacionDestino,
-                PartidaDestino = linea.PartidaDestino,
                 PaletDestino = linea.PaletDestino,
                 Estado = linea.Estado,
                 CantidadMovida = linea.CantidadMovida,
@@ -247,9 +225,32 @@ namespace SGA_Api.Services
                 IdOperarioAsignado = linea.IdOperarioAsignado,
                 FechaInicio = linea.FechaInicio,
                 FechaFinalizacion = linea.FechaFinalizacion,
-                IdTraspaso = linea.IdTraspaso,
-                IdLineaTraspaso = linea.IdLineaTraspaso
+                IdTraspaso = linea.IdTraspaso
             };
+        }
+
+        private async Task<string> GenerarCodigoOrdenAsync(short codigoEmpresa)
+        {
+            // Obtener el último número de orden para la empresa
+            var ultimaOrden = await _context.OrdenTraspasoCabecera
+                .Where(o => o.CodigoEmpresa == codigoEmpresa)
+                .OrderByDescending(o => o.CodigoOrden)
+                .FirstOrDefaultAsync();
+
+            int siguienteNumero = 1;
+            
+            if (ultimaOrden != null && !string.IsNullOrEmpty(ultimaOrden.CodigoOrden))
+            {
+                // Extraer el número del código existente (formato: OT-{EMPRESA}-{NUMERO})
+                var partes = ultimaOrden.CodigoOrden.Split('-');
+                if (partes.Length >= 3 && int.TryParse(partes[2], out int ultimoNumero))
+                {
+                    siguienteNumero = ultimoNumero + 1;
+                }
+            }
+
+            // Generar código en formato: OT-{EMPRESA}-{NUMERO}
+            return $"OT-{codigoEmpresa:D2}-{siguienteNumero:D6}";
         }
     }
 } 

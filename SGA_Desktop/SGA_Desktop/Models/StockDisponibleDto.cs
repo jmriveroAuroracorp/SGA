@@ -22,6 +22,7 @@ public class StockDisponibleDto : INotifyPropertyChanged
 
 	public string CodigoArticulo { get; set; }
 	public string DescripcionArticulo { get; set; }
+	public short CodigoEmpresa { get; set; }
 
 	public bool TieneError { get; set; }
 

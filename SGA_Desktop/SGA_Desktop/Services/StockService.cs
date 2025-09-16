@@ -253,6 +253,7 @@ namespace SGA_Desktop.Services
 						// Campos originales
 						DescripcionArticulo = jObject["descripcionArticulo"]?.ToString(),
 						CodigoArticulo = jObject["codigoArticulo"]?.ToString(),
+						CodigoEmpresa = jObject["codigoEmpresa"]?.ToObject<short>() ?? 0,
 						CodigoAlmacen = jObject["codigoAlmacen"]?.ToString(),
 						Ubicacion = jObject["ubicacion"]?.ToString(),
 						Partida = jObject["partida"]?.ToString(),

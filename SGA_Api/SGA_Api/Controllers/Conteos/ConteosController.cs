@@ -156,14 +156,15 @@ namespace SGA_Api.Controllers
         /// Listar todas las órdenes de conteo con filtros opcionales (para Desktop)
         /// </summary>
         /// <param name="estado">Estado de la orden para filtrar</param>
+        /// <param name="codigoOperario">Código del operario para filtrar</param>
         /// <returns>Lista de todas las órdenes que cumplen con los filtros</returns>
         [HttpGet("ordenes/todas")]
         [ProducesResponseType(typeof(IEnumerable<OrdenDto>), 200)]
-        public async Task<IActionResult> ListarTodasLasOrdenes([FromQuery] string? estado = null)
+        public async Task<IActionResult> ListarTodasLasOrdenes([FromQuery] string? estado = null, [FromQuery] string? codigoOperario = null)
         {
             try
             {
-                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado);
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado, codigoOperario);
                 return Ok(ordenes);
             }
             catch (Exception ex)

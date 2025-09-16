@@ -3,11 +3,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.OrdenTraspaso
 {
-    [Table("OrdenTrabajoCabecera")]
+    [Table("OrdenTraspasoCabecera")]
     public class OrdenTraspasoCabecera
     {
         [Key]
-        public Guid IdOrdenTrabajo { get; set; } = Guid.NewGuid();
+        public Guid IdOrdenTraspaso { get; set; } = Guid.NewGuid();
         
         [Required]
         public short CodigoEmpresa { get; set; }
@@ -25,23 +25,25 @@ namespace SGA_Api.Models.OrdenTraspaso
         
         [Required]
         [MaxLength(20)]
-        public string TipoOrigen { get; set; } = "MANUAL"; // 'MANUAL','INVENTARIO','ERP','AUTOMATICA'
-        
-        public Guid? IdOrigen { get; set; }
+        public string TipoOrigen { get; set; } = "SGA"; // 'SGA','MANUAL','INVENTARIO','ERP','AUTOMATICA'
         
         [Required]
         public int UsuarioCreacion { get; set; }
-        
-        public int? UsuarioAsignado { get; set; }
         
         [MaxLength(500)]
         public string? Comentarios { get; set; }
         
         [Required]
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        
+        [Required]
+        [MaxLength(30)]
+        public string CodigoOrden { get; set; } = string.Empty;
+
+        [MaxLength(10)]
+        public string? CodigoAlmacenDestino { get; set; }
 
         // Navegación
         public virtual ICollection<OrdenTraspasoLinea> Lineas { get; set; } = new List<OrdenTraspasoLinea>();
-        public virtual ICollection<OrdenTraspasoMovimiento> Movimientos { get; set; } = new List<OrdenTraspasoMovimiento>();
     }
 } 

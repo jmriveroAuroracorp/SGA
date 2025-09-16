@@ -4,6 +4,7 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
       mc:Ignorable="d"
       Background="{StaticResource BrushFondo}">
 
@@ -13,53 +14,392 @@
 
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <helpers:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility"/>
+        <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
     </Page.Resources>
 
     <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <!-- 0: Título y botón crear -->
+            <RowDefinition Height="Auto" />
+            <!-- 1: Filtros -->
+            <RowDefinition Height="Auto" />
+            <!-- 2: Lista de órdenes -->
+            <RowDefinition Height="*" />
+            <!-- 3: Botones de acción -->
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- TÍTULO Y BOTÓN CREAR -->
+        <Grid Grid.Row="0" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="🚚 GESTIÓN DE ÓRDENES DE TRASPASO"
+                           FontFamily="{StaticResource FuentePrincipal}"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource BrushPrincipal}"/>
+            </StackPanel>
+
+            <Button Grid.Column="1"
+                    Content="➕ Crear Orden"
+                    Command="{Binding CrearOrdenCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Width="180"
+                    Height="40"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    IsEnabled="{Binding CanEnableInputs}"/>
+        </Grid>
+
+        <!-- FILTROS -->
+        <GroupBox Grid.Row="1" Header="🔍 Filtros de Búsqueda" Margin="0,0,0,20">
+            <Grid Margin="15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Almacén Destino -->
+                <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                    <TextBlock Text="Almacén Destino" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                    <ComboBox 
+                              ItemsSource="{Binding AlmacenesCombo}"
+                              DisplayMemberPath="DescripcionCombo"
+                              SelectedItem="{Binding AlmacenDestinoSeleccionado}"
+                              Style="{StaticResource EstiloComboBox}"
+                              Height="30"/>
+                </StackPanel>
+
+                <!-- Fecha desde -->
+                <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                    <TextBlock Text="Desde" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                    <DatePicker 
+                            SelectedDate="{Binding FechaDesde}" 
+                            Style="{StaticResource EstiloDatePicker}"
+                                Height="30"/>
+                </StackPanel>
+
+                <!-- Fecha hasta -->
+                <StackPanel Grid.Column="2" Margin="0,0,15,0">
+                    <TextBlock Text="Hasta" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                    <DatePicker 
+                            SelectedDate="{Binding FechaHasta}" 
+                            Style="{StaticResource EstiloDatePicker}"
+                                Height="30"/>
+                </StackPanel>
+
+                <!-- Estado -->
+                <StackPanel Grid.Column="3" Margin="0,0,15,0">
+                    <TextBlock Text="Estado" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
+                    <ComboBox 
+                          ItemsSource="{Binding Source={StaticResource EstadosOrdenTraspaso}}"
+                          SelectedItem="{Binding EstadoFiltro}"
+                          Style="{StaticResource EstiloComboBox}"
+                              Height="30"/>
+                </StackPanel>
+
+                <!-- Botón cargar -->
+                <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                    <Button 
+                            Content="🔄 Cargar"
+                        Command="{Binding CargarOrdenesCommand}"
+                        Style="{StaticResource EstiloBoton}"
+                            Width="100"
+                        Height="30"
+                            IsEnabled="{Binding CanCargarOrdenes}"/>
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
+        <!-- LISTA DE ÓRDENES -->
+        <GroupBox Grid.Row="2" Header="📋 Órdenes de Traspaso Registradas">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Estado de carga -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" 
+                            Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}">
+                    <ProgressBar Width="20" Height="20" 
+                                 IsIndeterminate="True" 
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding MensajeEstado}" 
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushSecundario}"
+                               FontStyle="Italic"/>
+                </StackPanel>
+
+                <!-- Lista de cards de órdenes -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding OrdenesView}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource EstiloTarjeta}" 
+                                        Width="400" 
+                                        Height="350"
+                                        Margin="6"
+                                        Cursor="Hand">
+                                    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Título -->
-        <TextBlock Grid.Row="0" Text="Órdenes de Traspaso" 
-                   FontSize="24" FontWeight="Bold" 
+                                        <!-- Header con Código y Estado -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Código Orden -->
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="Código: " 
+                                                           FontWeight="Bold" 
                    Foreground="{StaticResource BrushPrincipal}"
-                   Margin="0,0,0,20"/>
+                                                           FontSize="14"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding CodigoOrden}" 
+                                                           FontFamily="Consolas"
+                                                           FontWeight="Bold"
+                                                           Foreground="#2C3E50"
+                                                           FontSize="14"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
 
-        <!-- Lista de órdenes -->
-        <DataGrid Grid.Row="1" ItemsSource="{Binding OrdenesTraspaso}" 
-                  SelectedItem="{Binding OrdenSeleccionada}"
-                  AutoGenerateColumns="False" 
-                  CanUserAddRows="False" 
-                  CanUserDeleteRows="False"
-                  IsReadOnly="True"
-                  GridLinesVisibility="Horizontal"
-                  HeadersVisibility="Column">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="ID" Binding="{Binding IdOrdenTrabajo}" Width="100"/>
-                <DataGridTextColumn Header="Empresa" Binding="{Binding CodigoEmpresa}" Width="80"/>
-                <DataGridTextColumn Header="Estado" Binding="{Binding Estado}" Width="100"/>
-                <DataGridTextColumn Header="Prioridad" Binding="{Binding Prioridad}" Width="80"/>
-                <DataGridTextColumn Header="Fecha Plan" Binding="{Binding FechaPlan, StringFormat=dd/MM/yyyy}" Width="100"/>
-                <DataGridTextColumn Header="Usuario Asignado" Binding="{Binding UsuarioAsignado}" Width="120"/>
-                <DataGridTextColumn Header="Comentarios" Binding="{Binding Comentarios}" Width="*"/>
-            </DataGrid.Columns>
-        </DataGrid>
+                                            <!-- Estado Badge -->
+                                            <Border Grid.Column="1" 
+                                                    Background="#F8F9FA" 
+                                                    BorderBrush="#DEE2E6" 
+                                                    BorderThickness="1" 
+                                                    CornerRadius="3" 
+                                                    Padding="6,3"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding EstadoFormateado}" 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           HorizontalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Estado}" Value="PENDIENTE">
+                                                                    <Setter Property="Foreground" Value="#FD7E14"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
+                                                                    <Setter Property="Foreground" Value="#0D6EFD"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Estado}" Value="COMPLETADA">
+                                                                    <Setter Property="Foreground" Value="#198754"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Estado}" Value="CANCELADA">
+                                                                    <Setter Property="Foreground" Value="#DC3545"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="PENDIENTE">
+                                                                <Setter Property="Background" Value="#FFF3CD"/>
+                                                                <Setter Property="BorderBrush" Value="#FD7E14"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
+                                                                <Setter Property="Background" Value="#E7F3FF"/>
+                                                                <Setter Property="BorderBrush" Value="#0D6EFD"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="COMPLETADA">
+                                                                <Setter Property="Background" Value="#D1E7DD"/>
+                                                                <Setter Property="BorderBrush" Value="#198754"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="CANCELADA">
+                                                                <Setter Property="Background" Value="#F8D7DA"/>
+                                                                <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                            </Border>
+                                        </Grid>
 
-        <!-- Botón Nueva Orden -->
-        <Button Grid.Row="2" Content="Nueva Orden" Command="{Binding CrearOrdenCommand}" 
-                Style="{StaticResource EstiloBotonPrincipal}" 
-                HorizontalAlignment="Right" Margin="0,20,0,0"/>
+                                        <!-- Contenido principal -->
+                                        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                            <!-- Prioridad -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
 
-        <!-- Loading indicator -->
-        <Border Grid.Row="0" Grid.RowSpan="3" 
-                Background="#80000000" 
-                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="Cargando..." Foreground="White" FontSize="16"/>
+                                                <TextBlock Grid.Column="0" Text="Prioridad: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding DataContext.GetPrioridadTexto(Prioridad), RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Almacén Destino -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Destino: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding AlmacenDestinoDescripcion}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Fechas -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Creación: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding FechaCreacion, StringFormat=dd/MM/yyyy HH:mm}" 
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="2" Text="Plan: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding FechaPlan, StringFormat=dd/MM/yyyy}" 
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                            </Grid>
+
+
+                                            <!-- Líneas -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Líneas: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding TotalLineas}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Comentarios -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Comentarios: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Comentarios}" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Botones de acción -->
+                                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                            
+                                            <!-- Botón Ver -->
+                                            <Button Content="👁️ Ver"
+                                                    Command="{Binding DataContext.VerOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBoton}"
+                                                    Width="60"
+                                                    Height="30"
+                                                    FontSize="11"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,4,0"/>
+                                            
+                                            <!-- Botón Editar -->
+                                            <Button Content="✏️ Editar"
+                                                    Command="{Binding DataContext.EditarOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBoton}"
+                                                    Width="70"
+                                                    Height="30"
+                                                    FontSize="11"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,4,0"
+                                                    Visibility="{Binding PuedeEditar, Converter={StaticResource BoolToVis}}"/>
+                                            
+                                            <!-- Botón Cancelar -->
+                                            <Button Content="❌ Cancelar"
+                                                    Command="{Binding DataContext.CancelarOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBotonSecundario}"
+                                                    Width="80"
+                                                    Height="30"
+                                                    FontSize="11"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,4,0"
+                                                    Visibility="{Binding PuedeCancelar, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
+                                    </Grid>
         </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </GroupBox>
+
+        <!-- BOTONES DE ACCIÓN -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <TextBlock Text="{Binding TotalOrdenes}" 
+                       FontWeight="Bold" 
+                       VerticalAlignment="Center"
+                       Margin="0,0,20,0"/>
+
+            <Button Content="📊 Exportar a Excel"
+                    Command="{Binding ExportarOrdenesCommand}"
+                    Style="{StaticResource EstiloBoton}"
+                    Width="150"
+                    Height="35"
+                    IsEnabled="{Binding CanEnableInputs}"/>
+        </StackPanel>
     </Grid>
 </Page> 

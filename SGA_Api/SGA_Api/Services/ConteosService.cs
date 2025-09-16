@@ -290,18 +290,24 @@ namespace SGA_Api.Services
         /// <summary>
         /// Listar todas las órdenes de conteo sin restricciones de usuario (para Desktop)
         /// </summary>
-        public async Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null)
+        public async Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null)
         {
             try
             {
-                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}", estado);
+                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}, operario: {Operario}", estado, codigoOperario);
                 
                 var query = _context.OrdenesConteo.AsQueryable();
 
-                // Solo aplicar filtro de estado si se especifica
+                // Aplicar filtro de estado si se especifica
                 if (!string.IsNullOrEmpty(estado))
                 {
                     query = query.Where(o => o.Estado == estado);
+                }
+
+                // Aplicar filtro de operario si se especifica
+                if (!string.IsNullOrEmpty(codigoOperario))
+                {
+                    query = query.Where(o => o.CodigoOperario == codigoOperario);
                 }
 
                 var ordenes = await query
@@ -1637,35 +1643,35 @@ namespace SGA_Api.Services
             return (partes[0], partes[1]);
         }
 
-        private static ResultadoConteoDetalladoDto MapToResultadoConteoDetalladoDto(ResultadoConteo resultado)
-        {
-            return new ResultadoConteoDetalladoDto
-            {
-                // Campos de ResultadoConteo
-                GuidID = resultado.GuidID,
-                OrdenGuid = resultado.OrdenGuid,
-                CodigoAlmacen = resultado.CodigoAlmacen,
-                CodigoUbicacion = resultado.CodigoUbicacion,
-                CodigoArticulo = resultado.CodigoArticulo,
-                DescripcionArticulo = resultado.DescripcionArticulo,
-                LotePartida = resultado.LotePartida,
-                CantidadContada = resultado.CantidadContada,
-                CantidadStock = resultado.CantidadStock,
-                UsuarioCodigo = resultado.UsuarioCodigo,
-                Diferencia = resultado.Diferencia,
-                AccionFinal = resultado.AccionFinal,
-                AprobadoPorCodigo = resultado.AprobadoPorCodigo,
-                FechaEvaluacion = resultado.FechaEvaluacion,
-                AjusteAplicado = resultado.AjusteAplicado,
+		private static ResultadoConteoDetalladoDto MapToResultadoConteoDetalladoDto(ResultadoConteo resultado)
+		{
+			return new ResultadoConteoDetalladoDto
+			{
+				// Campos de ResultadoConteo
+				GuidID = resultado.GuidID,
+				OrdenGuid = resultado.OrdenGuid,
+				CodigoAlmacen = resultado.CodigoAlmacen,
+				CodigoUbicacion = resultado.CodigoUbicacion,
+				CodigoArticulo = resultado.CodigoArticulo,
+				DescripcionArticulo = resultado.DescripcionArticulo,
+				LotePartida = resultado.LotePartida,
+				CantidadContada = resultado.CantidadContada,
+				CantidadStock = resultado.CantidadStock,
+				UsuarioCodigo = resultado.UsuarioCodigo,
+				Diferencia = resultado.Diferencia,
+				AccionFinal = resultado.AccionFinal,
+				AprobadoPorCodigo = resultado.AprobadoPorCodigo,
+				FechaEvaluacion = resultado.FechaEvaluacion,
+				AjusteAplicado = resultado.AjusteAplicado,
+				FechaCaducidad = resultado.FechaCaducidad,
+				// Campos de OrdenConteo
+				CodigoEmpresa = resultado.Orden?.CodigoEmpresa ?? 0,
+				Titulo = resultado.Orden?.Titulo ?? string.Empty,
+				Visibilidad = resultado.Orden?.Visibilidad ?? string.Empty
+			};
+		}
 
-                // Campos de OrdenConteo
-                CodigoEmpresa = resultado.Orden?.CodigoEmpresa ?? 0,
-                Titulo = resultado.Orden?.Titulo ?? string.Empty,
-                Visibilidad = resultado.Orden?.Visibilidad ?? string.Empty
-            };
-        }
-
-        public async Task<OrdenDto> ReasignarLineaAsync(Guid resultadoGuid, ReasignarLineaDto dto)
+		public async Task<OrdenDto> ReasignarLineaAsync(Guid resultadoGuid, ReasignarLineaDto dto)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             

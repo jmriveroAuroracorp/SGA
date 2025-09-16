@@ -141,7 +141,7 @@ namespace SGA_Desktop.Services
         /// <summary>
         /// Listar todas las órdenes de conteo con filtros (para Desktop)
         /// </summary>
-        public async Task<List<OrdenConteoDto>> ListarTodasLasOrdenesAsync(string? estado = null)
+        public async Task<List<OrdenConteoDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null)
         {
             try
             {
@@ -151,10 +151,13 @@ namespace SGA_Desktop.Services
                 if (!string.IsNullOrEmpty(estado))
                     queryParams.Add($"estado={Uri.EscapeDataString(estado)}");
 
+                if (!string.IsNullOrEmpty(codigoOperario))
+                    queryParams.Add($"codigoOperario={Uri.EscapeDataString(codigoOperario)}");
+
                 if (queryParams.Count > 0)
                     url += "?" + string.Join("&", queryParams);
 
-               
+                
                 var response = await _httpClient.GetAsync(url);
                 response.EnsureSuccessStatusCode();
 

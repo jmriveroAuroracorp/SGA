@@ -18,10 +18,9 @@ namespace SGA_Api.Controllers.OrdenTraspaso
         [HttpGet]
         public async Task<ActionResult<IEnumerable<OrdenTraspasoDto>>> GetOrdenesTraspaso(
             [FromQuery] short? codigoEmpresa = null,
-            [FromQuery] string? estado = null,
-            [FromQuery] int? usuarioAsignado = null)
+            [FromQuery] string? estado = null)
         {
-            var ordenes = await _ordenTraspasoService.GetOrdenesTraspasoAsync(codigoEmpresa, estado, usuarioAsignado);
+            var ordenes = await _ordenTraspasoService.GetOrdenesTraspasoAsync(codigoEmpresa, estado);
             return Ok(ordenes);
         }
 
@@ -39,7 +38,7 @@ namespace SGA_Api.Controllers.OrdenTraspaso
         public async Task<ActionResult<OrdenTraspasoDto>> CrearOrdenTraspaso(CrearOrdenTraspasoDto dto)
         {
             var orden = await _ordenTraspasoService.CrearOrdenTraspasoAsync(dto);
-            return CreatedAtAction(nameof(GetOrdenTraspaso), new { id = orden.IdOrdenTrabajo }, orden);
+            return CreatedAtAction(nameof(GetOrdenTraspaso), new { id = orden.IdOrdenTraspaso }, orden);
         }
 
         [HttpPut("{id}")]
@@ -92,14 +91,5 @@ namespace SGA_Api.Controllers.OrdenTraspaso
             return NoContent();
         }
 
-        [HttpPost("movimiento")]
-        public async Task<IActionResult> RegistrarMovimiento(RegistrarMovimientoDto dto)
-        {
-            var result = await _ordenTraspasoService.RegistrarMovimientoAsync(dto);
-            if (!result)
-                return BadRequest();
-
-            return Ok();
-        }
     }
 } 

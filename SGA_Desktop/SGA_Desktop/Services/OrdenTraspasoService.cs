@@ -7,7 +7,7 @@ namespace SGA_Desktop.Services
 {
     public class OrdenTraspasoService : ApiService
     {
-        public async Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null, int? usuarioAsignado = null)
+        public async Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null)
         {
             var queryParams = new List<string>();
             
@@ -16,9 +16,6 @@ namespace SGA_Desktop.Services
             
             if (!string.IsNullOrEmpty(estado))
                 queryParams.Add($"estado={estado}");
-            
-            if (usuarioAsignado.HasValue)
-                queryParams.Add($"usuarioAsignado={usuarioAsignado.Value}");
 
             var queryString = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
             return await GetAsync<IEnumerable<OrdenTraspasoDto>>($"OrdenTraspaso{queryString}");

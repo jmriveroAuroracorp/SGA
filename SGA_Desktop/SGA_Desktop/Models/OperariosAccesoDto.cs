@@ -18,5 +18,8 @@ namespace SGA_Desktop.Models
 
         // Propiedad para mostrar en ComboBox
         public string NombreCompleto => $"{Operario} - {NombreOperario}";
+        
+        // Propiedad para mostrar en ComboBox (consistente con otros DTOs)
+        public string DescripcionCombo => $"{Operario} - {NombreOperario}";
     }
 } 

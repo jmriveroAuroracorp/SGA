@@ -1,4 +1,5 @@
 using System.Windows;
+using SGA_Desktop.ViewModels;
 
 namespace SGA_Desktop.Dialog
 {
@@ -7,18 +8,13 @@ namespace SGA_Desktop.Dialog
         public CrearOrdenTraspasoDialog()
         {
             InitializeComponent();
-        }
-
-        private void Crear_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = true;
-            Close();
-        }
-
-        private void Cancelar_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
+            
+            // Crear y establecer el ViewModel
+            var viewModel = new CrearOrdenTraspasoDialogViewModel();
+            DataContext = viewModel;
+            
+            // Establecer la referencia del dialog en el ViewModel
+            viewModel.DialogResult = this;
         }
     }
 } 

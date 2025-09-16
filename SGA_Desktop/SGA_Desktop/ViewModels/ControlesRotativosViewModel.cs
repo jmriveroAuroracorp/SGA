@@ -37,6 +37,7 @@ namespace SGA_Desktop.ViewModels
             _loginService = loginService;
             EmpresaActual = ObtenerNombreEmpresaActual();
             AlmacenesCombo = new ObservableCollection<AlmacenDto>();
+            OperariosCombo = new ObservableCollection<OperariosAccesoDto>();
             OrdenesConteo = new ObservableCollection<OrdenConteoDto>();
             ResultadosSupervision = new ObservableCollection<ResultadoConteoDetalladoDto>();
             OperariosDisponibles = new ObservableCollection<OperariosAccesoDto>();
@@ -72,6 +73,7 @@ namespace SGA_Desktop.ViewModels
         private string empresaActual;
 
         public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
+        public ObservableCollection<OperariosAccesoDto> OperariosCombo { get; }
         public ObservableCollection<OrdenConteoDto> OrdenesConteo { get; }
         public ObservableCollection<string> EstadosCombo { get; }
         public ObservableCollection<ResultadoConteoDetalladoDto> ResultadosSupervision { get; }
@@ -80,6 +82,32 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private AlmacenDto? almacenSeleccionadoCombo;
+
+        partial void OnAlmacenSeleccionadoComboChanged(AlmacenDto? value)
+        {
+            // Recargar automáticamente cuando cambie el almacén seleccionado
+            if (value != null && !IsCargando)
+            {
+                _ = CargarControles();
+            }
+            OrdenesConteoView?.Refresh();
+            OnPropertyChanged(nameof(TotalOrdenes));
+            OnPropertyChanged(nameof(CanCargarControles));
+        }
+
+        [ObservableProperty]
+        private OperariosAccesoDto? operarioSeleccionadoCombo;
+
+        partial void OnOperarioSeleccionadoComboChanged(OperariosAccesoDto? value)
+        {
+            // Recargar automáticamente cuando cambie el operario seleccionado
+            if (value != null && !IsCargando)
+            {
+                _ = CargarControles();
+            }
+            OrdenesConteoView?.Refresh();
+            OnPropertyChanged(nameof(TotalOrdenes));
+        }
 
         [ObservableProperty]
         private OrdenConteoDto? ordenSeleccionada;
@@ -98,6 +126,17 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private string estadoFiltro = "TODOS";
+
+        partial void OnEstadoFiltroChanged(string value)
+        {
+            // Recargar automáticamente cuando cambie el estado del filtro
+            if (!IsCargando)
+            {
+                _ = CargarControles();
+            }
+            OrdenesConteoView?.Refresh();
+            OnPropertyChanged(nameof(TotalOrdenes));
+        }
 
         // Propiedades para supervisión
         [ObservableProperty]
@@ -177,6 +216,27 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
+        private void LimpiarFiltros()
+        {
+            EstadoFiltro = "TODOS";
+            
+            // Verificar que las colecciones no estén vacías antes de acceder a FirstOrDefault()
+            if (OperariosCombo?.Any() == true)
+            {
+                OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
+            }
+            
+            if (AlmacenesCombo?.Any() == true)
+            {
+                AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+            }
+            
+            // Establecer las fechas al día de hoy en lugar de null
+            FechaDesde = DateTime.Today;
+            FechaHasta = DateTime.Today;
+        }
+
+        [RelayCommand]
         private async Task CargarControles()
         {
             try
@@ -186,9 +246,12 @@ namespace SGA_Desktop.ViewModels
 
                 // Filtrar por estado si no es "TODOS"
                 var estadoFiltro = EstadoFiltro == "TODOS" ? null : EstadoFiltro;
+                
+                // Filtrar por operario si no es "TODOS"
+                var operarioFiltro = OperarioSeleccionadoCombo?.Operario == 0 ? null : OperarioSeleccionadoCombo?.Operario.ToString();
 
-                Debug.WriteLine($"CargarControles - EstadoFiltro: '{EstadoFiltro}', estadoFiltro enviado: '{estadoFiltro}'");
-                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estadoFiltro);
+                Debug.WriteLine($"CargarControles - EstadoFiltro: '{EstadoFiltro}', OperarioFiltro: '{OperarioSeleccionadoCombo?.DescripcionCombo}'");
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estadoFiltro, operarioFiltro);
                 Debug.WriteLine($"CargarControles - Se obtuvieron {ordenes.Count} órdenes");
 
                 // Asegurar que tenemos los operarios cargados para el mapeo de nombres
@@ -618,18 +681,6 @@ namespace SGA_Desktop.ViewModels
             return SessionManager.EmpresaSeleccionadaNombre ?? "Empresa no seleccionada";
         }
 
-        partial void OnAlmacenSeleccionadoComboChanged(AlmacenDto? value)
-        {
-            OrdenesConteoView?.Refresh();
-            OnPropertyChanged(nameof(TotalOrdenes));
-            OnPropertyChanged(nameof(CanCargarControles));
-        }
-
-        partial void OnEstadoFiltroChanged(string value)
-        {
-            OrdenesConteoView?.Refresh();
-            OnPropertyChanged(nameof(TotalOrdenes));
-        }
 
         partial void OnFechaDesdeChanged(DateTime value)
         {
@@ -660,13 +711,30 @@ namespace SGA_Desktop.ViewModels
                 var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
 
                 OperariosDisponibles.Clear();
+                OperariosCombo.Clear();
+                
+                // Agregar opción "Todos" al combo de filtro
+                OperariosCombo.Add(new OperariosAccesoDto
+                {
+                    Operario = 0,
+                    NombreOperario = "TODOS",
+                    Contraseña = "",
+                    MRH_CodigoAplicacion = 0
+                });
                 
                 foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
                 {
                     OperariosDisponibles.Add(operario);
+                    OperariosCombo.Add(operario);
                 }
 
-                // Seleccionar el operario actual por defecto
+                // Seleccionar "Todos" por defecto en el filtro solo si hay elementos
+                if (OperariosCombo.Any())
+                {
+                    OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
+                }
+
+                // Seleccionar el operario actual por defecto para supervisión
                 var operarioActual = SessionManager.UsuarioActual?.operario;
                 if (operarioActual.HasValue)
                 {
@@ -676,6 +744,9 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error cargando operarios: {ex.Message}");
+                // En caso de error, asegurar que las colecciones estén vacías
+                OperariosDisponibles.Clear();
+                OperariosCombo.Clear();
             }
         }
 

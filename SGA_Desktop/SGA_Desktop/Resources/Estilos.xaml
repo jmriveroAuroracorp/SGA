@@ -557,4 +557,13 @@
         <sys:String>CERRADO</sys:String>
     </x:Array>
 
+    <!-- Estados de orden de traspaso -->
+    <x:Array x:Key="EstadosOrdenTraspaso" Type="sys:String" xmlns:sys="clr-namespace:System;assembly=mscorlib">
+        <sys:String>TODOS</sys:String>
+        <sys:String>PENDIENTE</sys:String>
+        <sys:String>EN_PROCESO</sys:String>
+        <sys:String>COMPLETADA</sys:String>
+        <sys:String>CANCELADA</sys:String>
+    </x:Array>
+
 </ResourceDictionary>

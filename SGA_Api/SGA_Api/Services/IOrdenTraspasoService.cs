@@ -6,7 +6,7 @@ namespace SGA_Api.Services
 {
     public interface IOrdenTraspasoService
     {
-        Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null, int? usuarioAsignado = null);
+        Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null);
         Task<OrdenTraspasoDto?> GetOrdenTraspasoAsync(Guid id);
         Task<OrdenTraspasoDto> CrearOrdenTraspasoAsync(CrearOrdenTraspasoDto dto);
         Task<bool> ActualizarOrdenTraspasoAsync(Guid id, ActualizarOrdenTraspasoDto dto);
@@ -14,6 +14,5 @@ namespace SGA_Api.Services
         Task<bool> CompletarOrdenTraspasoAsync(Guid id);
         Task<bool> CancelarOrdenTraspasoAsync(Guid id);
         Task<bool> EliminarOrdenTraspasoAsync(Guid id);
-        Task<bool> RegistrarMovimientoAsync(RegistrarMovimientoDto dto);
     }
 }

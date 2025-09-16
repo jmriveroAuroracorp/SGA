@@ -8,7 +8,7 @@ namespace SGA_Api.Services
         Task<OrdenDto> ActualizarOrdenAsync(Guid guid, CrearOrdenConteoDto dto);
         Task<OrdenDto?> ObtenerOrdenAsync(Guid guid);
         Task<IEnumerable<OrdenDto>> ListarOrdenesAsync(string? codigoOperario = null, string? estado = null);
-        Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null);
+        Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null);
         Task<OrdenDto> IniciarOrdenAsync(Guid guid, string codigoOperario);
         Task<OrdenDto> AsignarOperarioAsync(Guid guid, AsignarOperarioDto dto);
         Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto);

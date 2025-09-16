@@ -14,8 +14,12 @@ namespace SGA_Desktop.Helpers
 
 		public static void Navigate(string pageKey)
 		{
+			System.Diagnostics.Debug.WriteLine($"NavigationStore.Navigate: {pageKey}");
+			
 			if (!_pageCache.TryGetValue(pageKey, out var page))
 			{
+				System.Diagnostics.Debug.WriteLine($"Creando nueva página: {pageKey}");
+				
 				// Sólo se crea la página la primera vez
 				page = pageKey switch
 				{
@@ -35,11 +39,22 @@ namespace SGA_Desktop.Helpers
 				};
 
 				_pageCache[pageKey] = page;
+				System.Diagnostics.Debug.WriteLine($"Página creada y cacheada: {pageKey}");
+			}
+			else
+			{
+				System.Diagnostics.Debug.WriteLine($"Usando página cacheada: {pageKey}");
 			}
 
-		
 			if (MainFrame.Content != page)
+			{
+				System.Diagnostics.Debug.WriteLine($"Navegando a: {pageKey}");
 				MainFrame.Navigate(page);
+			}
+			else
+			{
+				System.Diagnostics.Debug.WriteLine($"Ya estamos en la página: {pageKey}");
+			}
 		}
 		/// <summary>
 		/// Vacía la caché y limpia la vista actual.

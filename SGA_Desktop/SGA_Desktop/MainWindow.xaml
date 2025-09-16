@@ -163,7 +163,7 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
                     <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}" -->
-                    <Button Content="Órdenes de Trabajo"
+                    <Button Content="Órdenes de Traspaso"
                     Command="{Binding IrAOrdenTrabajoCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
