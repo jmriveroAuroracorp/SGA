@@ -1,0 +1,579 @@
+<Page x:Class="SGA_Desktop.Views.ConfiguracionOperariosView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      Title="Configuración de Operarios">
+
+    <!-- DataContext -->
+    <Page.DataContext>
+        <vm:ConfiguracionOperariosViewModel />
+    </Page.DataContext>
+
+    <!-- Recursos -->
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Page.Resources>
+
+     <Grid Background="{StaticResource BrushFondo}">
+         <Grid.RowDefinitions>
+             <RowDefinition Height="Auto"/>
+             <RowDefinition Height="*"/>
+             <RowDefinition Height="Auto"/>
+         </Grid.RowDefinitions>
+
+        <!-- BOTONES DE PESTAÑAS -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <Button Content="👤 Operarios"
+                    Command="{Binding CambiarAOperariosCommand}"
+                    Width="180"
+                    Height="35"
+                    Margin="0,0,5,0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoOperarios}" Value="True">
+                                <Setter Property="Background" Value="#3498DB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            <Button Content="📋 Configuraciones Predefinidas"
+                    Command="{Binding CambiarAConfiguracionesCommand}"
+                    Width="250"
+                    Height="35">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoConfiguraciones}" Value="True">
+                                <Setter Property="Background" Value="#3498DB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+
+         <!-- CONTENIDO DE OPERARIOS -->
+         <Grid Grid.Row="1"
+               Visibility="{Binding MostrandoOperarios, Converter={StaticResource BoolToVisibilityConverter}}">
+             <Grid.RowDefinitions>
+                 <RowDefinition Height="Auto"/>
+                 <RowDefinition Height="*"/>
+             </Grid.RowDefinitions>
+
+            <!-- Filtros y controles -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource BrushSecundario1}"
+                    Padding="20,15"
+                    BorderBrush="{StaticResource BrushInputBorde}"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Filtro por nombre -->
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="Filtrar por nombre:"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"/>
+
+                    <TextBox Grid.Row="0" Grid.Column="1"
+                             Text="{Binding FiltroNombre, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30"
+                             VerticalContentAlignment="Center"/>
+
+
+                    <!-- Botones -->
+                    <StackPanel Grid.Row="0" Grid.Column="4"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Content="Recargar"
+                                Command="{Binding CargarOperariosCommand}"
+                                Width="80"
+                                Height="35"
+                                Margin="0,0,10,0"
+                                Style="{StaticResource EstiloBotonSecundario}"/>
+                        <Button Content="Limpiar Filtros"
+                                Command="{Binding LimpiarFiltrosCommand}"
+                                Width="100"
+                                Height="35"
+                                Style="{StaticResource EstiloBotonSecundario}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Lista de operarios en formato cards -->
+            <GroupBox Grid.Row="1" Header="👥 Operarios Configurados" Margin="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Estado de carga -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10"
+                                    Visibility="{Binding Cargando, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ProgressBar Width="20" Height="20"
+                                         IsIndeterminate="True"
+                                         Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding Mensaje}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource BrushSecundario}"
+                                       FontStyle="Italic"/>
+                        </StackPanel>
+
+                        <!-- Lista de cards de operarios -->
+                        <ItemsControl Grid.Row="1" ItemsSource="{Binding Operarios}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource EstiloTarjeta}"
+                                            Width="400"
+                                            Height="280"
+                                            Margin="6"
+                                            Cursor="Hand">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Header con ID y Nombre -->
+                                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- ID y Nombre -->
+                                                <StackPanel Grid.Column="0" Orientation="Vertical">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                        <TextBlock Text="ID: "
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{StaticResource BrushPrincipal}"
+                                                                   FontSize="14"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Id}"
+                                                                   FontFamily="Consolas"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#2C3E50"
+                                                                   FontSize="14"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Nombre}"
+                                                               FontWeight="Bold"
+                                                               FontSize="16"
+                                                               Foreground="#2C3E50"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+
+                                            </Grid>
+
+                                            <!-- Contenido principal -->
+                                            <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                                <!-- Permisos -->
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Permisos: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding CantidadPermisos, StringFormat='{}{0} permisos'}"
+                                                               FontWeight="Bold"
+                                                               FontSize="12"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Empresas -->
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Empresas: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Empresas}"
+                                                               FontWeight="Bold"
+                                                               FontSize="12"
+                                                               Foreground="#34495E"
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </Grid>
+
+                                                <!-- Almacenes -->
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Almacenes: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding CantidadAlmacenes, StringFormat='{}{0} almacenes'}"
+                                                               FontWeight="Bold"
+                                                               FontSize="12"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Centro Logístico -->
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Centro: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding CodigoCentro}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                                </Grid>
+                                                
+                                                <!-- Plantilla aplicada -->
+                                                <Grid Grid.Row="5" Margin="0,5,0,0" 
+                                                      Visibility="{Binding PlantillaAplicada, Converter={StaticResource StringToVisibilityConverter}}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Plantilla: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding PlantillaAplicada}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#E67E22"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <!-- Botón de acción -->
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <Button Content="⚙️ Configurar"
+                                                        Command="{Binding DataContext.ConfigurarOperarioCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                                        Width="120"
+                                                        Height="35"
+                                                        FontSize="12"
+                                                        FontWeight="Medium"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </ScrollViewer>
+            </GroupBox>
+
+        </Grid>
+
+         <!-- CONTENIDO DE CONFIGURACIONES PREDEFINIDAS -->
+         <Grid Grid.Row="1"
+               Visibility="{Binding MostrandoConfiguraciones, Converter={StaticResource BoolToVisibilityConverter}}">
+             <Grid.RowDefinitions>
+                 <RowDefinition Height="Auto"/>
+                 <RowDefinition Height="*"/>
+             </Grid.RowDefinitions>
+
+            <!-- Controles de configuración -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource BrushSecundario1}"
+                    Padding="20,15"
+                    BorderBrush="{StaticResource BrushInputBorde}"
+                    BorderThickness="0,0,0,1">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="➕ Nueva Configuración"
+                            Command="{Binding CrearConfiguracionCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="180"
+                            Height="35"
+                            Margin="0,0,10,0"/>
+                    <Button Content="🔄 Recargar"
+                            Command="{Binding RecargarConfiguracionesCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="120"
+                            Height="35"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Lista de configuraciones predefinidas -->
+            <GroupBox Grid.Row="1" Header="📋 Configuraciones Disponibles" Margin="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Estado de carga -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10"
+                                    Visibility="{Binding CargandoConfiguraciones, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ProgressBar Width="20" Height="20"
+                                         IsIndeterminate="True"
+                                         Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding MensajeConfiguraciones}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource BrushSecundario}"
+                                       FontStyle="Italic"/>
+                        </StackPanel>
+
+                        <!-- Lista de cards de configuraciones -->
+                        <ItemsControl Grid.Row="1" ItemsSource="{Binding ConfiguracionesPredefinidas}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource EstiloTarjeta}"
+                                            Width="400"
+                                            Height="280"
+                                            Margin="6"
+                                            Cursor="Hand">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Header con nombre -->
+                                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="{Binding Nombre}"
+                                                           FontWeight="Bold"
+                                                           FontSize="16"
+                                                           Foreground="#2C3E50"/>
+
+                                                <Border Grid.Column="1"
+                                                        Background="#D1E7DD"
+                                                        BorderBrush="#198754"
+                                                        BorderThickness="1"
+                                                        CornerRadius="3"
+                                                        Padding="6,3"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding Activa, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="ACTIVA"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="10"
+                                                               Foreground="#198754"
+                                                               HorizontalAlignment="Center"/>
+                                                </Border>
+                                            </Grid>
+
+                                            <!-- Contenido principal -->
+                                            <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                                <!-- Descripción -->
+                                                <TextBlock Text="{Binding Descripcion}"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,0,0,8"/>
+
+                                                <!-- Permisos -->
+                                                <Grid Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Permisos: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="11"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding PermisosResumen}"
+                                                               FontWeight="Bold"
+                                                               FontSize="11"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Empresas -->
+                                                <Grid Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Empresas: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="11"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding EmpresasResumen}"
+                                                               FontWeight="Bold"
+                                                               FontSize="11"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Almacenes -->
+                                                <Grid Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Almacenes: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="11"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding AlmacenesResumen}"
+                                                               FontWeight="Bold"
+                                                               FontSize="11"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Límites -->
+                                                <Grid Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Límites: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="11"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding LimitesResumen}"
+                                                               FontWeight="Bold"
+                                                               FontSize="11"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Usado por -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Usado por: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="11"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding OperariosUsando, StringFormat='{}{0} operarios'}"
+                                                               FontWeight="Bold"
+                                                               FontSize="11"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <!-- Botones de acción -->
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <Button Content="✏️ Editar"
+                                                        Command="{Binding DataContext.EditarConfiguracionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource EstiloBoton}"
+                                                        Width="80"
+                                                        Height="30"
+                                                        FontSize="11"
+                                                        FontWeight="Medium"
+                                                        Margin="0,0,4,0"/>
+                                                <Button Content="👁️ Ver"
+                                                        Command="{Binding DataContext.VerConfiguracionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource EstiloBotonSecundario}"
+                                                        Width="60"
+                                                        Height="30"
+                                                        FontSize="11"
+                                                        FontWeight="Medium"
+                                                        Margin="0,0,4,0"/>
+                                                <Button Content="🗑️"
+                                                        Command="{Binding DataContext.EliminarConfiguracionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource EstiloBotonSecundario}"
+                                                        Width="30"
+                                                        Height="30"
+                                                        FontSize="11"
+                                                        FontWeight="Medium"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </ScrollViewer>
+            </GroupBox>
+
+        </Grid>
+
+         <!-- Barra de estado general -->
+         <Border Grid.Row="2"
+                Background="{StaticResource BrushSecundario1}"
+                Padding="20,10"
+                BorderBrush="{StaticResource BrushInputBorde}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Mensaje}"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource BrushGrisOscuro}"/>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Visibility="{Binding Cargando, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ProgressBar Width="100"
+                                 Height="15"
+                                 IsIndeterminate="True"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="Cargando..."
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushGrisOscuro}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

@@ -9,11 +9,18 @@ namespace SGA_Desktop.Helpers
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is string stringValue && parameter is string expectedValue)
+            // Si hay parámetro, usar lógica de comparación
+            if (parameter is string expectedValue && value is string stringValue)
             {
                 return stringValue.Equals(expectedValue, StringComparison.OrdinalIgnoreCase) 
                     ? Visibility.Visible 
                     : Visibility.Collapsed;
+            }
+            
+            // Si no hay parámetro, mostrar si el string no está vacío
+            if (value is string str)
+            {
+                return !string.IsNullOrWhiteSpace(str) ? Visibility.Visible : Visibility.Collapsed;
             }
             
             return Visibility.Collapsed;

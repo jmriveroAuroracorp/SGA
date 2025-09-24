@@ -34,6 +34,7 @@ namespace SGA_Desktop.Helpers
 					"Inventario" => new InventarioView(),
 					"OrdenTraspaso" => new OrdenTraspasoView(),
 					"ControlesRotativos" => new ControlesRotativosView(),
+					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
 
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};

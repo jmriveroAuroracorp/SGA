@@ -85,7 +85,7 @@ namespace SGA_Desktop.Models
         public string? NombreOperario { get; set; }
         
         public string OperarioDisplay => string.IsNullOrEmpty(NombreOperario) 
-            ? (string.IsNullOrEmpty(CodigoOperario) ? "Sin asignar" : CodigoOperario)
+            ? "Sin asignar"
             : NombreOperario;
 
         // Propiedades para mostrar información resumida

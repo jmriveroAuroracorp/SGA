@@ -76,9 +76,9 @@ namespace SGA_Api.Controllers.OrdenTraspaso
         {
             var result = await _ordenTraspasoService.CancelarOrdenTraspasoAsync(id);
             if (!result)
-                return NotFound();
+                return BadRequest("No se puede cancelar la orden. Verifique que esté en estado PENDIENTE o EN_PROCESO y sin movimientos realizados.");
 
-            return NoContent();
+            return Ok(new { mensaje = "Orden cancelada exitosamente" });
         }
 
         [HttpDelete("{id}")]

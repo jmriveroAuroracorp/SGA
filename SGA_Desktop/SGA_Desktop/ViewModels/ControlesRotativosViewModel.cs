@@ -47,6 +47,13 @@ namespace SGA_Desktop.ViewModels
 
             ResultadosView = CollectionViewSource.GetDefaultView(ResultadosSupervision);
             ResultadosView.Filter = new Predicate<object>(FiltroResultado);
+            
+            // Inicializar vistas para autocompletado de operarios
+            OperariosComboView = CollectionViewSource.GetDefaultView(OperariosCombo);
+            OperariosComboView.Filter = FiltraOperarioCombo;
+            
+            OperariosDisponiblesView = CollectionViewSource.GetDefaultView(OperariosDisponibles);
+            OperariosDisponiblesView.Filter = FiltraOperarioDisponibles;
 
             EstadosCombo = new ObservableCollection<string>
             {
@@ -79,6 +86,10 @@ namespace SGA_Desktop.ViewModels
         public ObservableCollection<ResultadoConteoDetalladoDto> ResultadosSupervision { get; }
         public ObservableCollection<OperariosAccesoDto> OperariosDisponibles { get; }
         public ICollectionView ResultadosView { get; }
+        
+        // Propiedades para autocompletado de operarios
+        public ICollectionView OperariosComboView { get; private set; }
+        public ICollectionView OperariosDisponiblesView { get; private set; }
 
         [ObservableProperty]
         private AlmacenDto? almacenSeleccionadoCombo;
@@ -153,6 +164,19 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private string filtroAlmacenSupervision = string.Empty;
+        
+        // Filtros para autocompletado de operarios
+        [ObservableProperty]
+        private string filtroOperariosCombo = "";
+        
+        [ObservableProperty]
+        private string filtroOperariosDisponibles = "";
+        
+        [ObservableProperty]
+        private bool isDropDownOpenCombo = false;
+        
+        [ObservableProperty]
+        private bool isDropDownOpenDisponibles = false;
 
         public ICollectionView OrdenesConteoView { get; }
         #endregion
@@ -795,6 +819,65 @@ namespace SGA_Desktop.ViewModels
         {
             OnPropertyChanged(nameof(MostrandoOrdenes));
             OnPropertyChanged(nameof(MostrandoSupervision));
+        }
+        
+        // Métodos para filtrado de operarios
+        private bool FiltraOperarioCombo(object obj)
+        {
+            if (obj is not OperariosAccesoDto operario) return false;
+            if (string.IsNullOrEmpty(FiltroOperariosCombo)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(operario.NombreOperario, FiltroOperariosCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+        
+        private bool FiltraOperarioDisponibles(object obj)
+        {
+            if (obj is not OperariosAccesoDto operario) return false;
+            if (string.IsNullOrEmpty(FiltroOperariosDisponibles)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(operario.NombreOperario, FiltroOperariosDisponibles, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+        
+        // Métodos para manejar cambios en filtros
+        partial void OnFiltroOperariosComboChanged(string value)
+        {
+            OperariosComboView?.Refresh();
+        }
+        
+        partial void OnFiltroOperariosDisponiblesChanged(string value)
+        {
+            OperariosDisponiblesView?.Refresh();
+        }
+        
+        // Comandos para controlar dropdown
+        [RelayCommand]
+        private void AbrirDropDownCombo()
+        {
+            // Limpiar el filtro para permitir escribir desde cero
+            FiltroOperariosCombo = "";
+            IsDropDownOpenCombo = true;
+        }
+        
+        [RelayCommand]
+        private void CerrarDropDownCombo()
+        {
+            IsDropDownOpenCombo = false;
+        }
+        
+        [RelayCommand]
+        private void AbrirDropDownDisponibles()
+        {
+            // Limpiar el filtro para permitir escribir desde cero
+            FiltroOperariosDisponibles = "";
+            IsDropDownOpenDisponibles = true;
+        }
+        
+        [RelayCommand]
+        private void CerrarDropDownDisponibles()
+        {
+            IsDropDownOpenDisponibles = false;
         }
 
         partial void OnIsCargandoChanged(bool value)

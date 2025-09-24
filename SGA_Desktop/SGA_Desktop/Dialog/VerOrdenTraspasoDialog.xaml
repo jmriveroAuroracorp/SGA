@@ -1,0 +1,592 @@
+<Window x:Class="SGA_Desktop.Dialog.VerOrdenTraspasoDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+        xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        Title="DETALLES DE LA ORDEN DE TRASPASO"
+        Width="1600"
+        Height="900"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- DataContext -->
+    <Window.DataContext>
+        <vm:VerOrdenTraspasoDialogViewModel />
+    </Window.DataContext>
+
+    <!-- Recursos y Estilos -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converters -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <helpers:EstadoToBrushConverter x:Key="EstadoToBrushConverter"/>
+            <helpers:ProgressColorConverter x:Key="ProgressColorConverter" />
+            <helpers:ProgressRectConverter x:Key="ProgressRectConverter" />
+            
+            <!-- Proxy para acceder al ViewModel desde los DataTemplates -->
+            <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Marco redondeado con fondo y bordes -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="60"/>
+                <RowDefinition/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}" 
+                    CornerRadius="6,6,0,0">
+                <TextBlock Text="DETALLES DE LA ORDEN DE TRASPASO" 
+                           FontSize="16" 
+                           FontWeight="Bold" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Margin="20,0"/>
+            </Border>
+
+            <!-- Contenido principal -->
+            <Grid Grid.Row="1" Margin="25,25,25,25">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Panel de información de la orden -->
+                <Border Grid.Row="0" 
+                        BorderBrush="{StaticResource BrushSecundario}" 
+                        BorderThickness="1" 
+                        CornerRadius="4"
+                        Margin="0,0,0,15">
+                    <Grid Margin="15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Primera fila: Código, Estado, Prioridad, Destino -->
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Código -->
+                            <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                                <TextBlock Text="Código:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock Text="{Binding OrdenTraspaso.CodigoOrden}" 
+                                           FontFamily="Consolas" 
+                                           FontWeight="Bold" 
+                                           FontSize="14" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+
+                            <!-- Estado -->
+                            <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                                <TextBlock Text="Estado:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <Border Background="#F8F9FA" 
+                                        BorderBrush="#DEE2E6" 
+                                        BorderThickness="1" 
+                                        CornerRadius="3" 
+                                        Padding="6,3">
+                                    <TextBlock Text="{Binding OrdenTraspaso.Estado}" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="12" 
+                                               HorizontalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding OrdenTraspaso.Estado}" Value="PENDIENTE">
+                                                        <Setter Property="Foreground" Value="#FFC107"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding OrdenTraspaso.Estado}" Value="EN_PROCESO">
+                                                        <Setter Property="Foreground" Value="#0D6EFD"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding OrdenTraspaso.Estado}" Value="COMPLETADA">
+                                                        <Setter Property="Foreground" Value="#198754"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding OrdenTraspaso.Estado}" Value="CANCELADA">
+                                                        <Setter Property="Foreground" Value="#DC3545"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Prioridad -->
+                            <StackPanel Grid.Column="2" Margin="0,0,15,0">
+                                <TextBlock Text="Prioridad:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock Text="{Binding OrdenTraspaso.PrioridadTexto}" 
+                                           FontWeight="Bold" 
+                                           FontSize="14" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+
+                            <!-- Destino -->
+                            <StackPanel Grid.Column="3">
+                                <TextBlock Text="Almacén Destino:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock Text="{Binding OrdenTraspaso.CodigoAlmacenDestino}" 
+                                           FontWeight="Bold" 
+                                           FontSize="14" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Segunda fila: Fechas y Usuario -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Fecha Creación -->
+                            <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                                <TextBlock Text="Creación:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock Text="{Binding OrdenTraspaso.FechaCreacion, StringFormat=dd/MM/yyyy HH:mm}" 
+                                           FontSize="12" 
+                                           Foreground="Black"/>
+                            </StackPanel>
+
+                            <!-- Fecha Plan -->
+                            <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                                <TextBlock Text="Plan:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock Text="{Binding OrdenTraspaso.FechaPlan, StringFormat=dd/MM/yyyy}" 
+                                           FontSize="12" 
+                                           Foreground="Black"/>
+                            </StackPanel>
+
+                            <!-- Usuario Creación -->
+                            <StackPanel Grid.Column="2" Margin="0,0,15,0">
+                                <TextBlock Text="Creado por:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock Text="{Binding OrdenTraspaso.NombreUsuarioCreacion}" 
+                                           FontSize="12" 
+                                           Foreground="Black"/>
+                            </StackPanel>
+
+                            <!-- Progreso -->
+                            <StackPanel Grid.Column="3">
+                                <TextBlock Text="Progreso:" 
+                                           FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                
+                                <!-- Texto del progreso -->
+                                <TextBlock Text="{Binding OrdenTraspaso.ProgresoTexto}" 
+                                           FontSize="11" 
+                                           Foreground="#7F8C8D"
+                                           Margin="0,0,0,4"/>
+                                
+                                <!-- Barra de progreso visual -->
+                                <Border Background="#E9ECEF" 
+                                        BorderBrush="#DEE2E6" 
+                                        BorderThickness="1" 
+                                        CornerRadius="8" 
+                                        Height="12">
+                                    <Grid ClipToBounds="True">
+                                        <Path Fill="{Binding OrdenTraspaso.PorcentajeProgreso, Converter={StaticResource ProgressColorConverter}}" 
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Stretch"
+                                              Margin="1">
+                                            <Path.Data>
+                                                <RectangleGeometry>
+                                                    <RectangleGeometry.Rect>
+                                                        <MultiBinding Converter="{StaticResource ProgressRectConverter}">
+                                                            <Binding Path="OrdenTraspaso.PorcentajeProgreso"/>
+                                                            <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=Border}"/>
+                                                            <Binding Path="ActualHeight" RelativeSource="{RelativeSource AncestorType=Border}"/>
+                                                        </MultiBinding>
+                                                    </RectangleGeometry.Rect>
+                                                    <RectangleGeometry.RadiusX>7</RectangleGeometry.RadiusX>
+                                                    <RectangleGeometry.RadiusY>7</RectangleGeometry.RadiusY>
+                                                </RectangleGeometry>
+                                            </Path.Data>
+                                        </Path>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Lista de líneas de la orden -->
+                <Border Grid.Row="1" 
+                        BorderBrush="{StaticResource BrushSecundario}" 
+                        BorderThickness="1" 
+                        CornerRadius="4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Título y estado de carga -->
+                        <Grid Grid.Row="0" Margin="20,20,20,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="📋 Líneas de la Orden de Traspaso" 
+                                       FontWeight="Bold" 
+                                       Foreground="{StaticResource BrushPrincipal}"/>
+
+                            <!-- Estado de carga -->
+                            <StackPanel Grid.Column="1" 
+                                        Orientation="Horizontal" 
+                                        Visibility="{Binding IsCargando, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <ProgressBar Width="20" Height="20" 
+                                             IsIndeterminate="True" 
+                                             Margin="0,0,10,0"/>
+                                <TextBlock Text="{Binding MensajeEstado}" 
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource BrushSecundario}"
+                                           FontStyle="Italic"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Cards de líneas -->
+                        <ScrollViewer Grid.Row="1" 
+                                      VerticalScrollBarVisibility="Auto" 
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Margin="20,0,20,20">
+                            <StackPanel>
+                                <!-- Header de columnas -->
+                                <Border Background="{StaticResource BrushSecundario}" 
+                                        BorderBrush="{StaticResource BrushIntermedio}" 
+                                        BorderThickness="0,0,0,1"
+                                        Padding="12,8"
+                                        Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="30"/>  <!-- Icono -->
+                                            <ColumnDefinition Width="100"/> <!-- Artículo -->
+                                            <ColumnDefinition Width="*"/>   <!-- Descripción -->
+                                            <ColumnDefinition Width="80"/>  <!-- Plan -->
+                                            <ColumnDefinition Width="80"/>  <!-- Movida -->
+                                            <ColumnDefinition Width="80"/>  <!-- Diferencia -->
+                                            <ColumnDefinition Width="100"/> <!-- Estado -->
+                                            <ColumnDefinition Width="120"/> <!-- Origen -->
+                                            <ColumnDefinition Width="120"/> <!-- Destino -->
+                                            <ColumnDefinition Width="120"/> <!-- Operario -->
+                                            <ColumnDefinition Width="100"/> <!-- Fechas -->
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <TextBlock Grid.Column="0" Text="" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
+                                        <TextBlock Grid.Column="2" Text="Descripción" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
+                                        <TextBlock Grid.Column="3" Text="Plan" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="4" Text="Movida" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="5" Text="Diferencia" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="6" Text="Estado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="7" Text="Origen" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="8" Text="Destino" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="9" Text="Operario" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="10" Text="Fechas" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Lista de líneas -->
+                                <ItemsControl ItemsSource="{Binding LineasOrden}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="6" 
+                                                Padding="12" 
+                                                Margin="0,0,0,8" 
+                                                BorderThickness="1">
+                                            <!-- Estilos diferentes para línea padre vs hija -->
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <!-- Estilo por defecto (líneas hijas) -->
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource BrushIntermedio}"/>
+                                                    <Setter Property="Margin" Value="40,0,25,8"/>  <!-- Indentación izquierda y margen derecho para hijas -->
+                                                    <Style.Triggers>
+                                                        <!-- Estilo para líneas padre (primer elemento del artículo) -->
+                                                        <DataTrigger Binding="{Binding EsPadre}" Value="True">
+                                                            <Setter Property="Background" Value="#F8F9FA"/>
+                                                            <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                                            <Setter Property="BorderThickness" Value="2"/>
+                                                            <Setter Property="Margin" Value="0,0,0,8"/>  <!-- Sin indentación para padre -->
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.1"/>
+                                            </Border.Effect>
+                                            
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="30"/>  <!-- Icono -->
+                                                    <ColumnDefinition Width="100"/> <!-- Artículo -->
+                                                    <ColumnDefinition Width="*"/>   <!-- Descripción -->
+                                                    <ColumnDefinition Width="80"/>  <!-- Plan -->
+                                                    <ColumnDefinition Width="80"/>  <!-- Movida -->
+                                                    <ColumnDefinition Width="80"/>  <!-- Diferencia -->
+                                                    <ColumnDefinition Width="100"/> <!-- Estado -->
+                                                    <ColumnDefinition Width="120"/> <!-- Origen -->
+                                                    <ColumnDefinition Width="120"/> <!-- Destino -->
+                                                    <ColumnDefinition Width="120"/> <!-- Operario -->
+                                                    <ColumnDefinition Width="100"/> <!-- Fechas -->
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <!-- Solo icono -->
+                                                <TextBlock Grid.Column="0" 
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="└─"/>  <!-- Icono para hijas -->
+                                                            <Setter Property="Foreground" Value="Gray"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding EsPadre}" Value="True">
+                                                                    <Setter Property="Text" Value="📦"/>  <!-- Icono para padre -->
+                                                                    <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                
+                                                <!-- Artículo -->
+                                                <TextBlock Grid.Column="1" 
+                                                           Text="{Binding CodigoArticulo}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12" 
+                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                           VerticalAlignment="Center"/>
+                                                
+                                                <!-- Descripción -->
+                                                <TextBlock Grid.Column="2" 
+                                                           Text="{Binding DescripcionArticulo}" 
+                                                           FontSize="12" 
+                                                           Foreground="Black"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0"/>
+                                                
+                                                <!-- Cantidad Plan -->
+                                                <TextBlock Grid.Column="3" 
+                                                           Text="{Binding CantidadPlan, StringFormat=F2}" 
+                                                           FontSize="12" 
+                                                           FontWeight="Bold"
+                                                           Foreground="Blue"
+                                                           VerticalAlignment="Center"
+                                                           HorizontalAlignment="Center"/>
+                                                
+                                                <!-- Cantidad Movida -->
+                                                <TextBlock Grid.Column="4" 
+                                                           Text="{Binding CantidadMovida, StringFormat=F2}" 
+                                                           FontSize="12" 
+                                                           FontWeight="Bold"
+                                                           Foreground="Green"
+                                                           VerticalAlignment="Center"
+                                                           HorizontalAlignment="Center"/>
+                                                
+                                                <!-- Diferencia -->
+                                                <TextBlock Grid.Column="5" 
+                                                           Text="{Binding DiferenciaTexto}" 
+                                                           FontSize="12" 
+                                                           FontWeight="Bold"
+                                                           VerticalAlignment="Center"
+                                                           HorizontalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="Black"/>
+                                                            <Style.Triggers>
+                                                                <!-- Diferencia positiva (falta material) -->
+                                                                <DataTrigger Binding="{Binding Diferencia}" Value="">
+                                                                    <Setter Property="Foreground" Value="Transparent"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                
+                                                <!-- Estado -->
+                                                <Border Grid.Column="6"
+                                                        Background="#F8F9FA" 
+                                                        BorderBrush="#DEE2E6" 
+                                                        BorderThickness="1" 
+                                                        CornerRadius="3" 
+                                                        Padding="4,2"
+                                                        Margin="5,0">
+                                                    <TextBlock Text="{Binding Estado}" 
+                                                               FontWeight="SemiBold" 
+                                                               FontSize="10" 
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="PENDIENTE">
+                                                                        <Setter Property="Foreground" Value="#FFC107"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
+                                                                        <Setter Property="Foreground" Value="#0D6EFD"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="COMPLETADA">
+                                                                        <Setter Property="Foreground" Value="#198754"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="COMPLETADO">
+                                                                        <Setter Property="Foreground" Value="#198754"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="SUBDIVIDIDO">
+                                                                        <Setter Property="Foreground" Value="#6F42C1"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                                
+                                                <!-- Origen -->
+                                                <StackPanel Grid.Column="7" 
+                                                            VerticalAlignment="Center"
+                                                            HorizontalAlignment="Center">
+                                                    <TextBlock Text="{Binding CodigoAlmacenOrigen}" 
+                                                               FontSize="11" 
+                                                               FontWeight="Bold"
+                                                               Foreground="Black"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding UbicacionOrigen}" 
+                                                               FontSize="10" 
+                                                               Foreground="Gray"
+                                                               HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                
+                                                <!-- Destino -->
+                                                <StackPanel Grid.Column="8" 
+                                                            VerticalAlignment="Center"
+                                                            HorizontalAlignment="Center">
+                                                    <TextBlock Text="{Binding CodigoAlmacenDestino}" 
+                                                               FontSize="11" 
+                                                               FontWeight="Bold"
+                                                               Foreground="Black"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding UbicacionDestino}" 
+                                                               FontSize="10" 
+                                                               Foreground="Gray"
+                                                               HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                
+                                                <!-- Operario -->
+                                                <TextBlock Grid.Column="9" 
+                                                           Text="{Binding NombreOperario}" 
+                                                           FontSize="11" 
+                                                           Foreground="Black"
+                                                           VerticalAlignment="Center"
+                                                           HorizontalAlignment="Center"
+                                                           TextWrapping="Wrap"/>
+                                                
+                                                <!-- Fechas -->
+                                                <StackPanel Grid.Column="10" 
+                                                            VerticalAlignment="Center"
+                                                            HorizontalAlignment="Center">
+                                                    <TextBlock Text="{Binding FechaInicio, StringFormat=dd/MM HH:mm}" 
+                                                               FontSize="10" 
+                                                               Foreground="Green"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding FechaFinalizacion, StringFormat=dd/MM HH:mm}" 
+                                                               FontSize="10" 
+                                                               Foreground="Red"
+                                                               HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Footer con botones -->
+            <Border Grid.Row="2" 
+                    Background="{StaticResource BrushSecundario}" 
+                    CornerRadius="0,0,6,6"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{StaticResource BrushIntermedio}">
+                <Grid Margin="15,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Información -->
+                    <StackPanel Grid.Column="0" 
+                                Orientation="Horizontal" 
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TotalLineas}" 
+                                   FontWeight="Bold" 
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource BrushPrincipal}"/>
+                    </StackPanel>
+
+                    <!-- Botón Exportar a Excel -->
+                    <Button Grid.Column="1"
+                            Content="📊 EXPORTAR A EXCEL"
+                            Command="{Binding ExportarAExcelCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="160" Height="35"
+                            Margin="0,0,10,0"/>
+
+                    <!-- Botón Cerrar -->
+                    <Button Grid.Column="2"
+                            Content="❌ CERRAR"
+                            Command="{Binding CerrarCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="120" Height="35"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

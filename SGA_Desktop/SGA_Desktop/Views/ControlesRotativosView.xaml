@@ -5,6 +5,7 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
       xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
       mc:Ignorable="d"
       Background="{StaticResource BrushFondo}">
 
@@ -183,11 +184,30 @@
                                 <!-- Operario -->
                                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                     <TextBlock Text="Operario" FontWeight="Bold" Margin="0,0,0,3" FontSize="11"/>
-                                    <ComboBox ItemsSource="{Binding OperariosCombo}"
-                                              DisplayMemberPath="DescripcionCombo"
+                                    <ComboBox ItemsSource="{Binding OperariosComboView}"
+                                              DisplayMemberPath="NombreOperario"
                                               SelectedItem="{Binding OperarioSeleccionadoCombo}"
+                                              Text="{Binding FiltroOperariosCombo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                               Style="{StaticResource EstiloComboBox}"
-                                              Height="26"/>
+                                              Height="26"
+                                              IsEditable="True"
+                                              IsTextSearchEnabled="False"
+                                              StaysOpenOnEdit="True"
+                                              IsDropDownOpen="{Binding IsDropDownOpenCombo}">
+                                        <i:Interaction.Triggers>
+                                            <i:EventTrigger EventName="GotFocus">
+                                                <i:InvokeCommandAction Command="{Binding AbrirDropDownComboCommand}"/>
+                                            </i:EventTrigger>
+                                            <i:EventTrigger EventName="SelectionChanged">
+                                                <i:InvokeCommandAction Command="{Binding CerrarDropDownComboCommand}"/>
+                                            </i:EventTrigger>
+                                        </i:Interaction.Triggers>
+                                        <ComboBox.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ComboBox.ItemsPanel>
+                                    </ComboBox>
                                 </StackPanel>
 
                                 <!-- Botón limpiar filtros -->
@@ -448,8 +468,7 @@
                         <TextBlock Text="{Binding TotalOrdenes}" 
                                    VerticalAlignment="Center"
                                    Margin="0,0,20,0"
-                                   FontWeight="Bold"
-                                   Foreground="{StaticResource BrushSecundario}"/>
+                                   FontWeight="Bold"/>
 
                         <Button Content="📊 Exportar a Excel"
                                 Command="{Binding ExportarControlesCommand}"
@@ -576,13 +595,32 @@
                             <!-- Operario Aprobador -->
                             <StackPanel Grid.Column="2" Margin="10,0,10,0">
                                 <TextBlock Text="Operario Aprobador" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <ComboBox ItemsSource="{Binding OperariosDisponibles}"
-                                          DisplayMemberPath="NombreCompleto"
+                                <ComboBox ItemsSource="{Binding OperariosDisponiblesView}"
+                                          DisplayMemberPath="NombreOperario"
                                           SelectedItem="{Binding OperarioAprobadorSeleccionado}"
+                                          Text="{Binding FiltroOperariosDisponibles, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           Height="35"
                                           FontSize="14"
                                           Padding="8"
-                                          IsEnabled="{Binding CanEnableInputs}"/>
+                                          IsEnabled="{Binding CanEnableInputs}"
+                                          IsEditable="True"
+                                          IsTextSearchEnabled="False"
+                                          StaysOpenOnEdit="True"
+                                          IsDropDownOpen="{Binding IsDropDownOpenDisponibles}">
+                                    <i:Interaction.Triggers>
+                                        <i:EventTrigger EventName="GotFocus">
+                                            <i:InvokeCommandAction Command="{Binding AbrirDropDownDisponiblesCommand}"/>
+                                        </i:EventTrigger>
+                                        <i:EventTrigger EventName="SelectionChanged">
+                                            <i:InvokeCommandAction Command="{Binding CerrarDropDownDisponiblesCommand}"/>
+                                        </i:EventTrigger>
+                                    </i:Interaction.Triggers>
+                                    <ComboBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ComboBox.ItemsPanel>
+                                </ComboBox>
                             </StackPanel>
 
                             <!-- Botones -->

@@ -11,6 +11,7 @@ namespace SGA_Desktop.Models
         public DateTime? FechaFinalizacion { get; set; }
         public string TipoOrigen { get; set; }
         public int UsuarioCreacion { get; set; }
+        public string? NombreUsuarioCreacion { get; set; }
         public string? Comentarios { get; set; }
         public DateTime FechaCreacion { get; set; }
         public string CodigoOrden { get; set; }
@@ -30,9 +31,29 @@ namespace SGA_Desktop.Models
         public string AlmacenOrigenDescripcion => Lineas.FirstOrDefault()?.CodigoAlmacenOrigen ?? "N/A";
         public string AlmacenDestinoDescripcion => Lineas.FirstOrDefault()?.CodigoAlmacenDestino ?? "N/A";
         public string UsuarioAsignadoNombre => "Sin asignar"; // Se asigna por línea individual
-        public int TotalLineas => Lineas.Count;
+        
+        // Conteo excluyendo líneas SUBDIVIDIDO (que son líneas padre que se descomponen)
+        public int TotalLineas => Lineas.Count(l => l.Estado != "SUBDIVIDIDO");
+        public int LineasCompletadas => Lineas.Count(l => l.Completada && l.Estado != "SUBDIVIDIDO");
+        public string ProgresoTexto => $"{LineasCompletadas} de {TotalLineas} líneas";
+        public double PorcentajeProgreso => TotalLineas > 0 ? (LineasCompletadas * 100.0 / TotalLineas) : 0;
+        
+        // Información sobre subdivisiones
+        public bool TieneSubdivisiones => Lineas.Any(l => l.Estado == "SUBDIVIDIDO");
+        public int NumeroSubdivisiones => Lineas.Count(l => l.Estado == "SUBDIVIDIDO");
+        public string TextoSubdivisiones => TieneSubdivisiones ? $"{NumeroSubdivisiones} subdivisión{(NumeroSubdivisiones > 1 ? "es" : "")}" : "";
         public bool PuedeEditar => Estado == "PENDIENTE";
         public bool PuedeCancelar => Estado == "PENDIENTE" || Estado == "EN_PROCESO";
+        
+        public string PrioridadTexto => Prioridad switch
+        {
+            1 => "Muy Baja",
+            2 => "Baja", 
+            3 => "Normal",
+            4 => "Alta",
+            5 => "Muy Alta",
+            _ => "Desconocida"
+        };
     }
 
     public class LineaOrdenTraspasoDetalleDto
@@ -58,6 +79,14 @@ namespace SGA_Desktop.Models
         public DateTime? FechaInicio { get; set; }
         public DateTime? FechaFinalizacion { get; set; }
         public Guid? IdTraspaso { get; set; }
+        
+        // Propiedades adicionales para la UI
+        public string NombreOperario { get; set; } = "Sin asignar";
+        public bool EsPadre { get; set; } = false;
+        
+        // Propiedad calculada para la diferencia (Plan - Movida)
+        public decimal? Diferencia => Estado == "SUBDIVIDIDO" ? null : CantidadPlan - CantidadMovida;
+        public string DiferenciaTexto => Estado == "SUBDIVIDIDO" ? "" : $"{Diferencia:F2}";
     }
 
     public class CrearOrdenTraspasoDto
@@ -87,5 +116,34 @@ namespace SGA_Desktop.Models
         public string? UbicacionDestino { get; set; }
         public string? PaletDestino { get; set; }
         public int IdOperarioAsignado { get; set; }
+        
+        // Propiedades adicionales para la UI
+        [System.Text.Json.Serialization.JsonIgnore]
+        public OperariosAccesoDto? OperarioSeleccionado 
+        { 
+            get => _operarioSeleccionado;
+            set 
+            { 
+                _operarioSeleccionado = value;
+                IdOperarioAsignado = value?.Operario ?? 0;
+            }
+        }
+        
+        private OperariosAccesoDto? _operarioSeleccionado;
+        
+        // Propiedades para filtrado individual por línea
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string FiltroOperarioLinea { get; set; } = "";
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsDropDownOpenLinea { get; set; } = false;
+        
+        // Lista de operarios disponibles para esta línea (se establecerá desde el ViewModel)
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Collections.ObjectModel.ObservableCollection<OperariosAccesoDto>? OperariosDisponiblesLinea { get; set; }
+        
+        // Vista filtrada para esta línea específica
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.ComponentModel.ICollectionView? OperariosViewLinea { get; set; }
     }
 } 

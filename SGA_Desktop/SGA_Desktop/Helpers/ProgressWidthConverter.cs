@@ -19,8 +19,10 @@ namespace SGA_Desktop.Helpers
                 // Calcular el ancho proporcional, con un mínimo para que se vea algo si hay progreso
                 if (porcentaje <= 0)
                     return 0.0;
-                    
-                var ancho = (porcentaje / 100.0) * anchoTotal;
+                
+                // Restar 2 píxeles del ancho total para dejar margen para las esquinas redondeadas
+                var anchoDisponible = anchoTotal - 2;
+                var ancho = (porcentaje / 100.0) * anchoDisponible;
                 
                 // Mínimo de 2 píxeles si hay algo de progreso
                 return Math.Max(ancho, porcentaje > 0 ? 2.0 : 0.0);

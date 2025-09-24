@@ -5,6 +5,10 @@ using SGA_Desktop.Services;
 using SGA_Desktop.Dialog;
 using System.Collections.ObjectModel;
 using SGA_Desktop.Helpers;
+using System.Windows;
+using System.Linq;
+using System.Windows.Data;
+using System.ComponentModel;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -16,8 +20,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private ObservableCollection<OrdenTraspasoDto> ordenesTraspaso = new();
 
-        [ObservableProperty]
-        private ObservableCollection<OrdenTraspasoDto> ordenesView = new();
+        public ICollectionView OrdenesView { get; private set; }
 
         [ObservableProperty]
         private OrdenTraspasoDto? ordenSeleccionada;
@@ -53,13 +56,25 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string estadoFiltro = "TODOS";
 
-        public int TotalOrdenes => OrdenesView.Count;
+        public string TotalOrdenes
+        {
+            get
+            {
+                var total = OrdenesTraspaso?.Count ?? 0;
+                return $"Total: {total} orden{(total != 1 ? "es" : "")} de traspaso";
+            }
+        }
 
         public OrdenTraspasoViewModel()
         {
             System.Diagnostics.Debug.WriteLine("OrdenTraspasoViewModel: Constructor iniciado");
             _ordenTraspasoService = new OrdenTraspasoService();
             _stockService = new StockService();
+            
+            // Inicializar ICollectionView para filtrado
+            OrdenesView = CollectionViewSource.GetDefaultView(OrdenesTraspaso);
+            OrdenesView.Filter = FiltrarOrdenes;
+            
             CargarDatosIniciales();
             System.Diagnostics.Debug.WriteLine("OrdenTraspasoViewModel: Datos iniciales cargados");
             _ = InitializeAsync();
@@ -122,7 +137,7 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        // Validación de fechas igual que en InventarioViewModel
+        // Validación de fechas y actualización de filtros
         partial void OnFechaDesdeChanged(DateTime oldValue, DateTime newValue)
         {
             // Si la fecha hasta es anterior a la nueva fecha desde, ajustarla
@@ -130,6 +145,7 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = newValue;
             }
+            OrdenesView?.Refresh();
         }
 
         partial void OnFechaHastaChanged(DateTime oldValue, DateTime newValue)
@@ -139,6 +155,17 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = FechaDesde;
             }
+            OrdenesView?.Refresh();
+        }
+
+        partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
+        {
+            OrdenesView?.Refresh();
+        }
+
+        partial void OnEstadoFiltroChanged(string oldValue, string newValue)
+        {
+            OrdenesView?.Refresh();
         }
 
         [RelayCommand]
@@ -153,21 +180,25 @@ namespace SGA_Desktop.ViewModels
                 var ordenes = await _ordenTraspasoService.GetOrdenesTraspasoAsync();
                 
                 OrdenesTraspaso.Clear();
-                OrdenesView.Clear();
                 
                 foreach (var orden in ordenes)
                 {
                     OrdenesTraspaso.Add(orden);
-                    OrdenesView.Add(orden);
                 }
                 
+                // Refrescar la vista filtrada
+                OrdenesView.Refresh();
+                OnPropertyChanged(nameof(TotalOrdenes));
+                
                 // Si no hay órdenes, mostrar mensaje
-                if (OrdenesView.Count == 0)
+                if (OrdenesTraspaso.Count == 0)
                 {
                     MensajeEstado = "No se encontraron órdenes de traspaso";
                 }
-                
-                MensajeEstado = $"{OrdenesView.Count} órdenes cargadas";
+                else
+                {
+                    MensajeEstado = $"{OrdenesTraspaso.Count} órdenes cargadas";
+                }
             }
             catch (Exception ex)
             {
@@ -208,8 +239,27 @@ namespace SGA_Desktop.ViewModels
         [RelayCommand]
         private void VerOrden(OrdenTraspasoDto orden)
         {
-            // TODO: Implementar vista de detalle
-            System.Diagnostics.Debug.WriteLine($"Ver orden: {orden.CodigoOrden}");
+            try
+            {
+                var dialog = new VerOrdenTraspasoDialog(orden);
+                
+                // Establecer la ventana padre
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != dialog)
+                    dialog.Owner = owner;
+                
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog("Error", $"Error al abrir detalles de la orden: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
+            }
         }
 
         [RelayCommand]
@@ -255,6 +305,29 @@ namespace SGA_Desktop.ViewModels
                 5 => "5 - Muy Alta",
                 _ => $"{prioridad} - Desconocida"
             };
+        }
+
+        // Método de filtrado para ICollectionView
+        private bool FiltrarOrdenes(object obj)
+        {
+            if (obj is not OrdenTraspasoDto orden) return false;
+
+            // Filtro por fecha
+            if (orden.FechaCreacion.Date < FechaDesde.Date || orden.FechaCreacion.Date > FechaHasta.Date)
+                return false;
+
+            // Filtro por almacén destino
+            if (AlmacenDestinoSeleccionado != null && 
+                AlmacenDestinoSeleccionado.CodigoAlmacen != "Todas" && 
+                !string.IsNullOrEmpty(orden.CodigoAlmacenDestino) &&
+                orden.CodigoAlmacenDestino != AlmacenDestinoSeleccionado.CodigoAlmacen)
+                return false;
+
+            // Filtro por estado
+            if (EstadoFiltro != "TODOS" && orden.Estado != EstadoFiltro)
+                return false;
+
+            return true;
         }
     }
 } 

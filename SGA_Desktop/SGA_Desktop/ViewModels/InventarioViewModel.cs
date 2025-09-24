@@ -117,7 +117,14 @@ namespace SGA_Desktop.ViewModels
         #region Computed Properties
         public bool CanEnableInputs => !IsCargando;
         public bool CanCargarInventarios => !IsCargando && AlmacenSeleccionadoCombo != null;
-        public string TotalInventarios => $"Total: {Inventarios.Count} inventarios";
+        public string TotalInventarios
+        {
+            get
+            {
+                var total = Inventarios?.Count ?? 0;
+                return $"Total: {total} inventario{(total != 1 ? "s" : "")}";
+            }
+        }
         public string TotalUbicaciones => $"Ubicaciones: {StockUbicaciones.Count}";
         #endregion
 

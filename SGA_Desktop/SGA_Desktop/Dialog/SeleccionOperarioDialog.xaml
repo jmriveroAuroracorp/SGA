@@ -1,0 +1,160 @@
+<Window x:Class="SGA_Desktop.Dialog.SeleccionOperarioDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SELECCIONAR OPERARIO"
+        Width="500"
+        Height="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- Recursos -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Marco principal -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}"
+                    CornerRadius="6,6,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="40"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <TextBlock Grid.Column="0"
+                               Text="SELECCIONAR OPERARIO"
+                               Foreground="White"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                    
+                    <Button Grid.Column="1"
+                            Content="✕"
+                            Background="Transparent"
+                            Foreground="White"
+                            BorderThickness="0"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Click="CloseButton_Click"
+                            Cursor="Hand"/>
+                </Grid>
+            </Border>
+
+            <!-- Contenido principal -->
+            <Grid Grid.Row="1" Margin="20">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Instrucciones -->
+                <TextBlock Grid.Row="0" 
+                           Text="Seleccione el operario para gestionar sus empresas:"
+                           FontSize="14"
+                           Margin="0,0,0,15"/>
+
+                <!-- Lista de operarios -->
+                <Border Grid.Row="1" 
+                        BorderBrush="{StaticResource BrushInputBorde}"
+                        BorderThickness="1"
+                        Background="White">
+                    
+                    <DataGrid x:Name="DgOperarios"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              SelectionMode="Single"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              CanUserResizeRows="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              AlternatingRowBackground="#F8F9FA"
+                              MouseDoubleClick="DgOperarios_MouseDoubleClick">
+                        
+                        <DataGrid.Columns>
+                            <!-- ID -->
+                            <DataGridTextColumn Header="ID" 
+                                                Binding="{Binding Id}" 
+                                                Width="60"
+                                                ElementStyle="{StaticResource DataGridTextStyle}"/>
+                            
+                            <!-- Nombre -->
+                            <DataGridTextColumn Header="Nombre" 
+                                                Binding="{Binding Nombre}" 
+                                                Width="*"
+                                                ElementStyle="{StaticResource DataGridTextStyle}"/>
+                            
+                            <!-- Código Centro -->
+                            <DataGridTextColumn Header="Centro" 
+                                                Binding="{Binding CodigoCentro}" 
+                                                Width="80"
+                                                ElementStyle="{StaticResource DataGridTextStyle}"/>
+                        </DataGrid.Columns>
+                        
+                        <!-- Estilo de filas -->
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="Height" Value="35"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#E3F2FD"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+                </Border>
+            </Grid>
+
+            <!-- Footer con botones -->
+            <Border Grid.Row="2" 
+                    Background="{StaticResource BrushSecundario1}"
+                    CornerRadius="0,0,6,6"
+                    Padding="20,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Seleccionar"
+                            Width="100"
+                            Height="35"
+                            Margin="0,0,10,0"
+                            Click="SeleccionarButton_Click"
+                            Style="{StaticResource EstiloBotonPrincipal}"/>
+                    
+                    <Button Content="Cancelar"
+                            Width="100"
+                            Height="35"
+                            Click="CloseButton_Click"
+                            Style="{StaticResource EstiloBotonSecundario}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

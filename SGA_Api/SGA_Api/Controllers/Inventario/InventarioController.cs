@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Text.Json.Serialization;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using SGA_Api.Services;
 
 namespace SGA_Api.Controllers.Inventario
 {
@@ -22,6 +23,7 @@ namespace SGA_Api.Controllers.Inventario
         private readonly StorageControlDbContext _storageContext;
         private readonly SageDbContext _sageDbContext;
         private readonly ILogger<InventarioController> _logger;
+
 
         public InventarioController(AuroraSgaDbContext context, StorageControlDbContext storageContext, SageDbContext sageDbContext, ILogger<InventarioController> logger)
         {
@@ -812,66 +814,23 @@ namespace SGA_Api.Controllers.Inventario
                     return BadRequest("Sin ejercicio válido");
                 }
 
-                // === NUEVO: Validación de límites por artículo antes de guardar ===
+                // === VALIDACIÓN DE LÍMITES POR ARTÍCULO USANDO SERVICIO ===
                 foreach (var articulo in conteo.Articulos)
                 {
-                    var (acumUnid, acumEur) = await CalcularDiferenciasDiariasPorArticuloAsync(
-                        articulo.UsuarioConteo,
-                        articulo.CodigoArticulo,
-                        conteo.IdInventario,
-                        inventario.CodigoEmpresa);
-
-                    // Límites del operario desde SAGE (si no hay, 0 => sin límite)
-                    var limEuros = await _sageDbContext.Operarios
-                        .Where(o => o.Id == articulo.UsuarioConteo)
-                        .Select(o => o.MRH_LimiteInventarioEuros)
-                        .FirstOrDefaultAsync() ?? 0m;
-
-                    var limUnidades = await _sageDbContext.Operarios
-                        .Where(o => o.Id == articulo.UsuarioConteo)
-                        .Select(o => o.MRH_LimiteInventarioUnidades)
-                        .FirstOrDefaultAsync() ?? 0m;
-
-                    // Diferencia que se intenta registrar ahora
+                    // Calcular diferencia actual
                     var stockActual = await _storageContext.AcumuladoStockUbicacion
                         .FirstOrDefaultAsync(s =>
                             s.CodigoEmpresa == inventario.CodigoEmpresa &&
                             s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == articulo.CodigoAlmacen && // ← CORREGIDO: Usar almacén del artículo
+                            s.CodigoAlmacen == articulo.CodigoAlmacen &&
                             s.CodigoArticulo == articulo.CodigoArticulo &&
                             s.Ubicacion == articulo.CodigoUbicacion &&
                             (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
                             (s.FechaCaducidad == articulo.FechaCaducidad || (s.FechaCaducidad == null && articulo.FechaCaducidad == null)));
 
-                    var diferenciaNueva = Math.Abs((articulo.CantidadInventario) - (stockActual?.UnidadSaldo ?? 0));
+                    var diferenciaNueva = (articulo.CantidadInventario) - (stockActual?.UnidadSaldo ?? 0);
 
-                    // Solo validar límites si hay diferencia real (no 0 absoluto)
-                    if (diferenciaNueva > 0)
-                    {
-                        if (limEuros > 0)
-                        {
-                            var precioMedio = await _sageDbContext.AcumuladoStock
-                                .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa && a.CodigoArticulo == articulo.CodigoArticulo)
-                                .OrderByDescending(a => a.Ejercicio)
-                                .Select(a => a.PrecioMedio)
-                                .FirstOrDefaultAsync() ?? 0m;
-
-                            var totalEuros = acumEur + (diferenciaNueva * precioMedio);
-                            if (totalEuros > limEuros)
-                            {
-                                return BadRequest($"Límite diario de euros superado para el artículo {articulo.CodigoArticulo}.");
-                            }
-                        }
-
-                        if (limUnidades > 0)
-                        {
-                            var totalUnidades = acumUnid + diferenciaNueva;
-                            if (totalUnidades > limUnidades)
-                            {
-                                return BadRequest($"Límite diario de unidades superado para el artículo {articulo.CodigoArticulo}.");
-                            }
-                        }
-                    }
+             
                 }
 
                 // Procesar cada artículo del conteo
@@ -950,70 +909,6 @@ namespace SGA_Api.Controllers.Inventario
             }
         }
 
-        /// <summary>
-        /// Calcula diferencias diarias por artículo para un operario, excluyendo un inventario dado
-        /// Suma tanto líneas temporales (no consolidadas) como líneas definitivas consolidadas del día.
-        /// </summary>
-        private async Task<(decimal unidades, decimal euros)> CalcularDiferenciasDiariasPorArticuloAsync(
-            int operarioId, string codigoArticulo, Guid inventarioAExcluir, short codigoEmpresa)
-        {
-            var hoy = DateTime.Today;
-            var manana = hoy.AddDays(1);
-
-            decimal totalUnidades = 0m;
-            decimal totalEuros = 0m;
-
-            // Precio medio (si no hay o es 0, aceptamos 0€ como pediste)
-            var precioMedio = await _sageDbContext.AcumuladoStock
-                .Where(a => a.CodigoEmpresa == codigoEmpresa && a.CodigoArticulo == codigoArticulo)
-                .OrderByDescending(a => a.Ejercicio)
-                .Select(a => a.PrecioMedio)
-                .FirstOrDefaultAsync() ?? 0m;
-
-            // InventarioLineasTemp del día (no consolidadas) distinto del actual
-            var temp = await _context.InventarioLineasTemp
-                .Where(lt => lt.UsuarioConteoId == operarioId &&
-                             lt.CodigoArticulo == codigoArticulo &&
-                             lt.IdInventario != inventarioAExcluir &&
-                             lt.FechaConteo >= hoy && lt.FechaConteo < manana &&
-                             !lt.Consolidado &&
-                             lt.CantidadContada.HasValue)
-                .Select(lt => new { lt.CantidadContada, lt.StockActual })
-                .ToListAsync();
-
-            foreach (var l in temp)
-            {
-                var diff = Math.Abs((l.CantidadContada ?? 0) - (l.StockActual));
-                Console.WriteLine($"🔍 TEMP CALC: Contado={l.CantidadContada}, Stock={l.StockActual}, Diff={diff}");
-                if (diff > 0.01m)
-                {
-                    totalUnidades += diff;
-                    totalEuros += diff * precioMedio;
-                }
-            }
-
-            // InventarioLineas del día (consolidadas) distinto del actual
-            var finales = await _context.InventarioLineas
-                .Where(l => l.UsuarioValidacionId == operarioId &&
-                            l.CodigoArticulo == codigoArticulo &&
-                            l.IdInventario != inventarioAExcluir &&
-                            l.FechaValidacion >= hoy && l.FechaValidacion < manana)
-                .Select(l => new { l.StockContado, l.StockActual })
-                .ToListAsync();
-
-            foreach (var l in finales)
-            {
-                var diff = Math.Abs((l.StockContado ?? 0m) - l.StockActual);
-                Console.WriteLine($"🔍 FINAL CALC: Contado={l.StockContado}, Stock={l.StockActual}, Diff={diff}");
-                if (diff > 0.01m)
-                {
-                    totalUnidades += diff;
-                    totalEuros += diff * precioMedio;
-                }
-            }
-
-            return (totalUnidades, totalEuros);
-        }
 
         /// <summary>
         /// POST /api/Inventario/consolidar/{idInventario}
@@ -2149,62 +2044,24 @@ namespace SGA_Api.Controllers.Inventario
                     return NotFound(new { mensaje = "Inventario no encontrado" });
                 }
 
-                // === NUEVO: Validación de límites por artículo antes de guardar reconteo ===
-                foreach (var lineaReconteo in reconteo.LineasRecontadas)
-                {
-                    var (acumUnid, acumEur) = await CalcularDiferenciasDiariasPorArticuloAsync(
-                        lineaReconteo.UsuarioReconteo,
-                        lineaReconteo.CodigoArticulo,
-                        reconteo.IdInventario,
-                        inventario.CodigoEmpresa);
-
-                    var limEuros = await _sageDbContext.Operarios
-                        .Where(o => o.Id == lineaReconteo.UsuarioReconteo)
-                        .Select(o => o.MRH_LimiteInventarioEuros)
-                        .FirstOrDefaultAsync() ?? 0m;
-
-                    var limUnidades = await _sageDbContext.Operarios
-                        .Where(o => o.Id == lineaReconteo.UsuarioReconteo)
-                        .Select(o => o.MRH_LimiteInventarioUnidades)
-                        .FirstOrDefaultAsync() ?? 0m;
-
-                                    // Calcular diferencia con stock actual del sistema
+                // === VALIDACIÓN DE LÍMITES POR ARTÍCULO USANDO SERVICIO (RECONTEO) ===
                 var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now) // Filtro de fecha para obtener ejercicio actual
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
                     .OrderByDescending(p => p.Fechainicio)
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
 
+                foreach (var lineaReconteo in reconteo.LineasRecontadas)
+                {
+                    // Calcular diferencia actual
                     var stockActual = await _storageContext.AcumuladoStockUbicacion
                         .FirstOrDefaultAsync(s => s.CodigoEmpresa == inventario.CodigoEmpresa && s.Ejercicio == ejercicio &&
                                                   s.CodigoAlmacen == inventario.CodigoAlmacen && s.CodigoArticulo == lineaReconteo.CodigoArticulo &&
                                                   s.Ubicacion == lineaReconteo.CodigoUbicacion && s.Partida == lineaReconteo.Partida);
 
-                    var diferenciaNueva = Math.Abs(lineaReconteo.CantidadReconteo - (stockActual?.UnidadSaldo ?? 0));
+                    var diferenciaNueva = lineaReconteo.CantidadReconteo - (stockActual?.UnidadSaldo ?? 0);
 
-                    if (limEuros > 0)
-                    {
-                        var precioMedio = await _sageDbContext.AcumuladoStock
-                            .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa && a.CodigoArticulo == lineaReconteo.CodigoArticulo)
-                            .OrderByDescending(a => a.Ejercicio)
-                            .Select(a => a.PrecioMedio)
-                            .FirstOrDefaultAsync() ?? 0m;
-
-                        var totalEuros = acumEur + (diferenciaNueva * precioMedio);
-                        if (totalEuros > limEuros)
-                        {
-                            return BadRequest(new { mensaje = $"Límite diario de euros superado para el artículo {lineaReconteo.CodigoArticulo}." });
-                        }
-                    }
-
-                    if (limUnidades > 0)
-                    {
-                        var totalUnidades = acumUnid + diferenciaNueva;
-                        if (totalUnidades > limUnidades)
-                        {
-                            return BadRequest(new { mensaje = $"Límite diario de unidades superado para el artículo {lineaReconteo.CodigoArticulo}." });
-                        }
-                    }
+                  
                 }
 
                 foreach (var lineaReconteo in reconteo.LineasRecontadas)

@@ -10,6 +10,8 @@ using SGA_Api.Models.UsuarioConf;
 using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Conteos;
 using SGA_Api.Models.OrdenTraspaso;
+using SGA_Api.Models;
+using SGA_Api.Models.Login;
 
 namespace SGA_Api.Data
 {
@@ -55,6 +57,14 @@ namespace SGA_Api.Data
 		// Entidades de Órdenes de Traspaso
 		public DbSet<OrdenTraspasoCabecera> OrdenTraspasoCabecera { get; set; }
 		public DbSet<OrdenTraspasoLinea> OrdenTraspasoLinea { get; set; }
+
+		// Configuraciones predefinidas
+		public DbSet<ConfiguracionPredefinida> ConfiguracionesPredefinidas { get; set; }
+		public DbSet<ConfiguracionPredefinidaPermiso> ConfiguracionesPredefinidasPermisos { get; set; }
+		public DbSet<ConfiguracionPredefinidaEmpresa> ConfiguracionesPredefinidasEmpresas { get; set; }
+		public DbSet<ConfiguracionPredefinidaAlmacen> ConfiguracionesPredefinidasAlmacenes { get; set; }
+		public DbSet<OperarioConfiguracionAplicada> OperariosConfiguracionesAplicadas { get; set; }
+
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{

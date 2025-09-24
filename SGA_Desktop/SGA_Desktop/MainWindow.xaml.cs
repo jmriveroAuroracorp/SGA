@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using SGA_Desktop.Helpers;
 using System.Windows.Input;
+using System.Threading.Tasks;
 
 namespace SGA_Desktop
 {
@@ -25,9 +26,18 @@ namespace SGA_Desktop
 			WindowState = WindowState.Minimized;
 		}
 
-		private void CloseButton_Click(object sender, RoutedEventArgs e)
+		private async void CloseButton_Click(object sender, RoutedEventArgs e)
 		{
-			Close();
+			// Obtener el ViewModel y ejecutar el comando de cerrar sesión
+			if (DataContext is ViewModels.MainViewModel mainViewModel)
+			{
+				await mainViewModel.CerrarSesionCommand.ExecuteAsync(null);
+			}
+			else
+			{
+				// Fallback si no hay ViewModel disponible
+				Close();
+			}
 		}
 
 		private void CustomTitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -1,0 +1,297 @@
+<Window x:Class="SGA_Desktop.Dialog.ConfiguracionPredefinidaDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CONFIGURACIÓN PREDEFINIDA"
+        Width="1100"
+        Height="900"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- Recursos -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Marco principal -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}"
+                    CornerRadius="6,6,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="40"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <TextBlock Grid.Column="0"
+                               x:Name="TitleText"
+                               Text="CONFIGURACIÓN PREDEFINIDA"
+                               Foreground="White"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                    
+                    <Button Grid.Column="1"
+                            Content="✕"
+                            Background="Transparent"
+                            Foreground="White"
+                            BorderThickness="0"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Click="CloseButton_Click"
+                            Cursor="Hand"/>
+                </Grid>
+            </Border>
+
+            <!-- Contenido principal -->
+            <ScrollViewer Grid.Row="1" Padding="20" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Información básica -->
+                    <GroupBox Header="Información Básica" Margin="0,0,0,15">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Nombre -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Nombre:" VerticalAlignment="Center" Margin="0,5"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtNombre" Margin="0,5"/>
+
+                            <!-- Descripción -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Descripción:" VerticalAlignment="Top" Margin="0,5,0,0"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtDescripcion" Margin="0,5,0,0" 
+                                     TextWrapping="Wrap" AcceptsReturn="True" Height="60"/>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Límites del operario -->
+                    <GroupBox Header="Límites Diarios Inventario/Conteos" Margin="0,0,0,15">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Límites -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Límite Euros:" VerticalAlignment="Center" Margin="0,5"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtLimiteEuros" Margin="0,5" PreviewTextInput="NumberValidationTextBox"/>
+
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Límite Unidades:" VerticalAlignment="Center" Margin="10,5,0,5"/>
+                            <TextBox Grid.Row="0" Grid.Column="3" x:Name="TxtLimiteUnidades" Margin="10,5,0,5" PreviewTextInput="NumberValidationTextBox"/>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Permisos -->
+                    <GroupBox Header="Permisos" Margin="0,0,0,15">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="150"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Text="Permisos asignados:" Margin="0,0,0,10"/>
+                            
+                            <!-- Lista de permisos -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="SpPermisosAsignados">
+                                    <!-- Los permisos se cargarán dinámicamente aquí -->
+                                </StackPanel>
+                            </ScrollViewer>
+                            
+                            <!-- Controles para agregar permiso -->
+                            <Grid Grid.Row="2" Margin="0,10,0,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <ComboBox Grid.Column="0" x:Name="CmbPermisosDisponibles" 
+                                              DisplayMemberPath="Descripcion" 
+                                              SelectedValuePath="Codigo"
+                                              Margin="0,0,10,0"/>
+                                    
+                                    <Button Grid.Column="1" x:Name="BtnAgregarPermiso" 
+                                            Content="Agregar" 
+                                            Click="AgregarPermiso_Click"
+                                            Style="{StaticResource EstiloBotonSecundario}"/>
+                                </Grid>
+                                
+                                <!-- Mensaje informativo -->
+                                <TextBlock Grid.Row="1" x:Name="TxtMensajePermisos"
+                                           Text=""
+                                           FontStyle="Italic"
+                                           Foreground="{StaticResource BrushSecundario}"
+                                           Margin="0,5,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Empresas -->
+                    <GroupBox Header="Empresas" Margin="0,0,0,15">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="150"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Text="Empresas asignadas:" Margin="0,0,0,10"/>
+                            
+                            <!-- Lista de empresas -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="SpEmpresasAsignadas">
+                                    <!-- Las empresas se cargarán dinámicamente aquí -->
+                                </StackPanel>
+                            </ScrollViewer>
+                            
+                            <!-- Controles para agregar empresa -->
+                            <Grid Grid.Row="2" Margin="0,10,0,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <ComboBox Grid.Column="0" x:Name="CmbEmpresasDisponibles" 
+                                              DisplayMemberPath="Nombre" 
+                                              SelectedValuePath="CodigoEmpresa"
+                                              Margin="0,0,10,0"/>
+                                    
+                                    <Button Grid.Column="1" x:Name="BtnAgregarEmpresa" 
+                                            Content="Agregar" 
+                                            Click="AgregarEmpresa_Click"
+                                            Style="{StaticResource EstiloBotonSecundario}"/>
+                                </Grid>
+                                
+                                <!-- Mensaje informativo -->
+                                <TextBlock Grid.Row="1" x:Name="TxtMensajeEmpresas"
+                                           Text=""
+                                           FontStyle="Italic"
+                                           Foreground="{StaticResource BrushSecundario}"
+                                           Margin="0,5,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Almacenes -->
+                    <GroupBox Header="Almacenes" Margin="0,0,0,15">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="150"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Text="Almacenes asignados:" Margin="0,0,0,10"/>
+                            
+                            <!-- Lista de almacenes -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="SpAlmacenesAsignados">
+                                    <!-- Los almacenes se cargarán dinámicamente aquí -->
+                                </StackPanel>
+                            </ScrollViewer>
+                            
+                            <!-- Controles para gestionar almacenes -->
+                            <Grid Grid.Row="2" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBlock Grid.Column="0" 
+                                           Text="Gestionar almacenes de forma masiva" 
+                                           VerticalAlignment="Center"
+                                           FontStyle="Italic"
+                                           Foreground="{StaticResource BrushSecundario}"/>
+                                
+                                <Button Grid.Column="1" x:Name="BtnSeleccionarAlmacenes" 
+                                        Content="📋 Seleccionar Almacenes" 
+                                        Click="SeleccionarAlmacenes_Click"
+                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                        Width="160"
+                                        Height="35"
+                                        Margin="0,0,10,0"/>
+                                
+                                <Button Grid.Column="2" x:Name="BtnLimpiarAlmacenes" 
+                                        Content="🗑️ Limpiar Todo" 
+                                        Click="LimpiarAlmacenes_Click"
+                                        Style="{StaticResource EstiloBotonSecundario}"
+                                        Width="120"
+                                        Height="35"/>
+                            </Grid>
+                        </Grid>
+                    </GroupBox>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Footer con botones -->
+            <Border Grid.Row="2" 
+                    Background="{StaticResource BrushSecundario1}"
+                    CornerRadius="0,0,6,6"
+                    Padding="20,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Guardar"
+                            Width="100"
+                            Height="35"
+                            Margin="0,0,10,0"
+                            Click="GuardarButton_Click"
+                            Style="{StaticResource EstiloBotonPrincipal}"/>
+                    
+                    <Button Content="Cancelar"
+                            Width="100"
+                            Height="35"
+                            Click="CancelarButton_Click"
+                            Style="{StaticResource EstiloBotonSecundario}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

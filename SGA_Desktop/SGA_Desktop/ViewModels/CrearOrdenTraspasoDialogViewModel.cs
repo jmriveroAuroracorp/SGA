@@ -6,7 +6,9 @@ using SGA_Desktop.Dialog;
 using SGA_Desktop.Helpers;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows;
+using System.Windows.Data;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -52,11 +54,17 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private ObservableCollection<OperariosAccesoDto> operariosDisponibles = new();
 
-        [ObservableProperty]
-        private ObservableCollection<OperariosAccesoDto> operariosFiltrados = new();
+        // Nota: Cada línea tendrá su propia vista de operarios para evitar conflictos
+        // El filtrado se manejará a nivel de línea individual
 
-        [ObservableProperty]
-        private string filtroOperarios = "";
+        [RelayCommand]
+        private void AbrirDropDown()
+        {
+            // Este comando se puede usar para abrir el dropdown programáticamente si es necesario
+            // El ComboBox se abrirá automáticamente con StaysOpenOnEdit="True"
+        }
+
+
 
         [ObservableProperty]
         private string comentarios = "";
@@ -237,49 +245,19 @@ namespace SGA_Desktop.ViewModels
                     OperariosDisponibles.Add(operario);
                 }
 
-                // Inicializar la lista filtrada con todos los operarios
-                AplicarFiltroOperarios();
+                // Inicializar filtrado para líneas existentes
+                foreach (var linea in Lineas)
+                {
+                    InicializarFiltradoLinea(linea);
+                }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error cargando operarios: {ex.Message}");
                 OperariosDisponibles.Clear();
-                OperariosFiltrados.Clear();
             }
         }
 
-        private void FiltrarOperarios(string filtro)
-        {
-            FiltroOperarios = filtro;
-            AplicarFiltroOperarios();
-        }
-
-        private void AplicarFiltroOperarios()
-        {
-            if (string.IsNullOrWhiteSpace(FiltroOperarios))
-            {
-                // Si no hay filtro, mostrar todos los operarios
-                OperariosFiltrados.Clear();
-                foreach (var operario in OperariosDisponibles)
-                {
-                    OperariosFiltrados.Add(operario);
-                }
-            }
-            else
-            {
-                // Filtrar operarios que contengan el texto (case insensitive)
-                var filtroLower = FiltroOperarios.ToLower();
-                OperariosFiltrados.Clear();
-                
-                foreach (var operario in OperariosDisponibles)
-                {
-                    if (operario.NombreOperario?.ToLower().Contains(filtroLower) == true)
-                    {
-                        OperariosFiltrados.Add(operario);
-                    }
-                }
-            }
-        }
 
         [RelayCommand]
         private void EliminarLinea()
@@ -337,8 +315,12 @@ namespace SGA_Desktop.ViewModels
                             FechaCaducidad = lineaItem.FechaCaducidad,
                             PaletOrigen = "",
                             PaletDestino = "",
-                            IdOperarioAsignado = 0 // Se asignará manualmente por línea
+                            IdOperarioAsignado = 0, // Se asignará manualmente por línea
+                            OperarioSeleccionado = null // Inicializar sin operario seleccionado
                         };
+
+                        // Inicializar el filtrado individual para esta línea
+                        InicializarFiltradoLinea(nuevaLinea);
 
                         Lineas.Add(nuevaLinea);
                     }
@@ -366,14 +348,6 @@ namespace SGA_Desktop.ViewModels
 
                 // Validaciones
                 if (!ValidarDatos())
-                {
-                    IsCargando = false;
-                    return;
-                }
-
-                // Verificar stock disponible antes de crear la orden
-                MensajeEstado = "Verificando stock disponible...";
-                if (!await VerificarStockDisponible())
                 {
                     IsCargando = false;
                     return;
@@ -463,17 +437,6 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        private RelayCommand? _filtrarOperariosCommand;
-        public RelayCommand FiltrarOperariosCommand
-        {
-            get
-            {
-                return _filtrarOperariosCommand ??= new RelayCommand<string>((filtro) =>
-                {
-                    FiltrarOperarios(filtro ?? "");
-                });
-            }
-        }
 
         private bool ValidarDatos()
         {
@@ -518,117 +481,52 @@ namespace SGA_Desktop.ViewModels
             return true;
         }
 
-        private async Task<bool> VerificarStockDisponible()
+        private void InicializarFiltradoLinea(CrearLineaOrdenTraspasoDto linea)
         {
-            try
+            // Crear una copia de los operarios para esta línea
+            linea.OperariosDisponiblesLinea = new ObservableCollection<OperariosAccesoDto>(OperariosDisponibles);
+            
+            // Crear vista filtrada para esta línea específica
+            linea.OperariosViewLinea = CollectionViewSource.GetDefaultView(linea.OperariosDisponiblesLinea);
+            linea.OperariosViewLinea.Filter = obj => FiltraOperarioLinea(obj, linea);
+        }
+
+        private bool FiltraOperarioLinea(object obj, CrearLineaOrdenTraspasoDto linea)
+        {
+            if (string.IsNullOrWhiteSpace(linea.FiltroOperarioLinea)) return true;
+            if (obj is not OperariosAccesoDto operario) return false;
+
+            // Búsqueda acento-insensible, sin mayúsc/minúsc, en cualquier parte del texto
+            var compare = CultureInfo.CurrentCulture.CompareInfo;
+            var options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
+
+            bool contiene(string s) =>
+                !string.IsNullOrEmpty(s) &&
+                compare.IndexOf(s, linea.FiltroOperarioLinea, options) >= 0;
+
+            return contiene(operario.NombreOperario) || contiene(operario.NombreCompleto);
+        }
+
+        [RelayCommand]
+        private void LimpiarFiltroLinea(CrearLineaOrdenTraspasoDto linea)
+        {
+            if (linea != null)
             {
-                var codigoEmpresa = SessionManager.EmpresaSeleccionada ?? 1;
-                var almacenesAutorizados = ObtenerAlmacenesAutorizados();
-
-                foreach (var linea in Lineas)
-                {
-                    // Debug: mostrar almacenes autorizados
-                    System.Diagnostics.Debug.WriteLine($"=== DEBUG VerificarStock para {linea.CodigoArticulo} ===");
-                    System.Diagnostics.Debug.WriteLine($"Almacenes autorizados: {string.Join(", ", almacenesAutorizados)}");
-
-                    // Consultar stock actual del artículo
-                    var stockActual = await _stockService.ObtenerPorArticuloAsync(
-                        codigoEmpresa,
-                        linea.CodigoArticulo,
-                        null, // partida
-                        null, // codigoAlmacen
-                        null, // codigoUbicacion
-                        null  // descripcion
-                    );
-
-                    System.Diagnostics.Debug.WriteLine($"Stock antes del filtro: {stockActual.Count} registros");
-                    foreach (var s in stockActual.Take(3))
-                    {
-                        System.Diagnostics.Debug.WriteLine($"  - Almacén: {s.CodigoAlmacen}, Stock: {s.UnidadSaldo}");
-                    }
-
-                    // Filtrar por almacenes autorizados
-                    if (almacenesAutorizados.Any())
-                    {
-                        stockActual = stockActual.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
-                    }
-
-                    System.Diagnostics.Debug.WriteLine($"Stock después del filtro: {stockActual.Count} registros");
-                    foreach (var s in stockActual)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"  - Almacén: {s.CodigoAlmacen}, Stock: {s.UnidadSaldo}");
-                    }
-
-                    // Calcular stock total disponible
-                    var stockTotal = stockActual.Sum(s => s.UnidadSaldo);
-                    System.Diagnostics.Debug.WriteLine($"Stock total: {stockTotal}");
-                    System.Diagnostics.Debug.WriteLine($"===============================================");
-
-                    if (stockTotal < linea.CantidadPlan)
-                    {
-                        var errorDialog = new WarningDialog(
-                            "Stock Insuficiente",
-                            $"El artículo '{linea.CodigoArticulo}' - '{linea.DescripcionArticulo}' no tiene suficiente stock.\n\n" +
-                            $"Stock disponible: {stockTotal}\n" +
-                            $"Cantidad solicitada: {linea.CantidadPlan}\n\n" +
-                            "Por favor, ajuste las cantidades o elimine la línea.");
-                        errorDialog.ShowDialog();
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                var errorDialog = new WarningDialog(
-                    "Error Verificando Stock",
-                    $"Error al verificar el stock disponible: {ex.Message}");
-                errorDialog.ShowDialog();
-                return false;
+                linea.FiltroOperarioLinea = ""; // Limpiar el filtro para permitir escribir desde cero
+                linea.IsDropDownOpenLinea = true;
+                linea.OperariosViewLinea?.Refresh();
             }
         }
 
-        private List<string> ObtenerAlmacenesAutorizados()
+        [RelayCommand]
+        private void ActualizarFiltroLinea(CrearLineaOrdenTraspasoDto linea)
         {
-            var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-            var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-
-            // Si no hay almacenes individuales, devolver lista vacía (sin restricciones)
-            if (!almacenesIndividuales.Any())
+            if (linea?.OperariosViewLinea != null)
             {
-                return new List<string>(); // Sin restricciones de almacén
+                linea.OperariosViewLinea.Refresh();
             }
-
-            // Crear lista de almacenes autorizados
-            var almacenesAutorizados = new List<string>();
-
-            // Agregar almacenes individuales
-            foreach (var almacen in almacenesIndividuales)
-            {
-                if (!string.IsNullOrWhiteSpace(almacen))
-                {
-                    almacenesAutorizados.Add(almacen.Trim());
-                }
-            }
-
-            // Si hay centro logístico, agregar almacenes del centro
-            if (!string.IsNullOrWhiteSpace(centro) && centro != "0")
-            {
-                // Agregar almacenes del centro logístico (formato: centro + sufijo)
-                var sufijosCentro = new[] { "01", "02", "03", "04", "05", "06", "07", "08", "09", "10" };
-                foreach (var sufijo in sufijosCentro)
-                {
-                    var almacenCentro = $"{centro}{sufijo}";
-                    if (!almacenesAutorizados.Contains(almacenCentro))
-                    {
-                        almacenesAutorizados.Add(almacenCentro);
-                    }
-                }
-            }
-
-            return almacenesAutorizados;
         }
+
         #endregion
     }
 }

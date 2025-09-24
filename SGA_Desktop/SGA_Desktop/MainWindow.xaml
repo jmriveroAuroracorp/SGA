@@ -178,6 +178,11 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
                     <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Empresa}" -->
+                    <Button Content="Configuración de Operarios"
+                    Command="{Binding IrAConfiguracionOperariosCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"/>
+                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}" -->
                     <Button Content="Salir"
                     Command="{Binding CerrarSesionCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

@@ -105,12 +105,12 @@
 
                             <!-- Almacén Destino -->
                 <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,10">
-                    <TextBlock Text="Almacén Destino" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBlock Text="Almacén Destino" FontWeight="Bold" Margin="0,0,0,5"/>
                     <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
                               DisplayMemberPath="DescripcionCombo"
                               SelectedItem="{Binding AlmacenDestinoSeleccionado}"
                               Style="{StaticResource EstiloComboBox}"
-                              Height="35"
+                                         Height="35"
                               IsEnabled="{Binding AlmacenDestinoHabilitado}"/>
                     
                     <!-- Mensaje informativo cuando está bloqueado -->
@@ -120,7 +120,7 @@
                                FontStyle="Italic"
                                Margin="0,5,0,0"
                                Visibility="{Binding AlmacenDestinoBloqueado, Converter={StaticResource BoolToVis}}"/>
-                </StackPanel>
+                            </StackPanel>
 
                             <!-- Comentarios -->
                             <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,10">
@@ -157,7 +157,7 @@
                                         Style="{StaticResource EstiloBotonSecundario}"
                                         Width="120"
                                         Height="30"
-                                        IsEnabled="{Binding LineaSeleccionada}"/>
+                                        IsEnabled="{Binding PuedeEliminarLinea}"/>
                             </StackPanel>
 
                             <!-- Lista de líneas con cards -->
@@ -166,7 +166,7 @@
                                       MinHeight="300"
                                       MaxHeight="400"
                                       ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                      BorderThickness="0"
+                                                             BorderThickness="0"
                                       Background="Transparent">
                                 
                                 <ListView.ItemContainerStyle>
@@ -180,7 +180,7 @@
                                 </ListView.ItemContainerStyle>
 
                                 <ListView.ItemTemplate>
-                                    <DataTemplate>
+                                                <DataTemplate>
                                         <Border CornerRadius="6"
                                                 BorderThickness="2"
                                                 BorderBrush="{StaticResource BrushPrincipal}"
@@ -251,31 +251,33 @@
                                                                VerticalAlignment="Center"
                                                                Margin="0,0,6,0"
                                                                MinWidth="50"/>
-                                                    <ComboBox ItemsSource="{Binding DataContext.OperariosFiltrados, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    <ComboBox ItemsSource="{Binding OperariosViewLinea}"
                                                               DisplayMemberPath="NombreOperario"
-                                                              SelectedValue="{Binding IdOperarioAsignado, UpdateSourceTrigger=PropertyChanged}"
-                                                              SelectedValuePath="Operario"
-                                                              Style="{StaticResource EstiloComboBox}"
+                                                              SelectedItem="{Binding OperarioSeleccionado, UpdateSourceTrigger=PropertyChanged}"
+                                                              Text="{Binding FiltroOperarioLinea, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              IsDropDownOpen="{Binding IsDropDownOpenLinea, Mode=TwoWay}"
                                                               Width="180"
                                                               Height="28"
                                                               IsEditable="True"
-                                                              IsTextSearchEnabled="True"
-                                                              TextSearchMode="Contains"
-                                                              StaysOpenOnEdit="True">
+                                                              IsTextSearchEnabled="False"
+                                                              StaysOpenOnEdit="True"
+                                                              MaxDropDownHeight="200">
                                                         <i:Interaction.Triggers>
                                                             <i:EventTrigger EventName="SelectionChanged">
                                                                 <i:InvokeCommandAction Command="{Binding DataContext.NotificarCambioEnLineasCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
                                                             </i:EventTrigger>
+                                                            <i:EventTrigger EventName="GotFocus">
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.LimpiarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                            </i:EventTrigger>
                                                             <i:EventTrigger EventName="TextChanged">
-                                                                <i:InvokeCommandAction Command="{Binding DataContext.FiltrarOperariosCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                                      CommandParameter="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.ActualizarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
                                                             </i:EventTrigger>
                                                         </i:Interaction.Triggers>
                                                     </ComboBox>
         </StackPanel>
     </Grid>
                                         </Border>
-                                    </DataTemplate>
+                                                </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>
                         </Grid>
@@ -289,11 +291,11 @@
                                      IsIndeterminate="True" 
                                      Margin="0,0,10,0"/>
                         <TextBlock Text="{Binding MensajeEstado}" 
-                       VerticalAlignment="Center"
+                                   VerticalAlignment="Center"
                                    Foreground="{StaticResource BrushSecundario}"
                                    FontStyle="Italic"/>
                     </StackPanel>
-        </StackPanel>
+                </StackPanel>
             </ScrollViewer>
 
             <!-- Botones de acción -->
@@ -314,8 +316,8 @@
                             Width="120"
                             Height="35"
                             IsEnabled="{Binding PuedeCrearOrden}"/>
-        </StackPanel>
+                </StackPanel>
             </Border>
-    </Grid>
+        </Grid>
     </Border>
 </Window>

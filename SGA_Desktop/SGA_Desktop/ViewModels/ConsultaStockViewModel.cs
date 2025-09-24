@@ -259,6 +259,7 @@ namespace SGA_Desktop.ViewModels
 				// Solo limpia filtros del modo artículo
 				FiltroArticulo = string.Empty;
 				FiltroPartida = string.Empty;
+				FiltroUbicacion = string.Empty;
 				AlmacenSeleccionado = TODAS;
 				// 👇 Añade esta línea para reiniciar el ComboBox de almacenes
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
@@ -266,6 +267,8 @@ namespace SGA_Desktop.ViewModels
 			else if (IsLocationMode)
 			{
 				AlmacenSeleccionado = TODAS;
+				FiltroUbicacion = string.Empty;
+				FiltroBusqueda = string.Empty;
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
 		}

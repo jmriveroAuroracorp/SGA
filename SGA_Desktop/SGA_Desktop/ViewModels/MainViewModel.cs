@@ -108,19 +108,26 @@ namespace SGA_Desktop.ViewModels
 			CurrentHeader = "IMPRESIÓN DE ETIQUETAS";
 		}
 
-		[RelayCommand]
-		public void IrASeleccionEmpresa()
-		{
-			NavigationStore.Navigate("SeleccionEmpresa");
-			CurrentHeader = "SELECCIÓN DE EMPRESA";
-		}
+	[RelayCommand]
+	public void IrASeleccionEmpresa()
+	{
+		NavigationStore.Navigate("SeleccionEmpresa");
+		CurrentHeader = "SELECCIÓN DE EMPRESA";
+	}
 
-		[RelayCommand]
-		public void IrATraspasosStock()
-		{
-			NavigationStore.Navigate("TraspasosStock");
-			CurrentHeader = "TRASPASOS DE STOCK";
-		}
+	[RelayCommand]
+	public void IrAConfiguracionOperarios()
+	{
+		NavigationStore.Navigate("ConfiguracionOperarios");
+		CurrentHeader = "CONFIGURACIÓN DE OPERARIOS";
+	}
+
+	[RelayCommand]
+	public void IrATraspasosStock()
+	{
+		NavigationStore.Navigate("TraspasosStock");
+		CurrentHeader = "TRASPASOS DE STOCK";
+	}
 
 		[RelayCommand]
 		private async Task CerrarSesion()

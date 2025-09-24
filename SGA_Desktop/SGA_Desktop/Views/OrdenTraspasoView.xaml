@@ -16,6 +16,9 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <helpers:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility"/>
         <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
+        <helpers:ProgressWidthConverter x:Key="ProgressWidthConverter" />
+        <helpers:ProgressColorConverter x:Key="ProgressColorConverter" />
+        <helpers:ProgressRectConverter x:Key="ProgressRectConverter" />
     </Page.Resources>
 
     <Grid Margin="20">
@@ -252,7 +255,7 @@
                                                            FontWeight="SemiBold" 
                                                            FontSize="12"
                                                            Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding DataContext.GetPrioridadTexto(Prioridad), RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                <TextBlock Grid.Column="1" Text="{Binding PrioridadTexto}" 
                                                            FontWeight="Bold" 
                                                            FontSize="12"
                                                            Foreground="#34495E"/>
@@ -304,21 +307,85 @@
                                             </Grid>
 
 
-                                            <!-- Líneas -->
+                                            <!-- Progreso de líneas -->
                                             <Grid Margin="0,0,0,8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
 
-                                                <TextBlock Grid.Column="0" Text="Líneas: " 
-                                                           FontWeight="SemiBold" 
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding TotalLineas}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
+                                                <!-- Texto del progreso -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Progreso: " 
+                                                               FontWeight="SemiBold" 
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding ProgresoTexto}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="12"
+                                                               Foreground="#34495E"/>
+                                                </Grid>
+
+                                                <!-- Barra de progreso visual -->
+                                                <Grid Grid.Row="1">
+                                                    <Border Background="#E9ECEF" 
+                                                            BorderBrush="#DEE2E6" 
+                                                            BorderThickness="1" 
+                                                            CornerRadius="8" 
+                                                            Height="12">
+                                                        <Grid ClipToBounds="True">
+                                                            <Path Fill="{Binding PorcentajeProgreso, Converter={StaticResource ProgressColorConverter}}" 
+                                                                  HorizontalAlignment="Left"
+                                                                  VerticalAlignment="Stretch"
+                                                                  Margin="1">
+                                                                <Path.Data>
+                                                                    <RectangleGeometry>
+                                                                        <RectangleGeometry.Rect>
+                                                                            <MultiBinding Converter="{StaticResource ProgressRectConverter}">
+                                                                                <Binding Path="PorcentajeProgreso"/>
+                                                                                <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=Border}"/>
+                                                                                <Binding Path="ActualHeight" RelativeSource="{RelativeSource AncestorType=Border}"/>
+                                                                            </MultiBinding>
+                                                                        </RectangleGeometry.Rect>
+                                                                        <RectangleGeometry.RadiusX>7</RectangleGeometry.RadiusX>
+                                                                        <RectangleGeometry.RadiusY>7</RectangleGeometry.RadiusY>
+                                                                    </RectangleGeometry>
+                                                                </Path.Data>
+                                                            </Path>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </Grid>
+
+                                            <!-- Información de subdivisiones -->
+                                            <Grid Margin="0,0,0,8" Visibility="{Binding TieneSubdivisiones, Converter={StaticResource BoolToVis}}">
+                                                <Border Background="#FFF3E0" 
+                                                        BorderBrush="#FF9800" 
+                                                        BorderThickness="1" 
+                                                        CornerRadius="4" 
+                                                        Padding="8,4">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="🔀" 
+                                                                   FontSize="14"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                        <TextBlock Text="Subdivisiones: " 
+                                                                   FontWeight="SemiBold" 
+                                                                   FontSize="11"
+                                                                   Foreground="#E65100"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding TextoSubdivisiones}" 
+                                                                   FontWeight="Bold" 
+                                                                   FontSize="11"
+                                                                   Foreground="#E65100"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Border>
                                             </Grid>
 
                                             <!-- Comentarios -->

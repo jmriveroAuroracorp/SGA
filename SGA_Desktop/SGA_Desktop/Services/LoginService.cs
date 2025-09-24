@@ -346,21 +346,45 @@ public class LoginService : ApiService
             try
             {
                 var response = await _httpClient.GetAsync("OperariosAcceso/conteos");
-                
+
                 if (response.IsSuccessStatusCode)
                 {
                     var jsonContent = await response.Content.ReadAsStringAsync();
                     var operarios = JsonSerializer.Deserialize<List<OperariosAccesoDto>>(jsonContent,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    
+
                     return operarios ?? new List<OperariosAccesoDto>();
                 }
-                
+
                 return new List<OperariosAccesoDto>();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error obteniendo operarios con acceso a conteos: {ex.Message}");
+                return new List<OperariosAccesoDto>();
+            }
+        }
+
+        public async Task<List<OperariosAccesoDto>> ObtenerOperariosConAccesoTraspasosAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync("OperariosAcceso/traspasos");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonContent = await response.Content.ReadAsStringAsync();
+                    var operarios = JsonSerializer.Deserialize<List<OperariosAccesoDto>>(jsonContent,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                    return operarios ?? new List<OperariosAccesoDto>();
+                }
+
+                return new List<OperariosAccesoDto>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error obteniendo operarios con acceso a traspasos: {ex.Message}");
                 return new List<OperariosAccesoDto>();
             }
         }

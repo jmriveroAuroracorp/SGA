@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.OrdenTraspaso;
+using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace SGA_Api.Services
 {
@@ -159,8 +161,21 @@ namespace SGA_Api.Services
 
         public async Task<bool> CancelarOrdenTraspasoAsync(Guid id)
         {
-            var orden = await _context.OrdenTraspasoCabecera.FindAsync(id);
-            if (orden == null) return false;
+            var orden = await _context.OrdenTraspasoCabecera
+                .Include(o => o.Lineas)
+                .FirstOrDefaultAsync(o => o.IdOrdenTraspaso == id);
+            
+            if (orden == null) 
+                return false;
+
+            // Validación: Solo se puede cancelar si está PENDIENTE o EN_PROCESO
+            if (orden.Estado != "PENDIENTE" && orden.Estado != "EN_PROCESO")
+                return false;
+
+            // Validación: No se puede cancelar si ya hay movimientos realizados
+            var tieneMovimientos = orden.Lineas.Any(l => l.CantidadMovida > 0);
+            if (tieneMovimientos)
+                return false;
 
             orden.Estado = "CANCELADA";
             orden.FechaFinalizacion = DateTime.Now;
@@ -231,26 +246,24 @@ namespace SGA_Api.Services
 
         private async Task<string> GenerarCodigoOrdenAsync(short codigoEmpresa)
         {
-            // Obtener el último número de orden para la empresa
-            var ultimaOrden = await _context.OrdenTraspasoCabecera
-                .Where(o => o.CodigoEmpresa == codigoEmpresa)
-                .OrderByDescending(o => o.CodigoOrden)
-                .FirstOrDefaultAsync();
-
-            int siguienteNumero = 1;
-            
-            if (ultimaOrden != null && !string.IsNullOrEmpty(ultimaOrden.CodigoOrden))
+            try
             {
-                // Extraer el número del código existente (formato: OT-{EMPRESA}-{NUMERO})
-                var partes = ultimaOrden.CodigoOrden.Split('-');
-                if (partes.Length >= 3 && int.TryParse(partes[2], out int ultimoNumero))
-                {
-                    siguienteNumero = ultimoNumero + 1;
-                }
-            }
+                var pCodigoEmpresa = new SqlParameter("@CodigoEmpresa", SqlDbType.SmallInt) { Value = codigoEmpresa };
+                var pNuevoCodigo = new SqlParameter("@NuevoCodigo", SqlDbType.VarChar, 50) { Direction = ParameterDirection.Output };
 
-            // Generar código en formato: OT-{EMPRESA}-{NUMERO}
-            return $"OT-{codigoEmpresa:D2}-{siguienteNumero:D6}";
+                await _context.Database.ExecuteSqlRawAsync(
+                    "EXEC dbo.CrearOrdenTraspaso @CodigoEmpresa, @NuevoCodigo OUTPUT",
+                    pCodigoEmpresa, pNuevoCodigo);
+
+                var codigoGenerado = (string)pNuevoCodigo.Value!;
+                return codigoGenerado; // Formato: 2025/OTR/0000001
+            }
+            catch (Exception ex)
+            {
+                // Fallback: generar código manual si falla el stored procedure
+                var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                return $"OTR-{codigoEmpresa:D2}-{timestamp}";
+            }
         }
     }
 } 

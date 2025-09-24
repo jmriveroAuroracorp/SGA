@@ -573,9 +573,25 @@ namespace SGA_Api.Controllers.Stock
     if (!string.IsNullOrWhiteSpace(codigoAlmacen))
         q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
 
-    // 🔷 CAMBIO: Solo filtrar por ubicación si se especifica explícitamente
-    if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+    // 🔷 LÓGICA FINAL: Diferenciar entre todo el almacén, sin ubicación y ubicación específica
+    var queryString = Request.QueryString.ToString();
+    var tieneParametroUbicacion = queryString.Contains("codigoUbicacion=");
+
+    if (!tieneParametroUbicacion)
+    {
+        // No se envió el parámetro → Sin filtro de ubicación (todas las ubicaciones)
+        // No aplicamos ningún filtro adicional
+    }
+    else if (codigoUbicacion == null || codigoUbicacion == "")
+    {
+        // Se envió el parámetro pero es null o vacío → Solo artículos sin ubicar
+        q = q.Where(a => string.IsNullOrEmpty(a.Ubicacion));
+    }
+    else
+    {
+        // Se envió el parámetro con valor → Ubicación específica
         q = q.Where(a => a.Ubicacion == codigoUbicacion);
+    }
 
     // 🔷 aquí filtramos solo los registros con disponible > 0
     q = q.Where(a => a.Disponible > 0);

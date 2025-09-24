@@ -18,9 +18,11 @@ namespace SGA_Api.Data
         public DbSet<OperarioAlmacen> OperariosAlmacenes { get; set; }
         public DbSet<OperarioEmpresa> OperariosEmpresas { get; set; }
         public DbSet<Almacenes> Almacenes { get; set; }
+        public DbSet<AplicacionSGA> AplicacionesSGA { get; set; }
         public DbSet<Periodo> Periodos { get; set; }
 		public DbSet<Empresa> Empresas { get; set; } = default!;
 		public DbSet<Articulo> Articulos { get; set; }
+        
         // Vista para los alérgenos de las etiquetas
 		public DbSet<VisArticulo> VisArticulos { get; set; } = null!;
 		public DbSet<AcumuladoStock> AcumuladoStock { get; set; } = null!;
@@ -33,12 +35,13 @@ namespace SGA_Api.Data
             // Tabla operarios
             modelBuilder.Entity<Operario>()
                 .ToTable("operarios")
-                .HasKey(o => o.Id);
+                .HasKey(o => o.Id)
+                .HasAnnotation("SqlServer:UseSqlOutputClause", false); // Deshabilitar OUTPUT clause para evitar conflictos con triggers
 
             // Tabla MRH_accesosOperariosSGA
             modelBuilder.Entity<AccesoOperario>()
                 .ToTable("MRH_accesosOperariosSGA")
-                .HasKey(a => a.Operario); // Clave primaria
+                .HasKey(a => new { a.CodigoEmpresa, a.Operario, a.MRH_CodigoAplicacion }); // Clave primaria compuesta
 
             // Relación (opcional, por si en el futuro quieres navegación)
             modelBuilder.Entity<AccesoOperario>()
@@ -93,6 +96,21 @@ namespace SGA_Api.Data
 
 				e.Property(x => x.EmpresaNombre)
 				 .HasColumnName("Empresa");
+			});
+
+			modelBuilder.Entity<AplicacionSGA>(e =>
+			{
+				e.ToTable("MRH_AplicacionesSGA");
+				e.HasKey(x => new { x.CodigoEmpresa, x.MRH_CodigoAplicacion });
+
+				e.Property(x => x.CodigoEmpresa)
+				 .HasColumnName("CodigoEmpresa");
+
+				e.Property(x => x.MRH_CodigoAplicacion)
+				 .HasColumnName("MRH_CodigoAplicacion");
+
+				e.Property(x => x.Descripcion)
+				 .HasColumnName("Descripcion");
 			});
 
 			modelBuilder
