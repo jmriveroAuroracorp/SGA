@@ -1,6 +1,7 @@
 ﻿using SGA_Desktop.Models;
 using System;
 using System.Linq;
+using System.Windows;
 
 namespace SGA_Desktop.Helpers
 {
@@ -46,5 +47,18 @@ namespace SGA_Desktop.Helpers
 			}
 		}
 		public static event EventHandler? PreferredPrinterChanged;
+
+		/// <summary>
+		/// Indica si la aplicación se está cerrando. Se usa para evitar operaciones de red durante el cierre.
+		/// </summary>
+		private static bool _isClosing = false;
+		public static bool IsClosing 
+		{ 
+			get => _isClosing;
+			set 
+			{
+				_isClosing = value;
+			}
+		}
 	}
 }

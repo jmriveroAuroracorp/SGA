@@ -1,0 +1,369 @@
+<Window x:Class="SGA_Desktop.Dialog.EditarOrdenTraspasoDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+        xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        Title="EDITAR ORDEN DE TRASPASO"
+        Width="1200"
+        Height="800"
+        MinWidth="1000"
+        MinHeight="700"
+        MaxWidth="1400"
+        MaxHeight="900"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <!-- DataContext se establece en el code-behind -->
+
+    <!-- Recursos -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Marco principal -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}" 
+                    CornerRadius="6,6,0,0">
+                <Grid>
+                    <TextBlock Text="✏️ EDITAR ORDEN DE TRASPASO" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                    <!-- Botón cerrar -->
+                    <Button Content="✕" 
+                            Width="30" 
+                            Height="30"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Command="{Binding CerrarCommand}"
+                            FontSize="14"/>
+                </Grid>
+            </Border>
+
+            <!-- Contenido principal -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="20">
+                <StackPanel>
+                    <!-- Información básica -->
+                    <GroupBox Header="📝 Información Básica" Margin="0,0,0,15">
+                        <Grid Margin="15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Prioridad -->
+                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,10">
+                                <TextBlock Text="Prioridad *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding PrioridadesDisponibles}"
+                                          DisplayMemberPath="Texto"
+                                          SelectedItem="{Binding PrioridadSeleccionada}"
+                                          Style="{StaticResource EstiloComboBox}"
+                                          Height="35"/>
+                            </StackPanel>
+
+                            <!-- Fecha Plan -->
+                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,0,10">
+                                <TextBlock Text="Fecha Planificada" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <DatePicker SelectedDate="{Binding FechaPlan}"
+                                           Height="35"
+                                           FontSize="14"/>
+                            </StackPanel>
+
+                            <!-- Almacén Destino -->
+                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,10">
+                                <TextBlock Text="Almacén Destino" FontWeight="Bold" Margin="0,0,0,5"/>
+                    <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
+                              DisplayMemberPath="DescripcionCombo"
+                              SelectedItem="{Binding AlmacenDestinoSeleccionado}"
+                              Style="{StaticResource EstiloComboBox}"
+                                         Height="35"
+                              IsEnabled="{Binding AlmacenDestinoHabilitado}"/>
+                    
+                    <!-- Mensaje informativo cuando está bloqueado -->
+                    <TextBlock Text="⚠️ Para cambiar el almacén destino, elimine todas las líneas primero"
+                               FontSize="11"
+                               Foreground="#FF6B35"
+                               FontStyle="Italic"
+                               Margin="0,5,0,0"
+                               Visibility="{Binding AlmacenDestinoBloqueado, Converter={StaticResource BoolToVis}}"/>
+                            </StackPanel>
+
+                            <!-- Comentarios -->
+                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,10">
+                                <TextBlock Text="Comentarios" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding Comentarios, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="60"
+                                         FontSize="14"
+                                         Padding="8"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"/>
+                            </StackPanel>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Líneas de la orden -->
+                    <GroupBox Header="📋 Líneas de la Orden" Margin="0,0,0,15">
+                        <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+                            <!-- Botones de gestión de líneas -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
+                                <Button Content="📦 Agregar Líneas"
+                                        Command="{Binding AgregarMultiplesLineasCommand}"
+                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                        Width="140"
+                                        Height="30"
+                                        Margin="0,0,10,0"/>
+                                <Button Content="🗑️ Eliminar Línea"
+                                        Command="{Binding EliminarLineaCommand}"
+                                        Style="{StaticResource EstiloBotonSecundario}"
+                                        Width="120"
+                                        Height="30"
+                                        IsEnabled="{Binding PuedeEliminarLinea}"/>
+                            </StackPanel>
+
+                            <!-- Lista de líneas con cards -->
+                            <ListView Grid.Row="1" ItemsSource="{Binding Lineas}"
+                                      SelectedItem="{Binding LineaSeleccionada}"
+                                      MinHeight="300"
+                                      MaxHeight="400"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                             BorderThickness="0"
+                                      Background="Transparent">
+                                
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Margin" Value="0,0,0,10"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="Black"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+
+                                <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                        <Border CornerRadius="6"
+                                                BorderThickness="2"
+                                                BorderBrush="{StaticResource BrushPrincipal}"
+                                                Background="White"
+                                                Margin="0,0,0,10">
+                                            
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                                    <Style.Triggers>
+                                                        <!-- Hover -->
+                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                                                            <Setter Property="Background" Value="#E6F0FA"/>
+                                                        </DataTrigger>
+                                                        <!-- Selección -->
+                                                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                                                            <Setter Property="Background" Value="{StaticResource BrushSecundario1}"/>
+                                                            <Setter Property="BorderBrush" Value="{StaticResource BrushSecundario1}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+
+                                            <!-- Contenido de la card en una sola línea -->
+                                            <Grid Margin="12,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/> <!-- Código y Descripción -->
+                                                    <ColumnDefinition Width="Auto"/> <!-- Cantidad centrada -->
+                                                    <ColumnDefinition Width="250"/> <!-- Usuario Asignado -->
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- IZQUIERDA: Código y Descripción -->
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding CodigoArticulo}"
+                                                               FontWeight="Bold"
+                                                               FontSize="16"
+                   Foreground="{StaticResource BrushPrincipal}"
+                                                               Margin="0,0,8,0"/>
+                                                    
+                                                    <!-- Indicador de estado de la línea -->
+                                                    <Border CornerRadius="3" 
+                                                            Padding="4,2" 
+                                                            Margin="0,0,8,0">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding PuedeEditarOperario}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                        <Setter Property="Background" Value="#FF6B35"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                        <Setter Property="Background" Value="#0078D4"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="COMPLETADA">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                        <Setter Property="Background" Value="#107C10"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="SUBDIVIDIDO">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                        <Setter Property="Background" Value="#9B59B6"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Estado}" Value="CANCELADA">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                        <Setter Property="Background" Value="#D13438"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding Estado}" 
+                                                                   FontSize="10" 
+                                                                   FontWeight="Bold" 
+                                                                   Foreground="White"/>
+                                                    </Border>
+                                                    
+                                                    <TextBlock Text="{Binding DescripcionArticulo}"
+                                                               FontSize="14"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+
+                                                <!-- CENTRO: Cantidad (solo texto) -->
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" 
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                                           Margin="20,0">
+                                                    <TextBlock Text="Cantidad:" 
+                                                               FontWeight="Bold" 
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                       VerticalAlignment="Center"
+                                                               Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{Binding CantidadPlan}" 
+                                                               FontWeight="Bold"
+                                                               FontSize="16"
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               VerticalAlignment="Center"/>
+        </StackPanel>
+
+                                                <!-- DERECHA: Usuario Asignado -->
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" 
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                    <TextBlock Text="Usuario:" 
+                                                               FontWeight="Bold" 
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,6,0"
+                                                               MinWidth="50"/>
+                                                    
+                                                    <!-- ComboBox con filtrado integrado -->
+                                                    <ComboBox ItemsSource="{Binding OperariosViewLinea, FallbackValue={x:Null}}"
+                                                              DisplayMemberPath="NombreOperario"
+                                                              SelectedItem="{Binding OperarioSeleccionado, UpdateSourceTrigger=PropertyChanged}"
+                                                              Text="{Binding FiltroOperarioLinea, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              IsDropDownOpen="{Binding IsDropDownOpenLinea, Mode=TwoWay}"
+                                                              IsEnabled="{Binding PuedeEditarOperario}"
+                                                              Width="180"
+                                                              Height="28"
+                                                              IsEditable="True"
+                                                              IsTextSearchEnabled="False"
+                                                              StaysOpenOnEdit="True"
+                                                              MaxDropDownHeight="200"
+                                                              HorizontalContentAlignment="Left"
+                                                              VerticalContentAlignment="Center">
+                                                        <i:Interaction.Triggers>
+                                                            <i:EventTrigger EventName="SelectionChanged">
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.OperarioSeleccionadoChangedCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                            </i:EventTrigger>
+                                                            <i:EventTrigger EventName="GotFocus">
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.LimpiarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                            </i:EventTrigger>
+                                                            <i:EventTrigger EventName="TextChanged">
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.ActualizarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                            </i:EventTrigger>
+                                                            <i:EventTrigger EventName="PreviewTextInput">
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.ActualizarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                            </i:EventTrigger>
+                                                        </i:Interaction.Triggers>
+                                                    </ComboBox>
+        </StackPanel>
+    </Grid>
+                                        </Border>
+                                                </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Información de estado -->
+                    <StackPanel Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}"
+                               Orientation="Horizontal"
+                               Margin="0,10,0,0">
+                        <ProgressBar Width="20" Height="20" 
+                                     IsIndeterminate="True" 
+                                     Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding MensajeEstado}" 
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource BrushSecundario}"
+                                   FontStyle="Italic"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Botones de acción -->
+            <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{StaticResource BrushSecundario}">
+                <StackPanel Orientation="Horizontal" 
+                           HorizontalAlignment="Right" 
+                           VerticalAlignment="Center"
+                           Margin="20,10">
+                    <Button Content="Cancelar"
+                            Command="{Binding CancelarCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="100"
+                            Height="35"
+                            Margin="0,0,10,0"/>
+                    <Button Content="Guardar Cambios"
+                            Command="{Binding GuardarCambiosCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="140"
+                            Height="35"
+                            IsEnabled="{Binding PuedeCrearOrden}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

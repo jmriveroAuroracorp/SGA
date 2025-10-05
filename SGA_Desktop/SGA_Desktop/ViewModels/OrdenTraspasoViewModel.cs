@@ -75,6 +75,9 @@ namespace SGA_Desktop.ViewModels
             OrdenesView = CollectionViewSource.GetDefaultView(OrdenesTraspaso);
             OrdenesView.Filter = FiltrarOrdenes;
             
+            // Suscribirse a solicitudes de filtro
+            OrdenTraspasoFiltroStore.FiltroSolicitado += OnFiltroSolicitado;
+            
             CargarDatosIniciales();
             System.Diagnostics.Debug.WriteLine("OrdenTraspasoViewModel: Datos iniciales cargados");
             _ = InitializeAsync();
@@ -92,7 +95,17 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 await CargarAlmacenesAsync();
+                
+                // Cargar las órdenes PRIMERO
                 await LoadOrdenesTraspasoAsync();
+                
+                // DESPUÉS de cargar los datos, aplicar cualquier filtro pendiente
+                // Esto asegura que el filtro se aplique sobre datos reales, no una colección vacía
+                if (!string.IsNullOrEmpty(_filtroEspecial))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Aplicando filtro especial después de carga inicial: {_filtroEspecial}");
+                    OrdenesView?.Refresh();
+                }
             }
             catch (Exception ex)
             {
@@ -145,6 +158,11 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = newValue;
             }
+            // Limpiar filtro especial si el usuario cambia fechas manualmente (no desde evento)
+            if (!_ajustandoFiltrosDesdeEvento)
+            {
+                _filtroEspecial = string.Empty;
+            }
             OrdenesView?.Refresh();
         }
 
@@ -155,21 +173,36 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = FechaDesde;
             }
+            // Limpiar filtro especial si el usuario cambia fechas manualmente (no desde evento)
+            if (!_ajustandoFiltrosDesdeEvento)
+            {
+                _filtroEspecial = string.Empty;
+            }
             OrdenesView?.Refresh();
         }
 
         partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
         {
+            // Limpiar filtro especial si el usuario cambia almacén manualmente (no desde evento)
+            if (!_ajustandoFiltrosDesdeEvento)
+            {
+                _filtroEspecial = string.Empty;
+            }
             OrdenesView?.Refresh();
         }
 
         partial void OnEstadoFiltroChanged(string oldValue, string newValue)
         {
+            // Limpiar filtro especial si el usuario cambia estado manualmente (no desde evento)
+            if (!_ajustandoFiltrosDesdeEvento)
+            {
+                _filtroEspecial = string.Empty;
+            }
             OrdenesView?.Refresh();
         }
 
         [RelayCommand]
-        private async Task LoadOrdenesTraspasoAsync()
+        public async Task LoadOrdenesTraspasoAsync()
         {
             try
             {
@@ -179,12 +212,18 @@ namespace SGA_Desktop.ViewModels
                 
                 var ordenes = await _ordenTraspasoService.GetOrdenesTraspasoAsync();
                 
+                // Guardar el filtro especial actual antes de limpiar
+                var filtroEspecialActual = _filtroEspecial;
+                
                 OrdenesTraspaso.Clear();
                 
                 foreach (var orden in ordenes)
                 {
                     OrdenesTraspaso.Add(orden);
                 }
+                
+                // Restaurar el filtro especial después de recargar
+                _filtroEspecial = filtroEspecialActual;
                 
                 // Refrescar la vista filtrada
                 OrdenesView.Refresh();
@@ -197,7 +236,7 @@ namespace SGA_Desktop.ViewModels
                 }
                 else
                 {
-                    MensajeEstado = $"{OrdenesTraspaso.Count} órdenes cargadas";
+                    MensajeEstado = $"{OrdenesTraspaso.Count} órdenes cargadas. Filtro activo: {_filtroEspecial}";
                 }
             }
             catch (Exception ex)
@@ -265,8 +304,27 @@ namespace SGA_Desktop.ViewModels
         [RelayCommand]
         private void EditarOrden(OrdenTraspasoDto orden)
         {
-            // TODO: Implementar edición
-            System.Diagnostics.Debug.WriteLine($"Editar orden: {orden.CodigoOrden}");
+            try
+            {
+                // Crear el ViewModel de edición con la orden seleccionada
+                var editarViewModel = new EditarOrdenTraspasoDialogViewModel(orden);
+                
+                // Crear y mostrar el diálogo de edición
+                var editarDialog = new EditarOrdenTraspasoDialog(editarViewModel);
+                editarDialog.Owner = Application.Current.MainWindow;
+                editarDialog.ShowDialog();
+                
+                // Recargar las órdenes después de cerrar el diálogo
+                CargarOrdenesCommand.Execute(null);
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al abrir edición", 
+                    $"No se pudo abrir el diálogo de edición: {ex.Message}", 
+                    "Aceptar");
+                errorDialog.ShowDialog();
+            }
         }
 
         [RelayCommand]
@@ -274,15 +332,119 @@ namespace SGA_Desktop.ViewModels
         {
             try
             {
-                var result = await _ordenTraspasoService.CancelarOrdenTraspasoAsync(orden.IdOrdenTraspaso);
-                if (result)
+                // Verificar si la orden se puede cancelar antes de intentar
+                if (orden.Estado != "PENDIENTE" && orden.Estado != "SIN_ASIGNAR" && orden.Estado != "EN_PROCESO")
                 {
-                    await LoadOrdenesTraspasoAsync();
+                    var warningDialog = new WarningDialog(
+                        "No se puede cancelar",
+                        $"No se puede cancelar la orden {orden.CodigoOrden} porque está en estado '{orden.EstadoTexto}'.\n\n" +
+                        "Solo se pueden cancelar órdenes en estado 'Pendiente', 'Sin Asignar' o 'En Proceso'.",
+                        "Aceptar");
+                    warningDialog.ShowDialog();
+                    return;
+                }
+
+                // Verificar si hay líneas en proceso
+                var tieneLineasEnProceso = orden.Lineas.Any(l => l.Estado == "EN_PROCESO");
+                if (tieneLineasEnProceso)
+                {
+                    // Si hay líneas en proceso, ofrecer cancelar solo las líneas pendientes
+                    var confirmacionProceso = new ConfirmationDialog(
+                        "Orden en proceso",
+                        $"La orden {orden.CodigoOrden} ya ha comenzado y tiene líneas en proceso.\n\n" +
+                        "¿Desea cancelar solo las líneas que no han comenzado?\n\n" +
+                        "Las líneas en proceso deben completarse.");
+
+                    if (confirmacionProceso.ShowDialog() == true)
+                    {
+                        await CancelarLineasPendientes(orden);
+                    }
+                    return;
+                }
+
+                // Verificar si hay movimientos realizados
+                var tieneMovimientos = orden.Lineas.Any(l => l.CantidadMovida > 0);
+                if (tieneMovimientos)
+                {
+                    var warningDialog = new WarningDialog(
+                        "No se puede cancelar",
+                        $"No se puede cancelar la orden {orden.CodigoOrden} porque ya tiene movimientos realizados.\n\n" +
+                        "Debe completar la orden en lugar de cancelarla.",
+                        "Aceptar");
+                    warningDialog.ShowDialog();
+                    return;
+                }
+
+                // Confirmar cancelación
+                var confirmacionCancelacion = new ConfirmationDialog(
+                    "Confirmar cancelación",
+                    $"¿Está seguro de que desea cancelar la orden '{orden.CodigoOrden}'?\n\n" +
+                    "Todas las líneas pendientes se marcarán como canceladas.");
+
+                if (confirmacionCancelacion.ShowDialog() == true)
+                {
+                    var result = await _ordenTraspasoService.CancelarOrdenTraspasoAsync(orden.IdOrdenTraspaso);
+                    if (result)
+                    {
+                        var successDialog = new WarningDialog(
+                            "Éxito",
+                            "Orden cancelada correctamente.",
+                            "Aceptar");
+                        successDialog.ShowDialog();
+                        await LoadOrdenesTraspasoAsync();
+                    }
+                    else
+                    {
+                        var errorDialog = new WarningDialog(
+                            "Error",
+                            "Error al cancelar la orden. Verifique que cumple las condiciones necesarias.",
+                            "Aceptar");
+                        errorDialog.ShowDialog();
+                    }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error al cancelar orden: {ex.Message}");
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al cancelar la orden: {ex.Message}",
+                    "Aceptar");
+                errorDialog.ShowDialog();
+            }
+        }
+
+        private async Task CancelarLineasPendientes(OrdenTraspasoDto orden)
+        {
+            try
+            {
+                var result = await _ordenTraspasoService.CancelarLineasPendientesAsync(orden.IdOrdenTraspaso);
+                if (result)
+                {
+                    var successDialog = new WarningDialog(
+                        "Líneas canceladas",
+                        $"Se han cancelado las líneas pendientes de la orden {orden.CodigoOrden}.\n\n" +
+                        "Las líneas en proceso deben completarse.",
+                        "Aceptar");
+                    successDialog.ShowDialog();
+                    await LoadOrdenesTraspasoAsync();
+                }
+                else
+                {
+                    var errorDialog = new WarningDialog(
+                        "Error",
+                        "No se pudieron cancelar las líneas pendientes.\n\n" +
+                        "Verifique que la orden esté en estado EN_PROCESO y tenga líneas pendientes.",
+                        "Aceptar");
+                    errorDialog.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al cancelar las líneas pendientes: {ex.Message}",
+                    "Aceptar");
+                errorDialog.ShowDialog();
             }
         }
 
@@ -312,22 +474,133 @@ namespace SGA_Desktop.ViewModels
         {
             if (obj is not OrdenTraspasoDto orden) return false;
 
-            // Filtro por fecha
-            if (orden.FechaCreacion.Date < FechaDesde.Date || orden.FechaCreacion.Date > FechaHasta.Date)
-                return false;
+            // Filtro especial desde dashboard (tiene prioridad y NO filtra por fecha/almacén)
+            if (!string.IsNullOrEmpty(_filtroEspecial))
+            {
+                var idOperarioActual = SessionManager.UsuarioActual?.operario ?? 0;
 
-            // Filtro por almacén destino
-            if (AlmacenDestinoSeleccionado != null && 
-                AlmacenDestinoSeleccionado.CodigoAlmacen != "Todas" && 
-                !string.IsNullOrEmpty(orden.CodigoAlmacenDestino) &&
-                orden.CodigoAlmacenDestino != AlmacenDestinoSeleccionado.CodigoAlmacen)
-                return false;
+                switch (_filtroEspecial)
+                {
+                    case "PENDIENTES":
+                        // Solo mostrar estado PENDIENTE
+                        if (orden.Estado != "PENDIENTE")
+                            return false;
+                        break;
+                    case "EN_PROCESO":
+                        // Solo mostrar estado EN_PROCESO
+                        if (orden.Estado != "EN_PROCESO")
+                            return false;
+                        break;
+                    case "PRIORIDAD_ALTA":
+                        // Solo PENDIENTES con prioridad alta (>= 4)
+                        if (orden.Estado != "PENDIENTE" || orden.Prioridad < 4)
+                            return false;
+                        break;
+                    case "ASIGNADAS_A_MI":
+                        // Solo PENDIENTES con líneas asignadas al operario actual
+                        var tieneLineasAsignadas = orden.Lineas.Any(l => l.IdOperarioAsignado == idOperarioActual && l.IdOperarioAsignado != 0);
+                        if (orden.Estado != "PENDIENTE" || !tieneLineasAsignadas)
+                            return false;
+                        break;
+                    case "SIN_ASIGNAR":
+                        // Solo estado SIN_ASIGNAR
+                        if (orden.Estado != "SIN_ASIGNAR")
+                            return false;
+                        break;
+                }
+            }
+            else
+            {
+                // Filtros normales (cuando NO hay filtro especial)
+                
+                // Filtro por fecha
+                if (orden.FechaCreacion.Date < FechaDesde.Date || orden.FechaCreacion.Date > FechaHasta.Date)
+                    return false;
 
-            // Filtro por estado
-            if (EstadoFiltro != "TODOS" && orden.Estado != EstadoFiltro)
-                return false;
+                // Filtro por almacén destino
+                if (AlmacenDestinoSeleccionado != null && 
+                    AlmacenDestinoSeleccionado.CodigoAlmacen != "Todas" && 
+                    !string.IsNullOrEmpty(orden.CodigoAlmacenDestino) &&
+                    orden.CodigoAlmacenDestino != AlmacenDestinoSeleccionado.CodigoAlmacen)
+                    return false;
+
+                // Filtro por estado
+                if (EstadoFiltro != "TODOS" && orden.Estado != EstadoFiltro)
+                    return false;
+            }
 
             return true;
+        }
+
+        private string _filtroEspecial = string.Empty;
+        private bool _ajustandoFiltrosDesdeEvento = false;
+
+        private async void OnFiltroSolicitado(object? sender, FiltroOrdenTraspasoEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"OnFiltroSolicitado recibido: {e.TipoFiltro}");
+            
+            _ajustandoFiltrosDesdeEvento = true;
+
+            // Aplicar el filtro especial
+            _filtroEspecial = e.TipoFiltro switch
+            {
+                TipoFiltroOrden.TodasPendientes => "PENDIENTES",
+                TipoFiltroOrden.EnProceso => "EN_PROCESO",
+                TipoFiltroOrden.PrioridadAlta => "PRIORIDAD_ALTA",
+                TipoFiltroOrden.AsignadasAMi => "ASIGNADAS_A_MI",
+                TipoFiltroOrden.SinAsignar => "SIN_ASIGNAR",
+                _ => string.Empty
+            };
+
+            System.Diagnostics.Debug.WriteLine($"Filtro especial asignado: {_filtroEspecial}");
+
+            // NO ajustar fechas ni almacén cuando hay filtro especial
+            // El filtro especial ignora fecha/almacén y solo filtra por estado
+
+            // Ajustar el filtro de estado para que sea compatible con el filtro especial
+            switch (_filtroEspecial)
+            {
+                case "PENDIENTES":
+                case "PRIORIDAD_ALTA":
+                case "ASIGNADAS_A_MI":
+                    // Todos estos filtros solo muestran PENDIENTES
+                    EstadoFiltro = "PENDIENTE";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a PENDIENTE");
+                    break;
+                case "EN_PROCESO":
+                    EstadoFiltro = "EN_PROCESO";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a EN_PROCESO");
+                    break;
+                case "SIN_ASIGNAR":
+                    EstadoFiltro = "SIN_ASIGNAR";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a SIN_ASIGNAR");
+                    break;
+                default:
+                    EstadoFiltro = "TODOS";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a TODOS");
+                    break;
+            }
+
+            // Forzar notificación de cambio de propiedad
+            OnPropertyChanged(nameof(EstadoFiltro));
+
+            _ajustandoFiltrosDesdeEvento = false;
+
+            // SOLUCIÓN CORRECTA: Si no hay datos cargados, cargar los datos AHORA con el filtro aplicado
+            if (OrdenesTraspaso?.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine("No hay datos cargados, cargando datos con filtro aplicado...");
+                await LoadOrdenesTraspasoAsync();
+                System.Diagnostics.Debug.WriteLine($"Datos cargados con filtro. Total órdenes: {OrdenesTraspaso?.Count}");
+            }
+            else
+            {
+                // Si ya hay datos cargados, solo aplicar el filtro
+                OrdenesView?.Refresh();
+                System.Diagnostics.Debug.WriteLine($"Filtro aplicado sobre {OrdenesTraspaso.Count} órdenes existentes");
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Filtro configurado completamente. Estado: {EstadoFiltro}, Especial: {_filtroEspecial}");
         }
     }
 } 

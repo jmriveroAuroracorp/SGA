@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.Palet;
+using SGA_Api.Services;
 using System;
 using System.Threading.Tasks;
 using System.Linq;
@@ -91,7 +92,109 @@ public class TraspasosController : ControllerBase
 
 		await _context.SaveChangesAsync();
 
+		// COMENTADO: La finalización la hace un servicio externo, no este Controller
+		// La notificación se envía desde TraspasoFinalizacionBackgroundService.cs
+
 		return Ok(new { message = "Traspaso finalizado correctamente", traspaso.Id, traspaso.CodigoEstado });
+	}
+
+	/// <summary>
+	/// Obtiene información adicional del traspaso para enriquecer la notificación
+	/// </summary>
+	private async Task<string> ObtenerInformacionAdicionalTraspasoAsync(Guid traspasoId, string? tipoTraspaso)
+	{
+		try
+		{
+			// Obtener el traspaso completo
+			var traspaso = await _context.Traspasos.FindAsync(traspasoId);
+			if (traspaso == null) return "";
+
+			var informacion = new List<string>();
+
+			// Formatear ubicación origen
+			string ubicacionOrigen = "";
+			if (!string.IsNullOrEmpty(traspaso.AlmacenOrigen) && !string.IsNullOrEmpty(traspaso.UbicacionOrigen) && traspaso.UbicacionOrigen.Trim() != "")
+			{
+				ubicacionOrigen = $"{traspaso.AlmacenOrigen}-{traspaso.UbicacionOrigen}";
+			}
+			else if (!string.IsNullOrEmpty(traspaso.UbicacionOrigen) && traspaso.UbicacionOrigen.Trim() != "")
+			{
+				ubicacionOrigen = traspaso.UbicacionOrigen;
+			}
+			else if (!string.IsNullOrEmpty(traspaso.AlmacenOrigen))
+			{
+				ubicacionOrigen = $"{traspaso.AlmacenOrigen}-SinUbicar";
+			}
+
+			// Formatear ubicación destino
+			string ubicacionDestino = "";
+			if (!string.IsNullOrEmpty(traspaso.AlmacenDestino) && !string.IsNullOrEmpty(traspaso.UbicacionDestino) && traspaso.UbicacionDestino.Trim() != "")
+			{
+				ubicacionDestino = $"{traspaso.AlmacenDestino}-{traspaso.UbicacionDestino}";
+			}
+			else if (!string.IsNullOrEmpty(traspaso.UbicacionDestino) && traspaso.UbicacionDestino.Trim() != "")
+			{
+				ubicacionDestino = traspaso.UbicacionDestino;
+			}
+			else if (!string.IsNullOrEmpty(traspaso.AlmacenDestino))
+			{
+				ubicacionDestino = $"{traspaso.AlmacenDestino}-SinUbicar";
+			}
+
+			// Agregar ubicación formateada
+			if (!string.IsNullOrEmpty(ubicacionOrigen) || !string.IsNullOrEmpty(ubicacionDestino))
+			{
+				informacion.Add($" Ubicación: {ubicacionOrigen} → {ubicacionDestino}");
+			}
+
+			// Para traspasos de artículo, obtener cantidad y descripción
+			if (tipoTraspaso == "ARTICULO" && !string.IsNullOrEmpty(traspaso.CodigoArticulo))
+			{
+				var cantidadEncontrada = false;
+
+				// 1. PRIMERO: Buscar en la tabla Traspasos directamente (para artículos sueltos)
+				if (traspaso.Cantidad != null && traspaso.Cantidad != 0)
+				{
+					informacion.Add($" Cantidad: {Math.Abs(traspaso.Cantidad.Value):F4}");
+					cantidadEncontrada = true;
+				}
+
+				// 2. SEGUNDO: Buscar en TempPaletLineas (para artículos en palets)
+				if (!cantidadEncontrada)
+				{
+					var tempLinea = await _context.TempPaletLineas
+						.Where(tl => tl.TraspasoId == traspasoId && tl.CodigoArticulo == traspaso.CodigoArticulo)
+						.FirstOrDefaultAsync();
+
+					if (tempLinea != null && tempLinea.Cantidad != 0)
+					{
+						informacion.Add($" Cantidad: {Math.Abs(tempLinea.Cantidad):F4}");
+						cantidadEncontrada = true;
+					}
+				}
+
+				// 3. TERCERO: Buscar en PaletLineas (para líneas ya consolidadas)
+				if (!cantidadEncontrada)
+				{
+					var paletLinea = await _context.PaletLineas
+						.Where(pl => pl.TraspasoId == traspasoId && pl.CodigoArticulo == traspaso.CodigoArticulo)
+						.FirstOrDefaultAsync();
+
+					if (paletLinea != null && paletLinea.Cantidad != 0)
+					{
+						informacion.Add($" Cantidad: {Math.Abs(paletLinea.Cantidad):F4}");
+						cantidadEncontrada = true;
+					}
+				}
+			}
+
+			return string.Join("", informacion);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Error al obtener información adicional del traspaso {TraspasoId}", traspasoId);
+			return "";
+		}
 	}
 
 	/// <summary>
@@ -122,7 +225,8 @@ public class TraspasosController : ControllerBase
 			UbicacionOrigen = traspaso.UbicacionOrigen,
 			CodigoPalet = traspaso.CodigoPalet,
 			CodigoArticulo = traspaso.CodigoArticulo,
-			TipoTraspaso = traspaso.TipoTraspaso
+			TipoTraspaso = traspaso.TipoTraspaso,
+			Comentarios = traspaso.Comentario
 		};
 
 		if (dto.UsuarioInicioId > 0 && nombreDict.TryGetValue(dto.UsuarioInicioId, out var nombreInicio))
@@ -238,6 +342,7 @@ public class TraspasosController : ControllerBase
 				CodigoArticulo = t.CodigoArticulo,
 				TipoTraspaso = t.TipoTraspaso,
 				Cantidad = t.Cantidad,
+				Comentarios = t.Comentario,
 				DescripcionArticulo = null // Se llenará después si es necesario
 			})
 			.ToListAsync();
@@ -254,7 +359,7 @@ public class TraspasosController : ControllerBase
 					.Where(s => s.CodigoArticulo == traspaso.CodigoArticulo)
 					.Select(s => new { s.DescripcionArticulo })
 					.FirstOrDefaultAsync();
-				
+
 				if (stockInfo != null)
 				{
 					traspaso.DescripcionArticulo = stockInfo.DescripcionArticulo;
@@ -315,7 +420,8 @@ public class TraspasosController : ControllerBase
 				CodigoPalet = t.CodigoPalet,
 				CodigoArticulo = t.CodigoArticulo,
 				TipoTraspaso = t.TipoTraspaso,
-				Cantidad = t.Cantidad
+				Cantidad = t.Cantidad,
+				Comentarios = t.Comentario
 			})
 			.ToListAsync();
 
@@ -331,7 +437,7 @@ public class TraspasosController : ControllerBase
 					.Where(s => s.CodigoArticulo == traspaso.CodigoArticulo)
 					.Select(s => new { s.DescripcionArticulo })
 					.FirstOrDefaultAsync();
-				
+
 				if (stockInfo != null)
 				{
 					traspaso.DescripcionArticulo = stockInfo.DescripcionArticulo;
@@ -735,7 +841,7 @@ public class TraspasosController : ControllerBase
 				_context.Traspasos.Update(traspaso);
 				await _context.SaveChangesAsync();
 
-		
+
 
 			}
 
@@ -1568,7 +1674,14 @@ public class TraspasosController : ControllerBase
 				t.Id,
 				t.CodigoEstado,
 				t.TipoTraspaso,
-				PaletCerrado = t.TipoTraspaso == "PALET" && t.UbicacionDestino != null
+				PaletCerrado = t.TipoTraspaso == "PALET" && t.UbicacionDestino != null,
+				PaletId = t.PaletId,
+				t.CodigoPalet,
+				// NUEVO: Buscar IdLineaOrden usando CodigoPalet → PaletDestino
+				IdLineaOrden = _context.OrdenTraspasoLinea
+					.Where(otl => otl.PaletDestino == t.CodigoPalet)
+					.Select(otl => otl.IdLineaOrdenTraspaso)
+					.FirstOrDefault()
 			})
 			.ToListAsync();
 
@@ -1577,7 +1690,4 @@ public class TraspasosController : ControllerBase
 
 		return Ok(traspasos);
 	}
-
-
-
 }

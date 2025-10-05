@@ -53,6 +53,56 @@ namespace SGA_Desktop.ViewModels
             _ = CargarAlmacenesDestinoAsync();
         }
 
+        public TraspasoPaletDialogViewModel(SGA_Desktop.Models.PaletDto palet)
+        {
+            _paletService = new PaletService();
+            _ubicacionesService = new UbicacionesService();
+
+            BuscarPaletCommand = new RelayCommand(BuscarPalets);
+            SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
+            MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
+
+            // Precargar el palet seleccionado con datos básicos
+            PaletSeleccionado = new PaletMovibleDto
+            {
+                Id = palet.Id,
+                Codigo = palet.Codigo,
+                Estado = palet.Estado,
+                AlmacenOrigen = null, // Se cargará desde el servicio
+                UbicacionOrigen = null,
+                FechaUltimoTraspaso = null
+            };
+
+            _ = CargarDatosCompletosPaletAsync(palet.Id);
+            _ = CargarAlmacenesDestinoAsync();
+        }
+
+        private async Task CargarDatosCompletosPaletAsync(Guid paletId)
+        {
+            try
+            {
+                // Obtener los datos completos del palet desde el servicio de traspasos
+                var paletsCompletos = await _traspasosService.ObtenerPaletsCerradosMoviblesAsync();
+                var paletCompleto = paletsCompletos.FirstOrDefault(p => p.Id == paletId);
+                
+                if (paletCompleto != null && PaletSeleccionado != null)
+                {
+                    PaletSeleccionado.AlmacenOrigen = paletCompleto.AlmacenOrigen;
+                    PaletSeleccionado.UbicacionOrigen = paletCompleto.UbicacionOrigen;
+                    PaletSeleccionado.FechaUltimoTraspaso = paletCompleto.FechaUltimoTraspaso;
+                    PaletSeleccionado.UsuarioUltimoTraspaso = paletCompleto.UsuarioUltimoTraspaso;
+                    
+                    // Notificar cambios en las propiedades
+                    OnPropertyChanged(nameof(PaletSeleccionado));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Manejo de error opcional - los datos básicos ya están cargados
+                System.Diagnostics.Debug.WriteLine($"Error al cargar datos completos del palet: {ex.Message}");
+            }
+        }
+
         private async Task CargarAlmacenesDestinoAsync()
         {
             AlmacenesDestino.Clear();

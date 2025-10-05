@@ -1702,16 +1702,16 @@ namespace SGA_Api.Services
                     Titulo = $"REASIGNACIÓN - {resultado.Orden.Titulo}",
                     Visibilidad = resultado.Orden.Visibilidad,
                     ModoGeneracion = "REASIGNA", // Solo 10 caracteres máximo
-                    Alcance = "UBICACION",
+                    Alcance = "UBICACION", // Mantener UBICACION pero con filtros específicos de artículo
                     FiltrosJson = GenerarFiltrosJsonParaReasignacion(resultado),
-                    FechaPlan = DateTime.UtcNow,
+                    FechaPlan = DateTime.Now, // Usar hora del servidor local en lugar de UTC
                     SupervisorCodigo = dto.SupervisorCodigo,
                     CreadoPorCodigo = dto.SupervisorCodigo ?? "SISTEMA",
                     Estado = "ASIGNADO",
-                    Prioridad = 1,
-                    FechaCreacion = DateTime.UtcNow,
+                    Prioridad = 5, // Mayor prioridad para reasignaciones
+                    FechaCreacion = DateTime.Now, // Usar hora del servidor local en lugar de UTC
                     CodigoOperario = dto.CodigoOperario,
-                    FechaAsignacion = DateTime.UtcNow,
+                    FechaAsignacion = DateTime.Now, // Usar hora del servidor local en lugar de UTC
                     CodigoAlmacen = resultado.CodigoAlmacen,
                     CodigoUbicacion = resultado.CodigoUbicacion,
                     CodigoArticulo = resultado.CodigoArticulo
@@ -1743,18 +1743,12 @@ namespace SGA_Api.Services
         {
             var filtros = new Dictionary<string, object>
             {
-                ["almacen"] = resultado.CodigoAlmacen
+                ["almacen"] = resultado.CodigoAlmacen,
+                ["ubicacion"] = resultado.CodigoUbicacion ?? string.Empty,
+                ["articulo"] = resultado.CodigoArticulo ?? string.Empty,
+                ["tipo"] = "LINEA_ESPECIFICA", // Especificar que es para una línea específica
+                ["modo"] = "REASIGNACION" // Indicar que es una reasignación
             };
-
-            if (!string.IsNullOrEmpty(resultado.CodigoUbicacion))
-            {
-                filtros["ubicacion"] = resultado.CodigoUbicacion;
-            }
-
-            if (!string.IsNullOrEmpty(resultado.CodigoArticulo))
-            {
-                filtros["articulo"] = resultado.CodigoArticulo;
-            }
 
             return System.Text.Json.JsonSerializer.Serialize(filtros);
         }

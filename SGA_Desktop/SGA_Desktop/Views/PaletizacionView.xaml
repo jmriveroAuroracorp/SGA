@@ -12,116 +12,438 @@
         <helpers:EstaCerradoConverter x:Key="EstaCerradoConverter"/>
         <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
         <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Page.Resources>
 
-    <Grid Margin="8">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Barra de herramientas -->
+        <Border Grid.Row="0"
+                Background="{StaticResource BrushPrincipal}"
+                Padding="20,15"
+                BorderBrush="{StaticResource BrushInputBorde}"
+                BorderThickness="0,0,0,1"
+                Margin="0,0,0,10">
+            <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="3*" />
-            <ColumnDefinition Width="5*" />
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <!-- 📦 Palets -->
-        <DockPanel Grid.Column="0" LastChildFill="True" Margin="0,0,8,0">
-            <StackPanel Orientation="Horizontal"
-                        DockPanel.Dock="Top"
-                        Margin="0,0,0,8"
-                        VerticalAlignment="Center">
+                <TextBlock Grid.Column="0"
+                           Text="📦 Gestión de Paletización"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="18"
+                           FontWeight="Bold"/>
 
+                 <StackPanel Grid.Column="1"
+                             Orientation="Horizontal"
+                             HorizontalAlignment="Right">
                 <Button Content="🔍 Filtros"
-                        Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding AbrirFiltrosCommand}"
-                        Width="110"
-                        Margin="0,0,8,0"/>
+                             Width="100"
+                             Height="35"
+                             Margin="0,0,10,0">
+                         <Button.Style>
+                             <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                 <Setter Property="Background" Value="White"/>
+                                 <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                 <Setter Property="BorderBrush" Value="White"/>
+                                 <Setter Property="BorderThickness" Value="1"/>
+                             </Style>
+                         </Button.Style>
+                     </Button>
+                     
                 <Button Content="➕ Nuevo"
-                        Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding CrearPaletCommand}"
                         Width="100"
-                        Margin="0,0,8,0"/>
+                             Height="35"
+                             Margin="0,0,10,0">
+                         <Button.Style>
+                             <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                 <Setter Property="Background" Value="White"/>
+                                 <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                 <Setter Property="BorderBrush" Value="White"/>
+                                 <Setter Property="BorderThickness" Value="1"/>
+                             </Style>
+                         </Button.Style>
+                     </Button>
+
+                     <Button Content="👁️ Ver Palet"
+                             Command="{Binding VerPaletSeleccionadoCommand}"
+                             Width="120"
+                             Height="35"
+                             Margin="0,0,10,0"
+                             IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}">
+                         <Button.Style>
+                             <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                 <Setter Property="Background" Value="White"/>
+                                 <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                 <Setter Property="BorderBrush" Value="White"/>
+                                 <Setter Property="BorderThickness" Value="1"/>
+                             </Style>
+                         </Button.Style>
+                     </Button>
+
+                     <Button Content="🖨️ Imprimir Palet"
+                             Command="{Binding ImprimirPaletSeleccionadoCommand}"
+                             Width="130"
+                             Height="35"
+                             Margin="0,0,10,0"
+                             IsEnabled="{Binding PaletSeleccionado, Converter={StaticResource NotNullToBoolConverter}}">
+                         <Button.Style>
+                             <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                 <Setter Property="Background" Value="White"/>
+                                 <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                 <Setter Property="BorderBrush" Value="White"/>
+                                 <Setter Property="BorderThickness" Value="1"/>
+                             </Style>
+                         </Button.Style>
+                     </Button>
+
+                     <Button Content="🔄 Recargar"
+                             Command="{Binding LoadPaletsCommand}"
+                             Width="100"
+                             Height="35">
+                         <Button.Style>
+                             <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                 <Setter Property="Background" Value="White"/>
+                                 <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                 <Setter Property="BorderBrush" Value="White"/>
+                                 <Setter Property="BorderThickness" Value="1"/>
+                             </Style>
+                         </Button.Style>
+                     </Button>
+                 </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Lista de palets en formato cards - Pantalla completa -->
+        <GroupBox Grid.Row="1" Header="📦 Palets Disponibles" Margin="20">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Estado de carga -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15"
+                            Visibility="{Binding Cargando, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ProgressBar Width="20" Height="20"
+                                 IsIndeterminate="True"
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding Mensaje}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushSecundario}"
+                               FontStyle="Italic"/>
             </StackPanel>
-            <ListView ItemsSource="{Binding PaletsView}"
-          SelectedItem="{Binding PaletSeleccionado, Mode=TwoWay}"
-          Margin="10"
-          HorizontalContentAlignment="Stretch">
-                <ListView.ItemTemplate>
+
+                <!-- Lista de cards de palets -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding PaletsView}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource EstiloTarjeta}" Margin="4" Padding="8">
-                            <StackPanel>
-                                <!-- Código + Estado -->
-                                <TextBlock Margin="0,0,0,4">
-        <Run Text="{Binding Codigo}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource BrushPrincipal}" />
-        <Run Text=" - " />
-        <Run Text="{Binding Estado}" Foreground="{Binding Estado, Converter={StaticResource EstadoColorConverter}}" FontSize="16"/>
-                                </TextBlock>
+                                <Border Style="{StaticResource EstiloTarjeta}"
+                                        Width="380"
+                                        Height="320"
+                                        Margin="8"
+                                        Cursor="Hand">
+                                    
+                                    <Grid MouseLeftButtonDown="PaletCard_MouseLeftButtonDown" Tag="{Binding}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
 
-                                <!-- Apertura + Abre -->
-                                <TextBlock Margin="0,2,0,0">
-        <Run Text="Apertura: " FontWeight="Bold"/>
-        <Run Text="{Binding FechaApertura, StringFormat={}{0:dd/MM/yyyy}}"/>
-        <Run Text=" - Abre: " FontWeight="Bold" />
-        <Run Text="{Binding UsuarioAperturaNombre}"/>
-                                </TextBlock>
+                                        <!-- Header con Código y Estado -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
 
-                                <!-- Cierre + Cierra -->
-                                <TextBlock Margin="0,2,0,0"
+                                            <!-- Código -->
+                                            <StackPanel Grid.Column="0" Orientation="Vertical">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                    <TextBlock Text="Código: "
+                                                               FontWeight="Bold"
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Codigo}"
+                                                               FontFamily="Consolas"
+                                                               FontWeight="Bold"
+                                                               Foreground="#2C3E50"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Indicador de estado -->
+                                            <Border Grid.Column="1"
+                                                    Background="{Binding Estado, Converter={StaticResource EstadoColorConverter}}"
+                                                    BorderBrush="{Binding Estado, Converter={StaticResource EstadoColorConverter}}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="3"
+                                                    Padding="8,4"
+                                                    VerticalAlignment="Top"
+                                                    HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding Estado}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="White"
+                                                           HorizontalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Contenido principal -->
+                                        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                            <!-- Fecha de apertura -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Apertura: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding FechaApertura, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Usuario apertura -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Abre: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding UsuarioAperturaNombre}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+
+                                            <!-- Fecha de cierre (si existe) -->
+                                            <Grid Margin="0,0,0,8"
+                                                  Visibility="{Binding UsuarioCierreNombre, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Cierre: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding FechaCierre, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Usuario cierre (si existe) -->
+                                            <Grid Margin="0,0,0,8"
                                            Visibility="{Binding UsuarioCierreNombre, Converter={StaticResource NullToVisibilityConverter}}">
-        <Run Text="Cierre: " FontWeight="Bold"/>
-        <Run Text="{Binding FechaCierre, StringFormat={}{0:dd/MM/yyyy}}"/>
-        <Run Text=" - Cierra: " FontWeight="Bold" />
-        <Run Text="{Binding UsuarioCierreNombre}"/>
-                                </TextBlock>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Cierra: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding UsuarioCierreNombre}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
 
                                 <!-- Orden de trabajo -->
-                                <TextBlock Margin="0,2,0,0"
+                                            <Grid Margin="0,8,0,0"
            Visibility="{Binding OrdenTrabajoId, Converter={StaticResource NullToVisibilityConverter}}">
-      <Run Text="📄 " />
-    <Run Text="Orden trabajo: " FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" />
-    <Run Text="{Binding OrdenTrabajoId}" Foreground="Black"/>
-                                </TextBlock>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="📄 Orden: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding OrdenTrabajoId}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource BrushPrincipal}"/>
+                                            </Grid>
+
+                                            <!-- Peso y altura (si existen) -->
+                                            <Grid Margin="0,8,0,0"
+                                                  Visibility="{Binding Peso, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="⚖️ Peso: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Peso, StringFormat='{}{0:F2} kg'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+
+                                                <TextBlock Grid.Column="2" Text="📏 Altura: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding Altura, StringFormat='{}{0:F2} cm'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Botones de acción -->
+                                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Button Content="👁️ Ver"
+                                                    Command="{Binding DataContext.SeleccionarPaletCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                                    Width="80"
+                                                    Height="30"
+                                                    FontSize="11"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,4,0"/>
+                                            <Button Content="🖨️ Imprimir"
+                                                    Command="{Binding DataContext.ImprimirPaletCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBotonSecundario}"
+                                                    Width="90"
+                                                    Height="30"
+                                                    FontSize="11"
+                                                    FontWeight="Medium"/>
                             </StackPanel>
+                                    </Grid>
                         </Border>
                     </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-        </DockPanel>
-        <!-- 📋 Líneas + acciones -->
-        <Grid Grid.Column="1">
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </GroupBox>
+
+        <!-- Sección expandible para contenido del palet -->
+        <Border Grid.Row="2"
+                Background="{StaticResource BrushPrincipal}"
+                Padding="20,15"
+                BorderBrush="{StaticResource BrushInputBorde}"
+                BorderThickness="0,1,0,0"
+                Visibility="{Binding PaletSeleccionado, Converter={StaticResource NullToVisibilityConverter}}">
+            <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0"
-                       Text="{Binding PaletSeleccionado.Codigo, StringFormat=Contenido del palet: {0}}"
-                       Style="{StaticResource LabelStyle}"
-                       FontSize="16"
-                       Margin="0,0,0,8"/>
+                <!-- Header del contenido -->
+                <Grid Grid.Row="0" Margin="0,0,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-            <ListView Grid.Row="1"
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding PaletSeleccionado.Codigo, StringFormat='Contenido del palet: {0}'}"
+                               Foreground="White"
+                       FontSize="16"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+
+                    <Button Grid.Column="1"
+                            Content="✕ Cerrar"
+                            Width="80"
+                            Height="30"
+                            Command="{Binding CerrarContenidoCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="BorderBrush" Value="White"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+
+                <!-- Contenido del palet -->
+                <Border Grid.Row="1"
+                        Background="White"
+                        CornerRadius="6"
+                        Padding="15"
+                        MaxHeight="300">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Lista de líneas del palet -->
+                        <ListView Grid.Row="0"
           SelectedItem="{Binding LineaSeleccionada, Mode=TwoWay}"
           ItemsSource="{Binding LineasPalet}"
-          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
 
                 <ListView.Resources>
                     <Style TargetType="ListViewItem">
-                        <Setter Property="Margin" Value="0,0,0,10"/>
+                                    <Setter Property="Margin" Value="0,0,0,8"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListViewItem">
                                     <Border x:Name="Bd"
                                 Background="White"
-                                CornerRadius="6"
+                                                        CornerRadius="4"
                                 BorderThickness="1"
-                                BorderBrush="#007ACC"
-                                Padding="10">
+                                                        BorderBrush="#E0E0E0"
+                                                        Padding="12">
                                         <ContentPresenter />
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#f0f8ff"/>
+                                                        <Setter TargetName="Bd" Property="Background" Value="#F8F9FA"/>
+                                                        <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                         </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#007ACC"/>
+                                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                                        <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -138,11 +460,10 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Izquierda: detalles -->
+                                        <!-- Detalles del artículo -->
                             <StackPanel Grid.Column="0">
-
                                 <!-- Código + Descripción -->
-                                <TextBlock FontSize="16" FontWeight="Bold">
+                                            <TextBlock FontSize="14" FontWeight="Bold" Margin="0,0,0,6">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
@@ -158,13 +479,32 @@
                         <Run Text="{Binding DescripcionArticulo}" />
                                 </TextBlock>
 
-                                <!-- Almacén -->
-                                <StackPanel Orientation="Horizontal">
-                                    <!-- Etiqueta -->
-                                    <TextBlock FontWeight="Bold">
+                                            <!-- Información del artículo -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Almacén:" FontWeight="SemiBold" FontSize="11" Foreground="#666"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding CodigoAlmacen}" FontSize="11" Margin="4,0,15,0"/>
+
+                                                <TextBlock Grid.Column="2" Text="Ubicación:" FontWeight="SemiBold" FontSize="11" Foreground="#666"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding Ubicacion}" FontSize="11" Margin="4,0,15,0"/>
+
+                                                <TextBlock Grid.Column="4" Text="Lote:" FontWeight="SemiBold" FontSize="11" Foreground="#666"/>
+                                                <TextBlock Grid.Column="5" Text="{Binding Lote}" FontSize="11" Margin="4,0,0,0"/>
+                                            </Grid>
+
+                                            <!-- Caducidad -->
+                                            <TextBlock Margin="0,4,0,0" FontSize="11">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource BrushIntermedio}"/>
+                                                        <Setter Property="Foreground" Value="#666"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
                                                         <Setter Property="Foreground" Value="White"/>
@@ -172,139 +512,22 @@
                                                 </Style.Triggers>
                                             </Style>
                                         </TextBlock.Style>
-                                        Almacén:
-                                    </TextBlock>
-
-                                    <!-- Valor -->
-                                    <TextBlock Margin="4,0,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="Black"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                        <TextBlock.Text>
-                                            <Binding Path="CodigoAlmacen"/>
-                                        </TextBlock.Text>
-                                    </TextBlock>
-                                </StackPanel>
-
-
-                                <!-- Ubicación -->
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontWeight="Bold">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource BrushIntermedio}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-        Ubicación:
-                                    </TextBlock>
-
-                                    <TextBlock Margin="4,0,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="Black"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                        <TextBlock.Text>
-                                            <Binding Path="Ubicacion"/>
-                                        </TextBlock.Text>
+                                                <Run Text="Caducidad: " FontWeight="SemiBold"/>
+                                                <Run Text="{Binding FechaCaducidad, StringFormat='{}{0:dd/MM/yyyy}'}"/>
                                     </TextBlock>
                                 </StackPanel>
 
-                                <!-- Lote -->
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontWeight="Bold">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource BrushIntermedio}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-        Lote:
-                                    </TextBlock>
-
-                                    <TextBlock Margin="4,0,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="Black"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                        <TextBlock.Text>
-                                            <Binding Path="Lote"/>
-                                        </TextBlock.Text>
-                                    </TextBlock>
-                                </StackPanel>
-
-                                <!-- Caducidad -->
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontWeight="Bold">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource BrushIntermedio}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-        Caducidad:
-                                    </TextBlock>
-
-                                    <TextBlock Margin="4,0,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="Black"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                        <TextBlock.Text>
-                                            <Binding Path="FechaCaducidad" StringFormat="{}{0:dd/MM/yyyy}"/>
-                                        </TextBlock.Text>
-                                    </TextBlock>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <!-- Derecha: cantidad -->
+                                        <!-- Cantidad -->
                             <TextBlock Grid.Column="1"
                            Text="{Binding Cantidad}"
-                           FontSize="24"
+                                                   FontSize="20"
                            FontWeight="Bold"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Right"
                            Margin="20,0,0,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="Black"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True">
                                                 <Setter Property="Foreground" Value="White"/>
@@ -318,49 +541,48 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-
-
-            <StackPanel Grid.Row="2"
+                        <!-- Botones de acción -->
+                        <StackPanel Grid.Row="1"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
-                        Margin="0,8,0,0">
-
-                <!-- Acciones de palet -->
+                                    Margin="0,15,0,0">
                 
                 <Button Content="📦 Añadir stock"
-                        Margin="0,0,20,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding AbrirPaletLineasCommand}"
-                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
+                                    IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}"
+                                    Width="120"
+                                    Height="35"
+                                    Margin="0,0,10,0"/>
 
                 <Button Content="🗑 Eliminar línea"
-                        Margin="0,0,20,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding EliminarLineaSeleccionadaCommand}"
-                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
+                                    IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}"
+                                    Width="120"
+                                    Height="35"
+                                    Margin="0,0,10,0"/>
 
                 <Button Content="🔒 Cerrar"
-                        Margin="0,0,320,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding CerrarPaletCommand}"
-                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}" />
+                                    IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaAbiertoConverter}}"
+                                    Width="100"
+                                    Height="35"
+                                    Margin="0,0,10,0"/>
 
                 <Button Content="🔓 Reabrir"
-                        Margin="0,0,20,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding ReabrirPaletCommand}"
-                        IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaCerradoConverter}}" />
-                <!-- Acciones de línea -->
-                <Button Content="🖨 Imprimir"
-                        Margin="0,0,20,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding ImprimirPaletCommand}" />
-            </StackPanel>
+                                    IsEnabled="{Binding PaletSeleccionado.Estado, Converter={StaticResource EstaCerradoConverter}}"
+                                    Width="100"
+                                    Height="35"
+                                    Margin="0,0,10,0"/>
 
-            <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="Red"
-                       Margin="0,4"
-                       FontWeight="Bold"/>
+                <Button Content="🖨 Imprimir"
+                                    Command="{Binding ImprimirPaletCommand}"
+                                    Width="100"
+                                    Height="35"/>
+            </StackPanel>
+                    </Grid>
+                </Border>
         </Grid>
+        </Border>
     </Grid>
 </Page>

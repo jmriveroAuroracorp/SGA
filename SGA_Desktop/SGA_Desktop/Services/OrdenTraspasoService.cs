@@ -59,10 +59,48 @@ namespace SGA_Desktop.Services
             return response.IsSuccessStatusCode;
         }
 
+        public async Task<bool> CancelarLineasPendientesAsync(Guid id)
+        {
+            var response = await _httpClient.PostAsync($"OrdenTraspaso/{id}/cancelar-lineas-pendientes", new StringContent("", Encoding.UTF8, "application/json"));
+            return response.IsSuccessStatusCode;
+        }
+
         public async Task<bool> EliminarOrdenTraspasoAsync(Guid id)
         {
             var response = await _httpClient.DeleteAsync($"OrdenTraspaso/{id}");
             return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> ActualizarLineaOrdenTraspasoAsync(Guid id, ActualizarLineaOrdenTraspasoDto dto)
+        {
+            var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            var response = await _httpClient.PutAsync($"OrdenTraspaso/linea/{id}", new StringContent(json, Encoding.UTF8, "application/json"));
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<LineaOrdenTraspasoDetalleDto> CrearLineaOrdenTraspasoAsync(Guid idOrden, CrearLineaOrdenTraspasoDto dto)
+        {
+            var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            var response = await _httpClient.PostAsync($"OrdenTraspaso/{idOrden}/linea", new StringContent(json, Encoding.UTF8, "application/json"));
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseJson = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<LineaOrdenTraspasoDetalleDto>(responseJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            
+            throw new Exception($"Error al crear línea de traspaso: {response.StatusCode}");
         }
 
         private async Task<T> GetAsync<T>(string relativeUrl)

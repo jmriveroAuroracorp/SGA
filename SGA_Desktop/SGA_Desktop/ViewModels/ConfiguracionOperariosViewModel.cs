@@ -11,6 +11,15 @@ using System.Windows.Data;
 namespace SGA_Desktop.ViewModels
 {
     /// <summary>
+    /// Opciones para el filtro de estado de operarios
+    /// </summary>
+    public enum FiltroEstadoOperario
+    {
+        Activos = 0,
+        Inactivos = 1
+    }
+
+    /// <summary>
     /// ViewModel para la pantalla de configuración de operarios desde Aurora
     /// </summary>
     public partial class ConfiguracionOperariosViewModel : ObservableObject
@@ -18,7 +27,9 @@ namespace SGA_Desktop.ViewModels
         #region Fields & Services
         private readonly OperariosConfiguracionService _operariosService;
         private readonly ConfiguracionesPredefinidasService _configuracionesService;
+        private readonly EmpleadosDisponiblesService _empleadosService;
         private readonly ICollectionView _operariosView;
+        private readonly ICollectionView _configuracionesView;
         #endregion
 
         #region Observable Properties
@@ -31,6 +42,8 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string filtroNombre = string.Empty;
 
+        [ObservableProperty]
+        private FiltroEstadoOperario filtroEstado = FiltroEstadoOperario.Activos; // Por defecto mostrar solo activos
 
         [ObservableProperty]
         private bool cargando = false;
@@ -48,12 +61,34 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string mensajeConfiguraciones = string.Empty;
 
+        [ObservableProperty]
+        private string filtroConfiguracion = string.Empty;
+
         // Propiedades para control de pestañas
         [ObservableProperty]
         private bool mostrandoOperarios = true;
 
         [ObservableProperty]
         private bool mostrandoConfiguraciones = false;
+
+        [ObservableProperty]
+        private bool mostrandoAltaSga = false;
+
+        // Propiedades para Alta SGA
+        [ObservableProperty]
+        private ObservableCollection<EmpleadoDisponibleDto> empleadosDisponibles = new();
+
+        [ObservableProperty]
+        private string filtroEmpleado = string.Empty;
+
+        [ObservableProperty]
+        private bool cargandoEmpleados = false;
+
+        [ObservableProperty]
+        private string mensajeEmpleados = "Cargando empleados disponibles...";
+
+        // Vista filtrable para empleados
+        private readonly ICollectionView _empleadosView;
         #endregion
 
         #region Constructor
@@ -61,16 +96,28 @@ namespace SGA_Desktop.ViewModels
         {
             _operariosService = operariosService;
             _configuracionesService = new ConfiguracionesPredefinidasService();
+            _empleadosService = new EmpleadosDisponiblesService();
             
             // Configurar vista filtrable
             _operariosView = CollectionViewSource.GetDefaultView(Operarios);
             _operariosView.Filter = FiltrarOperario;
+            
+            // Configurar vista filtrable para empleados
+            _empleadosView = CollectionViewSource.GetDefaultView(EmpleadosDisponibles);
+            _empleadosView.Filter = FiltrarEmpleado;
+            
+            // Configurar vista filtrable para configuraciones
+            _configuracionesView = CollectionViewSource.GetDefaultView(ConfiguracionesPredefinidas);
+            _configuracionesView.Filter = FiltrarConfiguracion;
             
             // Cargar datos iniciales
             _ = CargarOperariosAsync();
             
             // Cargar configuraciones predefinidas al inicializar
             _ = CargarConfiguracionesPredefinidasAsync();
+            
+            // Cargar empleados disponibles al inicializar (para la pestaña Alta SGA)
+            _ = CargarEmpleadosDisponiblesAsync();
         }
 
         public ConfiguracionOperariosViewModel() : this(new OperariosConfiguracionService())
@@ -180,7 +227,19 @@ namespace SGA_Desktop.ViewModels
         private void LimpiarFiltros()
         {
             FiltroNombre = string.Empty;
+            FiltroEmpleado = string.Empty;
+            FiltroConfiguracion = string.Empty;
+            FiltroEstado = FiltroEstadoOperario.Activos; // Resetear a activos por defecto
             _operariosView.Refresh();
+            _empleadosView?.Refresh();
+            _configuracionesView?.Refresh();
+        }
+
+        [RelayCommand]
+        private void LimpiarFiltrosConfiguracion()
+        {
+            FiltroConfiguracion = string.Empty;
+            _configuracionesView?.Refresh();
         }
         #endregion
 
@@ -193,7 +252,13 @@ namespace SGA_Desktop.ViewModels
                 Mensaje = "Cargando operarios con acceso SGA...";
                 
                 // Usar el endpoint que filtra por operarios con acceso SGA
-                var operariosDisponibles = await _operariosService.ObtenerOperariosDisponiblesAsync();
+                bool? soloActivos = FiltroEstado switch
+                {
+                    FiltroEstadoOperario.Activos => true,
+                    FiltroEstadoOperario.Inactivos => false,
+                    _ => true
+                };
+                var operariosDisponibles = await _operariosService.ObtenerOperariosDisponiblesAsync(soloActivos);
                 
                 if (operariosDisponibles != null)
                 {
@@ -206,12 +271,14 @@ namespace SGA_Desktop.ViewModels
                             Id = operario.Id,
                             Nombre = operario.Nombre,
                             CodigoCentro = operario.CodigoCentro,
+                            FechaBaja = operario.FechaBaja,
+                            Activo = operario.Activo,
                             Permisos = operario.Permisos,
                             Empresas = operario.Empresas,
                             Almacenes = operario.Almacenes,
                             CantidadPermisos = operario.CantidadPermisos,
                             CantidadAlmacenes = operario.CantidadAlmacenes,
-                            PlantillaAplicada = operario.PlantillaAplicada // ¡FALTABA ESTA LÍNEA!
+                            PlantillaAplicada = operario.PlantillaAplicada
                         };
                         Operarios.Add(operarioLista);
                     }
@@ -238,16 +305,81 @@ namespace SGA_Desktop.ViewModels
             if (item is not OperarioListaDto operario)
                 return false;
 
-
-            // Filtro por nombre
+            // Filtro por nombre (ignorando tildes y acentos)
             if (!string.IsNullOrWhiteSpace(FiltroNombre))
             {
                 var nombre = operario.Nombre ?? string.Empty;
-                if (!nombre.Contains(FiltroNombre, StringComparison.OrdinalIgnoreCase))
+                var nombreNormalizado = NormalizarTexto(nombre);
+                var filtroNormalizado = NormalizarTexto(FiltroNombre);
+                
+                if (!nombreNormalizado.Contains(filtroNormalizado, StringComparison.OrdinalIgnoreCase))
                     return false;
             }
 
             return true;
+        }
+
+        private bool FiltrarEmpleado(object item)
+        {
+            if (item is not EmpleadoDisponibleDto empleado)
+                return false;
+
+            // Filtro por nombre (ignorando tildes y acentos)
+            if (!string.IsNullOrWhiteSpace(FiltroEmpleado))
+            {
+                var nombre = empleado.Nombre ?? string.Empty;
+                var nombreNormalizado = NormalizarTexto(nombre);
+                var filtroNormalizado = NormalizarTexto(FiltroEmpleado);
+                
+                if (!nombreNormalizado.Contains(filtroNormalizado, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private bool FiltrarConfiguracion(object item)
+        {
+            if (item is not ConfiguracionPredefinidaDto configuracion)
+                return false;
+
+            // Filtro por nombre (ignorando tildes y acentos)
+            if (!string.IsNullOrWhiteSpace(FiltroConfiguracion))
+            {
+                var nombre = configuracion.Nombre ?? string.Empty;
+                var nombreNormalizado = NormalizarTexto(nombre);
+                var filtroNormalizado = NormalizarTexto(FiltroConfiguracion);
+                
+                if (!nombreNormalizado.Contains(filtroNormalizado, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Normaliza texto quitando tildes, acentos y signos de puntuación para facilitar la búsqueda
+        /// </summary>
+        private static string NormalizarTexto(string texto)
+        {
+            if (string.IsNullOrEmpty(texto))
+                return string.Empty;
+
+            // Quitar tildes y acentos
+            var textoNormalizado = texto.Normalize(System.Text.NormalizationForm.FormD);
+            var sinAcentos = new System.Text.StringBuilder();
+            
+            foreach (char c in textoNormalizado)
+            {
+                var categoria = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+                if (categoria != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    sinAcentos.Append(c);
+                }
+            }
+
+            // Convertir a minúsculas y quitar espacios extra
+            return sinAcentos.ToString().ToLowerInvariant().Trim();
         }
 
         private async Task MostrarMensajeAsync(string mensaje)
@@ -257,8 +389,16 @@ namespace SGA_Desktop.ViewModels
             // También mostrar en diálogo si es necesario
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                MessageBox.Show(mensaje, "Configuración de Operarios", 
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                var infoDialog = new WarningDialog(
+                    "Configuración de Operarios",
+                    mensaje,
+                    "\uE946" // ícono de información
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != infoDialog)
+                    infoDialog.Owner = owner;
+                infoDialog.ShowDialog();
             });
         }
         #endregion
@@ -266,7 +406,35 @@ namespace SGA_Desktop.ViewModels
         #region Property Changed Handlers
         partial void OnFiltroNombreChanged(string value)
         {
-            _operariosView?.Refresh();
+            // Solo filtrar si hay 3 o más caracteres para reducir carga
+            if (string.IsNullOrEmpty(value) || value.Length >= 3)
+            {
+                _operariosView?.Refresh();
+            }
+        }
+
+        partial void OnFiltroEstadoChanged(FiltroEstadoOperario value)
+        {
+            // Recargar operarios cuando cambie el filtro de estado
+            _ = CargarOperariosAsync();
+        }
+
+        partial void OnFiltroEmpleadoChanged(string value)
+        {
+            // Solo filtrar si hay 3 o más caracteres para reducir carga
+            if (string.IsNullOrEmpty(value) || value.Length >= 3)
+            {
+                _empleadosView?.Refresh();
+            }
+        }
+
+        partial void OnFiltroConfiguracionChanged(string value)
+        {
+            // Solo filtrar si hay 3 o más caracteres para reducir carga
+            if (string.IsNullOrEmpty(value) || value.Length >= 3)
+            {
+                _configuracionesView?.Refresh();
+            }
         }
 
         #endregion
@@ -277,6 +445,7 @@ namespace SGA_Desktop.ViewModels
         {
             MostrandoOperarios = true;
             MostrandoConfiguraciones = false;
+            MostrandoAltaSga = false;
         }
 
         [RelayCommand]
@@ -284,6 +453,18 @@ namespace SGA_Desktop.ViewModels
         {
             MostrandoOperarios = false;
             MostrandoConfiguraciones = true;
+            MostrandoAltaSga = false;
+        }
+
+        [RelayCommand]
+        private async Task CambiarAAltaSga()
+        {
+            MostrandoOperarios = false;
+            MostrandoConfiguraciones = false;
+            MostrandoAltaSga = true;
+            
+            // Cargar empleados disponibles cuando se cambie a esta pestaña
+            await CargarEmpleadosDisponiblesAsync();
         }
         #endregion
 
@@ -371,23 +552,53 @@ namespace SGA_Desktop.ViewModels
 
             try
             {
-                var result = MessageBox.Show(
-                    $"¿Estás seguro de que quieres eliminar la configuración '{configuracion.Nombre}'?",
-                    "Confirmar eliminación",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-
-                if (result == MessageBoxResult.Yes)
+                // Verificar si hay operarios asociados a esta configuración
+                var operariosAsociados = await _configuracionesService.VerificarOperariosAsociadosAsync(configuracion.Id);
+                
+                string mensajeConfirmacion;
+                if (operariosAsociados?.TieneOperariosAsociados == true)
                 {
-                    var exito = await _configuracionesService.EliminarConfiguracionPredefinidaAsync(configuracion.Id);
-                    if (exito)
+                    mensajeConfirmacion = $"¿Estás seguro de que quieres eliminar la configuración '{configuracion.Nombre}'?\n\n" +
+                                        $"⚠️ ADVERTENCIA: Esta configuración está aplicada a {operariosAsociados.CantidadOperarios} operario(s).\n\n" +
+                                        $"Al eliminar la configuración:\n" +
+                                        $"• Los operarios serán desasociados de la plantilla\n" +
+                                        $"• Su configuración actual (permisos, empresas, almacenes, límites) se mantendrá sin cambios\n" +
+                                        $"• Ya no recibirán actualizaciones automáticas de esta plantilla\n\n" +
+                                        $"¿Deseas continuar con la eliminación?";
+                }
+                else
+                {
+                    mensajeConfirmacion = $"¿Estás seguro de que quieres eliminar la configuración '{configuracion.Nombre}'?";
+                }
+
+                var confirmacionEliminar = new ConfirmationDialog(
+                    "Confirmar eliminación",
+                    mensajeConfirmacion
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != confirmacionEliminar)
+                    confirmacionEliminar.Owner = owner;
+                    
+                var result = confirmacionEliminar.ShowDialog();
+
+                if (result == true)
+                {
+                    var resultadoEliminacion = await _configuracionesService.EliminarConfiguracionPredefinidaAsync(configuracion.Id);
+                    if (resultadoEliminacion.Success)
                     {
-                        await MostrarMensajeAsync("Configuración eliminada exitosamente.");
+                        string mensajeExito = "Configuración eliminada exitosamente.";
+                        if (resultadoEliminacion.OperariosDesasociados > 0)
+                        {
+                            mensajeExito += $"\n\nSe desasociaron {resultadoEliminacion.OperariosDesasociados} operario(s) de esta plantilla.";
+                        }
+                        
+                        await MostrarMensajeAsync(mensajeExito);
                         await CargarConfiguracionesPredefinidasAsync();
                     }
                     else
                     {
-                        await MostrarMensajeAsync("Error al eliminar la configuración.");
+                        await MostrarMensajeAsync($"Error al eliminar la configuración: {resultadoEliminacion.Message}");
                     }
                 }
             }
@@ -428,6 +639,151 @@ namespace SGA_Desktop.ViewModels
             finally
             {
                 CargandoConfiguraciones = false;
+            }
+        }
+        #endregion
+
+        #region Comandos para Alta SGA
+        [RelayCommand]
+        private async Task CargarEmpleadosDisponibles()
+        {
+            await CargarEmpleadosDisponiblesAsync();
+        }
+
+        [RelayCommand]
+        private async Task DarAltaEmpleado(EmpleadoDisponibleDto? empleado = null)
+        {
+            if (empleado == null)
+            {
+                await MostrarMensajeAsync("No se ha seleccionado ningún empleado.");
+                return;
+            }
+
+            try
+            {
+                // Crear DTO para dar de alta
+                var darAltaDto = new DarAltaEmpleadoDto
+                {
+                    CodigoEmpleado = empleado.CodigoEmpleado,
+                    Nombre = empleado.Nombre,
+                    Contraseña = empleado.CodigoEmpleado.ToString(), // Por defecto, la contraseña es el código
+                    CodigoCentro = "1", // Por defecto
+                    PermisosIniciales = new List<short>(), // El API asigna el permiso 10 por defecto
+                    EmpresasIniciales = new List<short> { 1 }, // Empresa por defecto
+                    AlmacenesIniciales = new List<string>() // Sin almacenes iniciales
+                };
+
+                var resultado = await _empleadosService.DarAltaEmpleadoAsync(darAltaDto);
+
+                if (resultado.Exito)
+                {
+                    await MostrarMensajeAsync($"Empleado {empleado.Nombre} dado de alta correctamente en SGA.");
+                    
+                    // Remover de la lista de disponibles
+                    EmpleadosDisponibles.Remove(empleado);
+                    
+                    // Actualizar mensaje
+                    MensajeEmpleados = $"Se cargaron {EmpleadosDisponibles.Count} empleados disponibles.";
+                }
+                else
+                {
+                    await MostrarMensajeAsync($"Error al dar de alta al empleado {empleado.Nombre}.\n{resultado.Mensaje}");
+                }
+            }
+            catch (Exception ex)
+            {
+                await MostrarMensajeAsync($"Error al dar de alta empleado: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private async Task DarAltaSeleccionados()
+        {
+            var empleadosSeleccionados = EmpleadosDisponibles.Where(e => e.IsSelected).ToList();
+
+            if (!empleadosSeleccionados.Any())
+            {
+                await MostrarMensajeAsync("No se ha seleccionado ningún empleado para dar de alta.");
+                return;
+            }
+
+            try
+            {
+                var darAltaDtos = empleadosSeleccionados.Select(e => new DarAltaEmpleadoDto
+                {
+                    CodigoEmpleado = e.CodigoEmpleado,
+                    Nombre = e.Nombre,
+                    Contraseña = e.CodigoEmpleado.ToString(),
+                    CodigoCentro = "1",
+                    PermisosIniciales = new List<short>(), // El API asigna el permiso 10 por defecto
+                    EmpresasIniciales = new List<short> { 1 },
+                    AlmacenesIniciales = new List<string>()
+                }).ToList();
+
+                var resultados = await _empleadosService.DarAltaEmpleadosAsync(darAltaDtos);
+
+                var exitosos = resultados.Count(r => r.Exito);
+                var fallidos = resultados.Count(r => !r.Exito);
+
+                if (exitosos > 0)
+                {
+                    // Remover empleados exitosos de la lista
+                    foreach (var resultado in resultados.Where(r => r.Exito))
+                    {
+                        var empleado = EmpleadosDisponibles.FirstOrDefault(e => e.CodigoEmpleado == resultado.CodigoEmpleado);
+                        if (empleado != null)
+                        {
+                            EmpleadosDisponibles.Remove(empleado);
+                        }
+                    }
+                }
+
+                var mensaje = $"Proceso completado:\n✅ {exitosos} empleados dados de alta correctamente";
+                if (fallidos > 0)
+                {
+                    mensaje += $"\n❌ {fallidos} empleados con errores";
+                }
+
+                await MostrarMensajeAsync(mensaje);
+                MensajeEmpleados = $"Se cargaron {EmpleadosDisponibles.Count} empleados disponibles.";
+            }
+            catch (Exception ex)
+            {
+                await MostrarMensajeAsync($"Error al dar de alta empleados: {ex.Message}");
+            }
+        }
+
+        private async Task CargarEmpleadosDisponiblesAsync()
+        {
+            try
+            {
+                CargandoEmpleados = true;
+                MensajeEmpleados = "Cargando empleados disponibles...";
+                
+                var empleados = await _empleadosService.ObtenerEmpleadosDisponiblesAsync();
+
+                if (empleados != null)
+                {
+                    EmpleadosDisponibles.Clear();
+                    foreach (var empleado in empleados)
+                    {
+                        EmpleadosDisponibles.Add(empleado);
+                    }
+
+                    MensajeEmpleados = $"Se cargaron {empleados.Count} empleados disponibles para dar de alta.";
+                }
+                else
+                {
+                    MensajeEmpleados = "Error al cargar empleados disponibles.";
+                }
+            }
+            catch (Exception ex)
+            {
+                MensajeEmpleados = $"Error: {ex.Message}";
+            }
+            finally
+            {
+                CargandoEmpleados = false;
             }
         }
         #endregion

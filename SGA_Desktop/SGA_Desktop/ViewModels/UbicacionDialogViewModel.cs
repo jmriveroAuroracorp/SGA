@@ -179,7 +179,7 @@ namespace SGA_Desktop.ViewModels
 
 			if (!ok)
 			{
-				var dialog = new SGA_Desktop.Dialog.ConfirmationDialog(
+				var dialog = new SGA_Desktop.Dialog.WarningDialog(
 					$"Error al {(_isNew ? "crear" : "actualizar")} ubicación",
 					error ?? "Error desconocido",
 					"\uE814" // icono de advertencia

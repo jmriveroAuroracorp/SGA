@@ -1,4 +1,7 @@
 ﻿using SGA_Desktop.Helpers;
+using SGA_Desktop.ViewModels;
+using SGA_Desktop.Models;
+using SGA_Desktop.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,21 +21,63 @@ namespace SGA_Desktop.Views
 {
 	public partial class TraspasosView : Page
 	{
-		public TraspasosView()
-		{
-			InitializeComponent();
-			// Apuntamos el Frame interno al store
-			TraspasosNavigationStore.InnerFrame = InnerFrame;
-			// Navegamos automáticamente a la pestaña de Paletización
-			TraspasosNavigationStore.Navigate("Paletizacion");
-		}
+	public TraspasosView()
+	{
+		InitializeComponent();
+		// Ya no necesitamos frames - todo se maneja directamente en la vista
+	}
 
-		private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
-		{
-			if (sender is TabControl tc && tc.SelectedItem is TabItem ti && ti.Tag is string key)
-			{
-				TraspasosNavigationStore.Navigate(key);
-			}
-		}
+        private void PaletCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Grid grid && grid.Tag is PaletDto palet && DataContext is TraspasosViewModel vm)
+            {
+                vm.PaletSeleccionado = palet;
+            }
+        }
+
+        private void AbrirPaletLineas_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is PaletDto palet && DataContext is TraspasosViewModel vm)
+            {
+                vm.PaletSeleccionado = palet;
+                vm.AbrirPaletLineasCommand.Execute(null);
+            }
+        }
+
+        private async void CerrarPalet_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is PaletDto palet && DataContext is TraspasosViewModel vm)
+            {
+                vm.PaletSeleccionado = palet;
+                await vm.CerrarPaletCommand.ExecuteAsync(null);
+            }
+        }
+
+        private async void ReabrirPalet_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is PaletDto palet && DataContext is TraspasosViewModel vm)
+            {
+                vm.PaletSeleccionado = palet;
+                await vm.ReabrirPaletCommand.ExecuteAsync(null);
+            }
+        }
+
+        private async void TraspasarPalet_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is PaletDto palet && DataContext is TraspasosViewModel vm)
+            {
+                vm.PaletSeleccionado = palet;
+                await vm.TraspasarPaletCommand.ExecuteAsync(null);
+            }
+        }
+
+        private async void ImprimirPalet_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is PaletDto palet && DataContext is TraspasosViewModel vm)
+            {
+                vm.PaletSeleccionado = palet;
+                await vm.ImprimirPaletCommand.ExecuteAsync(null);
+            }
+        }
 	}
 }

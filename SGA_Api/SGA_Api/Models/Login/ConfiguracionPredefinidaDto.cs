@@ -22,6 +22,9 @@ namespace SGA_Api.Models.Login
         // Usuarios de auditoría
         public int? UsuarioCreacion { get; set; }
         public int? UsuarioModificacion { get; set; }
+        
+        // Contador de operarios usando esta configuración
+        public int OperariosUsando { get; set; } = 0;
     }
 
     /// <summary>

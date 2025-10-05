@@ -22,6 +22,7 @@ namespace SGA_Api.Data
         public DbSet<Periodo> Periodos { get; set; }
 		public DbSet<Empresa> Empresas { get; set; } = default!;
 		public DbSet<Articulo> Articulos { get; set; }
+        public DbSet<VAuxiliarEmpleado> VAuxiliarEmpleados { get; set; }
         
         // Vista para los alérgenos de las etiquetas
 		public DbSet<VisArticulo> VisArticulos { get; set; } = null!;
@@ -35,8 +36,16 @@ namespace SGA_Api.Data
             // Tabla operarios
             modelBuilder.Entity<Operario>()
                 .ToTable("operarios")
-                .HasKey(o => o.Id)
-                .HasAnnotation("SqlServer:UseSqlOutputClause", false); // Deshabilitar OUTPUT clause para evitar conflictos con triggers
+                .HasKey(o => o.Id);
+
+            // Configurar para evitar OUTPUT clause en operarios (tabla con triggers)
+            modelBuilder.Entity<Operario>()
+                .Property(o => o.MRH_LimiteInventarioEuros)
+                .HasAnnotation("SqlServer:UseSqlOutputClause", false);
+            
+            modelBuilder.Entity<Operario>()
+                .Property(o => o.MRH_LimiteInventarioUnidades)
+                .HasAnnotation("SqlServer:UseSqlOutputClause", false);
 
             // Tabla MRH_accesosOperariosSGA
             modelBuilder.Entity<AccesoOperario>()
@@ -143,6 +152,11 @@ namespace SGA_Api.Data
 			modelBuilder.Entity<AcumuladoStock>()
 				.ToTable("AcumuladoStock")
 				.HasNoKey(); // Vista sin clave primaria definida
+
+			// Configuración para VAuxiliarEmpleado
+			modelBuilder.Entity<VAuxiliarEmpleado>()
+				.ToTable("VAuxiliarEmpleado")
+				.HasKey(ve => new { ve.CodigoEmpresa, ve.CodigoEmpleado });
 
 		}
 	}

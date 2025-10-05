@@ -25,10 +25,10 @@ namespace SGA_Desktop.ViewModels
 		private string? comentario;
 
 		[ObservableProperty]
-		private decimal? altura = 0;
+		private decimal? altura;
 
 		[ObservableProperty]
-		private decimal? peso = 0;
+		private decimal? peso;
 
 		public ConfirmationWithListDialogViewModel(
 			IEnumerable<LineaPaletDto> lineas,
@@ -90,25 +90,19 @@ namespace SGA_Desktop.ViewModels
 					.Distinct()
 					.ToList();
 
-				// Mensaje de depuración: ubicaciones actuales enviadas
-				MessageBox.Show(string.Join(", ", ubicacionesActuales), "Ubicaciones actuales enviadas al backend");
-
 				var lista = await _ubicacionesService.ObtenerUbicacionesVaciasOEspAsync(
 					SessionManager.EmpresaSeleccionada.Value, codigoAlmacen, ubicacionesActuales);
 
-				// Mensaje de depuración: ubicaciones recibidas del backend
-				MessageBox.Show(string.Join(", ", lista.Select(u => u.Ubicacion)), "Ubicaciones recibidas del backend");
-
 				Ubicaciones = lista
 					.Select(u => new UbicacionDto
-					{
-						CodigoAlmacen = u.CodigoAlmacen,
-						Ubicacion = u.Ubicacion
-					}).ToList();
+				{
+					CodigoAlmacen = u.CodigoAlmacen,
+					Ubicacion = u.Ubicacion
+				}).ToList();
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show($"Error al cargar ubicaciones: {ex.Message}");
+				// En caso de error, inicializar lista vacía
 				Ubicaciones = new List<UbicacionDto>();
 			}
 		}

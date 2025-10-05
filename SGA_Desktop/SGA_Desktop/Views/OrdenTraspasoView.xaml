@@ -8,9 +8,7 @@
       mc:Ignorable="d"
       Background="{StaticResource BrushFondo}">
 
-    <Page.DataContext>
-        <vm:OrdenTraspasoViewModel />
-    </Page.DataContext>
+    <!-- DataContext se asigna en el código-behind para mantener la misma instancia -->
 
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -188,53 +186,38 @@
 
                                             <!-- Estado Badge -->
                                             <Border Grid.Column="1" 
-                                                    Background="#F8F9FA" 
-                                                    BorderBrush="#DEE2E6" 
                                                     BorderThickness="1" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3"
+                                                    CornerRadius="4" 
+                                                    Padding="8,4"
                                                     VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding EstadoFormateado}" 
-                                                           FontWeight="SemiBold" 
+                                                <TextBlock Text="{Binding EstadoTexto}" 
+                                                           FontWeight="Bold" 
                                                            FontSize="12"
+                                                           Foreground="White"
                                                            HorizontalAlignment="Center">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="PENDIENTE">
-                                                                    <Setter Property="Foreground" Value="#FD7E14"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
-                                                                    <Setter Property="Foreground" Value="#0D6EFD"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="COMPLETADA">
-                                                                    <Setter Property="Foreground" Value="#198754"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Estado}" Value="CANCELADA">
-                                                                    <Setter Property="Foreground" Value="#DC3545"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
                                                 </TextBlock>
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Estado}" Value="PENDIENTE">
-                                                                <Setter Property="Background" Value="#FFF3CD"/>
-                                                                <Setter Property="BorderBrush" Value="#FD7E14"/>
+                                                                <Setter Property="Background" Value="#FD7E14"/>
+                                                                <Setter Property="BorderBrush" Value="#E67E22"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Estado}" Value="EN_PROCESO">
-                                                                <Setter Property="Background" Value="#E7F3FF"/>
-                                                                <Setter Property="BorderBrush" Value="#0D6EFD"/>
+                                                                <Setter Property="Background" Value="#0D6EFD"/>
+                                                                <Setter Property="BorderBrush" Value="#0A58CA"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Estado}" Value="COMPLETADA">
-                                                                <Setter Property="Background" Value="#D1E7DD"/>
-                                                                <Setter Property="BorderBrush" Value="#198754"/>
+                                                                <Setter Property="Background" Value="#198754"/>
+                                                                <Setter Property="BorderBrush" Value="#146C43"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Estado}" Value="CANCELADA">
-                                                                <Setter Property="Background" Value="#F8D7DA"/>
-                                                                <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                                <Setter Property="Background" Value="#DC3545"/>
+                                                                <Setter Property="BorderBrush" Value="#B02A37"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="SIN_ASIGNAR">
+                                                                <Setter Property="Background" Value="#6C757D"/>
+                                                                <Setter Property="BorderBrush" Value="#5A6268"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -339,7 +322,7 @@
                                                             CornerRadius="8" 
                                                             Height="12">
                                                         <Grid ClipToBounds="True">
-                                                            <Path Fill="{Binding PorcentajeProgreso, Converter={StaticResource ProgressColorConverter}}" 
+                                                            <Path Fill="{Binding ColorBarraProgreso}" 
                                                                   HorizontalAlignment="Left"
                                                                   VerticalAlignment="Stretch"
                                                                   Margin="1">

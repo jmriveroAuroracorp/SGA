@@ -81,6 +81,22 @@ namespace SGA_Desktop.ViewModels
 				// ✅ Caso 2: Login OK
 				SessionManager.UsuarioActual = respuesta;
 
+				// Inicializar notificaciones SignalR después del login exitoso
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						// Verificar si la aplicación se está cerrando antes de continuar
+						if (SessionManager.IsClosing)
+							return;
+							
+						await NotificacionesManager.InicializarAsync();
+					}
+					catch (Exception ex)
+					{
+					}
+				});
+
 				try
 				{
 					await loginService.RegistrarLogEventoAsync(new LogEvento

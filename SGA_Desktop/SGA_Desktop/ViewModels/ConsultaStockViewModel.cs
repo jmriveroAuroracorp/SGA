@@ -156,6 +156,7 @@ namespace SGA_Desktop.ViewModels
 				if (SetProperty(ref _filtroBusqueda, value))
 				{
 					ResultadosStockPorUbicacionView.Refresh();
+					OnPropertyChanged(nameof(CanClearFilters));
 				}
 			}
 		}
@@ -175,6 +176,38 @@ namespace SGA_Desktop.ViewModels
 
 		public IRelayCommand BuscarCommand =>
 			IsArticleMode ? BuscarPorArticuloCommand : BuscarPorUbicacionCommand;
+
+		/// <summary>
+		/// Determina si el botón de refrescar debe estar habilitado
+		/// </summary>
+		public bool CanRefresh =>
+			(IsArticleMode && StockFiltrado.Any()) ||
+			(IsLocationMode && ResultadosStockPorUbicacion.Any());
+
+		/// <summary>
+		/// Determina si el botón de limpiar filtros debe estar habilitado
+		/// </summary>
+		public bool CanClearFilters =>
+			(IsArticleMode && (!string.IsNullOrWhiteSpace(FiltroArticulo) || 
+							   !string.IsNullOrWhiteSpace(FiltroPartida) || 
+							   !string.IsNullOrWhiteSpace(FiltroUbicacion) ||
+							   (AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas"))) ||
+			(IsLocationMode && (!string.IsNullOrWhiteSpace(FiltroUbicacion) || 
+								!string.IsNullOrWhiteSpace(FiltroBusqueda) ||
+								(AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas")));
+
+		/// <summary>
+		/// Determina si el botón de exportar Excel debe estar habilitado
+		/// </summary>
+		public bool CanExportExcel =>
+			(IsArticleMode && StockFiltrado.Any()) ||
+			(IsLocationMode && ResultadosStockPorUbicacion.Any());
+
+		/// <summary>
+		/// Determina si el botón de imprimir etiqueta debe estar habilitado
+		/// </summary>
+		public bool CanImprimirEtiqueta =>
+			ArticuloSeleccionadoParaImprimir != null;
 		
 		
 		#endregion
@@ -185,6 +218,7 @@ namespace SGA_Desktop.ViewModels
 		{
 			OnPropertyChanged(nameof(CanEnableInputs));
 			OnPropertyChanged(nameof(CanEnableLocation));
+			OnPropertyChanged(nameof(CanClearFilters));
 		}
 
 		partial void OnAlmacenSeleccionadoComboChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
@@ -192,6 +226,9 @@ namespace SGA_Desktop.ViewModels
 			if (newValue is null) return;
 
 			AlmacenSeleccionado = newValue.CodigoAlmacen;
+			OnPropertyChanged(nameof(CanClearFilters));
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanExportExcel));
 			_ = LoadUbicacionesAsync(newValue.CodigoAlmacen);
 		}
 
@@ -200,6 +237,16 @@ namespace SGA_Desktop.ViewModels
 
 
 
+
+		partial void OnFiltroPartidaChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanClearFilters));
+		}
+
+		partial void OnFiltroUbicacionChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanClearFilters));
+		}
 
 		partial void OnIsArticleModeChanged(bool oldValue, bool newValue)
 		{
@@ -210,6 +257,9 @@ namespace SGA_Desktop.ViewModels
 				SwitchMode(resetFilters: false, setArticle: true);
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanClearFilters));
+			OnPropertyChanged(nameof(CanExportExcel));
 		}
 
 
@@ -222,6 +272,9 @@ namespace SGA_Desktop.ViewModels
 				SwitchMode(resetFilters: false, setArticle: false);
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanClearFilters));
+			OnPropertyChanged(nameof(CanExportExcel));
 		}
 
 		partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? oldValue, ArticuloResumenDto? newValue)
@@ -244,6 +297,11 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(ArticuloMostrado));
 			OnPropertyChanged(nameof(ArticulosUnicosVisibility));
 			OnPropertyChanged(nameof(ListViewVisibility));
+		}
+
+		partial void OnArticuloSeleccionadoParaImprimirChanged(StockDto? oldValue, StockDto? newValue)
+		{
+			OnPropertyChanged(nameof(CanImprimirEtiqueta));
 		}
 
 
@@ -271,6 +329,17 @@ namespace SGA_Desktop.ViewModels
 				FiltroBusqueda = string.Empty;
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
+			
+			// Limpiar resultados al limpiar filtros
+			ResultadosStock.Clear();
+			ResultadosStockPorUbicacion.Clear();
+			StockFiltrado.Clear();
+			ArticuloMostrado = string.Empty;
+			
+			// Notificar cambios
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanClearFilters));
+			OnPropertyChanged(nameof(CanExportExcel));
 		}
 
 
@@ -373,6 +442,8 @@ namespace SGA_Desktop.ViewModels
 				OnPropertyChanged(nameof(ArticuloMostrado));
 				OnPropertyChanged(nameof(ArticulosUnicosVisibility));
 				OnPropertyChanged(nameof(ListViewVisibility));
+				OnPropertyChanged(nameof(CanRefresh));
+				OnPropertyChanged(nameof(CanExportExcel));
 
 			}
 			catch (Exception ex)
@@ -425,6 +496,8 @@ namespace SGA_Desktop.ViewModels
 
 				// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
 				LlenarResultados(lista, filterByPermissions: true);
+				OnPropertyChanged(nameof(CanRefresh));
+				OnPropertyChanged(nameof(CanExportExcel));
 			}
 			catch (Exception ex)
 			{
@@ -609,6 +682,27 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (!string.IsNullOrWhiteSpace(descripcion))
 				Clipboard.SetText(descripcion);
+		}
+
+		[RelayCommand]
+		private async Task RefrescarAsync()
+		{
+			try
+			{
+				// Ejecutar la búsqueda actual según el modo activo
+				if (IsArticleMode)
+				{
+					await BuscarPorArticuloAsync();
+				}
+				else if (IsLocationMode)
+				{
+					await BuscarPorUbicacionAsync();
+				}
+			}
+			catch (Exception ex)
+			{
+				MostrarError("Error al refrescar", ex);
+			}
 		}
 
 
@@ -800,6 +894,11 @@ namespace SGA_Desktop.ViewModels
 				ResultadosStockPorUbicacion.Clear();
 				filtrada.ForEach(x => ResultadosStockPorUbicacion.Add(x));
 			}
+			
+			// Notificar cambios en las propiedades calculadas
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanClearFilters));
+			OnPropertyChanged(nameof(CanExportExcel));
 		}
 
 

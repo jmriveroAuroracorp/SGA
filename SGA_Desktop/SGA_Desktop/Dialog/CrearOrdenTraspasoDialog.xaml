@@ -251,7 +251,9 @@
                                                                VerticalAlignment="Center"
                                                                Margin="0,0,6,0"
                                                                MinWidth="50"/>
-                                                    <ComboBox ItemsSource="{Binding OperariosViewLinea}"
+                                                    
+                                                    <!-- ComboBox con filtrado integrado -->
+                                                    <ComboBox ItemsSource="{Binding OperariosViewLinea, FallbackValue={x:Null}}"
                                                               DisplayMemberPath="NombreOperario"
                                                               SelectedItem="{Binding OperarioSeleccionado, UpdateSourceTrigger=PropertyChanged}"
                                                               Text="{Binding FiltroOperarioLinea, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -261,7 +263,9 @@
                                                               IsEditable="True"
                                                               IsTextSearchEnabled="False"
                                                               StaysOpenOnEdit="True"
-                                                              MaxDropDownHeight="200">
+                                                              MaxDropDownHeight="200"
+                                                              HorizontalContentAlignment="Left"
+                                                              VerticalContentAlignment="Center">
                                                         <i:Interaction.Triggers>
                                                             <i:EventTrigger EventName="SelectionChanged">
                                                                 <i:InvokeCommandAction Command="{Binding DataContext.NotificarCambioEnLineasCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
@@ -270,6 +274,9 @@
                                                                 <i:InvokeCommandAction Command="{Binding DataContext.LimpiarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
                                                             </i:EventTrigger>
                                                             <i:EventTrigger EventName="TextChanged">
+                                                                <i:InvokeCommandAction Command="{Binding DataContext.ActualizarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                            </i:EventTrigger>
+                                                            <i:EventTrigger EventName="PreviewTextInput">
                                                                 <i:InvokeCommandAction Command="{Binding DataContext.ActualizarFiltroLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
                                                             </i:EventTrigger>
                                                         </i:Interaction.Triggers>

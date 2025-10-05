@@ -20,9 +20,11 @@ namespace SGA_Desktop.ViewModels
 		private readonly UbicacionesService _ubicService;
 		private readonly LoginService _loginService; // <- para impresoras
 
-		[ObservableProperty] private string? errorMessage;
-		[ObservableProperty]
-		private LineaPaletDto? lineaSeleccionada;
+	[ObservableProperty] private string? errorMessage;
+	[ObservableProperty] private string mensaje = "Listo";
+	[ObservableProperty] private bool cargando = false;
+	[ObservableProperty]
+	private LineaPaletDto? lineaSeleccionada;
 		partial void OnLineaSeleccionadaChanged(LineaPaletDto? value)
 		{
 			EliminarLineaSeleccionadaCommand.NotifyCanExecuteChanged();
@@ -35,7 +37,8 @@ namespace SGA_Desktop.ViewModels
 			CerrarPaletCommand.NotifyCanExecuteChanged();
 			ReabrirPaletCommand.NotifyCanExecuteChanged();
 			ImprimirPaletCommand.NotifyCanExecuteChanged();
-
+			VerPaletSeleccionadoCommand.NotifyCanExecuteChanged();
+			ImprimirPaletSeleccionadoCommand.NotifyCanExecuteChanged();
 
 			OnPropertyChanged(nameof(PuedeCerrarPalet));
 			OnPropertyChanged(nameof(PuedeReabrirPalet));
@@ -47,8 +50,12 @@ namespace SGA_Desktop.ViewModels
 		public IAsyncRelayCommand LoadPaletsCommand { get; }
 		public IRelayCommand AbrirFiltrosCommand { get; }
 		public IAsyncRelayCommand LoadLineasCommand { get; }
-		public IRelayCommand CrearPaletCommand { get; }
-		public IRelayCommand AbrirPaletLineasCommand { get; }
+	public IRelayCommand CrearPaletCommand { get; }
+	public IRelayCommand AbrirPaletLineasCommand { get; }
+	public IRelayCommand<PaletDto> SeleccionarPaletCommand { get; }
+	public IRelayCommand CerrarContenidoCommand { get; }
+	public IRelayCommand VerPaletSeleccionadoCommand { get; }
+	public IRelayCommand ImprimirPaletSeleccionadoCommand { get; }
 
 		public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; }
 
@@ -64,10 +71,20 @@ namespace SGA_Desktop.ViewModels
 			CrearPaletCommand = new RelayCommand(AbrirPaletCrearDialog);
 			LoadLineasCommand = new AsyncRelayCommand(LoadLineasPaletAsync);
 			AbrirPaletLineasCommand = new RelayCommand(AbrirPaletLineas, PuedeAbrirPaletLineas);
+			SeleccionarPaletCommand = new RelayCommand<PaletDto>(SeleccionarPalet);
+			CerrarContenidoCommand = new RelayCommand(CerrarContenido);
+			VerPaletSeleccionadoCommand = new RelayCommand(VerPaletSeleccionado, PuedeVerPalet);
+			ImprimirPaletSeleccionadoCommand = new RelayCommand(ImprimirPaletSeleccionado, PuedeImprimirPalet);
 			ImpresorasDisponibles = new ObservableCollection<ImpresoraDto>();
 
 			// Inicialización común
-			_ = LoadImpresorasAsync();
+			
+			// Solo cargar impresoras si la aplicación no se está cerrando
+			if (!SessionManager.IsClosing)
+			{
+				_ = LoadImpresorasAsync();
+			}
+			
 			_ = InitializeAsync();
 
 		}
@@ -84,22 +101,75 @@ namespace SGA_Desktop.ViewModels
 			await Task.CompletedTask;
 		}
 
-		private async Task LoadPaletsAsync()
+	private async Task LoadPaletsAsync()
+	{
+		try
 		{
-			try
-			{
-				var lista = await _paletService.ObtenerPaletsAsync(
-					codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value);
-				PaletsView.Clear();
-				foreach (var p in lista)
-					PaletsView.Add(p);
-				ErrorMessage = null;
-			}
-			catch (Exception ex)
-			{
-				ErrorMessage = ex.Message;
-			}
+			Cargando = true;
+			Mensaje = "Cargando palets...";
+			
+			var lista = await _paletService.ObtenerPaletsAsync(
+				codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value);
+			PaletsView.Clear();
+			foreach (var p in lista)
+				PaletsView.Add(p);
+			
+			Mensaje = $"Se cargaron {lista.Count} palets correctamente";
+			ErrorMessage = null;
 		}
+		catch (Exception ex)
+		{
+			ErrorMessage = ex.Message;
+			Mensaje = "Error al cargar palets";
+		}
+		finally
+		{
+			Cargando = false;
+		}
+	}
+
+	private void SeleccionarPalet(PaletDto? palet)
+	{
+		if (palet != null)
+		{
+			PaletSeleccionado = palet;
+			Mensaje = $"Palet {palet.Codigo} seleccionado";
+		}
+	}
+
+	private void CerrarContenido()
+	{
+		PaletSeleccionado = null;
+		Mensaje = "Contenido cerrado";
+	}
+
+	private void VerPaletSeleccionado()
+	{
+		if (PaletSeleccionado != null)
+		{
+			Mensaje = $"Mostrando contenido del palet {PaletSeleccionado.Codigo}";
+			// El contenido se muestra automáticamente por el binding
+		}
+	}
+
+	private bool PuedeVerPalet()
+	{
+		return PaletSeleccionado != null;
+	}
+
+	private void ImprimirPaletSeleccionado()
+	{
+		if (PaletSeleccionado != null)
+		{
+			// Llamar al comando de impresión existente
+			ImprimirPaletCommand.Execute(PaletSeleccionado);
+		}
+	}
+
+	private bool PuedeImprimirPalet()
+	{
+		return PaletSeleccionado != null;
+	}
 
 		private async Task LoadLineasPaletAsync()
 		{
@@ -530,6 +600,10 @@ namespace SGA_Desktop.ViewModels
 
 		private async Task LoadImpresorasAsync()
 		{
+			// Si la aplicación se está cerrando, no cargar impresoras
+			if (SessionManager.IsClosing)
+				return;
+
 			try
 			{
 				var lista = await _printService.ObtenerImpresorasAsync();
@@ -540,11 +614,15 @@ namespace SGA_Desktop.ViewModels
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show(
-					$"Error al cargar impresoras: {ex.Message}",
-					"Error de impresoras",
-					MessageBoxButton.OK,
-					MessageBoxImage.Error);
+				// Solo mostrar el diálogo si la aplicación no se está cerrando
+				if (!SessionManager.IsClosing)
+				{
+					MessageBox.Show(
+						$"Error al cargar impresoras: {ex.Message}",
+						"Error de impresoras",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
+				}
 			}
 		}
 

@@ -42,7 +42,7 @@ namespace SGA_Desktop.ViewModels
 			LoadTraspasosCommand = new AsyncRelayCommand(LoadTraspasosAsync);
 			AbrirFiltrosCommand = new RelayCommand(AbrirFiltros);
 			NuevoTraspasoCommand = new RelayCommand(AbrirTraspasoPaletDialog);
-			//FinalizarTraspasoCommand = new AsyncRelayCommand(FinalizarTraspasoAsync, PuedeFinalizarTraspaso);
+			FinalizarTraspasoCommand = new AsyncRelayCommand(FinalizarTraspasoAsync, PuedeFinalizarTraspaso);
 			CancelarTraspasoCommand = new AsyncRelayCommand(CancelarTraspasoAsync, PuedeCancelarTraspaso);
 
 			_ = InitializeAsync();
@@ -163,34 +163,35 @@ namespace SGA_Desktop.ViewModels
 				   TraspasoSeleccionado.CodigoEstado?.Equals("PENDIENTE", StringComparison.OrdinalIgnoreCase) == true;
 		}
 
-		//private async Task FinalizarTraspasoAsync()
-		//{
-		//	if (TraspasoSeleccionado is null) return;
+		private async Task FinalizarTraspasoAsync()
+		{
+			if (TraspasoSeleccionado is null) return;
 
-		//	var dlgVm = new TraspasosFinalizarDialogViewModel(TraspasoSeleccionado, _traspasosService);
-		//	var dlg = new TraspasosFinalizarDialog
-		//	{
-		//		Owner = Application.Current.MainWindow,
-		//		DataContext = dlgVm
-		//	};
+			var confirm = new ConfirmationDialog(
+				"Finalizar traspaso",
+				$"¿Estás seguro de finalizar el traspaso del palet {TraspasoSeleccionado.PaletId}?");
+			if (confirm.ShowDialog() != true) return;
 
-		//	if (dlg.ShowDialog() != true) return;
+			try
+			{
+				var dto = new FinalizarTraspasoDto
+				{
+					UbicacionDestino = TraspasoSeleccionado.UbicacionDestino,
+					UsuarioFinalizacionId = SessionManager.UsuarioActual?.operario ?? 0,
+					FechaFinalizacion = DateTime.Now
+				};
 
-		//	try
-		//	{
-		//		var dto = dlgVm.GetFinalizarDto();
+				await _traspasosService.FinalizarTraspasoAsync(TraspasoSeleccionado.Id, dto);
 
-		//		await _traspasosService.FinalizarTraspasoAsync(TraspasoSeleccionado.Id, dto);
+				await ActualizarTraspasoEnLista(TraspasoSeleccionado.Id);
 
-		//		await ActualizarTraspasoEnLista(TraspasoSeleccionado.Id);
-
-		//		ErrorMessage = null;
-		//	}
-		//	catch (Exception ex)
-		//	{
-		//		ErrorMessage = ex.Message;
-		//	}
-		//}
+				ErrorMessage = null;
+			}
+			catch (Exception ex)
+			{
+				ErrorMessage = ex.Message;
+			}
+		}
 
 		private bool PuedeCancelarTraspaso()
 		{

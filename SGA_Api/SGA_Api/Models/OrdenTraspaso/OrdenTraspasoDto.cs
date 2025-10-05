@@ -73,6 +73,7 @@ namespace SGA_Api.Models.OrdenTraspaso
         public string? UbicacionDestino { get; set; }
         public string? PaletDestino { get; set; }
         public int IdOperarioAsignado { get; set; }
+        public string Estado { get; set; } = "PENDIENTE";
     }
 
     public class ActualizarOrdenTraspasoDto

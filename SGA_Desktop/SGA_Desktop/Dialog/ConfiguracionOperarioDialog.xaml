@@ -279,20 +279,41 @@
                     Background="{StaticResource BrushSecundario1}"
                     CornerRadius="0,0,6,6"
                     Padding="20,10">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Guardar"
-                            Width="100"
-                            Height="35"
-                            Margin="0,0,10,0"
-                            Click="GuardarButton_Click"
-                            Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
                     
-                    <Button Content="Cancelar"
-                            Width="100"
-                            Height="35"
-                            Click="CancelarButton_Click"
-                            Style="{StaticResource EstiloBotonSecundario}"/>
-                </StackPanel>
+                    <!-- Botones de la izquierda -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left">
+                        <Button x:Name="BtnDarDeBaja"
+                                Content="{Binding TextoBotonDarBajaAlta}"
+                                Width="120"
+                                Height="35"
+                                Margin="0,0,10,0"
+                                Click="DarDeBajaAltaButton_Click"
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Background="{Binding ColorBotonDarBajaAlta}"
+                                Foreground="White"/>
+                    </StackPanel>
+                    
+                    <!-- Botones de la derecha -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Guardar"
+                                Width="100"
+                                Height="35"
+                                Margin="0,0,10,0"
+                                Click="GuardarButton_Click"
+                                Style="{StaticResource EstiloBotonPrincipal}"/>
+                        
+                        <Button Content="Cancelar"
+                                Width="100"
+                                Height="35"
+                                Click="CancelarButton_Click"
+                                Style="{StaticResource EstiloBotonSecundario}"/>
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Border>

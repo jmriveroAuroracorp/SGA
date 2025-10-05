@@ -52,6 +52,22 @@ public partial class EmpresaViewModel : ObservableObject
 			return;
 		}
 
+		// Verificar si ya está en la misma empresa
+		if (EmpresaSeleccionada.Codigo == SessionManager.EmpresaSeleccionada)
+		{
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+					 ?? Application.Current.MainWindow;
+			var aviso = new WarningDialog(
+				"Información",
+				"Ya estás trabajando con esta empresa.",
+				"\uE946" // ícono de información
+			);
+			if (owner != null && owner != aviso)
+				aviso.Owner = owner;
+			aviso.ShowDialog();
+			return;
+		}
+
 		// --- Aquí, tu diálogo personalizado ---
 		var owner2 = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
 					 ?? Application.Current.MainWindow;
@@ -88,8 +104,8 @@ public partial class EmpresaViewModel : ObservableObject
 		// 3) Limpia la caché de vistas
 		NavigationStore.ClearCache();
 
-		// 4) Navega de nuevo a ConsultaStock si quieres
-		//NavigationStore.Navigate("ConsultaStock");
+		// 4) Navega a la vista de bienvenida
+		NavigationStore.Navigate("Welcome");
 	}
 
 }

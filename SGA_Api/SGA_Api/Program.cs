@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using SGA_Api.Data;
+using SGA_Api.Hubs;
 using SGA_Api.Logic;
 using SGA_Api.Middleware;
 using SGA_Api.Services;
 using System.IO;
-using SGA_Api.Middleware;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,7 +42,12 @@ builder.Services.AddScoped<IConteosService>(provider =>
         provider.GetRequiredService<ILogger<ConteosService>>()
     ));
 builder.Services.AddScoped<IOrdenTraspasoService, OrdenTraspasoService>();
+builder.Services.AddScoped<INotificacionesTraspasosService, NotificacionesTraspasosService>();
+builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
 builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
+
+// Configuración de SignalR
+builder.Services.AddSignalR();
 
 // CORS aqu
 builder.Services.AddCors(options =>
@@ -75,5 +80,8 @@ app.UseMiddleware<TokenValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Mapeo del Hub de SignalR para notificaciones de traspasos
+app.MapHub<NotificacionesTraspasosHub>("/notificacionesTraspasosHub");
 
 app.Run();

@@ -4,7 +4,7 @@
         xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
         Title="Traspaso de Stock"
         Width="600"
-        Height="500"
+        Height="540"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"

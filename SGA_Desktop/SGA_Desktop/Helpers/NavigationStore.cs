@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Windows.Controls;
+using System.Windows;
 using SGA_Desktop.Views;
 
 namespace SGA_Desktop.Helpers
@@ -12,17 +13,52 @@ namespace SGA_Desktop.Helpers
 
 		private static readonly Dictionary<string, Page> _pageCache = new();
 
+		// Evento para solicitar cambio de header
+		public static event EventHandler<string>? HeaderChangeRequested;
+
+		/// <summary>
+		/// Pre-carga una página sin navegar a ella (útil para inicialización en segundo plano)
+		/// </summary>
+		public static void PreloadPage(string pageKey)
+		{
+			if (!_pageCache.ContainsKey(pageKey))
+			{
+				Page page = pageKey switch
+				{
+					"Welcome" => new WelcomeView(),
+					"ConsultaStock" => new ConsultaStockView(),
+					"Traspasos" => new TraspasosView(),
+					"Ubicaciones" => new GestionUbicacionesView(),
+					"Etiquetas" => new ImpresionEtiquetasView(),
+					"SeleccionEmpresa" => new EmpresaView(),
+					"Paletizacion" => new PaletizacionView(),
+					"TraspasosStock" => new TraspasosStockView(),
+					"Inventario" => new InventarioView(),
+					"OrdenTraspaso" => new OrdenTraspasoView(),
+					"ControlesRotativos" => new ControlesRotativosView(),
+					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
+					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
+				};
+
+				_pageCache[pageKey] = page;
+				System.Diagnostics.Debug.WriteLine($"Página pre-cargada y cacheada: {pageKey}");
+			}
+			else
+			{
+				System.Diagnostics.Debug.WriteLine($"Página ya está cacheada: {pageKey}");
+			}
+		}
+
 		public static void Navigate(string pageKey)
 		{
-			System.Diagnostics.Debug.WriteLine($"NavigationStore.Navigate: {pageKey}");
 			
 			if (!_pageCache.TryGetValue(pageKey, out var page))
 			{
-				System.Diagnostics.Debug.WriteLine($"Creando nueva página: {pageKey}");
 				
 				// Sólo se crea la página la primera vez
 				page = pageKey switch
 				{
+					"Welcome" => new WelcomeView(),
 					"ConsultaStock" => new ConsultaStockView(),
 					"Traspasos" => new TraspasosView(),
 					"Ubicaciones" => new GestionUbicacionesView(),
@@ -65,6 +101,14 @@ namespace SGA_Desktop.Helpers
 			_pageCache.Clear();
 			if (MainFrame.Content != null)
 				MainFrame.Content = null;
+		}
+
+		/// <summary>
+		/// Solicita cambiar el header del MainWindow
+		/// </summary>
+		public static void RequestHeaderChange(string newHeader)
+		{
+			HeaderChangeRequested?.Invoke(null, newHeader);
 		}
 	}
 }

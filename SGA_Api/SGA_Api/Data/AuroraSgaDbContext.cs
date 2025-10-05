@@ -10,6 +10,7 @@ using SGA_Api.Models.UsuarioConf;
 using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Conteos;
 using SGA_Api.Models.OrdenTraspaso;
+using SGA_Api.Models.Notificaciones;
 using SGA_Api.Models;
 using SGA_Api.Models.Login;
 
@@ -57,6 +58,11 @@ namespace SGA_Api.Data
 		// Entidades de Órdenes de Traspaso
 		public DbSet<OrdenTraspasoCabecera> OrdenTraspasoCabecera { get; set; }
 		public DbSet<OrdenTraspasoLinea> OrdenTraspasoLinea { get; set; }
+
+		// Entidades de Notificaciones
+		public DbSet<Notificacion> Notificaciones { get; set; }
+		public DbSet<NotificacionDestinatario> NotificacionesDestinatarios { get; set; }
+		public DbSet<NotificacionLectura> NotificacionesLecturas { get; set; }
 
 		// Configuraciones predefinidas
 		public DbSet<ConfiguracionPredefinida> ConfiguracionesPredefinidas { get; set; }
@@ -520,6 +526,82 @@ namespace SGA_Api.Data
                       .HasForeignKey(r => r.OrdenGuid)
                       .HasPrincipalKey(o => o.GuidID)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // --- Configuraciones de Notificaciones ---
+            
+            // Configuración para Notificacion
+            modelBuilder.Entity<Notificacion>(entity =>
+            {
+                entity.ToTable("Notificaciones");
+                entity.HasKey(e => e.IdNotificacion);
+                
+                entity.Property(e => e.IdNotificacion).HasColumnName("IdNotificacion").HasDefaultValueSql("NEWID()");
+                entity.Property(e => e.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasDefaultValue(1);
+                entity.Property(e => e.TipoNotificacion).HasColumnName("TipoNotificacion").HasMaxLength(20).IsRequired();
+                entity.Property(e => e.ProcesoId).HasColumnName("ProcesoId");
+                entity.Property(e => e.Titulo).HasColumnName("Titulo").HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Mensaje).HasColumnName("Mensaje").HasMaxLength(500).IsRequired();
+                entity.Property(e => e.EstadoAnterior).HasColumnName("EstadoAnterior").HasMaxLength(20);
+                entity.Property(e => e.EstadoActual).HasColumnName("EstadoActual").HasMaxLength(20);
+                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.EsActiva).HasColumnName("EsActiva").HasDefaultValue(true);
+                entity.Property(e => e.EsGrupal).HasColumnName("EsGrupal").HasDefaultValue(false);
+                entity.Property(e => e.GrupoDestino).HasColumnName("GrupoDestino").HasMaxLength(50);
+                entity.Property(e => e.Comentario).HasColumnName("Comentario").HasMaxLength(500);
+
+                // Relaciones
+                entity.HasMany(e => e.Destinatarios)
+                      .WithOne(d => d.Notificacion)
+                      .HasForeignKey(d => d.IdNotificacion)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasMany(e => e.Lecturas)
+                      .WithOne(l => l.Notificacion)
+                      .HasForeignKey(l => l.IdNotificacion)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configuración para NotificacionDestinatario
+            modelBuilder.Entity<NotificacionDestinatario>(entity =>
+            {
+                entity.ToTable("NotificacionesDestinatarios");
+                entity.HasKey(e => e.IdDestinatario);
+                
+                entity.Property(e => e.IdDestinatario).HasColumnName("IdDestinatario").HasDefaultValueSql("NEWID()");
+                entity.Property(e => e.IdNotificacion).HasColumnName("IdNotificacion").IsRequired();
+                entity.Property(e => e.UsuarioId).HasColumnName("UsuarioId").IsRequired();
+                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.EsActiva).HasColumnName("EsActiva").HasDefaultValue(true);
+
+                // Relación con Usuario (asumiendo que existe la tabla usuarios)
+                entity.HasOne(d => d.Usuario)
+                      .WithMany()
+                      .HasForeignKey(d => d.UsuarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configuración para NotificacionLectura
+            modelBuilder.Entity<NotificacionLectura>(entity =>
+            {
+                entity.ToTable("NotificacionesLecturas");
+                entity.HasKey(e => e.IdLectura);
+                
+                entity.Property(e => e.IdLectura).HasColumnName("IdLectura").HasDefaultValueSql("NEWID()");
+                entity.Property(e => e.IdNotificacion).HasColumnName("IdNotificacion").IsRequired();
+                entity.Property(e => e.UsuarioId).HasColumnName("UsuarioId").IsRequired();
+                entity.Property(e => e.FechaLeida).HasColumnName("FechaLeida").HasDefaultValueSql("sysutcdatetime()");
+
+                // Relación con Usuario
+                entity.HasOne(l => l.Usuario)
+                      .WithMany()
+                      .HasForeignKey(l => l.UsuarioId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Índice único para evitar lecturas duplicadas
+                entity.HasIndex(e => new { e.IdNotificacion, e.UsuarioId })
+                      .IsUnique()
+                      .HasDatabaseName("IX_NotificacionesLecturas_Notificacion_Usuario");
             });
 
         }

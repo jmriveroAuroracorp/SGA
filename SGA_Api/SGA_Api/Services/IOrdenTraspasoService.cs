@@ -11,8 +11,10 @@ namespace SGA_Api.Services
         Task<OrdenTraspasoDto> CrearOrdenTraspasoAsync(CrearOrdenTraspasoDto dto);
         Task<bool> ActualizarOrdenTraspasoAsync(Guid id, ActualizarOrdenTraspasoDto dto);
         Task<bool> ActualizarLineaOrdenTraspasoAsync(Guid id, ActualizarLineaOrdenTraspasoDto dto);
+        Task<LineaOrdenTraspasoDetalleDto?> CrearLineaOrdenTraspasoAsync(Guid idOrden, CrearLineaOrdenTraspasoDto dto);
         Task<bool> CompletarOrdenTraspasoAsync(Guid id);
         Task<bool> CancelarOrdenTraspasoAsync(Guid id);
+        Task<bool> CancelarLineasPendientesAsync(Guid idOrden);
         Task<bool> EliminarOrdenTraspasoAsync(Guid id);
     }
 }

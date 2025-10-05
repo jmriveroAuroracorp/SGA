@@ -57,13 +57,6 @@ namespace SGA_Desktop.Dialog
             _operariosService = new OperariosConfiguracionService();
             EsEdicion = configuracion != null;
             
-            // Debug: Log de inicialización
-            Console.WriteLine($"Constructor - EsEdicion: {EsEdicion}");
-            Console.WriteLine($"Constructor - _configuracion: {_configuracion?.Nombre ?? "null"}");
-            Console.WriteLine($"Constructor - _permisosActuales inicial: {_permisosActuales.Count}");
-            
-            // Debug: MessageBox para verificar inicialización
-            // MessageBox.Show($"Constructor:\nEsEdicion: {EsEdicion}\n_configuracion: {_configuracion?.Nombre ?? "null"}\n_permisosActuales inicial: {_permisosActuales.Count}", "Debug Constructor");
 
             // Inicializar colecciones
             _empresas = new ObservableCollection<EmpresaConfiguracionDto>();
@@ -74,7 +67,7 @@ namespace SGA_Desktop.Dialog
             
             // Cargar empresas en el StackPanel
             CargarEmpresasEnStackPanel();
-
+            
             // Cargar datos
             _ = CargarDatosAsync();
         }
@@ -96,8 +89,8 @@ namespace SGA_Desktop.Dialog
                 }
 
                 // Cargar límites
-                TxtLimiteEuros.Text = "0,0000";
-                TxtLimiteUnidades.Text = "0,0000";
+                TxtLimiteEuros.Text = "0.0000";
+                TxtLimiteUnidades.Text = "0.0000";
 
                 // Cargar empresas disponibles
                 try
@@ -201,26 +194,17 @@ namespace SGA_Desktop.Dialog
             _permisosOriginales = _configuracion.Permisos.Select(p => p.Codigo).ToList();
             _permisosActuales = new List<short>(_permisosOriginales);
             
-            // Cargar límites existentes
-            TxtLimiteEuros.Text = _configuracion.LimiteEuros?.ToString("F4") ?? "0,0000";
-            TxtLimiteUnidades.Text = _configuracion.LimiteUnidades?.ToString("F4") ?? "0,0000";
+            // Cargar límites existentes usando punto como separador decimal
+            TxtLimiteEuros.Text = _configuracion.LimiteEuros?.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) ?? "0.0000";
+            TxtLimiteUnidades.Text = _configuracion.LimiteUnidades?.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) ?? "0.0000";
             
-            // Debug: Log de permisos cargados
-            Console.WriteLine($"Cargando datos existentes:");
-            Console.WriteLine($"Permisos originales: {_permisosOriginales.Count}");
-            Console.WriteLine($"Permisos actuales: {_permisosActuales.Count}");
-            foreach (var permiso in _permisosActuales)
-            {
-                Console.WriteLine($"Permiso cargado: {permiso}");
-            }
-            
-            // Debug: MessageBox para verificar permisos cargados
-            // MessageBox.Show($"Cargando datos existentes:\nPermisos originales: {_permisosOriginales.Count}\nPermisos actuales: {_permisosActuales.Count}\nPermisos: {string.Join(", ", _permisosActuales)}", "Debug CargarDatosExistentes");
             
             CargarPermisosEnStackPanel();
 
             // Cargar empresas existentes
             _empresas.Clear();
+            
+            
             foreach (var empresa in _configuracion.Empresas)
             {
                 _empresas.Add(empresa);
@@ -288,75 +272,163 @@ namespace SGA_Desktop.Dialog
                     return;
                 }
 
-                // Debug: Log de permisos que se van a enviar
-                Console.WriteLine($"Enviando {_permisosActuales.Count} permisos al API:");
-                foreach (var permiso in _permisosActuales)
+                // Mostrar diálogo de confirmación antes de guardar
+                var tituloConfirmacion = EsEdicion ? "Confirmar actualización" : "Confirmar creación";
+                var mensajeConfirmacion = EsEdicion 
+                    ? $"¿Está seguro de que desea actualizar la configuración '{TxtNombre.Text.Trim()}'?"
+                    : $"¿Está seguro de que desea crear la nueva configuración '{TxtNombre.Text.Trim()}'?";
+                
+                var confirmacionGuardar = new ConfirmationDialog(tituloConfirmacion, mensajeConfirmacion);
+                var ownerConfirmacion = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                      ?? Application.Current.MainWindow;
+                if (ownerConfirmacion != null && ownerConfirmacion != confirmacionGuardar)
+                    confirmacionGuardar.Owner = ownerConfirmacion;
+                    
+                var confirmarGuardado = confirmacionGuardar.ShowDialog();
+                if (confirmarGuardado != true)
                 {
-                    Console.WriteLine($"Permiso a enviar: {permiso}");
+                    RestaurarEstadoVentana(botonGuardar);
+                    return;
                 }
-                
-                // Debug: MessageBox para verificar permisos antes de enviar
-                // MessageBox.Show($"Antes de enviar al API:\n_permisosActuales: {_permisosActuales.Count}\nPermisos: {string.Join(", ", _permisosActuales)}", "Debug Antes de Enviar");
-                
+
                 // Crear DTO de configuración
                 var dto = new ConfiguracionPredefinidaCrearDto
                 {
                     Nombre = TxtNombre.Text.Trim(),
                     Descripcion = TxtDescripcion.Text?.Trim(),
                     Permisos = _permisosActuales,
-                    Empresas = _empresas.Select(e => e.CodigoEmpresa).ToList(),
+                    Empresas = _empresas.Select(e => e.EmpresaOrigen).ToList(),
                     Almacenes = _almacenes.Select(a => a.CodigoAlmacen).ToList(),
                     
-                    // Límites
-                    LimiteEuros = decimal.TryParse(TxtLimiteEuros.Text?.Replace(",", "."), out var limiteEuros) ? limiteEuros : (decimal?)null,
-                    LimiteUnidades = decimal.TryParse(TxtLimiteUnidades.Text?.Replace(",", "."), out var limiteUnidades) ? limiteUnidades : (decimal?)null,
+                    // Límites - usar InvariantCulture para parsing consistente
+                    LimiteEuros = decimal.TryParse(TxtLimiteEuros.Text?.Replace(",", "."), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var limiteEuros) ? limiteEuros : (decimal?)null,
+                    LimiteUnidades = decimal.TryParse(TxtLimiteUnidades.Text?.Replace(",", "."), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var limiteUnidades) ? limiteUnidades : (decimal?)null,
                     
                     // Usuario actual (ID del operario)
                     Usuario = SessionManager.UsuarioActual?.operario ?? 0
                 };
 
-                bool exito;
                 if (EsEdicion && _configuracion != null)
                 {
-                    exito = await _configuracionesService.ActualizarConfiguracionPredefinidaAsync(_configuracion.Id, dto);
+                    var resultado = await _configuracionesService.ActualizarConfiguracionPredefinidaAsync(_configuracion.Id, dto);
+                    
+                    if (resultado.Success)
+                    {
+                        // Si hay operarios afectados, mostrar mensaje informativo y aplicar cambios
+                        if (resultado.OperariosAfectados.Any())
+                        {
+                            var operariosNombres = resultado.OperariosAfectados
+                                .Select(o => $"• {o.OperarioNombre}")
+                                .ToList();
+
+                            var mensajeInformativo = $"Los ajustes se aplicarán automáticamente a todos los usuarios que tengan esta plantilla:\n\n" +
+                                                   string.Join("\n", operariosNombres);
+
+                            var infoDialog = new WarningDialog(
+                                "Plantilla Actualizada",
+                                mensajeInformativo,
+                                "\uE946" // ícono informativo
+                            );
+                            
+                            var parentWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                       ?? Application.Current.MainWindow;
+                            if (parentWindow != null && parentWindow != infoDialog)
+                                infoDialog.Owner = parentWindow;
+                                
+                            infoDialog.ShowDialog();
+
+                            // Aplicar la plantilla actualizada a los operarios afectados
+                            var operarioIds = resultado.OperariosAfectados.Select(o => o.OperarioId).ToList();
+                            var exitoAplicacion = await _configuracionesService.AplicarPlantillaAOperariosAsync(_configuracion.Id, operarioIds);
+                            
+                            if (exitoAplicacion)
+                            {
+                                var aplicacionDialog = new WarningDialog(
+                                    "Aplicación Exitosa",
+                                    $"Plantilla aplicada correctamente a {operarioIds.Count} operario(s).",
+                                    "\uE946" // ícono de éxito
+                                );
+                                if (parentWindow != null && parentWindow != aplicacionDialog)
+                                    aplicacionDialog.Owner = parentWindow;
+                                aplicacionDialog.ShowDialog();
+                            }
+                            else
+                            {
+                                var errorDialog = new WarningDialog(
+                                    "Error en Aplicación",
+                                    "Hubo un error al aplicar la plantilla a los operarios.",
+                                    "\uE783" // ícono de error
+                                );
+                                if (parentWindow != null && parentWindow != errorDialog)
+                                    errorDialog.Owner = parentWindow;
+                                errorDialog.ShowDialog();
+                            }
+                        }
+                        
+                        var successDialog = new WarningDialog(
+                            "Configuración Predefinida",
+                            "Configuración guardada correctamente.",
+                            "\uE946" // ícono de información/éxito
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != successDialog)
+                            successDialog.Owner = owner;
+                        successDialog.ShowDialog();
+                        
+                        DialogResult = true;
+                        Close();
+                    }
+                    else
+                    {
+                        var errorDialog = new WarningDialog(
+                            "Error",
+                            "Error al guardar la configuración.",
+                            "\uE814" // ícono de error/advertencia
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != errorDialog)
+                            errorDialog.Owner = owner;
+                        errorDialog.ShowDialog();
+                        
+                        RestaurarEstadoVentana(botonGuardar);
+                    }
                 }
                 else
                 {
                     var resultado = await _configuracionesService.CrearConfiguracionPredefinidaAsync(dto);
-                    exito = resultado != null;
-                }
-
-                if (exito)
-                {
-                    var successDialog = new WarningDialog(
-                        "Configuración Predefinida",
-                        "Configuración guardada correctamente.",
-                        "\uE946" // ícono de información/éxito
-                    );
-                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-                               ?? Application.Current.MainWindow;
-                    if (owner != null && owner != successDialog)
-                        successDialog.Owner = owner;
-                    successDialog.ShowDialog();
-                    
-                    DialogResult = true;
-                    Close();
-                }
-                else
-                {
-                    var errorDialog = new WarningDialog(
-                        "Error",
-                        "Error al guardar la configuración.",
-                        "\uE814" // ícono de error/advertencia
-                    );
-                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-                               ?? Application.Current.MainWindow;
-                    if (owner != null && owner != errorDialog)
-                        errorDialog.Owner = owner;
-                    errorDialog.ShowDialog();
-                    
-                    // Restaurar estado de la ventana
-                    RestaurarEstadoVentana(botonGuardar);
+                    if (resultado != null)
+                    {
+                        var successDialog = new WarningDialog(
+                            "Configuración Predefinida",
+                            "Configuración guardada correctamente.",
+                            "\uE946" // ícono de información/éxito
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != successDialog)
+                            successDialog.Owner = owner;
+                        successDialog.ShowDialog();
+                        
+                        DialogResult = true;
+                        Close();
+                    }
+                    else
+                    {
+                        var errorDialog = new WarningDialog(
+                            "Error",
+                            "Error al guardar la configuración.",
+                            "\uE814" // ícono de error/advertencia
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != errorDialog)
+                            errorDialog.Owner = owner;
+                        errorDialog.ShowDialog();
+                        
+                        RestaurarEstadoVentana(botonGuardar);
+                    }
                 }
             }
             catch (Exception ex)
@@ -443,7 +515,7 @@ namespace SGA_Desktop.Dialog
             if (_todasLasEmpresas != null)
             {
                 var empresasDisponibles = _todasLasEmpresas
-                    .Where(e => !_empresas.Any(emp => emp.CodigoEmpresa == e.CodigoEmpresa))
+                    .Where(e => !_empresas.Any(emp => emp.EmpresaOrigen == e.EmpresaOrigen))
                     .ToList();
                 
                 CmbEmpresasDisponibles.ItemsSource = empresasDisponibles;
@@ -502,15 +574,15 @@ namespace SGA_Desktop.Dialog
 
             var codigoText = new TextBlock
             {
-                Text = $"(Código: {empresa.CodigoEmpresa})",
+                Text = $"(Código: {empresa.EmpresaOrigen})",
                 FontSize = 12,
                 Foreground = Brushes.Gray,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center 
             };
-
+            
             stackPanel.Children.Add(empresaText);
             stackPanel.Children.Add(codigoText);
-
+            
             var eliminarButton = new Button
             {
                 Content = "Eliminar",
@@ -579,19 +651,13 @@ namespace SGA_Desktop.Dialog
         {
             SpPermisosAsignados.Children.Clear();
             
-            // Debug: Log de permisos antes de cargar en UI
-            Console.WriteLine($"CargarPermisosEnStackPanel - _permisosActuales: {_permisosActuales?.Count ?? -1}");
             if (_permisosActuales != null)
             {
                 foreach (var permiso in _permisosActuales)
                 {
-                    Console.WriteLine($"Cargando permiso en UI: {permiso}");
                     CrearElementoPermiso(permiso);
                 }
             }
-            
-            // Debug: MessageBox para verificar permisos en UI
-            // MessageBox.Show($"CargarPermisosEnStackPanel:\n_permisosActuales: {_permisosActuales?.Count ?? -1}\nPermisos: {(_permisosActuales != null ? string.Join(", ", _permisosActuales) : "null")}", "Debug CargarPermisosEnStackPanel");
             
             // Actualizar ComboBox para excluir permisos ya asignados
             ActualizarComboPermisosDisponibles();
@@ -774,8 +840,8 @@ namespace SGA_Desktop.Dialog
 
             // Texto entre paréntesis en gris claro
             var empresaText = new TextBlock
-            {
-                Text = $" ({almacen.NombreEmpresa})",
+            { 
+                Text = $" ({almacen.NombreEmpresa})", 
                 VerticalAlignment = VerticalAlignment.Center,
                 FontWeight = FontWeights.Normal,
                 Foreground = Brushes.Gray
@@ -933,6 +999,63 @@ namespace SGA_Desktop.Dialog
                 {
                     e.Handled = true;
                     return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Muestra un diálogo para confirmar la actualización de operarios afectados
+        /// </summary>
+        private async Task MostrarDialogoOperariosAfectados(List<OperarioAfectado> operariosAfectados, int configuracionId)
+        {
+            var mensaje = $"Esta plantilla está aplicada a {operariosAfectados.Count} operario(s).\n\n" +
+                         "¿Desea aplicar los cambios a estos operarios?\n\n" +
+                         "Operarios afectados:\n" +
+                         string.Join("\n", operariosAfectados.Select(o => $"• {(!string.IsNullOrEmpty(o.OperarioNombre) ? o.OperarioNombre : $"Operario {o.OperarioId}")} (ID: {o.OperarioId})"));
+
+            var confirmationDialog = new ConfirmationDialog(
+                "Operarios Afectados",
+                mensaje
+            );
+            
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                       ?? Application.Current.MainWindow;
+            if (owner != null && owner != confirmationDialog)
+                confirmationDialog.Owner = owner;
+                
+            var result = confirmationDialog.ShowDialog();
+
+            if (result == true)
+            {
+                // Aplicar la plantilla actualizada a los operarios
+                var operarioIds = operariosAfectados.Select(o => o.OperarioId).ToList();
+                var exito = await _configuracionesService.AplicarPlantillaAOperariosAsync(configuracionId, operarioIds);
+
+                if (exito)
+                {
+                    var successDialog = new WarningDialog(
+                        "Éxito",
+                        $"Plantilla aplicada correctamente a {operarioIds.Count} operario(s).",
+                        "\uE946" // ícono de éxito
+                    );
+                    var successOwner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                    if (successOwner != null && successOwner != successDialog)
+                        successDialog.Owner = successOwner;
+                    successDialog.ShowDialog();
+                }
+                else
+                {
+                    var errorDialog = new WarningDialog(
+                        "Error",
+                        "Error al aplicar la plantilla a los operarios.",
+                        "\uE814" // ícono de error
+                    );
+                    var errorOwner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                    if (errorOwner != null && errorOwner != errorDialog)
+                        errorDialog.Owner = errorOwner;
+                    errorDialog.ShowDialog();
                 }
             }
         }

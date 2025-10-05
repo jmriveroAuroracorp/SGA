@@ -1,26 +1,582 @@
 ﻿<Page x:Class="SGA_Desktop.Views.TraspasosView"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="Transparent">
+      xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      Title="Gestión de Traspasos">
 
-    <Grid Margin="10">
-        <!-- Pestañas internas sin borde -->
-        <TabControl x:Name="Tabs"
-                SelectionChanged="TabControl_SelectionChanged"
-                Style="{StaticResource EstiloTabControl}"
-                ItemContainerStyle="{StaticResource EstiloTabItem}">
-            <TabItem Header="Paletización" Tag="Paletizacion" Margin="0,0,-10,0" />
-            <TabItem Header="Traspasos"     Tag="GestionTraspasos"   Margin="0,0,-10,0"/>
-        </TabControl>
+    <!-- DataContext -->
+    <Page.DataContext>
+        <vm:TraspasosViewModel />
+    </Page.DataContext>
 
-        <!-- Border solo alrededor del Frame -->
-        <Border BorderBrush="{StaticResource BrushPrincipal}"
-            BorderThickness="2"
-            CornerRadius="4,4,4,4"
-            Margin="0,33,0,0"     
-            Padding="8">
-            <Frame x:Name="InnerFrame"
-             NavigationUIVisibility="Hidden" />
+    <!-- Recursos -->
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <helpers:NullToBoolConverter x:Key="NotNullToBoolConverter"/>
+            <helpers:BoolToYesNoConverter x:Key="BoolToYesNoConverter"/>
+            <helpers:OperarioIdANombreConverter x:Key="OperarioIdANombreConverter"/>
+            <helpers:EstaAbiertoConverter x:Key="EstaAbiertoConverter"/>
+            <helpers:EstaCerradoConverter x:Key="EstaCerradoConverter"/>
+            <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
+            <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid Background="{StaticResource BrushFondo}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- BARRA DE HERRAMIENTAS UNIFICADA -->
+        <Border Grid.Row="0" 
+                Background="{StaticResource BrushPrincipal}"
+                Padding="20,15"
+                BorderBrush="{StaticResource BrushInputBorde}"
+                BorderThickness="0,0,0,1"
+                Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="📦 Gestión de Palets y Traspasos"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="18"
+                           FontWeight="Bold"/>
+
+                <!-- Controles -->
+                <StackPanel Grid.Column="1" 
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Content="🔍 Filtros"
+                            Command="{Binding AbrirFiltrosCommand}"
+                            Width="100"
+                            Height="35"
+                            Margin="0,0,10,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="BorderBrush" Value="White"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    
+                    <Button Content="➕ Nuevo"
+                            Command="{Binding CrearPaletCommand}"
+                            Width="100"
+                            Height="35"
+                            Margin="0,0,10,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="BorderBrush" Value="White"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+
+                    <Button Content="🔄 Recargar"
+                            Command="{Binding LoadPaletsCommand}"
+                            Width="100"
+                            Height="35">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="BorderBrush" Value="White"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Lista de palets en formato cards - Pantalla completa -->
+            <GroupBox Grid.Row="0" Header="📦 Palets Disponibles" Margin="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding PaletsView}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource EstiloTarjeta}"
+                                        Width="380"
+                                        Height="320"
+                                        Margin="8"
+                                        Cursor="Hand">
+                                    <Grid MouseLeftButtonDown="PaletCard_MouseLeftButtonDown" Tag="{Binding}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Header con Código y Estado -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Código -->
+                                            <StackPanel Grid.Column="0" Orientation="Vertical">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                    <TextBlock Text="Código: "
+                                                               FontWeight="Bold"
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Codigo}"
+                                                               FontFamily="Consolas"
+                                                               FontWeight="Bold"
+                                                               Foreground="#2C3E50"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Indicador de estado -->
+                                            <Border Grid.Column="1"
+                                                    Background="{Binding Estado, Converter={StaticResource EstadoColorConverter}}"
+                                                    BorderBrush="{Binding Estado, Converter={StaticResource EstadoColorConverter}}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="3"
+                                                    Padding="8,4"
+                                                    VerticalAlignment="Top"
+                                                    HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding Estado}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="White"
+                                                           HorizontalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Contenido principal -->
+                                        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                            <!-- Fecha de apertura -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Apertura: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding FechaApertura, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Usuario apertura -->
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Abre: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding UsuarioAperturaNombre}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+
+                                            <!-- Fecha de cierre (si existe) -->
+                                            <Grid Margin="0,0,0,8"
+                                                  Visibility="{Binding UsuarioCierreNombre, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Cierre: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding FechaCierre, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Usuario cierre (si existe) -->
+                                            <Grid Margin="0,0,0,8"
+                                                  Visibility="{Binding UsuarioCierreNombre, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Cierra: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding UsuarioCierreNombre}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="#34495E"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+
+                                            <!-- Orden de trabajo -->
+                                            <Grid Margin="0,8,0,0"
+                                                  Visibility="{Binding OrdenTrabajoId, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="📄 Orden: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding OrdenTrabajoId}"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource BrushPrincipal}"/>
+                                            </Grid>
+
+                                            <!-- Peso y altura (si existen) -->
+                                            <Grid Margin="0,8,0,0"
+                                                  Visibility="{Binding Peso, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="⚖️ Peso: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Peso, StringFormat='{}{0:F2} kg'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+
+                                                <TextBlock Grid.Column="2" Text="📏 Altura: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding Altura, StringFormat='{}{0:F2} cm'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Información de traspaso (si existe) -->
+                                            <Grid Margin="0,8,0,0"
+                                                  Visibility="{Binding AlmacenOrigen, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="🏢 Almacén: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding AlmacenOrigen}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+
+                                                <TextBlock Grid.Column="2" Text="📍 Ubicación: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding UbicacionOrigen}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+
+                                            <!-- Fecha último traspaso (si existe) -->
+                                            <Grid Margin="0,4,0,0"
+                                                  Visibility="{Binding FechaUltimoTraspaso, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="🕒 Último traspaso: "
+                                                           FontWeight="SemiBold"
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding FechaUltimoTraspaso, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="#34495E"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Botones de acción -->
+                                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Button Content="👁️ Ver"
+                                                    Command="{Binding DataContext.SeleccionarPaletCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                                    Width="60"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0"/>
+                                            <Button Content="📦 Añadir"
+                                                    Click="AbrirPaletLineas_Click"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource EstiloBotonSecundario}"
+                                                    Width="70"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0"/>
+                                            <!-- Botón Cerrar (visible cuando estado = Abierto) -->
+                                            <Button Content="🔒 Cerrar"
+                                                    Click="CerrarPalet_Click"
+                                                    Tag="{Binding}"
+                                                    Width="70"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            
+                                            <!-- Botón Abrir (visible cuando estado = Cerrado) -->
+                                            <Button Content="🔓 Abrir"
+                                                    Click="ReabrirPalet_Click"
+                                                    Tag="{Binding}"
+                                                    Width="70"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            
+                                            <!-- Botón Traspasar (visible cuando estado = Cerrado) -->
+                                            <Button Content="🚚 Traspasar"
+                                                    Click="TraspasarPalet_Click"
+                                                    Tag="{Binding}"
+                                                    Width="80"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            <Button Content="🖨️ Imprimir"
+                                                    Click="ImprimirPalet_Click"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource EstiloBotonSecundario}"
+                                                    Width="70"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </GroupBox>
+
+            <!-- Sección expandible para contenido del palet -->
+            <Border Grid.Row="1"
+                    Background="{StaticResource BrushPrincipal}"
+                    Padding="20,15"
+                    BorderBrush="{StaticResource BrushInputBorde}"
+                    BorderThickness="0,1,0,0"
+                    Visibility="{Binding PaletSeleccionado, Converter={StaticResource NullToVisibilityConverter}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header del contenido -->
+                    <Grid Grid.Row="0" Margin="0,0,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding PaletSeleccionado.Codigo, StringFormat='Contenido del palet: {0}'}"
+                                   Foreground="White"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+
+                        <Button Grid.Column="1"
+                                Content="✕ Cerrar"
+                                Width="80"
+                                Height="30"
+                                Command="{Binding CerrarContenidoCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="White"/>
+                                    <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <!-- Contenido del palet -->
+                    <Border Grid.Row="1"
+                            Background="White"
+                            CornerRadius="6"
+                            Padding="15"
+                            MaxHeight="300">
+                        <StackPanel>
+                            <TextBlock Text="Líneas del palet seleccionado:" 
+                                       FontWeight="Bold" 
+                                       FontSize="14" 
+                                       Margin="0,0,0,10"/>
+                            <ListView ItemsSource="{Binding LineasPalet}"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      MaxHeight="200">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#F8F9FA" 
+                                                BorderBrush="#E0E0E0" 
+                                                BorderThickness="1" 
+                                                CornerRadius="4" 
+                                                Padding="10" 
+                                                Margin="0,0,0,5">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding CodigoArticulo}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="12"/>
+                                                    <TextBlock Text="{Binding DescripcionArticulo}" 
+                                                               FontSize="11" 
+                                                               Foreground="#666"/>
+                                                    <TextBlock Text="{Binding Lote, StringFormat='Lote: {0}'}" 
+                                                               FontSize="10" 
+                                                               Foreground="#888"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" 
+                                                           Text="{Binding Cantidad}" 
+                                                           FontSize="16" 
+                                                           FontWeight="Bold" 
+                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                           VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Barra de estado general -->
+        <Border Grid.Row="2"
+                Background="{StaticResource BrushPrincipal}"
+                Padding="20,10"
+                BorderBrush="{StaticResource BrushInputBorde}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Mensaje}"
+                           VerticalAlignment="Center"
+                           Foreground="White"/>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Visibility="{Binding Cargando, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ProgressBar Width="100"
+                                 Height="15"
+                                 IsIndeterminate="True"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="Cargando..."
+                               VerticalAlignment="Center"
+                               Foreground="White"/>
+                </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </Page>

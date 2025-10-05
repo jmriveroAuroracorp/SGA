@@ -468,7 +468,7 @@ namespace SGA_Desktop.ViewModels
 					FechaInicio = _fechaInicioDialogo,
 					Finalizar = true,
 					DescripcionArticulo = dto.DescripcionArticulo,
-					Observaciones = comentariosTexto, // Añadir comentarios
+					Comentario = comentariosTexto, // Añadir comentarios
 
 					// 🔹 clave: si el ORIGEN está Cerrado, pedimos reapertura automática
 					ReabrirSiCerradoOrigen = string.Equals(dto.EstadoPaletOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase)

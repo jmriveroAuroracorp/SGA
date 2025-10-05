@@ -21,6 +21,9 @@ namespace SGA_Api.Models.Login
         
         // Almacenes asignados
         public List<AlmacenOperarioDto> Almacenes { get; set; } = new List<AlmacenOperarioDto>();
+        
+        // Plantilla aplicada
+        public string? PlantillaAplicada { get; set; } // Nombre de la plantilla aplicada
     }
 
     /// <summary>
@@ -85,6 +88,9 @@ namespace SGA_Api.Models.Login
         public int CantidadPermisos { get; set; } // Número de permisos asignados
         public int CantidadAlmacenes { get; set; } // Número de almacenes asignados
         public string? PlantillaAplicada { get; set; } // Nombre de la plantilla aplicada
+        public decimal? LimiteImporte { get; set; } // Límite de importe del operario (MRH_LimiteInventarioEuros)
+        public decimal? LimiteUnidades { get; set; } // Límite de unidades del operario (MRH_LimiteInventarioUnidades)
+        public string LimitesResumen { get; set; } = string.Empty; // Resumen de límites formateado
     }
 
     public class EmpresaConfiguracionDto
@@ -115,6 +121,8 @@ namespace SGA_Api.Models.Login
         public int Id { get; set; }
         public string Nombre { get; set; } = string.Empty;
         public string? CodigoCentro { get; set; }
+        public DateTime? FechaBaja { get; set; } // Fecha de baja del operario
+        public bool Activo { get; set; } // Indica si el operario está activo
         public string Permisos { get; set; } = string.Empty; // Lista de permisos separados por comas
         public string Empresas { get; set; } = string.Empty; // Lista de empresas separadas por comas
         public string Almacenes { get; set; } = string.Empty; // Lista de almacenes separados por comas

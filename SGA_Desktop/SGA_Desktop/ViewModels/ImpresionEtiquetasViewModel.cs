@@ -29,7 +29,12 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		Impresoras = new ObservableCollection<ImpresoraDto>();
 
 		_ = InitializeAsync();
-		_ = LoadImpresorasAsync();
+		
+		// Solo cargar impresoras si la aplicación no se está cerrando
+		if (!SessionManager.IsClosing)
+		{
+			_ = LoadImpresorasAsync();
+		}
 	}
 
 	// Ctor sin parámetros para el diseñador / XAML
@@ -156,6 +161,10 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 	/// </summary>
 	private async Task LoadImpresorasAsync()
 	{
+		// Si la aplicación se está cerrando, no cargar impresoras
+		if (SessionManager.IsClosing)
+			return;
+
 		try
 		{
 			// 1) Obtén todas las impresoras
@@ -177,11 +186,15 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		}
 		catch (Exception ex)
 		{
-			MessageBox.Show(
-				$"Error al cargar impresoras: {ex.Message}",
-				"Error de impresoras",
-				MessageBoxButton.OK,
-				MessageBoxImage.Error);
+			// Solo mostrar el diálogo si la aplicación no se está cerrando
+			if (!SessionManager.IsClosing)
+			{
+				MessageBox.Show(
+					$"Error al cargar impresoras: {ex.Message}",
+					"Error de impresoras",
+					MessageBoxButton.OK,
+					MessageBoxImage.Error);
+			}
 		}
 	}
 

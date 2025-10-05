@@ -44,6 +44,9 @@ namespace SGA_Desktop.Dialog
         // Flag para evitar múltiples operaciones de guardado simultáneas
         private bool _guardandoEnProgreso = false;
 
+        // Propiedades para el botón dinámico
+        public string TextoBotonDarBajaAlta => _operario.FechaBaja.HasValue ? "✅ Dar de Alta" : "⚠️ Dar de Baja";
+        public Brush ColorBotonDarBajaAlta => _operario.FechaBaja.HasValue ? new SolidColorBrush(Color.FromRgb(40, 167, 69)) : new SolidColorBrush(Color.FromRgb(255, 107, 107));
 
         public ConfiguracionOperarioDialog(OperarioConfiguracionDto operario, OperariosConfiguracionService service)
         {
@@ -94,14 +97,30 @@ namespace SGA_Desktop.Dialog
                     }
                     else
                     {
-                        MessageBox.Show("No se pudieron cargar las empresas disponibles.", "Advertencia", 
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        var warningDialog = new WarningDialog(
+                            "Advertencia",
+                            "No se pudieron cargar las empresas disponibles.",
+                            "\uE814" // ícono de advertencia
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != warningDialog)
+                            warningDialog.Owner = owner;
+                        warningDialog.ShowDialog();
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Error al cargar empresas disponibles: {ex.Message}", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    var errorDialog = new WarningDialog(
+                        "Error",
+                        $"Error al cargar empresas disponibles: {ex.Message}",
+                        "\uE814" // ícono de error
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != errorDialog)
+                        errorDialog.Owner = owner;
+                    errorDialog.ShowDialog();
                 }
 
                 // Cargar permisos disponibles
@@ -134,14 +153,30 @@ namespace SGA_Desktop.Dialog
                     }
                     else
                     {
-                        MessageBox.Show("No se pudieron cargar los almacenes disponibles.", "Advertencia", 
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        var warningDialog = new WarningDialog(
+                            "Advertencia",
+                            "No se pudieron cargar los almacenes disponibles.",
+                            "\uE814" // ícono de advertencia
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != warningDialog)
+                            warningDialog.Owner = owner;
+                        warningDialog.ShowDialog();
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Error al cargar almacenes disponibles: {ex.Message}", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    var errorDialog = new WarningDialog(
+                        "Error",
+                        $"Error al cargar almacenes disponibles: {ex.Message}",
+                        "\uE814" // ícono de error
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != errorDialog)
+                        errorDialog.Owner = owner;
+                    errorDialog.ShowDialog();
                 }
 
                 // Configurar título
@@ -204,7 +239,21 @@ namespace SGA_Desktop.Dialog
 
             try
             {
-                // No hay validaciones básicas ya que solo se editan los límites
+                // Mostrar diálogo de confirmación antes de guardar
+                var mensajeConfirmacion = $"¿Está seguro de que desea guardar la configuración del operario '{_operario.Nombre}'?";
+                
+                var confirmacionGuardar = new ConfirmationDialog("Confirmar guardado", mensajeConfirmacion);
+                var ownerConfirmacion = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                      ?? Application.Current.MainWindow;
+                if (ownerConfirmacion != null && ownerConfirmacion != confirmacionGuardar)
+                    confirmacionGuardar.Owner = ownerConfirmacion;
+                    
+                var confirmarGuardado = confirmacionGuardar.ShowDialog();
+                if (confirmarGuardado != true)
+                {
+                    RestaurarEstadoVentana(botonGuardar);
+                    return;
+                }
 
                 // Construir DTO de actualización (solo límites)
                 var updateDto = new OperarioUpdateDto
@@ -239,8 +288,12 @@ namespace SGA_Desktop.Dialog
 
                 // Calcular diferencias de empresas
                 var empresasActuales = _empresas.ToList();
-                updateDto.EmpresasAsignar = empresasActuales.Except(_empresasOriginales, new EmpresaOperarioDtoComparer()).ToList();
-                updateDto.EmpresasQuitar = _empresasOriginales.Except(empresasActuales, new EmpresaOperarioDtoComparer()).Select(e => e.EmpresaOrigen).ToList();
+                var empresasParaAsignar = empresasActuales.Except(_empresasOriginales, new EmpresaOperarioDtoComparer()).ToList();
+                var empresasParaQuitar = _empresasOriginales.Except(empresasActuales, new EmpresaOperarioDtoComparer()).Select(e => e.EmpresaOrigen).ToList();
+
+
+                updateDto.EmpresasAsignar = empresasParaAsignar;
+                updateDto.EmpresasQuitar = empresasParaQuitar;
                 
                 // SOLUCIÓN SEGURA: Solo hacer cambios si hay diferencias reales
                 var almacenesActuales = _almacenes.ToList();
@@ -263,11 +316,11 @@ namespace SGA_Desktop.Dialog
                 // Guardar
                 try
                 {
-                    await _service.ActualizarOperarioAsync(updateDto.Id, updateDto);
+                    var resultado = await _service.ActualizarOperarioAsync(updateDto.Id, updateDto);
                     
                     var successDialog = new WarningDialog(
                         "Configuración de Operarios",
-                        "Configuración actualizada correctamente.",
+                        resultado.HuboCambios ? "Configuración actualizada correctamente." : "No se detectaron cambios en la configuración.",
                         "\uE946" // ícono de información/éxito
                     );
                     var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
@@ -356,6 +409,134 @@ namespace SGA_Desktop.Dialog
             Close();
         }
 
+        private async void DarDeBajaAltaButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+
+                if (_operario.FechaBaja.HasValue)
+                {
+                    // El operario está dado de baja, ofrecer dar de alta
+                    var confirmacion = new ConfirmationDialog(
+                        "✅ DAR DE ALTA OPERARIO",
+                        $"¿Está seguro de que desea DAR DE ALTA al operario?\n\n" +
+                        $"👤 {_operario.Nombre}\n\n" +
+                        $"✅ CONSECUENCIAS:\n" +
+                        $"✅ RECUPERARÁ TODOS LOS ACCESOS AL SGA\n" +
+                        $"✅ PODRÁ INICIAR SESIÓN EN LA APLICACIÓN\n" +
+                        $"✅ VOLVERÁ A APARECER EN EL SISTEMA\n" +
+                        $"✅ MANTENDRÁ SUS CONFIGURACIONES\n\n" +
+                        $"¿Desea continuar?"
+                    );
+                    
+                    if (owner != null && owner != confirmacion)
+                        confirmacion.Owner = owner;
+                        
+                    var resultado = confirmacion.ShowDialog();
+                    
+                    if (resultado == true)
+                    {
+                        var exito = await _service.DarDeAltaOperarioAsync(_operario.Id);
+                        
+                        if (exito)
+                        {
+                            var successDialog = new WarningDialog(
+                                "Operario Dado de Alta",
+                                $"El operario '{_operario.Nombre}' ha sido dado de alta correctamente.",
+                                "\uE946"
+                            );
+                            if (owner != null && owner != successDialog)
+                                successDialog.Owner = owner;
+                            successDialog.ShowDialog();
+                            
+                            DialogResult = true;
+                            Close();
+                        }
+                        else
+                        {
+                            var errorDialog = new WarningDialog(
+                                "Error",
+                                "No se pudo dar de alta al operario. Inténtelo de nuevo.",
+                                "\uE783"
+                            );
+                            if (owner != null && owner != errorDialog)
+                                errorDialog.Owner = owner;
+                            errorDialog.ShowDialog();
+                        }
+                    }
+                }
+                else
+                {
+                    // El operario está activo, ofrecer dar de baja
+                    var confirmacion = new ConfirmationDialog(
+                        "⚠️ ADVERTENCIA CRÍTICA - DAR DE BAJA OPERARIO ⚠️",
+                        $"🚨 ACCIÓN IRREVERSIBLE 🚨\n\n" +
+                        $"Está a punto de DAR DE BAJA al operario:\n" +
+                        $"👤 {_operario.Nombre}\n\n" +
+                        $"🔥 CONSECUENCIAS INMEDIATAS:\n" +
+                        $"❌ PERDERÁ TODOS LOS ACCESOS AL SGA\n" +
+                        $"❌ NO PODRÁ INICIAR SESIÓN EN LA APLICACIÓN\n" +
+                        $"❌ DESAPARECERÁ COMPLETAMENTE DEL SISTEMA\n" +
+                        $"❌ SE PERDERÁN TODAS SUS CONFIGURACIONES\n" +
+                        $"❌ NO SE PODRÁ DESHACER ESTA ACCIÓN\n\n" +
+                        $"⚠️ ESTA ACCIÓN ES PERMANENTE Y NO TIENE VUELTA ATRÁS ⚠️\n\n" +
+                        $"¿ESTÁ ABSOLUTAMENTE SEGURO DE QUE DESEA CONTINUAR?"
+                    );
+                    
+                    if (owner != null && owner != confirmacion)
+                        confirmacion.Owner = owner;
+                        
+                    var resultado = confirmacion.ShowDialog();
+                    
+                    if (resultado == true)
+                    {
+                        var exito = await _service.DarDeBajaOperarioAsync(_operario.Id);
+                        
+                        if (exito)
+                        {
+                            var successDialog = new WarningDialog(
+                                "Operario Dado de Baja",
+                                $"El operario '{_operario.Nombre}' ha sido dado de baja correctamente.",
+                                "\uE946"
+                            );
+                            if (owner != null && owner != successDialog)
+                                successDialog.Owner = owner;
+                            successDialog.ShowDialog();
+                            
+                            DialogResult = true;
+                            Close();
+                        }
+                        else
+                        {
+                            var errorDialog = new WarningDialog(
+                                "Error",
+                                "No se pudo dar de baja al operario. Inténtelo de nuevo.",
+                                "\uE783"
+                            );
+                            if (owner != null && owner != errorDialog)
+                                errorDialog.Owner = owner;
+                            errorDialog.ShowDialog();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al procesar la operación: {ex.Message}",
+                    "\uE783"
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
+            }
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
@@ -431,7 +612,7 @@ namespace SGA_Desktop.Dialog
             
             var empresaText = new TextBlock
             {
-                Text = empresa.Empresa,
+                Text = ObtenerNombreEmpresa(empresa.EmpresaOrigen),
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 10, 0)
@@ -439,7 +620,7 @@ namespace SGA_Desktop.Dialog
 
             var codigoText = new TextBlock
             {
-                Text = $"(Código: {empresa.CodigoEmpresa}, Origen: {empresa.EmpresaOrigen})",
+                Text = $"(Código: {empresa.EmpresaOrigen})",
                 FontSize = 12,
                 Foreground = Brushes.Gray,
                 VerticalAlignment = VerticalAlignment.Center
@@ -515,8 +696,16 @@ namespace SGA_Desktop.Dialog
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al agregar empresa: {ex.Message}", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al agregar empresa: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -646,14 +835,30 @@ namespace SGA_Desktop.Dialog
                 }
                 else
                 {
-                    MessageBox.Show("Este permiso ya está asignado al operario.", "Información", 
-                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    var infoDialog = new WarningDialog(
+                        "Información",
+                        "Este permiso ya está asignado al operario.",
+                        "\uE946" // ícono de información
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != infoDialog)
+                        infoDialog.Owner = owner;
+                    infoDialog.ShowDialog();
                 }
             }
             else
             {
-                MessageBox.Show("Por favor, seleccione un permiso para agregar.", "Información", 
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                var infoDialog = new WarningDialog(
+                    "Información",
+                    "Por favor, seleccione un permiso para agregar.",
+                    "\uE946" // ícono de información
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != infoDialog)
+                    infoDialog.Owner = owner;
+                infoDialog.ShowDialog();
             }
         }
 
@@ -770,14 +975,30 @@ namespace SGA_Desktop.Dialog
                     
                     CargarAlmacenesEnStackPanel();
                     
-                    MessageBox.Show($"Se asignaron {dialog.AlmacenesSeleccionados.Count} almacenes al operario.", 
-                                   "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                    var successDialog = new WarningDialog(
+                        "Éxito",
+                        $"Se asignaron {dialog.AlmacenesSeleccionados.Count} almacenes al operario.",
+                        "\uE946" // ícono de éxito
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != successDialog)
+                        successDialog.Owner = owner;
+                    successDialog.ShowDialog();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al seleccionar almacenes: {ex.Message}", "Error", 
-                               MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al seleccionar almacenes: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -787,29 +1008,59 @@ namespace SGA_Desktop.Dialog
             {
                 if (_almacenes.Count == 0)
                 {
-                    MessageBox.Show("No hay almacenes asignados para limpiar.", "Información", 
-                                   MessageBoxButton.OK, MessageBoxImage.Information);
+                    var infoDialog = new WarningDialog(
+                        "Información",
+                        "No hay almacenes asignados para limpiar.",
+                        "\uE946" // ícono de información
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != infoDialog)
+                        infoDialog.Owner = owner;
+                    infoDialog.ShowDialog();
                     return;
                 }
 
-                var resultado = MessageBox.Show($"¿Está seguro de que desea eliminar todos los {_almacenes.Count} almacenes asignados?", 
-                                               "Confirmar eliminación", 
-                                               MessageBoxButton.YesNo, 
-                                               MessageBoxImage.Question);
+                var confirmacionEliminar = new ConfirmationDialog(
+                    "Confirmar eliminación",
+                    $"¿Está seguro de que desea eliminar todos los {_almacenes.Count} almacenes asignados?"
+                );
+                var ownerConfirmacion = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                      ?? Application.Current.MainWindow;
+                if (ownerConfirmacion != null && ownerConfirmacion != confirmacionEliminar)
+                    confirmacionEliminar.Owner = ownerConfirmacion;
+                    
+                var resultado = confirmacionEliminar.ShowDialog();
 
-                if (resultado == MessageBoxResult.Yes)
+                if (resultado == true)
                 {
                     _almacenes.Clear();
                     CargarAlmacenesEnStackPanel();
                     
-                    MessageBox.Show("Se eliminaron todos los almacenes asignados.", 
-                                   "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                    var successDialog = new WarningDialog(
+                        "Éxito",
+                        "Se eliminaron todos los almacenes asignados.",
+                        "\uE946" // ícono de éxito
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != successDialog)
+                        successDialog.Owner = owner;
+                    successDialog.ShowDialog();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al limpiar almacenes: {ex.Message}", "Error", 
-                               MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al limpiar almacenes: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -868,21 +1119,49 @@ namespace SGA_Desktop.Dialog
                 var configuraciones = await _configuracionesService.ObtenerConfiguracionesPredefinidasAsync();
                 if (configuraciones != null && configuraciones.Any())
                 {
-                    // Agregar opción "Sin configuración"
-                    var configuracionesConOpcionVacia = new List<ConfiguracionPredefinidaDto>
+                    // Agregar opciones especiales
+                    var configuracionesConOpciones = new List<ConfiguracionPredefinidaDto>
                     {
-                        new ConfiguracionPredefinidaDto { Id = 0, Nombre = "-- Seleccionar configuración --" }
+                        new ConfiguracionPredefinidaDto { Id = 0, Nombre = "-- Seleccionar configuración --" },
+                        new ConfiguracionPredefinidaDto { Id = -1, Nombre = "Sin plantilla (desasociar)" }
                     };
-                    configuracionesConOpcionVacia.AddRange(configuraciones);
+                    configuracionesConOpciones.AddRange(configuraciones);
                     
-                    CmbConfiguracionPredefinida.ItemsSource = configuracionesConOpcionVacia;
-                    CmbConfiguracionPredefinida.SelectedIndex = 0; // Seleccionar la opción vacía por defecto
+                    CmbConfiguracionPredefinida.ItemsSource = configuracionesConOpciones;
+                    
+                    // Si el operario tiene una plantilla aplicada, seleccionarla automáticamente
+                    if (!string.IsNullOrWhiteSpace(_operario.PlantillaAplicada))
+                    {
+                        var plantillaAplicada = configuracionesConOpciones
+                            .FirstOrDefault(c => c.Nombre == _operario.PlantillaAplicada);
+                        
+                        if (plantillaAplicada != null)
+                        {
+                            CmbConfiguracionPredefinida.SelectedItem = plantillaAplicada;
+                        }
+                        else
+                        {
+                            CmbConfiguracionPredefinida.SelectedIndex = 0; // Seleccionar la opción vacía si no se encuentra
+                        }
+                    }
+                    else
+                    {
+                        CmbConfiguracionPredefinida.SelectedIndex = 0; // Seleccionar la opción vacía por defecto
+                    }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar configuraciones predefinidas: {ex.Message}", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al cargar configuraciones predefinidas: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
@@ -890,38 +1169,79 @@ namespace SGA_Desktop.Dialog
         {
             if (CmbConfiguracionPredefinida.SelectedItem is ConfiguracionPredefinidaDto configuracion)
             {
-                BtnAplicarConfiguracion.IsEnabled = configuracion.Id > 0;
+                // Habilitar botón para plantillas válidas (Id > 0) o para desasociación (Id == -1)
+                BtnAplicarConfiguracion.IsEnabled = configuracion.Id > 0 || configuracion.Id == -1;
             }
         }
 
         private async void BtnAplicarConfiguracion_Click(object sender, RoutedEventArgs e)
         {
-            if (CmbConfiguracionPredefinida.SelectedItem is ConfiguracionPredefinidaDto configuracion && configuracion.Id > 0)
+            if (CmbConfiguracionPredefinida.SelectedItem is ConfiguracionPredefinidaDto configuracion)
             {
                 try
                 {
-                    // Confirmar aplicación
-                    var resultado = MessageBox.Show(
-                        $"¿Está seguro de que desea aplicar la configuración '{configuracion.Nombre}'?\n\n" +
-                        "Esto sobrescribirá los límites, permisos, empresas y almacenes actuales.",
-                        "Confirmar aplicación de configuración",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (resultado == MessageBoxResult.Yes)
+                    // Manejar opción de desasociación
+                    if (configuracion.Id == -1) // "Sin plantilla (desasociar)"
                     {
-                        // Obtener la configuración completa
-                        var configuracionCompleta = await _configuracionesService.ObtenerConfiguracionPredefinidaAsync(configuracion.Id);
-                        if (configuracionCompleta != null)
+                        var confirmacionDesasociar = new ConfirmationDialog(
+                            "Confirmar desasociación",
+                            "¿Está seguro de que desea desasociar al operario de su plantilla actual?\n\n" +
+                            "Esto NO cambiará la configuración actual del operario (permisos, empresas, almacenes, límites), " +
+                            "solo lo desasociará de la plantilla."
+                        );
+                        var ownerConfirmacion = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                              ?? Application.Current.MainWindow;
+                        if (ownerConfirmacion != null && ownerConfirmacion != confirmacionDesasociar)
+                            confirmacionDesasociar.Owner = ownerConfirmacion;
+                            
+                        var resultado = confirmacionDesasociar.ShowDialog();
+
+                        if (resultado == true)
                         {
-                            await AplicarConfiguracionPredefinida(configuracionCompleta);
+                            await DesasociarPlantilla();
+                        }
+                        return;
+                    }
+                    
+                    // Manejar aplicación de plantilla normal
+                    if (configuracion.Id > 0)
+                    {
+                        // Confirmar aplicación
+                        var confirmacionAplicar = new ConfirmationDialog(
+                            "Confirmar aplicación de configuración",
+                            $"¿Está seguro de que desea aplicar la configuración '{configuracion.Nombre}'?\n\n" +
+                            "Esto sobrescribirá los límites, permisos, empresas y almacenes actuales."
+                        );
+                        var ownerConfirmacion = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                              ?? Application.Current.MainWindow;
+                        if (ownerConfirmacion != null && ownerConfirmacion != confirmacionAplicar)
+                            confirmacionAplicar.Owner = ownerConfirmacion;
+                            
+                        var resultado = confirmacionAplicar.ShowDialog();
+
+                        if (resultado == true)
+                        {
+                            // Obtener la configuración completa
+                            var configuracionCompleta = await _configuracionesService.ObtenerConfiguracionPredefinidaAsync(configuracion.Id);
+                            if (configuracionCompleta != null)
+                            {
+                                await AplicarConfiguracionPredefinida(configuracionCompleta);
+                            }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Error al aplicar la configuración: {ex.Message}", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                        var errorDialog = new WarningDialog(
+                            "Error",
+                            $"Error al aplicar la configuración: {ex.Message}",
+                            "\uE814" // ícono de error
+                        );
+                        var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                   ?? Application.Current.MainWindow;
+                        if (owner != null && owner != errorDialog)
+                            errorDialog.Owner = owner;
+                        errorDialog.ShowDialog();
                 }
             }
         }
@@ -944,8 +1264,16 @@ namespace SGA_Desktop.Dialog
             // Guardar la plantilla aplicada
             await GuardarPlantillaAplicada(configuracion);
 
-            MessageBox.Show($"Configuración '{configuracion.Nombre}' aplicada correctamente.", "Éxito", 
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            var successDialog = new WarningDialog(
+                "Éxito",
+                $"Configuración '{configuracion.Nombre}' aplicada correctamente.",
+                "\uE946" // ícono de éxito
+            );
+            var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                       ?? Application.Current.MainWindow;
+            if (owner != null && owner != successDialog)
+                successDialog.Owner = owner;
+            successDialog.ShowDialog();
         }
 
         private async Task AplicarPermisos(List<PermisoDisponibleDto> permisos)
@@ -983,7 +1311,7 @@ namespace SGA_Desktop.Dialog
             {
                 var empresaOperario = new EmpresaOperarioDto
                 {
-                    CodigoEmpresa = empresa.CodigoEmpresa,
+                    CodigoEmpresa = 1, // Siempre 1 para SGA
                     EmpresaOrigen = empresa.EmpresaOrigen,
                     Empresa = empresa.Nombre
                 };
@@ -1033,11 +1361,103 @@ namespace SGA_Desktop.Dialog
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar la plantilla aplicada: {ex.Message}", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al guardar la plantilla aplicada: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 
+        #endregion
+
+        #region Desasociación de Plantilla
+
+        /// <summary>
+        /// Desasocia al operario de su plantilla actual sin cambiar su configuración
+        /// </summary>
+        private async Task DesasociarPlantilla()
+        {
+            try
+            {
+                // Llamar al servicio para desasociar la plantilla
+                var exito = await _configuracionesService.DesasociarPlantillaAsync(_operario.Id);
+                
+                if (exito)
+                {
+                    // Actualizar la propiedad local
+                    _operario.PlantillaAplicada = null;
+                    
+                    // Actualizar el combo para mostrar "Sin plantilla"
+                    var configuraciones = CmbConfiguracionPredefinida.ItemsSource as List<ConfiguracionPredefinidaDto>;
+                    if (configuraciones != null)
+                    {
+                        var sinPlantilla = configuraciones.FirstOrDefault(c => c.Id == -1);
+                        if (sinPlantilla != null)
+                        {
+                            CmbConfiguracionPredefinida.SelectedItem = sinPlantilla;
+                        }
+                    }
+                    
+                    var successDialog = new WarningDialog(
+                        "Éxito",
+                        "El operario ha sido desasociado de su plantilla correctamente.\n\n" +
+                        "Su configuración actual (permisos, empresas, almacenes, límites) se mantiene sin cambios.",
+                        "\uE946" // ícono de éxito
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != successDialog)
+                        successDialog.Owner = owner;
+                    successDialog.ShowDialog();
+                }
+                else
+                {
+                    var errorDialog = new WarningDialog(
+                        "Error",
+                        "Error al desasociar la plantilla del operario.",
+                        "\uE814" // ícono de error
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != errorDialog)
+                        errorDialog.Owner = owner;
+                    errorDialog.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al desasociar la plantilla: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
+            }
+        }
+
+        #endregion
+
+        #region Helper Methods
+        private string ObtenerNombreEmpresa(short codigoEmpresa)
+        {
+            return codigoEmpresa switch
+            {
+                1 => "MORENO RUIZ HNOS,S.L",
+                3 => "DMI INNOVATIVE NUTRITION, S.L.",
+                999 => "NUTRIEXPERIENCE S.L.",
+                _ => $"Empresa {codigoEmpresa}"
+            };
+        }
         #endregion
     }
 

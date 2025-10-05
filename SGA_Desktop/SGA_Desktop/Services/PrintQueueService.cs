@@ -15,6 +15,10 @@ namespace SGA_Desktop.Services
 		/// </summary>
 		public async Task InsertarRegistroImpresionAsync(LogImpresionDto dto)
 		{
+			// Si la aplicación se está cerrando, no intentar insertar logs
+			if (SessionManager.IsClosing)
+				return;
+
 			dto.Usuario = SessionManager.Operario.ToString();
 			dto.Dispositivo = Environment.MachineName;
 			dto.Copias ??= 1;
@@ -26,12 +30,15 @@ namespace SGA_Desktop.Services
 			}
 			catch (HttpRequestException ex)
 			{
-				// No llegó a la API
-				MessageBox.Show(
-					$"Error de red al llamar al servicio:\n{ex.Message}",
-					"Error HTTP",
-					MessageBoxButton.OK,
-					MessageBoxImage.Error);
+				// Solo mostrar el diálogo si la aplicación no se está cerrando
+				if (!SessionManager.IsClosing)
+				{
+					MessageBox.Show(
+						$"Error de red al llamar al servicio:\n{ex.Message}",
+						"Error HTTP",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
+				}
 				return;
 			}
 
@@ -39,12 +46,15 @@ namespace SGA_Desktop.Services
 
 			if (!response.IsSuccessStatusCode)
 			{
-				// La API devolvió 4xx o 5xx
-				MessageBox.Show(
-					$"La API respondió con {(int)response.StatusCode} {response.ReasonPhrase}:\n{body}",
-					"Error en API",
-					MessageBoxButton.OK,
-					MessageBoxImage.Error);
+				// Solo mostrar el diálogo si la aplicación no se está cerrando
+				if (!SessionManager.IsClosing)
+				{
+					MessageBox.Show(
+						$"La API respondió con {(int)response.StatusCode} {response.ReasonPhrase}:\n{body}",
+						"Error en API",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
+				}
 				return;
 			}
 
@@ -57,6 +67,13 @@ namespace SGA_Desktop.Services
 		/// </summary>
 		public async Task<List<ImpresoraDto>> ObtenerImpresorasAsync()
 		{
+			// Si la aplicación se está cerrando, no intentar cargar impresoras
+			if (SessionManager.IsClosing)
+			{
+				return new List<ImpresoraDto>();
+			}
+
+			
 			try
 			{
 				var lista = await _httpClient
@@ -66,20 +83,30 @@ namespace SGA_Desktop.Services
 			}
 			catch (HttpRequestException ex)
 			{
-				MessageBox.Show(
-					$"Error de red al obtener impresoras:\n{ex.Message}",
-					"Error HTTP",
-					MessageBoxButton.OK,
-					MessageBoxImage.Error);
+				
+				// Solo mostrar el diálogo si la aplicación no se está cerrando
+				if (!SessionManager.IsClosing)
+				{
+					MessageBox.Show(
+						$"Error de red al obtener impresoras:\n{ex.Message}",
+						"Error HTTP",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
+				}
 				return new List<ImpresoraDto>();
 			}
 			catch (NotSupportedException)
 			{
-				MessageBox.Show(
-					"El contenido de la respuesta no está en formato JSON.",
-					"Error de formato",
-					MessageBoxButton.OK,
-					MessageBoxImage.Error);
+				
+				// Solo mostrar el diálogo si la aplicación no se está cerrando
+				if (!SessionManager.IsClosing)
+				{
+					MessageBox.Show(
+						"El contenido de la respuesta no está en formato JSON.",
+						"Error de formato",
+						MessageBoxButton.OK,
+						MessageBoxImage.Error);
+				}
 				return new List<ImpresoraDto>();
 			}
 		

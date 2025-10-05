@@ -30,6 +30,7 @@ namespace SGA_Api.Models.Traspasos
 		public string? DescripcionArticulo { get; set; }
 		public string? TipoTraspaso { get; set; }
 		public decimal? Cantidad { get; set; }
+		public string? Comentarios { get; set; }
 
 		
 		// Líneas del palet

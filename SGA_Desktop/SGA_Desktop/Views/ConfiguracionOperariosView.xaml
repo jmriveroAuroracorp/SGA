@@ -19,6 +19,10 @@
 
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
             <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            <helpers:BoolToColorConverter x:Key="BoolToColorConverter"/>
+            <helpers:BoolToBorderColorConverter x:Key="BoolToBorderColorConverter"/>
+            <helpers:BoolToStatusTextConverter x:Key="BoolToStatusTextConverter"/>
+            <helpers:FiltroEstadoToComboBoxConverter x:Key="FiltroEstadoToComboBoxConverter"/>
         </ResourceDictionary>
     </Page.Resources>
 
@@ -38,12 +42,12 @@
                     Margin="0,0,5,0">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
-                        <Setter Property="Background" Value="#E8F4FD"/>
-                        <Setter Property="BorderBrush" Value="#3498DB"/>
-                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Setter Property="Background" Value="White"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding MostrandoOperarios}" Value="True">
-                                <Setter Property="Background" Value="#3498DB"/>
+                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </DataTrigger>
@@ -54,15 +58,35 @@
             <Button Content="📋 Configuraciones Predefinidas"
                     Command="{Binding CambiarAConfiguracionesCommand}"
                     Width="250"
+                    Height="35"
+                    Margin="0,0,5,0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="White"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoConfiguraciones}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            <Button Content="➕ Alta SGA"
+                    Command="{Binding CambiarAAltaSgaCommand}"
+                    Width="150"
                     Height="35">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
-                        <Setter Property="Background" Value="#E8F4FD"/>
-                        <Setter Property="BorderBrush" Value="#3498DB"/>
-                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Setter Property="Background" Value="White"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding MostrandoConfiguraciones}" Value="True">
-                                <Setter Property="Background" Value="#3498DB"/>
+                            <DataTrigger Binding="{Binding MostrandoAltaSga}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </DataTrigger>
@@ -82,7 +106,7 @@
 
             <!-- Filtros y controles -->
             <Border Grid.Row="0"
-                    Background="{StaticResource BrushSecundario1}"
+                    Background="{StaticResource BrushPrincipal}"
                     Padding="20,15"
                     BorderBrush="{StaticResource BrushInputBorde}"
                     BorderThickness="0,0,0,1">
@@ -95,6 +119,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="300"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -103,29 +128,57 @@
                     <TextBlock Grid.Row="0" Grid.Column="0"
                                Text="Filtrar por nombre:"
                                VerticalAlignment="Center"
-                               Margin="0,0,10,0"/>
+                               Margin="0,0,10,0"
+                               Foreground="White"/>
 
                     <TextBox Grid.Row="0" Grid.Column="1"
                              Text="{Binding FiltroNombre, UpdateSourceTrigger=PropertyChanged}"
                              Height="30"
                              VerticalContentAlignment="Center"/>
 
+                    <!-- Filtro por estado activo/inactivo -->
+                    <ComboBox Grid.Row="0" Grid.Column="2"
+                              SelectedIndex="{Binding FiltroEstado, Converter={StaticResource FiltroEstadoToComboBoxConverter}}"
+                              VerticalAlignment="Center"
+                              Margin="20,0,0,0"
+                              Width="120"
+                              Height="30">
+                        <ComboBoxItem Content="Solo Activos"/>
+                        <ComboBoxItem Content="Solo Inactivos"/>
+                    </ComboBox>
+
 
                     <!-- Botones -->
-                    <StackPanel Grid.Row="0" Grid.Column="4"
+                    <StackPanel Grid.Row="0" Grid.Column="5"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Right">
                         <Button Content="Recargar"
                                 Command="{Binding CargarOperariosCommand}"
                                 Width="80"
                                 Height="35"
-                                Margin="0,0,10,0"
-                                Style="{StaticResource EstiloBotonSecundario}"/>
+                                Margin="0,0,10,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                         <Button Content="Limpiar Filtros"
                                 Command="{Binding LimpiarFiltrosCommand}"
                                 Width="100"
-                                Height="35"
-                                Style="{StaticResource EstiloBotonSecundario}"/>
+                                Height="35">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -177,6 +230,7 @@
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
                                                 <!-- ID y Nombre -->
@@ -200,6 +254,40 @@
                                                                Foreground="#2C3E50"
                                                                TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
+
+                                                <!-- Plantilla aplicada -->
+                                                <Border Grid.Column="1"
+                                                        Background="#E67E22"
+                                                        BorderBrush="#D35400"
+                                                        BorderThickness="1"
+                                                        CornerRadius="3"
+                                                        Padding="6,3"
+                                                        VerticalAlignment="Top"
+                                                        HorizontalAlignment="Right"
+                                                        Margin="0,0,5,0"
+                                                        Visibility="{Binding PlantillaAplicada, Converter={StaticResource StringToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding PlantillaAplicada}"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="10"
+                                                               Foreground="White"
+                                                               HorizontalAlignment="Center"/>
+                                                </Border>
+
+                                                <!-- Indicador de estado -->
+                                                <Border Grid.Column="2"
+                                                        Background="{Binding Activo, Converter={StaticResource BoolToColorConverter}}"
+                                                        BorderBrush="{Binding Activo, Converter={StaticResource BoolToBorderColorConverter}}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="3"
+                                                        Padding="6,3"
+                                                        VerticalAlignment="Top"
+                                                        HorizontalAlignment="Right">
+                                                    <TextBlock Text="{Binding Activo, Converter={StaticResource BoolToStatusTextConverter}}"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="10"
+                                                               Foreground="White"
+                                                               HorizontalAlignment="Center"/>
+                                                </Border>
 
                                             </Grid>
 
@@ -258,38 +346,34 @@
                                                                Foreground="#34495E"/>
                                                 </Grid>
 
-                                                <!-- Centro Logístico -->
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
 
-                                                    <TextBlock Grid.Column="0" Text="Centro: "
-                                                           FontWeight="SemiBold"
-                                                           FontSize="12"
-                                                           Foreground="#7F8C8D"/>
-                                                    <TextBlock Grid.Column="1" Text="{Binding CodigoCentro}"
-                                                           FontWeight="Bold"
-                                                           FontSize="12"
-                                                           Foreground="#34495E"/>
-                                                </Grid>
-                                                
-                                                <!-- Plantilla aplicada -->
-                                                <Grid Grid.Row="5" Margin="0,5,0,0" 
-                                                      Visibility="{Binding PlantillaAplicada, Converter={StaticResource StringToVisibilityConverter}}">
+                                                <!-- Límites -->
+                                                <Grid Margin="0,8,0,0">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding LimitesResumen}" Value="">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding LimitesResumen}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" Text="Plantilla: "
+                                                    <TextBlock Grid.Column="0" Text="Límites: "
                                                            FontWeight="SemiBold"
                                                            FontSize="12"
                                                            Foreground="#7F8C8D"/>
-                                                    <TextBlock Grid.Column="1" Text="{Binding PlantillaAplicada}"
+                                                    <TextBlock Grid.Column="1" Text="{Binding LimitesResumen}"
                                                            FontWeight="Bold"
                                                            FontSize="12"
-                                                           Foreground="#E67E22"/>
+                                                           Foreground="#E74C3C"/>
                                                 </Grid>
                                             </StackPanel>
 
@@ -323,25 +407,80 @@
                  <RowDefinition Height="*"/>
              </Grid.RowDefinitions>
 
-            <!-- Controles de configuración -->
+            <!-- Barra unificada de filtros y controles -->
             <Border Grid.Row="0"
-                    Background="{StaticResource BrushSecundario1}"
+                    Background="{StaticResource BrushPrincipal}"
                     Padding="20,15"
                     BorderBrush="{StaticResource BrushInputBorde}"
                     BorderThickness="0,0,0,1">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="➕ Nueva Configuración"
-                            Command="{Binding CrearConfiguracionCommand}"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                            Width="180"
-                            Height="35"
-                            Margin="0,0,10,0"/>
-                    <Button Content="🔄 Recargar"
-                            Command="{Binding RecargarConfiguracionesCommand}"
-                            Style="{StaticResource EstiloBotonSecundario}"
-                            Width="120"
-                            Height="35"/>
-                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Filtro por nombre -->
+                    <TextBlock Grid.Column="0"
+                               Text="Filtrar por nombre:"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               Foreground="White"/>
+                    <TextBox Grid.Column="1"
+                             Text="{Binding FiltroConfiguracion, UpdateSourceTrigger=PropertyChanged}"
+                             Width="300"
+                             Height="35"
+                             VerticalAlignment="Center"
+                             Margin="0,0,20,0"/>
+
+                    <!-- Botones de acción -->
+                    <StackPanel Grid.Column="3"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Content="➕ Nueva Configuración"
+                                Command="{Binding CrearConfiguracionCommand}"
+                                Width="180"
+                                Height="35"
+                                Margin="0,0,10,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="🔄 Recargar"
+                                Command="{Binding RecargarConfiguracionesCommand}"
+                                Width="100"
+                                Height="35"
+                                Margin="0,0,10,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="Limpiar Filtros"
+                                Command="{Binding LimpiarFiltrosConfiguracionCommand}"
+                                Width="120"
+                                Height="35">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </Border>
 
             <!-- Lista de configuraciones predefinidas -->
@@ -509,21 +648,19 @@
                                                 <Button Content="✏️ Editar"
                                                         Command="{Binding DataContext.EditarConfiguracionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
-                                                        Style="{StaticResource EstiloBoton}"
                                                         Width="80"
                                                         Height="30"
                                                         FontSize="11"
                                                         FontWeight="Medium"
-                                                        Margin="0,0,4,0"/>
-                                                <Button Content="👁️ Ver"
-                                                        Command="{Binding DataContext.VerConfiguracionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        CommandParameter="{Binding}"
-                                                        Style="{StaticResource EstiloBotonSecundario}"
-                                                        Width="60"
-                                                        Height="30"
-                                                        FontSize="11"
-                                                        FontWeight="Medium"
-                                                        Margin="0,0,4,0"/>
+                                                        Margin="0,0,4,0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                                                            <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                            <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
                                                 <Button Content="🗑️"
                                                         Command="{Binding DataContext.EliminarConfiguracionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
@@ -544,9 +681,178 @@
 
         </Grid>
 
+         <!-- CONTENIDO DE ALTA SGA -->
+         <Grid Grid.Row="1"
+               Visibility="{Binding MostrandoAltaSga, Converter={StaticResource BoolToVisibilityConverter}}">
+             <Grid.RowDefinitions>
+                 <RowDefinition Height="Auto"/>
+                 <RowDefinition Height="*"/>
+             </Grid.RowDefinitions>
+
+            <!-- Filtros y controles para Alta SGA -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource BrushPrincipal}"
+                    Padding="20,15"
+                    BorderBrush="{StaticResource BrushInputBorde}"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Filtro por nombre -->
+                    <TextBlock Grid.Column="0"
+                               Text="Buscar empleado:"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               Foreground="White"/>
+
+                    <TextBox Grid.Column="1"
+                             Text="{Binding FiltroEmpleado, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30"
+                             VerticalContentAlignment="Center"/>
+
+                    <!-- Botones -->
+                    <StackPanel Grid.Column="3"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Content="🔄 Recargar"
+                                Command="{Binding CargarEmpleadosDisponiblesCommand}"
+                                Width="100"
+                                Height="35"
+                                Margin="0,0,10,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="➕ Dar de Alta Seleccionados"
+                                Command="{Binding DarAltaSeleccionadosCommand}"
+                                Width="180"
+                                Height="35">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                    <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="White"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Lista de empleados disponibles -->
+            <GroupBox Grid.Row="1" Header="👥 Empleados Disponibles para Alta en SGA" Margin="20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Estado de carga -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10"
+                                    Visibility="{Binding CargandoEmpleados, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ProgressBar Width="20" Height="20"
+                                         IsIndeterminate="True"
+                                         Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding MensajeEmpleados}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource BrushSecundario}"
+                                       FontStyle="Italic"/>
+                        </StackPanel>
+
+                        <!-- Lista de cards de empleados -->
+                        <ItemsControl Grid.Row="1" ItemsSource="{Binding EmpleadosDisponibles}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource EstiloTarjeta}"
+                                            Width="280"
+                                            Height="120"
+                                            Margin="6"
+                                            Cursor="Hand">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Header con ID y Nombre -->
+                                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- ID y Nombre -->
+                                                <StackPanel Grid.Column="0" Orientation="Vertical">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                        <TextBlock Text="Código: "
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{StaticResource BrushPrincipal}"
+                                                                   FontSize="12"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding CodigoEmpleado}"
+                                                                   FontFamily="Consolas"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#2C3E50"
+                                                                   FontSize="12"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Nombre}"
+                                                               FontWeight="Bold"
+                                                               FontSize="14"
+                                                               Foreground="#2C3E50"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+
+                                                <!-- Checkbox para selección -->
+                                                <CheckBox Grid.Column="1"
+                                                          IsChecked="{Binding IsSelected}"
+                                                          VerticalAlignment="Top"
+                                                          HorizontalAlignment="Right"/>
+                                            </Grid>
+
+                                            <!-- Botón de acción -->
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <Button Content="➕ Dar de Alta"
+                                                        Command="{Binding DataContext.DarAltaEmpleadoCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                                        Width="100"
+                                                        Height="30"
+                                                        FontSize="11"
+                                                        FontWeight="Medium"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </ScrollViewer>
+            </GroupBox>
+
+        </Grid>
+
          <!-- Barra de estado general -->
          <Border Grid.Row="2"
-                Background="{StaticResource BrushSecundario1}"
+                Background="{StaticResource BrushPrincipal}"
                 Padding="20,10"
                 BorderBrush="{StaticResource BrushInputBorde}"
                 BorderThickness="0,1,0,0">
@@ -559,7 +865,7 @@
                 <TextBlock Grid.Column="0"
                            Text="{Binding Mensaje}"
                            VerticalAlignment="Center"
-                           Foreground="{StaticResource BrushGrisOscuro}"/>
+                           Foreground="White"/>
 
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
@@ -571,7 +877,7 @@
                                  Margin="0,0,10,0"/>
                     <TextBlock Text="Cargando..."
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource BrushGrisOscuro}"/>
+                               Foreground="White"/>
                 </StackPanel>
             </Grid>
         </Border>

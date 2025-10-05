@@ -26,6 +26,12 @@ namespace SGA_Desktop.Dialog
 			this.DataContext = new SGA_Desktop.ViewModels.TraspasoPaletDialogViewModel();
 		}
 
+		public TraspasoPaletDialog(SGA_Desktop.Models.PaletDto palet)
+		{
+			InitializeComponent();
+			this.DataContext = new SGA_Desktop.ViewModels.TraspasoPaletDialogViewModel(palet);
+		}
+
 		private void Cerrar_Click(object sender, RoutedEventArgs e)
 		{
 			this.Close();

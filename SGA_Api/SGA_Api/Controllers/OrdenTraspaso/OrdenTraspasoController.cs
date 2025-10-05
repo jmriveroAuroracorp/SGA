@@ -61,6 +61,16 @@ namespace SGA_Api.Controllers.OrdenTraspaso
             return NoContent();
         }
 
+        [HttpPost("{idOrden}/linea")]
+        public async Task<ActionResult<LineaOrdenTraspasoDetalleDto>> CrearLineaOrdenTraspaso(Guid idOrden, CrearLineaOrdenTraspasoDto dto)
+        {
+            var linea = await _ordenTraspasoService.CrearLineaOrdenTraspasoAsync(idOrden, dto);
+            if (linea == null)
+                return NotFound();
+
+            return CreatedAtAction(nameof(GetOrdenTraspaso), new { id = idOrden }, linea);
+        }
+
         [HttpPost("{id}/completar")]
         public async Task<IActionResult> CompletarOrdenTraspaso(Guid id)
         {
@@ -76,9 +86,19 @@ namespace SGA_Api.Controllers.OrdenTraspaso
         {
             var result = await _ordenTraspasoService.CancelarOrdenTraspasoAsync(id);
             if (!result)
-                return BadRequest("No se puede cancelar la orden. Verifique que esté en estado PENDIENTE o EN_PROCESO y sin movimientos realizados.");
+                return BadRequest("No se puede cancelar la orden. Verifique que esté en estado PENDIENTE o SIN_ASIGNAR y sin movimientos realizados.");
 
             return Ok(new { mensaje = "Orden cancelada exitosamente" });
+        }
+
+        [HttpPost("{id}/cancelar-lineas-pendientes")]
+        public async Task<IActionResult> CancelarLineasPendientes(Guid id)
+        {
+            var result = await _ordenTraspasoService.CancelarLineasPendientesAsync(id);
+            if (!result)
+                return BadRequest("No se pueden cancelar las líneas pendientes. Verifique que la orden esté en estado EN_PROCESO y tenga líneas pendientes.");
+
+            return Ok(new { mensaje = "Líneas pendientes canceladas exitosamente" });
         }
 
         [HttpDelete("{id}")]

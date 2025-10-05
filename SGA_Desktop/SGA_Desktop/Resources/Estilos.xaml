@@ -7,7 +7,11 @@
     <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <helpers:BoolToVisibilityConverter x:Key="BoolToVis"/>
     <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+    <helpers:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
+    <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
     <helpers:ProgressWidthConverter x:Key="ProgressWidthConverter"/>
+    <helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
+    <helpers:IntToVisibilityConverter x:Key="IntToVisibilityConverter"/>
 
     <!-- 🎨 Colores -->
     <!--<Color x:Key="ColorPrincipal">#0067C3</Color>-->
@@ -564,6 +568,24 @@
         <sys:String>EN_PROCESO</sys:String>
         <sys:String>COMPLETADA</sys:String>
         <sys:String>CANCELADA</sys:String>
+        <sys:String>SIN_ASIGNAR</sys:String>
     </x:Array>
+
+    <!-- Estilo global para ComboBoxItem para evitar errores de binding -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="4,2"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#E6F0FA"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="#D0E7FF"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 
 </ResourceDictionary>

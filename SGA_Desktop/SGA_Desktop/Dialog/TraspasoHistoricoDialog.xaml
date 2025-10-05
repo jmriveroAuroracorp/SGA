@@ -25,7 +25,7 @@
             Background="{StaticResource BrushFondo}"
             BorderBrush="{StaticResource BrushPrincipal}"
             BorderThickness="2"
-            Padding="20">
+            Padding="15">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/> <!-- Filtros - más compactos -->
@@ -152,7 +152,7 @@
                     </StackPanel>
                     
                     <!-- Lista de traspasos -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="20,0,20,20">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="15,0,15,15">
                         <StackPanel>
                             <ItemsControl ItemsSource="{Binding Traspasos}">
                                 <ItemsControl.ItemTemplate>
@@ -165,52 +165,139 @@
                                                 BorderBrush="{StaticResource BrushIntermedio}"
                                                 Cursor="Hand">
                                             <Border.Effect>
-                                                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.15"/>
+                                                <DropShadowEffect BlurRadius="6" ShadowDepth="3" Opacity="0.2"/>
                                             </Border.Effect>
                                             
-                                            <!-- Layout de una sola línea -->
+                                            <!-- Layout compacto de dos filas -->
                                             <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/> <!-- Primera fila: Información principal -->
+                                                    <RowDefinition Height="Auto"/> <!-- Segunda fila: Información secundaria -->
+                                                </Grid.RowDefinitions>
+                                                
+                                                <!-- Primera fila: Fecha, Artículo, Descripción, Tipo, Estado, Cantidad -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,6">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="120"/>
+                                                        <ColumnDefinition Width="130"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="2*"/>
                                                     <ColumnDefinition Width="80"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="80"/>
+                                                        <ColumnDefinition Width="100"/>
                                                     <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="140"/>
                                                 </Grid.ColumnDefinitions>
                                                 
                                                 <!-- Fecha -->
                                                 <StackPanel Grid.Column="0">
                                                     <TextBlock Text="FECHA" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                                    Foreground="Gray" Margin="0,0,0,3"/>
                                                     <TextBlock Text="{Binding FechaInicio, StringFormat=dd/MM/yyyy HH:mm}" 
                                                                FontSize="13" FontWeight="Bold" 
                                                                Foreground="{StaticResource BrushPrincipal}"/>
                                                 </StackPanel>
                                                 
                                                 <!-- Artículo -->
-                                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                     <StackPanel Grid.Column="1" Margin="6,0,0,0">
                                                     <TextBlock Text="ARTÍCULO" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                                    Foreground="Gray" Margin="0,0,0,3"/>
                                                     <TextBlock Text="{Binding CodigoArticulo}" FontSize="13" FontWeight="Bold" 
                                                                Foreground="{StaticResource BrushPrincipal}"/>
                                                 </StackPanel>
                                                 
                                                 <!-- Descripción -->
-                                                <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                                                     <StackPanel Grid.Column="2" Margin="6,0,0,0">
                                                     <TextBlock Text="DESCRIPCIÓN" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4"/>
-                                                    <TextBlock Text="{Binding DescripcionArticulo}" FontSize="13" 
+                                                                    Foreground="Gray" Margin="0,0,0,3"/>
+                                                         <TextBlock Text="{Binding DescripcionArticulo}" FontSize="12" 
                                                                Foreground="Black" TextWrapping="Wrap" 
-                                                               FontWeight="Medium"/>
+                                                                    FontWeight="Medium" MaxHeight="36" TextTrimming="CharacterEllipsis"/>
+                                                     </StackPanel>
+                                                    
+                                                    <!-- Tipo de Traspaso -->
+                                                    <StackPanel Grid.Column="3" Margin="6,0,0,0">
+                                                        <TextBlock Text="TIPO" FontSize="11" FontWeight="Bold" 
+                                                                   Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                                        <Border Background="#E3F2FD" BorderBrush="#2196F3" BorderThickness="1" 
+                                                                CornerRadius="3" Padding="5,3" HorizontalAlignment="Center">
+                                                            <TextBlock FontSize="10" FontWeight="Bold" 
+                                                                       HorizontalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Text" Value="{Binding TipoTraspaso}"/>
+                                                                        <Setter Property="Foreground" Value="#1976D2"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding TipoTraspaso}" Value="ARTICULO">
+                                                                                <Setter Property="Text" Value="ARTÍCULO"/>
+                                                                                <Setter Property="Foreground" Value="#1976D2"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding TipoTraspaso}" Value="PALET">
+                                                                                <Setter Property="Text" Value="PALET"/>
+                                                                                <Setter Property="Foreground" Value="#388E3C"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    
+                                                    <!-- Estado -->
+                                                    <StackPanel Grid.Column="4" Margin="6,0,0,0">
+                                                        <TextBlock Text="ESTADO" FontSize="11" FontWeight="Bold" 
+                                                                   Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                                        <Border Background="#E8F5E8" BorderBrush="#28A745" BorderThickness="1" 
+                                                                CornerRadius="3" Padding="12,4" HorizontalAlignment="Center">
+                                                            <TextBlock Text="{Binding CodigoEstado}" FontSize="10" FontWeight="Bold" 
+                                                                       Foreground="#198754" HorizontalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="COMPLETADO">
+                                                                                <Setter Property="Text" Value="COMP"/>
+                                                                                <Setter Property="Foreground" Value="#198754"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="PENDIENTE">
+                                                                                <Setter Property="Text" Value="PEND"/>
+                                                                                <Setter Property="Foreground" Value="#FD7E14"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="CANCELADO">
+                                                                                <Setter Property="Text" Value="CANC"/>
+                                                                                <Setter Property="Foreground" Value="#DC3545"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="ERROR_ERP">
+                                                                                <Setter Property="Text" Value="ERROR"/>
+                                                                                <Setter Property="Foreground" Value="#DC3545"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    
+                                                    <!-- Cantidad -->
+                                                    <StackPanel Grid.Column="5" Margin="6,0,0,0">
+                                                        <TextBlock Text="CANTIDAD" FontSize="11" FontWeight="Bold" 
+                                                                   Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Cantidad, StringFormat=F2}" FontSize="13" 
+                                                                   FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
+                                                                   HorizontalAlignment="Center"/>
                                                 </StackPanel>
+                                                </Grid>
+                                                
+                                                <!-- Segunda fila: Origen, Destino, Palet, Usuario, Observaciones -->
+                                                <Grid Grid.Row="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="150"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
                                                 
                                                 <!-- Origen -->
-                                                <StackPanel Grid.Column="3" Margin="8,0,0,0">
+                                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                                     <TextBlock Text="ORIGEN" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                                     Foreground="Gray" Margin="0,0,0,3"/>
                                                     <TextBlock Text="{Binding AlmacenOrigen}" FontSize="12" 
                                                                FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                                     <TextBlock Text="{Binding UbicacionOrigen}" FontSize="11" 
@@ -218,62 +305,84 @@
                                                 </StackPanel>
                                                 
                                                 <!-- Destino -->
-                                                <StackPanel Grid.Column="4" Margin="8,0,0,0">
+                                                     <StackPanel Grid.Column="1" Margin="0,0,8,0">
                                                     <TextBlock Text="DESTINO" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4"/>
+                                                                     Foreground="Gray" Margin="0,0,0,3"/>
                                                     <TextBlock Text="{Binding AlmacenDestino}" FontSize="12" 
                                                                FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                                     <TextBlock Text="{Binding UbicacionDestino}" FontSize="11" 
                                                                Foreground="Black" FontWeight="Medium"/>
                                                 </StackPanel>
                                                 
-                                                <!-- Cantidad -->
-                                                <StackPanel Grid.Column="5" Margin="8,0,0,0">
-                                                    <TextBlock Text="CANTIDAD" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="{Binding Cantidad, StringFormat=F2}" FontSize="13" 
-                                                               FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
-                                                               HorizontalAlignment="Center"/>
-                                                </StackPanel>
-                                                
-                                                <!-- Estado -->
-                                                <StackPanel Grid.Column="6" Margin="8,0,0,0">
-                                                    <TextBlock Text="ESTADO" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4" HorizontalAlignment="Center"/>
-                                                    <Border Background="#E8F5E8" BorderBrush="#28A745" BorderThickness="1" 
-                                                            CornerRadius="4" Padding="6,3" HorizontalAlignment="Center">
-                                                        <TextBlock Text="{Binding CodigoEstado}" FontSize="11" FontWeight="Bold" 
-                                                                   Foreground="#198754" HorizontalAlignment="Center">
+                                                    <!-- Palet -->
+                                                    <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                                        <TextBlock Text="PALET" FontSize="11" FontWeight="Bold" 
+                                                                   Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                                        <TextBlock FontSize="11" FontWeight="Bold" 
+                                                                   HorizontalAlignment="Center">
                                                             <TextBlock.Style>
                                                                 <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="Sin paletizar"/>
                                                                     <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="COMPLETADO">
-                                                                            <Setter Property="Foreground" Value="#198754"/>
+                                                                        <DataTrigger Binding="{Binding CodigoPalet}" Value="{x:Null}">
+                                                                            <Setter Property="Text" Value="Sin paletizar"/>
+                                                                            <Setter Property="Foreground" Value="#6C757D"/>
                                                                         </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="PENDIENTE">
-                                                                            <Setter Property="Foreground" Value="#FD7E14"/>
+                                                                        <DataTrigger Binding="{Binding CodigoPalet}" Value="">
+                                                                            <Setter Property="Text" Value="Sin paletizar"/>
+                                                                            <Setter Property="Foreground" Value="#6C757D"/>
                                                                         </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="CANCELADO">
-                                                                            <Setter Property="Foreground" Value="#DC3545"/>
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding CodigoEstado}" Value="ERROR">
-                                                                            <Setter Property="Foreground" Value="#DC3545"/>
+                                                                        <DataTrigger Binding="{Binding CodigoPalet}" Value="NULL">
+                                                                            <Setter Property="Text" Value="Sin paletizar"/>
+                                                                            <Setter Property="Foreground" Value="#6C757D"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </TextBlock.Style>
+                                                            <TextBlock.Text>
+                                                                <MultiBinding StringFormat="{}{0}">
+                                                                    <Binding Path="CodigoPalet"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
                                                         </TextBlock>
-                                                    </Border>
                                                 </StackPanel>
                                                 
-                                                <!-- Usuario -->
-                                                <StackPanel Grid.Column="7" Margin="8,0,0,0">
-                                                    <TextBlock Text="USUARIO" FontSize="11" FontWeight="Bold" 
-                                                               Foreground="Gray" Margin="0,0,0,4" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="{Binding UsuarioInicioNombre}" FontSize="12" 
-                                                               Foreground="Black" TextWrapping="Wrap" 
-                                                               HorizontalAlignment="Center" FontWeight="Medium"/>
+                                                 <!-- Usuario -->
+                                                     <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                                                          <TextBlock Text="USUARIO" FontSize="11" FontWeight="Bold" 
+                                                                     Foreground="Gray" Margin="0,0,0,3"/>
+                                                          <TextBlock Text="{Binding UsuarioInicioNombre}" FontSize="11" 
+                                                                   Foreground="Black" FontWeight="Medium" 
+                                                                   TextWrapping="Wrap" MaxHeight="24" TextTrimming="CharacterEllipsis"/>
+                                                 </StackPanel>
+                                                 
+                                                    <!-- Observaciones -->
+                                                    <StackPanel Grid.Column="4">
+                                                        <TextBlock Text="OBSERVACIONES" FontSize="11" FontWeight="Bold" 
+                                                                   Foreground="Gray" Margin="0,0,0,3"/>
+                                                        <TextBlock FontSize="11" Foreground="Black" FontWeight="Medium" 
+                                                                   TextWrapping="Wrap" MaxHeight="24" TextTrimming="CharacterEllipsis">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="Sin observaciones"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Comentarios}" Value="{x:Null}">
+                                                                            <Setter Property="Text" Value="Sin observaciones"/>
+                                                                            <Setter Property="Foreground" Value="#6C757D"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Comentarios}" Value="">
+                                                                            <Setter Property="Text" Value="Sin observaciones"/>
+                                                                            <Setter Property="Foreground" Value="#6C757D"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                            <TextBlock.Text>
+                                                                <Binding Path="Comentarios"/>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
                                                 </StackPanel>
+                                                </Grid>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -286,11 +395,8 @@
 
             <!-- Botones -->
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button Content="Cerrar" Width="120" Height="35" Margin="0,0,10,0" 
+                <Button Content="Cerrar" Width="120" Height="35" 
                         IsCancel="True" Command="{Binding CerrarCommand}" 
-                        Style="{StaticResource EstiloBotonPrincipal}"/>
-                <Button Content="Ver Detalles" Width="120" Height="35" 
-                        Command="{Binding VerDetallesCommand}"
                         Style="{StaticResource EstiloBotonPrincipal}"/>
             </StackPanel>
         </Grid>

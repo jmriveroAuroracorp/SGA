@@ -129,6 +129,7 @@ namespace SGA_Desktop.ViewModels
             CodigoPalet = stockSeleccionado.CodigoPalet ?? "";
             EstadoPalet = stockSeleccionado.EstadoPalet ?? "";
             
+            
             _ = InitializeAsync();
         }
 
@@ -275,7 +276,7 @@ namespace SGA_Desktop.ViewModels
 				FechaInicio = _fechaBusqueda,
 				DescripcionArticulo = _stockSeleccionado.DescripcionArticulo,
 				UnidadMedida = null,
-				Observaciones = comentariosTexto, // Usar comentarios del usuario
+				Comentario = comentariosTexto, // Usar comentarios del usuario
 
 				// 🔹 nuevo flag para que el backend reabra el palet de ORIGEN si estaba cerrado
 				ReabrirSiCerradoOrigen = reabrirOrigen
@@ -338,6 +339,7 @@ namespace SGA_Desktop.ViewModels
                 
             dialog.ShowDialog();
         }
+
 
         // No es necesario implementar PropertyChanged, lo gestiona ObservableObject
     }

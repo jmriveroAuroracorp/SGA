@@ -15,11 +15,17 @@ namespace SGA_Desktop.Services
         /// <summary>
         /// Obtiene lista de operarios disponibles para seleccionar
         /// </summary>
-        public async Task<List<OperarioDisponibleDto>?> ObtenerOperariosDisponiblesAsync()
+        public async Task<List<OperarioDisponibleDto>?> ObtenerOperariosDisponiblesAsync(bool? soloActivos = true)
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{BASE_URL}/disponibles");
+                var url = $"{BASE_URL}/disponibles";
+                if (soloActivos.HasValue)
+                {
+                    url += $"?soloActivos={soloActivos.Value.ToString().ToLower()}";
+                }
+                
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -93,7 +99,7 @@ namespace SGA_Desktop.Services
         /// <summary>
         /// Actualiza la configuración de un operario
         /// </summary>
-        public async Task<bool> ActualizarOperarioAsync(int operarioId, OperarioUpdateDto operarioUpdate)
+        public async Task<ActualizarOperarioResult> ActualizarOperarioAsync(int operarioId, OperarioUpdateDto operarioUpdate)
         {
             try
             {
@@ -123,7 +129,14 @@ namespace SGA_Desktop.Services
                     throw new Exception($"Error del servidor: {response.StatusCode} - {errorContent}");
                 }
                 
-                return true;
+                // Leer la respuesta para obtener información sobre los cambios
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<ActualizarOperarioResult>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+                
+                return result ?? new ActualizarOperarioResult { Success = true, HuboCambios = true };
             }
             catch (Exception ex)
             {
@@ -299,5 +312,73 @@ namespace SGA_Desktop.Services
                 throw new Exception($"Error al aplicar plantilla: {ex.Message}", ex);
             }
         }
+
+        /// <summary>
+        /// Da de baja a un operario estableciendo su FechaBaja
+        /// </summary>
+        public async Task<bool> DarDeBajaOperarioAsync(int operarioId)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync($"{BASE_URL}/{operarioId}/dar-de-baja", null);
+                
+                System.Diagnostics.Debug.WriteLine($"Status Code: {response.StatusCode}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    System.Diagnostics.Debug.WriteLine($"Respuesta del API: {content}");
+                    
+                    // Verificar que la respuesta contenga "success": true
+                    if (content.Contains("\"success\":true") || content.Contains("\"success\": true"))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Operación exitosa detectada");
+                        return true;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("No se encontró 'success': true en la respuesta");
+                        return false;
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error HTTP: {response.StatusCode}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error al dar de baja operario {operarioId}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Da de alta a un operario estableciendo su FechaBaja como null
+        /// </summary>
+        public async Task<bool> DarDeAltaOperarioAsync(int operarioId)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync($"{BASE_URL}/{operarioId}/dar-de-alta", null);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error al dar de alta operario {operarioId}: {ex.Message}");
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resultado de la actualización de un operario
+    /// </summary>
+    public class ActualizarOperarioResult
+    {
+        public bool Success { get; set; }
+        public bool HuboCambios { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }

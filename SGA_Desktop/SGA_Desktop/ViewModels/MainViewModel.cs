@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Services;
+using SGA_Desktop.Models;
 using System.Net.Http.Headers;
 using System.Net.Http;
 using System.Text;
@@ -25,7 +26,7 @@ namespace SGA_Desktop.ViewModels
 		{
 			_login = loginService;
 
-			CurrentHeader = string.Empty;
+			CurrentHeader = "BIENVENIDO";
 			EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
 			nombreOperario = SessionManager.NombreOperario;
 			SessionManager.EmpresaCambiada += (_, __) =>
@@ -33,7 +34,16 @@ namespace SGA_Desktop.ViewModels
 				EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
 			};
 
+			// Suscribirse a solicitudes de cambio de header
+			NavigationStore.HeaderChangeRequested += (sender, newHeader) =>
+			{
+				CurrentHeader = newHeader;
+			};
+
 			_ = InicializarEmpresaPreferidaAsync();
+			
+			// Configurar sistema de notificaciones con campanita
+			ConfigurarSistemaNotificaciones();
 		}
 
 		[ObservableProperty]
@@ -45,6 +55,15 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private string nombreOperario = "";
 
+		[ObservableProperty]
+		private int contadorNotificaciones = 0;
+
+		[ObservableProperty]
+		private int contadorNotificacionesPositivas = 0;
+
+		[ObservableProperty]
+		private int contadorNotificacionesNegativas = 0;
+
 		private async Task InicializarEmpresaPreferidaAsync()
 		{
 			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
@@ -55,6 +74,13 @@ namespace SGA_Desktop.ViewModels
 				SessionManager.SetEmpresa(idEmpresa.Value);
 				EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
 			}
+		}
+
+		[RelayCommand]
+		public void IrAWelcome()
+		{
+			NavigationStore.Navigate("Welcome");
+			CurrentHeader = "BIENVENIDO";
 		}
 
 		[RelayCommand]
@@ -132,6 +158,9 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		private async Task CerrarSesion()
 		{
+			// Marcar que la aplicación se está cerrando INMEDIATAMENTE
+			SessionManager.IsClosing = true;
+			
 			var dialog = new ConfirmationDialog(
 				"Confirmar salida",
 				"¿Estás seguro de que quieres salir de la aplicación?");
@@ -140,12 +169,22 @@ namespace SGA_Desktop.ViewModels
 			if (owner != null && owner != dialog)
 				dialog.Owner = owner;
 			if (dialog.ShowDialog() != true)
+			{
+				// Si el usuario cancela, resetear el flag
+				SessionManager.IsClosing = false;
 				return;
+			}
+			
+			// Si el usuario confirma, mantener el flag en true
 
 			var logoutTask = Task.Run(async () =>
 			{
 				try
 				{
+					// Verificar si la aplicación se está cerrando antes de continuar
+					if (SessionManager.IsClosing)
+						return;
+
 					if (!string.IsNullOrWhiteSpace(SessionManager.Token))
 					{
 						using var http = new HttpClient();
@@ -199,6 +238,98 @@ namespace SGA_Desktop.ViewModels
 			EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
 		}
 
+		#region Sistema de Notificaciones con Campanita
+
+		/// <summary>
+		/// Configura el sistema de notificaciones con campanita
+		/// </summary>
+		private void ConfigurarSistemaNotificaciones()
+		{
+			try
+			{
+				// Suscribirse a eventos del NotificacionesManager
+				NotificacionesManager.OnNotificacionAgregada += OnNotificacionRecibida;
+				NotificacionesManager.OnContadorCambiado += OnContadorCambiado;
+
+				// Inicializar contadores
+				ContadorNotificaciones = NotificacionesManager.ContadorPendientes;
+				
+				// Calcular contadores separados
+				var notificaciones = NotificacionesManager.ObtenerNotificacionesPendientes();
+				ContadorNotificacionesPositivas = notificaciones.Count(n => n.EsPositiva);
+				ContadorNotificacionesNegativas = notificaciones.Count(n => n.EsNegativa);
+
+				System.Diagnostics.Debug.WriteLine("✅ Sistema de notificaciones con campanita configurado");
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"❌ Error al configurar sistema de notificaciones: {ex.Message}");
+			}
+		}
+
+		/// <summary>
+		/// Maneja las notificaciones recibidas de SignalR (convertidas a NotificacionDto)
+		/// </summary>
+		private void OnNotificacionRecibida(NotificacionDto notificacion)
+		{
+			try
+			{
+				System.Diagnostics.Debug.WriteLine($"🔔 Notificación recibida: {notificacion.Titulo} - {notificacion.Mensaje}");
+				
+				// La notificación ya está agregada al NotificacionesManager
+				// El contador se actualizará automáticamente via OnContadorCambiado
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"❌ Error al procesar notificación: {ex.Message}");
+			}
+		}
+
+		/// <summary>
+		/// Maneja cambios en el contador de notificaciones
+		/// </summary>
+		private void OnContadorCambiado(int nuevoContador)
+		{
+			ContadorNotificaciones = nuevoContador;
+			
+			// Calcular contadores separados por tipo
+			var notificaciones = NotificacionesManager.ObtenerNotificacionesPendientes();
+			ContadorNotificacionesPositivas = notificaciones.Count(n => n.EsPositiva);
+			ContadorNotificacionesNegativas = notificaciones.Count(n => n.EsNegativa);
+			
+			System.Diagnostics.Debug.WriteLine($"🔔 Contador total: {nuevoContador}, Positivas: {ContadorNotificacionesPositivas}, Negativas: {ContadorNotificacionesNegativas}");
+		}
+
+		/// <summary>
+		/// Comando para abrir el modal de notificaciones
+		/// </summary>
+		[RelayCommand]
+		private void AbrirNotificaciones()
+		{
+			try
+			{
+				System.Diagnostics.Debug.WriteLine("🔔 Abriendo modal de notificaciones");
+				
+				var modal = new NotificacionesModal();
+				var viewModel = new NotificacionesModalViewModel();
+				modal.DataContext = viewModel;
+				
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						   ?? Application.Current.MainWindow;
+				if (owner != null && owner != modal)
+					modal.Owner = owner;
+				
+				modal.ShowDialog();
+				
+				System.Diagnostics.Debug.WriteLine("✅ Modal de notificaciones mostrado");
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"❌ Error al abrir notificaciones: {ex.Message}");
+			}
+		}
+
+		#endregion
 
 	}
 }

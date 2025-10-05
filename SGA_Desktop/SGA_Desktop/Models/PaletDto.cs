@@ -25,5 +25,11 @@ namespace SGA_Desktop.Models
 
 		public string? CodigoGS1 { get; set; }
 		public string? CodigoPalet { get; set; }
+
+		// Propiedades de traspaso
+		public string? AlmacenOrigen { get; set; }
+		public string? UbicacionOrigen { get; set; }
+		public DateTime? FechaUltimoTraspaso { get; set; }
+		public int? UsuarioUltimoTraspaso { get; set; }
 	}
 }

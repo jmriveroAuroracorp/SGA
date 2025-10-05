@@ -6,10 +6,12 @@ using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using SGA_Desktop.ViewModels;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 using System.Linq;
 
 
@@ -28,6 +30,21 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
 		= new ObservableCollection<UbicacionDetalladaDto>();
 	[ObservableProperty] private UbicacionDetalladaDto? selectedUbicacion;
+
+	// Filtrado
+	public ICollectionView UbicacionesView { get; }
+	private string _filtroBusqueda = string.Empty;
+	public string FiltroBusqueda
+	{
+		get => _filtroBusqueda;
+		set
+		{
+			if (SetProperty(ref _filtroBusqueda, value))
+			{
+				UbicacionesView.Refresh();
+			}
+		}
+	}
 
 	public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; } = new();
 
@@ -69,6 +86,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public IRelayCommand CreateUbicacionCommand { get; }
 	public IRelayCommand<UbicacionDetalladaDto> EditarUbicacionCommand { get; }
 	public IRelayCommand<AlmacenDto> OpenMasivoCommand { get; }
+	public IRelayCommand RefrescarCommand { get; }
 
 	[RelayCommand]
 	private async Task ImprimirUbicacionAsync(UbicacionDetalladaDto ubicacion)
@@ -169,6 +187,11 @@ $"Posición: {ubicacion.Posicion}";
 		_ubicService = ubicService;
 		_paletService = paletService;
 		_printService = new PrintQueueService();
+		
+		// Inicializar CollectionView para filtrado
+		UbicacionesView = CollectionViewSource.GetDefaultView(Ubicaciones);
+		UbicacionesView.Filter = FiltroUbicacion;
+		
 		LoadAlergenosCommand = new AsyncRelayCommand<UbicacionDetalladaDto>(LoadAlergenosAsync);
 		CreateUbicacionCommand = new RelayCommand<AlmacenDto>(
 		OpenCrearUbicacionDialog,
@@ -180,7 +203,13 @@ $"Posición: {ubicacion.Posicion}";
   );
 		_ = InitializeAsync();
 		OpenMasivoCommand = new RelayCommand<AlmacenDto>(OpenMasivoDialog, alm => alm != null);
-		_ = LoadImpresorasAsync();
+		RefrescarCommand = new RelayCommand(RefrescarUbicaciones, () => SelectedAlmacenCombo != null);
+		
+		// Solo cargar impresoras si la aplicación no se está cerrando
+		if (!SessionManager.IsClosing)
+		{
+			_ = LoadImpresorasAsync();
+		}
 
 	}
 
@@ -198,6 +227,15 @@ $"Posición: {ubicacion.Posicion}";
 		foreach (var u in Ubicaciones)
 			u.IsMarcada = false;
 		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void RefrescarUbicaciones()
+	{
+		if (SelectedAlmacenCombo != null)
+		{
+			_ = LoadUbicacionesAsync(SelectedAlmacenCombo.CodigoAlmacen);
+		}
 	}
 
 	[RelayCommand]
@@ -315,6 +353,9 @@ $"Posición: {ubicacion.Posicion}";
 	{
 		if (nuev is not null)
 			_ = LoadUbicacionesAsync(nuev.CodigoAlmacen);
+		
+		// Actualizar el estado del comando de refrescar
+		RefrescarCommand.NotifyCanExecuteChanged();
 	}
 
 	private async Task LoadUbicacionesAsync(string almacen)
@@ -472,6 +513,10 @@ $"Posición: {ubicacion.Posicion}";
 
 	private async Task LoadImpresorasAsync()
 	{
+		// Si la aplicación se está cerrando, no cargar impresoras
+		if (SessionManager.IsClosing)
+			return;
+
 		try
 		{
 			var lista = await _printService.ObtenerImpresorasAsync();
@@ -481,12 +526,30 @@ $"Posición: {ubicacion.Posicion}";
 		}
 		catch (Exception ex)
 		{
-			MessageBox.Show(
-				$"Error al cargar impresoras: {ex.Message}",
-				"Error de impresoras",
-				MessageBoxButton.OK,
-				MessageBoxImage.Error);
+			// Solo mostrar el diálogo si la aplicación no se está cerrando
+			if (!SessionManager.IsClosing)
+			{
+				MessageBox.Show(
+					$"Error al cargar impresoras: {ex.Message}",
+					"Error de impresoras",
+					MessageBoxButton.OK,
+					MessageBoxImage.Error);
+			}
 		}
+	}
+
+	private bool FiltroUbicacion(object obj)
+	{
+		if (obj is not UbicacionDetalladaDto ubicacion) return false;
+		if (string.IsNullOrWhiteSpace(FiltroBusqueda)) return true;
+
+		return (ubicacion.Ubicacion?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
+			   (ubicacion.DescripcionUbicacion?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
+			   (ubicacion.TipoUbicacionDescripcion?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
+			   (ubicacion.Pasillo?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
+			   (ubicacion.Estanteria?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
+			   (ubicacion.Altura?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
+			   (ubicacion.Posicion?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
 	}
 
 

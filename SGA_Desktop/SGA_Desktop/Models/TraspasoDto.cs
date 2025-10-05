@@ -32,6 +32,7 @@ namespace SGA_Desktop.Models
 		public string? CodigoArticulo { get; set; }
 		public string? DescripcionArticulo { get; set; }
 		public decimal? Cantidad { get; set; }
+		public string? Comentarios { get; set; }
 		
 		// Líneas del palet
 		public List<LineaPaletDto> LineasPalet { get; set; } = new List<LineaPaletDto>();

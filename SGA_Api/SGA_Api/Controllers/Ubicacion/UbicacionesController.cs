@@ -248,6 +248,9 @@ namespace SGA_Api.Controllers.Ubicacion
 					u.CodigoUbicacion == dto.CodigoUbicacion);
 			if (existe) return Conflict("La ubicación ya existe.");
 
+			// Limpiar el contexto para evitar problemas de estado
+			_auroraSgaContext.ChangeTracker.Clear();
+
 			// 3. Crear entidad Ubicaciones
 			var u = new SGA_Api.Models.Ubicacion.Ubicacion
 			{
@@ -284,21 +287,23 @@ namespace SGA_Api.Controllers.Ubicacion
 			};
 			_auroraSgaContext.Ubicaciones_Configuracion.Add(cfg);
 
-			await _auroraSgaContext.SaveChangesAsync();
-
 			// 5) Insertar los alérgenos permitidos
-			foreach (var codAler in dto.AlergenosPermitidos)
+			if (dto.AlergenosPermitidos != null && dto.AlergenosPermitidos.Any())
 			{
-				_auroraSgaContext.Ubicaciones_AlergenosPermitidos.Add(new UbicacionesAlergenosPermitidos
+				foreach (var codAler in dto.AlergenosPermitidos)
 				{
-					CodigoEmpresa = dto.CodigoEmpresa,
-					CodigoAlmacen = dto.CodigoAlmacen,
-					Ubicacion = dto.CodigoUbicacion,
-					VCodigoAlergeno = codAler
-				});
+					_auroraSgaContext.Ubicaciones_AlergenosPermitidos.Add(new UbicacionesAlergenosPermitidos
+					{
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Ubicacion = dto.CodigoUbicacion,
+						VCodigoAlergeno = codAler
+					});
+				}
 			}
+			
+			// Guardar todos los cambios
 			await _auroraSgaContext.SaveChangesAsync();
-
 
 			return CreatedAtAction(
 				nameof(GetUbicacionesBasico),

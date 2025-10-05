@@ -23,40 +23,65 @@
             <!-- Listado -->
         </Grid.RowDefinitions>
 
-        <!-- 2) Filtro de Almacén, siempre fijo arriba -->
-        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="Almacén:"
-                 VerticalAlignment="Center"
-                 FontFamily="{StaticResource FuentePrincipal}"
-                 FontSize="14"
-                 Margin="0,0,5,0"/>
-            <ComboBox Width="250"
-                Style="{StaticResource EstiloComboBox}"
-                ItemsSource="{Binding AlmacenesCombo}"
-                DisplayMemberPath="DescripcionCombo"
-                SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"/>
-            <Button Content="Nueva ubicación"
-          Margin="20,0,20,0"
-          Padding="8,4"
-                    Width="150"
-          Style="{StaticResource EstiloBotonPrincipal}"
-          Command="{Binding CreateUbicacionCommand}"
-          CommandParameter="{Binding SelectedAlmacenCombo}"
-          ToolTip="Crear una ubicación en este almacén"/>
-            <Button Content="Multiples ubicaciones"
-          Margin="10,0,0,0"
-                    Width="150"
-          Padding="8,4"
-          Style="{StaticResource EstiloBotonPrincipal}"
-          Command="{Binding OpenMasivoCommand}"
-          CommandParameter="{Binding SelectedAlmacenCombo}"
-          ToolTip="Generar ubicaciones en bloque"/>
-        </StackPanel>
+        <!-- 2) Filtros y Botones -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            
+            <!-- Filtros a la izquierda -->
+            <StackPanel Orientation="Horizontal" Grid.Column="0">
+                <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                    <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
+                    <ComboBox Width="250"
+                        Style="{StaticResource EstiloComboBox}"
+                        ItemsSource="{Binding AlmacenesCombo}"
+                        DisplayMemberPath="DescripcionCombo"
+                        SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"/>
+                </StackPanel>
+                
+                <StackPanel Orientation="Vertical">
+                    <TextBlock Text="Buscar" FontWeight="Bold" Margin="0,0,0,4"/>
+                    <TextBox Width="200"
+                             Height="32"
+                             Style="{StaticResource EstiloCajaTexto}"
+                             Text="{Binding FiltroBusqueda, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Buscar por ubicación, descripción, tipo, pasillo, estantería, altura o posición"/>
+                </StackPanel>
+            </StackPanel>
+            
+            <!-- Botones a la derecha -->
+            <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Bottom">
+                <Button Content="Nueva ubicación"
+                        Margin="0,0,10,0"
+                        Padding="8,4"
+                        Width="150"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding CreateUbicacionCommand}"
+                        CommandParameter="{Binding SelectedAlmacenCombo}"
+                        ToolTip="Crear una ubicación en este almacén"/>
+                <Button Content="Multiples ubicaciones"
+                        Padding="8,4"
+                        Width="150"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding OpenMasivoCommand}"
+                        CommandParameter="{Binding SelectedAlmacenCombo}"
+                        ToolTip="Generar ubicaciones en bloque"/>
+                <Button Content="Refrescar"
+                        Padding="8,4"
+                        Width="100"
+                        Margin="10,0,0,0"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding RefrescarCommand}"
+                        ToolTip="Actualizar la lista de ubicaciones"/>
+            </StackPanel>
+        </Grid>
 
         
         <!-- 3) ListView con virtualización y estilo de tarjeta -->
         <ListView x:Name="lvUbicaciones" Grid.Row="1"
-              ItemsSource="{Binding Ubicaciones}"
+              ItemsSource="{Binding UbicacionesView}"
               SelectedItem="{Binding SelectedUbicacion}"
               ScrollViewer.VerticalScrollBarVisibility="Auto"
               BorderThickness="0"

@@ -133,8 +133,7 @@ namespace SGA_Desktop.ViewModels
                 var resultado = !IsCargando && Lineas.Any() && 
                     Lineas.All(l => !string.IsNullOrWhiteSpace(l.CodigoArticulo) && 
                                    l.CantidadPlan > 0 && 
-                                   !string.IsNullOrWhiteSpace(l.CodigoAlmacenDestino) &&
-                                   l.IdOperarioAsignado > 0);
+                                   !string.IsNullOrWhiteSpace(l.CodigoAlmacenDestino));
                 
                 System.Diagnostics.Debug.WriteLine($"=== DEBUG PuedeCrearOrden ===");
                 System.Diagnostics.Debug.WriteLine($"IsCargando: {IsCargando}");
@@ -142,7 +141,7 @@ namespace SGA_Desktop.ViewModels
                 System.Diagnostics.Debug.WriteLine($"Lineas.Count: {Lineas.Count}");
                 foreach (var linea in Lineas)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Línea: {linea.CodigoArticulo} - Usuario: {linea.IdOperarioAsignado} - Cantidad: {linea.CantidadPlan} - Destino: {linea.CodigoAlmacenDestino}");
+                    System.Diagnostics.Debug.WriteLine($"Línea: {linea.CodigoArticulo} - Usuario: {(linea.IdOperarioAsignado > 0 ? linea.IdOperarioAsignado.ToString() : "Sin asignar")} - Cantidad: {linea.CantidadPlan} - Destino: {linea.CodigoAlmacenDestino}");
                 }
                 System.Diagnostics.Debug.WriteLine($"Resultado final: {resultado}");
                 System.Diagnostics.Debug.WriteLine($"=============================");
@@ -323,6 +322,12 @@ namespace SGA_Desktop.ViewModels
                         InicializarFiltradoLinea(nuevaLinea);
 
                         Lineas.Add(nuevaLinea);
+                        
+                        // Verificar que se inicializó correctamente
+                        if (nuevaLinea.OperariosViewLinea == null)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"ADVERTENCIA: OperariosViewLinea no se inicializó para línea: {nuevaLinea.CodigoArticulo}");
+                        }
                     }
 
                     // Seleccionar la última línea agregada
@@ -359,7 +364,7 @@ namespace SGA_Desktop.ViewModels
                 System.Diagnostics.Debug.WriteLine("=== DEBUG CrearOrden - Líneas ===");
                 foreach (var linea in Lineas)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Línea: {linea.CodigoArticulo} - IdOperarioAsignado: {linea.IdOperarioAsignado}");
+                    System.Diagnostics.Debug.WriteLine($"Línea: {linea.CodigoArticulo} - IdOperarioAsignado: {(linea.IdOperarioAsignado > 0 ? linea.IdOperarioAsignado.ToString() : "Sin asignar")}");
                 }
                 System.Diagnostics.Debug.WriteLine("=================================");
 
@@ -470,12 +475,7 @@ namespace SGA_Desktop.ViewModels
                     return false;
                 }
 
-                if (linea.IdOperarioAsignado <= 0)
-                {
-                    MessageBox.Show("Todas las líneas deben tener un usuario asignado.", "Validación", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return false;
-                }
+                // Validación de operario removida - ahora se permite crear líneas sin operario asignado
             }
 
             return true;
@@ -483,12 +483,35 @@ namespace SGA_Desktop.ViewModels
 
         private void InicializarFiltradoLinea(CrearLineaOrdenTraspasoDto linea)
         {
-            // Crear una copia de los operarios para esta línea
-            linea.OperariosDisponiblesLinea = new ObservableCollection<OperariosAccesoDto>(OperariosDisponibles);
-            
-            // Crear vista filtrada para esta línea específica
-            linea.OperariosViewLinea = CollectionViewSource.GetDefaultView(linea.OperariosDisponiblesLinea);
-            linea.OperariosViewLinea.Filter = obj => FiltraOperarioLinea(obj, linea);
+            try
+            {
+                // Verificar que OperariosDisponibles no esté vacío
+                if (OperariosDisponibles == null || !OperariosDisponibles.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine($"ERROR: OperariosDisponibles está vacío para línea: {linea.CodigoArticulo}");
+                    return;
+                }
+
+                // Crear una copia de los operarios para esta línea
+                linea.OperariosDisponiblesLinea = new ObservableCollection<OperariosAccesoDto>(OperariosDisponibles);
+                
+                // Crear vista filtrada para esta línea específica
+                linea.OperariosViewLinea = CollectionViewSource.GetDefaultView(linea.OperariosDisponiblesLinea);
+                
+                if (linea.OperariosViewLinea != null)
+                {
+                    linea.OperariosViewLinea.Filter = obj => FiltraOperarioLinea(obj, linea);
+                    System.Diagnostics.Debug.WriteLine($"Filtrado inicializado para línea: {linea.CodigoArticulo} - Operarios: {linea.OperariosDisponiblesLinea.Count}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"ERROR: OperariosViewLinea es null para línea: {linea.CodigoArticulo}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error inicializando filtrado: {ex.Message}");
+            }
         }
 
         private bool FiltraOperarioLinea(object obj, CrearLineaOrdenTraspasoDto linea)
@@ -512,17 +535,41 @@ namespace SGA_Desktop.ViewModels
         {
             if (linea != null)
             {
-                linea.FiltroOperarioLinea = ""; // Limpiar el filtro para permitir escribir desde cero
+                // Limpiar el filtro y mostrar todos los operarios
+                linea.FiltroOperarioLinea = "";
                 linea.IsDropDownOpenLinea = true;
-                linea.OperariosViewLinea?.Refresh();
+                
+                // Forzar actualización del filtro para mostrar todos
+                if (linea.OperariosViewLinea != null)
+                {
+                    linea.OperariosViewLinea.Filter = obj => FiltraOperarioLinea(obj, linea);
+                    linea.OperariosViewLinea.Refresh();
+                    System.Diagnostics.Debug.WriteLine($"Filtro limpiado para línea: {linea.CodigoArticulo}");
+                }
             }
         }
 
         [RelayCommand]
         private void ActualizarFiltroLinea(CrearLineaOrdenTraspasoDto linea)
         {
-            if (linea?.OperariosViewLinea != null)
+            if (linea == null) return;
+            
+            // Si no está inicializado, inicializarlo
+            if (linea.OperariosViewLinea == null)
             {
+                InicializarFiltradoLinea(linea);
+            }
+            
+            if (linea.OperariosViewLinea != null)
+            {
+                // Abrir el dropdown cuando se escribe (solo si hay texto)
+                if (!string.IsNullOrWhiteSpace(linea.FiltroOperarioLinea))
+                {
+                    linea.IsDropDownOpenLinea = true;
+                }
+                
+                // Forzar actualización del filtro
+                linea.OperariosViewLinea.Filter = obj => FiltraOperarioLinea(obj, linea);
                 linea.OperariosViewLinea.Refresh();
             }
         }

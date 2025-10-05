@@ -1,4 +1,5 @@
 ﻿using SGA_Desktop.ViewModels;
+using SGA_Desktop.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,21 +26,14 @@ namespace SGA_Desktop.Views
 		{
 			InitializeComponent();
 			DataContext = new PaletizacionViewModel();
-			//this.Loaded += async (_, __) =>
-			//{
-			//	if (DataContext is PaletizacionViewModel vm)
-			//		await vm.LoadPaletsCommand.ExecuteAsync(null);
-			//};
 		}
 
-		//private async void PaletizacionView_Loaded(object sender, RoutedEventArgs e)
-		//{
-		//	// Al cargar la página, pide al VM que traiga los datos
-		//	if (DataContext is PaletizacionViewModel vm)
-		//	{
-		//		// Ejecuta el comando async (carga los primeros 100 pallets)
-		//		await vm.LoadPaletsCommand.ExecuteAsync(null);
-		//	}
-		//}
+		private void PaletCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+		{
+			if (sender is Grid grid && grid.Tag is PaletDto palet && DataContext is PaletizacionViewModel vm)
+			{
+				vm.PaletSeleccionado = palet;
+			}
+		}
 	}
 }

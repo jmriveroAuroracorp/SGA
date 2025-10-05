@@ -175,7 +175,7 @@ namespace SGA_Desktop.ViewModels
                 Estados.Add(new EstadoTraspasoDto { CodigoEstado = "EN_PROCESO", Descripcion = "En Proceso" });
                 Estados.Add(new EstadoTraspasoDto { CodigoEstado = "COMPLETADO", Descripcion = "Completado" });
                 Estados.Add(new EstadoTraspasoDto { CodigoEstado = "CANCELADO", Descripcion = "Cancelado" });
-                Estados.Add(new EstadoTraspasoDto { CodigoEstado = "ERROR", Descripcion = "Error" });
+                Estados.Add(new EstadoTraspasoDto { CodigoEstado = "ERROR_ERP", Descripcion = "Error" });
             }
             catch (Exception ex)
             {

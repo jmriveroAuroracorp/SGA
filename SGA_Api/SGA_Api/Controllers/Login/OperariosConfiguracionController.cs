@@ -22,24 +22,46 @@ namespace SGA_Api.Controllers.Login
         /// Obtiene lista de operarios que tienen acceso al SGA
         /// </summary>
         [HttpGet("disponibles")]
-        public async Task<ActionResult<List<OperarioDisponibleDto>>> GetOperariosDisponibles()
+        public async Task<ActionResult<List<OperarioDisponibleDto>>> GetOperariosDisponibles([FromQuery] bool? soloActivos = true)
         {
-            // Primero obtener los operarios básicos
-            var operarios = await (from o in _context.Operarios
-                                   join a in _context.AccesosOperarios on o.Id equals a.Operario
-                                   where o.FechaBaja == null && a.CodigoEmpresa == 1 && a.MRH_CodigoAplicacion >= 7 // Solo operarios activos con permisos >= 7
-                                   select new OperarioDisponibleDto
-                                   {
-                                       Id = o.Id,
-                                       Nombre = o.Nombre ?? "Sin nombre",
-                                       CodigoCentro = o.CodigoCentro,
-                                       Permisos = string.Empty, // Se llenará después
-                                       Empresas = string.Empty, // Se llenará después
-                                       Almacenes = string.Empty // Se llenará después
-                                   })
-                                 .Distinct()
-                                 .OrderBy(o => o.Nombre)
-                                 .ToListAsync();
+            // Construir la consulta base
+            var query = from o in _context.Operarios
+                        join a in _context.AccesosOperarios on o.Id equals a.Operario
+                        where a.CodigoEmpresa == 1 && a.MRH_CodigoAplicacion >= 7 // Operarios con permisos >= 7
+                        select o;
+
+            // Aplicar filtro por estado según el parámetro
+            if (soloActivos.HasValue)
+            {
+                if (soloActivos.Value)
+                {
+                    // Solo operarios activos (FechaBaja == null)
+                    query = query.Where(o => o.FechaBaja == null);
+                }
+                else
+                {
+                    // Solo operarios inactivos (FechaBaja != null)
+                    query = query.Where(o => o.FechaBaja != null);
+                }
+            }
+            // Si soloActivos es null, no aplicar filtro de estado (mostrar todos)
+
+            // Ejecutar la consulta
+            var operarios = await query
+                .Select(o => new OperarioDisponibleDto
+                {
+                    Id = o.Id,
+                    Nombre = o.Nombre ?? "Sin nombre",
+                    CodigoCentro = o.CodigoCentro,
+                    FechaBaja = o.FechaBaja,
+                    Activo = o.FechaBaja == null,
+                    Permisos = string.Empty, // Se llenará después
+                    Empresas = string.Empty, // Se llenará después
+                    Almacenes = string.Empty // Se llenará después
+                })
+                .Distinct()
+                .OrderBy(o => o.Nombre)
+                .ToListAsync();
 
             // Llenar listas para cada operario
             foreach (var operario in operarios)
@@ -56,7 +78,11 @@ namespace SGA_Api.Controllers.Login
 
                 // Empresas (tabla MRH_SGAOperariosEmpresas) - solo nombres
                 var empresas = await _context.Database.SqlQueryRaw<string>(
-                    "SELECT Empresa FROM MRH_SGAOperariosEmpresas WHERE Operario = {0} ORDER BY Empresa", operario.Id)
+                    @"SELECT e.Empresa 
+                      FROM MRH_SGAOperariosEmpresas oe 
+                      INNER JOIN Empresas e ON e.CodigoEmpresa = oe.EmpresaOrigen 
+                      WHERE oe.Operario = {0} 
+                      ORDER BY e.Empresa", operario.Id)
                     .ToListAsync();
                 operario.Empresas = string.Join(", ", empresas);
 
@@ -95,7 +121,9 @@ namespace SGA_Api.Controllers.Login
                     Activo = o.FechaBaja == null,
                     Permisos = string.Empty, // Se llenará después
                     Empresas = string.Empty, // Se llenará después
-                    Almacenes = string.Empty // Se llenará después
+                    Almacenes = string.Empty, // Se llenará después
+                    LimiteImporte = o.MRH_LimiteInventarioEuros,
+                    LimiteUnidades = o.MRH_LimiteInventarioUnidades
                 })
                 .OrderBy(o => o.Nombre)
                 .ToListAsync();
@@ -115,7 +143,11 @@ namespace SGA_Api.Controllers.Login
 
                 // Empresas (tabla MRH_SGAOperariosEmpresas) - solo nombres
                 var empresas = await _context.Database.SqlQueryRaw<string>(
-                    "SELECT Empresa FROM MRH_SGAOperariosEmpresas WHERE Operario = {0} ORDER BY Empresa", operario.Id)
+                    @"SELECT e.Empresa 
+                      FROM MRH_SGAOperariosEmpresas oe 
+                      INNER JOIN Empresas e ON e.CodigoEmpresa = oe.EmpresaOrigen 
+                      WHERE oe.Operario = {0} 
+                      ORDER BY e.Empresa", operario.Id)
                     .ToListAsync();
                 operario.Empresas = string.Join(", ", empresas);
 
@@ -133,6 +165,20 @@ namespace SGA_Api.Controllers.Login
                     .Select(oca => oca.ConfiguracionPredefinidaNombre)
                     .FirstOrDefaultAsync();
                 operario.PlantillaAplicada = plantillaAplicada;
+
+                // Calcular resumen de límites
+                System.Diagnostics.Debug.WriteLine($"Operario {operario.Id}: LimiteImporte={operario.LimiteImporte}, LimiteUnidades={operario.LimiteUnidades}");
+                
+                if (operario.LimiteImporte.HasValue && operario.LimiteImporte.Value > 0.0000000m)
+                {
+                    operario.LimitesResumen = $"{operario.LimiteImporte.Value:C} / {operario.LimiteUnidades ?? 0:N0} unidades";
+                }
+                else
+                {
+                    operario.LimitesResumen = "Sin límites";
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"Operario {operario.Id}: LimitesResumen='{operario.LimitesResumen}'");
             }
 
             return Ok(operarios);
@@ -158,67 +204,6 @@ namespace SGA_Api.Controllers.Login
             });
         }
 
-        /// <summary>
-        /// Endpoint temporal para debuggear contadores
-        /// </summary>
-        [HttpGet("debug-contadores/{operarioId}")]
-        public async Task<ActionResult> DebugContadores(int operarioId)
-        {
-            // Consulta SQL directa para verificar
-            var permisosSQL = await _context.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*) FROM MRH_accesosOperariosSGA WHERE Operario = {0}", operarioId)
-                .FirstOrDefaultAsync();
-
-            var empresasSQL = await _context.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*) FROM MRH_SGAOperariosEmpresas WHERE Operario = {0}", operarioId)
-                .FirstOrDefaultAsync();
-
-            var almacenesSQL = await _context.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*) FROM MRH_OperariosAlmacenes WHERE Operario = {0}", operarioId)
-                .FirstOrDefaultAsync();
-
-            // También probar con Entity Framework
-            var permisosEF = await _context.AccesosOperarios
-                .Where(a => a.Operario == operarioId)
-                .ToListAsync();
-
-            // Obtener los códigos de permisos específicos
-            var permisosCodigos = await _context.Database.SqlQueryRaw<string>(
-                "SELECT CAST(MRH_CodigoAplicacion AS VARCHAR) FROM MRH_accesosOperariosSGA WHERE Operario = {0} ORDER BY MRH_CodigoAplicacion", operarioId)
-                .ToListAsync();
-
-            // Filtrar permisos >= 7
-            var permisosFiltrados = permisosCodigos.Where(p => int.TryParse(p, out int codigo) && codigo >= 7).ToList();
-
-            var empresasEF = await _context.OperariosEmpresas
-                .Where(e => e.Operario == operarioId)
-                .ToListAsync();
-
-            var almacenesEF = await _context.OperariosAlmacenes
-                .Where(a => a.Operario == operarioId)
-                .ToListAsync();
-
-            return Ok(new
-            {
-                OperarioId = operarioId,
-                SQL_Directo = new
-                {
-                    Permisos = permisosSQL,
-                    Empresas = empresasSQL,
-                    Almacenes = almacenesSQL
-                },
-                EntityFramework = new
-                {
-                    Permisos = permisosEF.Count,
-                    Empresas = empresasEF.Count,
-                    Almacenes = almacenesEF.Count
-                },
-                DetallePermisos = permisosEF.Select(p => new { p.CodigoEmpresa, p.MRH_CodigoAplicacion }),
-                PermisosCodigos = permisosCodigos,
-                PermisosFiltrados = permisosFiltrados,
-                CantidadPermisosFiltrados = permisosFiltrados.Count
-            });
-        }
 
         /// <summary>
         /// Obtiene configuración completa de un operario específico
@@ -263,6 +248,12 @@ namespace SGA_Api.Controllers.Login
                                            NombreEmpresa = e.EmpresaNombre ?? ""
                                        }).ToListAsync();
 
+                // Obtener plantilla aplicada
+                var plantillaAplicada = await _auroraContext.OperariosConfiguracionesAplicadas
+                    .Where(oca => oca.OperarioId == id && oca.Activa)
+                    .Select(oca => oca.ConfiguracionPredefinidaNombre)
+                    .FirstOrDefaultAsync();
+
                 var configuracion = new OperarioConfiguracionDto
                 {
                     Id = operario.Id,
@@ -274,7 +265,8 @@ namespace SGA_Api.Controllers.Login
                     LimiteInventarioUnidades = operario.MRH_LimiteInventarioUnidades,
                     Permisos = permisos,
                     Empresas = empresas,
-                    Almacenes = almacenes
+                    Almacenes = almacenes,
+                    PlantillaAplicada = plantillaAplicada
                 };
 
                 return Ok(configuracion);
@@ -299,31 +291,49 @@ namespace SGA_Api.Controllers.Login
                 if (operario == null)
                     return NotFound($"Operario con ID {id} no encontrado");
 
+                bool huboCambios = false;
+
                 // ⚠️ IMPORTANTE: Solo actualizar estos dos campos de la tabla operarios
                 // NO tocar ningún otro campo para evitar romper el ERP
-                // Usar EF Core directamente para evitar problemas de transacción
-                if (dto.LimiteInventarioEuros.HasValue)
+                // Usar SQL directo para evitar problemas con triggers
+                if (dto.LimiteInventarioEuros.HasValue && operario.MRH_LimiteInventarioEuros != dto.LimiteInventarioEuros.Value)
                 {
-                    operario.MRH_LimiteInventarioEuros = dto.LimiteInventarioEuros.Value;
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE operarios SET MRH_LimiteInventarioEuros = {0} WHERE Operario = {1}",
+                        dto.LimiteInventarioEuros.Value, id);
+                    huboCambios = true;
                 }
-                if (dto.LimiteInventarioUnidades.HasValue)
+                if (dto.LimiteInventarioUnidades.HasValue && operario.MRH_LimiteInventarioUnidades != dto.LimiteInventarioUnidades.Value)
                 {
-                    operario.MRH_LimiteInventarioUnidades = dto.LimiteInventarioUnidades.Value;
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE operarios SET MRH_LimiteInventarioUnidades = {0} WHERE Operario = {1}",
+                        dto.LimiteInventarioUnidades.Value, id);
+                    huboCambios = true;
                 }
 
-                // Gestionar permisos
-                await GestionarPermisos(id, dto.PermisosAsignar, dto.PermisosQuitar);
+                // Gestionar permisos y detectar cambios
+                var cambiosPermisos = await GestionarPermisos(id, dto.PermisosAsignar, dto.PermisosQuitar);
+                if (cambiosPermisos) huboCambios = true;
 
-                // Gestionar empresas
-                await GestionarEmpresas(id, dto.EmpresasAsignar, dto.EmpresasQuitar);
+                // Gestionar empresas y detectar cambios
+                var cambiosEmpresas = await GestionarEmpresas(id, dto.EmpresasAsignar, dto.EmpresasQuitar);
+                if (cambiosEmpresas) huboCambios = true;
 
-                // Gestionar almacenes
-                await GestionarAlmacenes(id, dto.AlmacenesAsignar, dto.AlmacenesQuitar);
+                // Gestionar almacenes y detectar cambios
+                var cambiosAlmacenes = await GestionarAlmacenes(id, dto.AlmacenesAsignar, dto.AlmacenesQuitar);
+                if (cambiosAlmacenes) huboCambios = true;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok("Configuración actualizada correctamente");
+                if (huboCambios)
+                {
+                    return Ok(new { message = "Configuración actualizada correctamente", huboCambios = true });
+                }
+                else
+                {
+                    return Ok(new { message = "No se detectaron cambios en la configuración", huboCambios = false });
+                }
             }
             catch (Exception ex)
             {
@@ -512,6 +522,7 @@ namespace SGA_Api.Controllers.Login
                     .Select(e => new EmpresaConfiguracionDto
                     {
                         CodigoEmpresa = e.CodigoEmpresa,
+                        EmpresaOrigen = e.CodigoEmpresa, // El código real de la empresa
                         Nombre = e.EmpresaNombre
                     })
                     .FirstOrDefaultAsync();
@@ -525,6 +536,7 @@ namespace SGA_Api.Controllers.Login
                     .Select(e => new EmpresaConfiguracionDto
                     {
                         CodigoEmpresa = e.CodigoEmpresa,
+                        EmpresaOrigen = e.CodigoEmpresa, // El código real de la empresa
                         Nombre = e.EmpresaNombre
                     })
                     .FirstOrDefaultAsync();
@@ -538,6 +550,7 @@ namespace SGA_Api.Controllers.Login
                     .Select(e => new EmpresaConfiguracionDto
                     {
                         CodigoEmpresa = e.CodigoEmpresa,
+                        EmpresaOrigen = e.CodigoEmpresa, // El código real de la empresa
                         Nombre = e.EmpresaNombre
                     })
                     .FirstOrDefaultAsync();
@@ -577,8 +590,10 @@ namespace SGA_Api.Controllers.Login
 
         #region Métodos privados
 
-        private async Task GestionarPermisos(int operarioId, List<short> asignar, List<short> quitar)
+        private async Task<bool> GestionarPermisos(int operarioId, List<short> asignar, List<short> quitar)
         {
+            bool huboCambios = false;
+
             // Quitar permisos - usar consultas individuales para evitar OPENJSON
             foreach (var permisoId in quitar)
             {
@@ -586,7 +601,11 @@ namespace SGA_Api.Controllers.Login
                     .Where(a => a.Operario == operarioId && a.MRH_CodigoAplicacion == permisoId && a.CodigoEmpresa == 1)
                     .ToListAsync();
 
-                _context.AccesosOperarios.RemoveRange(permisosAQuitar);
+                if (permisosAQuitar.Any())
+                {
+                    _context.AccesosOperarios.RemoveRange(permisosAQuitar);
+                    huboCambios = true;
+                }
             }
 
             // Asignar nuevos permisos (evitar duplicados)
@@ -602,13 +621,22 @@ namespace SGA_Api.Controllers.Login
                     CodigoEmpresa = 1, // Siempre empresa 1 para permisos SGA
                     Operario = operarioId,
                     MRH_CodigoAplicacion = p
-                });
+                })
+                .ToList();
 
-            _context.AccesosOperarios.AddRange(nuevosPermisos);
+            if (nuevosPermisos.Any())
+            {
+                _context.AccesosOperarios.AddRange(nuevosPermisos);
+                huboCambios = true;
+            }
+
+            return huboCambios;
         }
 
-        private async Task GestionarEmpresas(int operarioId, List<EmpresaOperarioDto> asignar, List<short> quitar)
+        private async Task<bool> GestionarEmpresas(int operarioId, List<EmpresaOperarioDto> asignar, List<short> quitar)
         {
+            bool huboCambios = false;
+
             // Quitar empresas - usar consultas individuales para evitar OPENJSON
             foreach (var empresaOrigen in quitar)
             {
@@ -616,7 +644,11 @@ namespace SGA_Api.Controllers.Login
                     .Where(e => e.Operario == operarioId && e.EmpresaOrigen == empresaOrigen)
                     .ToListAsync();
 
-                _context.OperariosEmpresas.RemoveRange(empresasAQuitar);
+                if (empresasAQuitar.Any())
+                {
+                    _context.OperariosEmpresas.RemoveRange(empresasAQuitar);
+                    huboCambios = true;
+                }
             }
 
             // Asignar nuevas empresas
@@ -633,45 +665,76 @@ namespace SGA_Api.Controllers.Login
                     CodigoEmpresa = e.CodigoEmpresa,
                     EmpresaOrigen = e.EmpresaOrigen,
                     Empresa = e.Empresa
-                });
+                })
+                .ToList();
 
-            _context.OperariosEmpresas.AddRange(nuevasEmpresas);
-        }
-
-        private async Task GestionarAlmacenes(int operarioId, List<AlmacenOperarioDto> asignar, List<string> quitar)
-        {
-            // Quitar almacenes - usar consultas individuales para evitar OPENJSON
-            foreach (var almacenId in quitar)
+            if (nuevasEmpresas.Any())
             {
-                var almacenesAQuitar = await _context.OperariosAlmacenes
-                    .Where(a => a.Operario == operarioId && (a.CodigoAlmacen ?? "") == almacenId)
-                    .ToListAsync();
-
-                _context.OperariosAlmacenes.RemoveRange(almacenesAQuitar);
+                _context.OperariosEmpresas.AddRange(nuevasEmpresas);
+                huboCambios = true;
             }
 
-            // Asignar nuevos almacenes - como estamos quitando todos y asignando todos,
-            // no necesitamos verificar duplicados
-            var nuevosAlmacenes = asignar
-                .Select(a => new OperarioAlmacen
-                {
-                    Operario = operarioId,
-                    CodigoEmpresa = 1, // Siempre 1 para SGA
-                    CodigoAlmacen = a.CodigoAlmacen
-                });
+            return huboCambios;
+        }
 
-            _context.OperariosAlmacenes.AddRange(nuevosAlmacenes);
+        private async Task<bool> GestionarAlmacenes(int operarioId, List<AlmacenOperarioDto> asignar, List<string> quitar)
+        {
+            bool huboCambios = false;
+
+            // Obtener almacenes actuales del operario
+            var almacenesActuales = await _context.OperariosAlmacenes
+                .Where(a => a.Operario == operarioId)
+                .Select(a => a.CodigoAlmacen ?? "")
+                .ToListAsync();
+
+            // Obtener códigos de almacenes deseados
+            var almacenesDeseados = asignar
+                .Select(a => a.CodigoAlmacen)
+                .ToList();
+
+            // Calcular qué almacenes quitar (están actuales pero no deseados)
+            var almacenesAQuitar = almacenesActuales
+                .Where(actual => !almacenesDeseados.Contains(actual))
+                .ToList();
+
+            // Calcular qué almacenes agregar (están deseados pero no actuales)
+            var almacenesAAgregar = almacenesDeseados
+                .Where(deseado => !almacenesActuales.Contains(deseado))
+                .ToList();
+
+            // Quitar almacenes que ya no son necesarios
+            if (almacenesAQuitar.Any())
+            {
+                var almacenesParaEliminar = await _context.OperariosAlmacenes
+                    .Where(a => a.Operario == operarioId && 
+                               almacenesAQuitar.Contains(a.CodigoAlmacen ?? ""))
+                    .ToListAsync();
+
+                _context.OperariosAlmacenes.RemoveRange(almacenesParaEliminar);
+                huboCambios = true;
+            }
+
+            // Agregar solo los almacenes nuevos
+            if (almacenesAAgregar.Any())
+            {
+                var nuevosAlmacenes = almacenesAAgregar
+                    .Select(codigoAlmacen => new OperarioAlmacen
+                    {
+                        Operario = operarioId,
+                        CodigoEmpresa = 1, // Siempre 1 para SGA
+                        CodigoAlmacen = codigoAlmacen
+                    });
+
+                _context.OperariosAlmacenes.AddRange(nuevosAlmacenes);
+                huboCambios = true;
+            }
+
+            return huboCambios;
         }
 
         #endregion
 
         // DTOs auxiliares para las consultas
-        public class EmpresaConfiguracionDto
-        {
-            public short CodigoEmpresa { get; set; }
-            public string Nombre { get; set; } = string.Empty;
-        }
-
         public class AlmacenConfiguracionDto
         {
             public short CodigoEmpresa { get; set; }
@@ -754,6 +817,353 @@ namespace SGA_Api.Controllers.Login
             public string OperarioNombre { get; set; } = string.Empty;
             public string? CodigoCentro { get; set; }
             public List<EmpresaOperarioDto> Empresas { get; set; } = new List<EmpresaOperarioDto>();
+        }
+
+        /// <summary>
+        /// Da de baja a un operario estableciendo su FechaBaja
+        /// </summary>
+        [HttpPost("{operarioId}/dar-de-baja")]
+        public async Task<IActionResult> DarDeBajaOperario(int operarioId)
+        {
+            try
+            {
+                // Verificar que el operario existe
+                var operario = await _context.Operarios
+                    .Where(o => o.Id == operarioId)
+                    .Select(o => new { o.Id, o.Nombre })
+                    .FirstOrDefaultAsync();
+                    
+                if (operario == null)
+                    return NotFound($"Operario con ID {operarioId} no encontrado");
+
+                // Usar SQL raw para evitar problemas con triggers
+                var fechaBaja = DateTime.Now;
+                var sql = "UPDATE operarios SET FechaBaja = @fechaBaja WHERE Operario = @operarioId";
+                
+                await _context.Database.ExecuteSqlRawAsync(sql, 
+                    new Microsoft.Data.SqlClient.SqlParameter("@fechaBaja", fechaBaja),
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                // Quitar plantilla asociada (marcar como inactiva)
+                await _auroraContext.Database.ExecuteSqlRawAsync(
+                    "UPDATE OperariosConfiguracionesAplicadas SET Activa = 0 WHERE OperarioId = @operarioId",
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                // Eliminar permisos específicos (7, 8, 9) pero mantener básicos (1-6) y otros (10+)
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM MRH_accesosOperariosSGA WHERE Operario = @operarioId AND MRH_CodigoAplicacion IN (7, 8, 9)",
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                // Eliminar todas las empresas asociadas
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM MRH_SGAOperariosEmpresas WHERE Operario = @operarioId",
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                // Eliminar todos los almacenes asociados
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM MRH_OperariosAlmacenes WHERE Operario = @operarioId",
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                // Eliminar límites del operario (poner en 0.0000000)
+                await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE operarios SET MRH_LimiteInventarioEuros = 0.0000000, MRH_LimiteInventarioUnidades = 0.0000000 WHERE Operario = @operarioId",
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                // Asegurar que tenga el permiso básico 10 (insertar si no existe)
+                await _context.Database.ExecuteSqlRawAsync(
+                    "IF NOT EXISTS (SELECT 1 FROM MRH_accesosOperariosSGA WHERE Operario = @operarioId AND MRH_CodigoAplicacion = 10) " +
+                    "INSERT INTO MRH_accesosOperariosSGA (Operario, MRH_CodigoAplicacion, CodigoEmpresa) VALUES (@operarioId, 10, 1)",
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                return Ok(new { 
+                    success = true, 
+                    message = $"Operario {operario.Nombre} dado de baja correctamente. Se han eliminado permisos 7-9, plantilla, empresas, almacenes y límites, manteniendo permisos básicos (1-6) y SGA (10+).",
+                    fechaBaja = fechaBaja
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = $"Error al dar de baja al operario: {ex.Message}" 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Da de alta a un operario estableciendo su FechaBaja como null
+        /// </summary>
+        [HttpPost("{operarioId}/dar-de-alta")]
+        public async Task<IActionResult> DarDeAltaOperario(int operarioId)
+        {
+            try
+            {
+                // Verificar que el operario existe
+                var operario = await _context.Operarios
+                    .Where(o => o.Id == operarioId)
+                    .Select(o => new { o.Id, o.Nombre })
+                    .FirstOrDefaultAsync();
+                    
+                if (operario == null)
+                    return NotFound($"Operario con ID {operarioId} no encontrado");
+
+                // Usar SQL raw para evitar problemas con triggers
+                var sql = "UPDATE operarios SET FechaBaja = NULL WHERE Operario = @operarioId";
+                
+                await _context.Database.ExecuteSqlRawAsync(sql, 
+                    new Microsoft.Data.SqlClient.SqlParameter("@operarioId", operarioId));
+
+                return Ok(new { 
+                    success = true, 
+                    message = $"Operario {operario.Nombre} dado de alta correctamente",
+                    fechaBaja = (DateTime?)null
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = $"Error al dar de alta al operario: {ex.Message}" 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Obtiene empleados disponibles para dar de alta en SGA:
+        /// 1. Empleados de VAuxiliarEmpleado que NO están en operarios
+        /// 2. Operarios que están en operarios pero NO tienen permisos SGA
+        /// </summary>
+        [HttpGet("empleados-disponibles")]
+        public async Task<ActionResult<List<EmpleadoDisponibleDto>>> GetEmpleadosDisponibles()
+        {
+            try
+            {
+                var empleadosDisponibles = new List<EmpleadoDisponibleDto>();
+
+                // 1. Empleados activos de VAuxiliarEmpleado que no están en operarios
+                var empleadosVAuxiliar = await (from emp in _context.VAuxiliarEmpleados
+                                               where emp.StatusActivo == 0 && emp.CodigoEmpleado >= 1000
+                                               && !_context.Operarios.Any(op => op.Id == emp.CodigoEmpleado)
+                                               select new EmpleadoDisponibleDto
+                                               {
+                                                   CodigoEmpleado = emp.CodigoEmpleado,
+                                                   Nombre = emp.MRH_RazonSocialEmpleado,
+                                                   Tipo = "Empleado"
+                                               })
+                                               .ToListAsync();
+
+                // 2. Operarios que están en operarios pero NO tienen permisos SGA (>= 7)
+                // Usar consulta más simple para evitar problemas con LINQ
+                var operariosActivos = await _context.Operarios
+                    .Where(op => op.FechaBaja == null)
+                    .ToListAsync();
+
+                var operariosSinPermisos = new List<EmpleadoDisponibleDto>();
+
+                foreach (var op in operariosActivos)
+                {
+                    var tienePermisosSGA = await _context.AccesosOperarios
+                        .AnyAsync(a => a.Operario == op.Id && a.CodigoEmpresa == 1 && a.MRH_CodigoAplicacion >= 7);
+
+                    if (!tienePermisosSGA)
+                    {
+                        operariosSinPermisos.Add(new EmpleadoDisponibleDto
+                        {
+                            CodigoEmpleado = op.Id,
+                            Nombre = op.Nombre ?? "Sin nombre",
+                            Tipo = "Operario sin permisos"
+                        });
+                    }
+                }
+
+                // Combinar ambas listas
+                empleadosDisponibles.AddRange(empleadosVAuxiliar);
+                empleadosDisponibles.AddRange(operariosSinPermisos);
+
+                // Ordenar por nombre
+                empleadosDisponibles = empleadosDisponibles
+                    .OrderBy(e => e.Nombre)
+                    .ToList();
+
+                return Ok(empleadosDisponibles);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Error al obtener empleados disponibles: {ex.Message}");
+            }
+        }
+
+
+        /// <summary>
+        /// Da de alta un empleado/operario en el SGA:
+        /// - Si es empleado de VAuxiliarEmpleado: lo crea en operarios
+        /// - Si es operario sin permisos: solo le asigna permisos SGA
+        /// </summary>
+        [HttpPost("dar-alta-empleado")]
+        public async Task<IActionResult> DarAltaEmpleado([FromBody] DarAltaEmpleadoDto dto)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            
+            try
+            {
+                // PRIMERO: Verificar si YA es un operario existente (prioridad)
+                var operarioExistente = await _context.Operarios
+                    .Where(o => o.Id == dto.CodigoEmpleado && o.FechaBaja == null)
+                    .FirstOrDefaultAsync();
+
+                // SEGUNDO: Verificar si es un empleado de VAuxiliarEmpleado
+                var empleado = await _context.VAuxiliarEmpleados
+                    .Where(e => e.CodigoEmpleado == dto.CodigoEmpleado && e.StatusActivo == 0)
+                    .FirstOrDefaultAsync();
+
+                // Debe existir al menos en una de las dos tablas
+                if (empleado == null && operarioExistente == null)
+                    return NotFound($"No se encontró empleado con código {dto.CodigoEmpleado} en VAuxiliarEmpleado ni operario activo en operarios");
+
+                // Si NO es operario existente pero SÍ es empleado de VAuxiliar, crear en operarios
+                if (operarioExistente == null && empleado != null)
+                {
+                    // Crear nuevo operario usando SQL raw para evitar problemas con triggers
+                    var fechaAlta = DateTime.Now;
+                    var contraseña = dto.Contraseña ?? dto.CodigoEmpleado.ToString();
+                    
+                    var sql = @"INSERT INTO operarios (CodigoEmpresa, Operario, NombreOperario, FechaAlta, Contraseña, CodigoCentro, FechaBaja, MRH_LimiteInventarioEuros, MRH_LimiteInventarioUnidades)
+                               VALUES (1, @operarioId, @nombre, @fechaAlta, @contraseña, @codigoCentro, NULL, 0, 0)";
+
+                    await _context.Database.ExecuteSqlRawAsync(sql,
+                        new Microsoft.Data.SqlClient.SqlParameter("@operarioId", dto.CodigoEmpleado),
+                        new Microsoft.Data.SqlClient.SqlParameter("@nombre", dto.Nombre),
+                        new Microsoft.Data.SqlClient.SqlParameter("@fechaAlta", fechaAlta),
+                        new Microsoft.Data.SqlClient.SqlParameter("@contraseña", contraseña),
+                        new Microsoft.Data.SqlClient.SqlParameter("@codigoCentro", dto.CodigoCentro ?? ""));
+                }
+                // Si YA es operario existente, solo se le asignarán permisos/empresas/almacenes más adelante
+
+                // Verificar y asignar permisos sin duplicar
+                var permisosExistentes = await _context.AccesosOperarios
+                    .Where(a => a.Operario == dto.CodigoEmpleado && a.CodigoEmpresa == 1)
+                    .Select(a => a.MRH_CodigoAplicacion)
+                    .ToListAsync();
+
+                // Asignar permiso básico SGA (código 10) por defecto si no existe
+                if (!permisosExistentes.Contains(10))
+                {
+                    var permisoBasico = new AccesoOperario
+                    {
+                        CodigoEmpresa = 1,
+                        Operario = dto.CodigoEmpleado,
+                        MRH_CodigoAplicacion = 10 // Permiso básico SGA
+                    };
+                    _context.AccesosOperarios.Add(permisoBasico);
+                }
+
+                // Asignar permisos adicionales si se especifican
+                if (dto.PermisosIniciales.Any())
+                {
+                    foreach (var permiso in dto.PermisosIniciales)
+                    {
+                        // Solo agregar si no existe ya
+                        if (!permisosExistentes.Contains(permiso))
+                        {
+                            var nuevoPermiso = new AccesoOperario
+                            {
+                                CodigoEmpresa = 1,
+                                Operario = dto.CodigoEmpleado,
+                                MRH_CodigoAplicacion = permiso
+                            };
+                            _context.AccesosOperarios.Add(nuevoPermiso);
+                        }
+                    }
+                }
+
+                // Verificar empresas existentes
+                var empresasExistentes = await _context.OperariosEmpresas
+                    .Where(oe => oe.Operario == dto.CodigoEmpleado)
+                    .Select(oe => oe.EmpresaOrigen)
+                    .ToListAsync();
+
+                // Asignar empresas iniciales si se especifican
+                if (dto.EmpresasIniciales.Any())
+                {
+                    foreach (var empresaId in dto.EmpresasIniciales)
+                    {
+                        // Solo agregar si no existe ya
+                        if (!empresasExistentes.Contains(empresaId))
+                        {
+                            var empresa = await _context.Empresas
+                                .Where(e => e.CodigoEmpresa == empresaId)
+                                .FirstOrDefaultAsync();
+
+                            if (empresa != null)
+                            {
+                                var nuevaEmpresa = new OperarioEmpresa
+                                {
+                                    Operario = dto.CodigoEmpleado,
+                                    CodigoEmpresa = empresaId,
+                                    EmpresaOrigen = empresaId,
+                                    Empresa = empresa.EmpresaNombre ?? ""
+                                };
+                                _context.OperariosEmpresas.Add(nuevaEmpresa);
+                            }
+                        }
+                    }
+                }
+
+                // Verificar almacenes existentes
+                var almacenesExistentes = await _context.OperariosAlmacenes
+                    .Where(oa => oa.Operario == dto.CodigoEmpleado && oa.CodigoEmpresa == 1)
+                    .Select(oa => oa.CodigoAlmacen)
+                    .ToListAsync();
+
+                // Asignar almacenes iniciales si se especifican
+                if (dto.AlmacenesIniciales.Any())
+                {
+                    foreach (var codigoAlmacen in dto.AlmacenesIniciales)
+                    {
+                        // Solo agregar si no existe ya
+                        if (!almacenesExistentes.Contains(codigoAlmacen))
+                        {
+                            var nuevoAlmacen = new OperarioAlmacen
+                            {
+                                Operario = dto.CodigoEmpleado,
+                                CodigoEmpresa = 1,
+                                CodigoAlmacen = codigoAlmacen
+                            };
+                            _context.OperariosAlmacenes.Add(nuevoAlmacen);
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                // Determinar qué tipo de operación se hizo
+                string mensaje;
+                if (operarioExistente != null)
+                {
+                    // Era un operario existente sin permisos, se le asignaron permisos
+                    mensaje = $"Operario {dto.Nombre} configurado correctamente con acceso al SGA";
+                }
+                else
+                {
+                    // Era un empleado nuevo que se creó en operarios
+                    mensaje = $"Empleado {dto.Nombre} dado de alta correctamente en el SGA";
+                }
+
+                return Ok(new { 
+                    success = true, 
+                    message = mensaje,
+                    operarioId = dto.CodigoEmpleado
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { 
+                    success = false, 
+                    message = $"Error al dar de alta al empleado: {ex.Message}" 
+                });
+            }
         }
     }
 }

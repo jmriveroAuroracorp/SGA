@@ -68,12 +68,20 @@
                 <TextBox Width="150"
              Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}"
              Style="{StaticResource EstiloCajaTexto}"
-             Margin="5,0"/>
+             Margin="5,0">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding BuscarStockCommand}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
                 <TextBlock Text="Nombre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 <TextBox Width="150"
              Text="{Binding ArticuloDescripcion, UpdateSourceTrigger=PropertyChanged}"
              Style="{StaticResource EstiloCajaTexto}"
-             Margin="5,0"/>
+             Margin="5,0">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding BuscarStockCommand}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
                 <Button Content="Buscar stock"
             Command="{Binding BuscarStockCommand}"
             Style="{StaticResource EstiloBotonPrincipal}"
@@ -152,7 +160,11 @@
                                                                     <TextBox Width="48"
                                                                              Margin="0,0,6,0"
                                                                              FontSize="13"
-                                                                             Text="{Binding CantidadAMoverTexto, UpdateSourceTrigger=PropertyChanged}" />
+                                                                             Text="{Binding CantidadAMoverTexto, UpdateSourceTrigger=PropertyChanged}">
+                                                                        <TextBox.InputBindings>
+                                                                            <KeyBinding Key="Return" Command="{Binding DataContext.AnhadirLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                                                        </TextBox.InputBindings>
+                                                                    </TextBox>
                                                                     <Button Content="Añadir"
                                                                         Command="{Binding DataContext.AnhadirLineaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                         CommandParameter="{Binding}"

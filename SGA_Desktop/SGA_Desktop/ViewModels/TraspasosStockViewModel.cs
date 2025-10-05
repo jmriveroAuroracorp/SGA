@@ -13,12 +13,15 @@ using SGA_Desktop.Dialog;
 
 namespace SGA_Desktop.ViewModels
 {
-    public class ArticuloStockGroup
+    public partial class ArticuloStockGroup : ObservableObject
     {
         public string CodigoArticulo { get; set; } = string.Empty;
         public string DescripcionArticulo { get; set; } = string.Empty;
         public ObservableCollection<StockDisponibleDto> Ubicaciones { get; set; } = new();
         public string HeaderArticulo => $"{CodigoArticulo} - {DescripcionArticulo}";
+        
+        [ObservableProperty]
+        private bool isExpanded = false;
     }
 
     public partial class TraspasosStockViewModel : ObservableObject
@@ -26,6 +29,7 @@ namespace SGA_Desktop.ViewModels
         private readonly StockService _stockService;
         private readonly TraspasosService _traspasosService;
         private DateTime? _fechaUltimaBusqueda;
+        private Dictionary<string, bool> _estadosExpansion = new();
 
         public TraspasosStockViewModel(StockService stockService, TraspasosService traspasosService)
         {
@@ -63,6 +67,21 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private bool mostrarCardsAgrupados;
+
+        [RelayCommand]
+        public async Task RefrescarAsync()
+        {
+            if (!string.IsNullOrWhiteSpace(ArticuloBuscado))
+            {
+                // Guardar el estado de expansión actual antes de refrescar
+                GuardarEstadosExpansion();
+                await BuscarStockAsync();
+                // Pequeño delay para asegurar que la UI se actualice
+                await Task.Delay(50);
+                // Restaurar el estado de expansión después de refrescar
+                RestaurarEstadosExpansion();
+            }
+        }
 
         [RelayCommand]
         public async Task BuscarStockAsync()
@@ -156,8 +175,14 @@ namespace SGA_Desktop.ViewModels
             if (resultado.Success)
             {
                 Feedback = "Traspaso realizado correctamente.";
+                // Guardar el estado de expansión antes de refrescar
+                GuardarEstadosExpansion();
                 await BuscarStockAsync();
                 await CargarUltimosTraspasosAsync();
+                // Pequeño delay para asegurar que la UI se actualice
+                await Task.Delay(50);
+                // Restaurar el estado de expansión después de refrescar
+                RestaurarEstadosExpansion();
             }
             else
             {
@@ -199,14 +224,20 @@ namespace SGA_Desktop.ViewModels
             if (owner != null && owner != dlg)
                 dlg.Owner = owner;
             // Suscribirse al cierre para refrescar si fue correcto
-            vm.RequestClose += (ok) =>
+            vm.RequestClose += async (ok) =>
             {
                 dlg.DialogResult = ok;
                 dlg.Close();
                 if (ok)
                 {
-                    _ = BuscarStockAsync();
-                    _ = CargarUltimosTraspasosAsync();
+                    // Guardar el estado de expansión antes de refrescar
+                    GuardarEstadosExpansion();
+                    await BuscarStockAsync();
+                    await CargarUltimosTraspasosAsync();
+                    // Pequeño delay para asegurar que la UI se actualice
+                    await Task.Delay(50);
+                    // Restaurar el estado de expansión después de refrescar
+                    RestaurarEstadosExpansion();
                 }
             };
             dlg.ShowDialog();
@@ -262,6 +293,31 @@ namespace SGA_Desktop.ViewModels
                 // Si no tiene almacenes individuales, usar solo los del centro
                 return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
             }
+        }
+
+        private void GuardarEstadosExpansion()
+        {
+            _estadosExpansion.Clear();
+            foreach (var grupo in ArticulosConUbicaciones)
+            {
+                var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
+                _estadosExpansion[clave] = grupo.IsExpanded;
+            }
+        }
+
+        private void RestaurarEstadosExpansion()
+        {
+            foreach (var grupo in ArticulosConUbicaciones)
+            {
+                var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
+                if (_estadosExpansion.ContainsKey(clave))
+                {
+                    grupo.IsExpanded = _estadosExpansion[clave];
+                }
+            }
+            
+            // Forzar la actualización de la UI
+            OnPropertyChanged(nameof(ArticulosConUbicaciones));
         }
 	}
 } 

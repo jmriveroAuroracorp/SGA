@@ -28,6 +28,10 @@ public class ApiService
 	/// </summary>
 	protected async Task<string> GetStringAsync(string ruta)
 	{
+		// Si la aplicación se está cerrando, no hacer llamadas HTTP
+		if (SessionManager.IsClosing)
+			throw new OperationCanceledException("La aplicación se está cerrando");
+
 		var resp = await _httpClient.GetAsync(ruta);
 		resp.EnsureSuccessStatusCode();
 		return await resp.Content.ReadAsStringAsync();

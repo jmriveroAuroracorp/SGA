@@ -21,6 +21,9 @@ namespace SGA_Desktop.Models
         
         // Almacenes asignados
         public List<AlmacenOperarioDto> Almacenes { get; set; } = new List<AlmacenOperarioDto>();
+        
+        // Plantilla aplicada
+        public string? PlantillaAplicada { get; set; } // Nombre de la plantilla aplicada
     }
 
     /// <summary>
@@ -78,6 +81,7 @@ namespace SGA_Desktop.Models
         public int Id { get; set; }
         public string? Nombre { get; set; }
         public string? CodigoCentro { get; set; }
+        public DateTime? FechaBaja { get; set; } // Fecha de baja del operario
         public bool Activo { get; set; }
         public string Permisos { get; set; } = string.Empty; // Lista de permisos separados por comas
         public string Empresas { get; set; } = string.Empty; // Lista de empresas separadas por comas
@@ -85,6 +89,9 @@ namespace SGA_Desktop.Models
         public int CantidadPermisos { get; set; } // Número de permisos asignados
         public int CantidadAlmacenes { get; set; } // Número de almacenes asignados
         public string? PlantillaAplicada { get; set; } // Nombre de la plantilla aplicada
+        public decimal? LimiteImporte { get; set; } // Límite de importe del operario (MRH_LimiteInventarioEuros)
+        public decimal? LimiteUnidades { get; set; } // Límite de unidades del operario (MRH_LimiteInventarioUnidades)
+        public string LimitesResumen { get; set; } = string.Empty; // Resumen de límites formateado
     }
 
     /// <summary>
@@ -129,6 +136,8 @@ namespace SGA_Desktop.Models
         public int Id { get; set; }
         public string Nombre { get; set; } = string.Empty;
         public string? CodigoCentro { get; set; }
+        public DateTime? FechaBaja { get; set; } // Fecha de baja del operario
+        public bool Activo { get; set; } // Indica si el operario está activo
         public string Permisos { get; set; } = string.Empty; // Lista de permisos separados por comas
         public string Empresas { get; set; } = string.Empty; // Lista de empresas separadas por comas
         public string Almacenes { get; set; } = string.Empty; // Lista de almacenes separados por comas
@@ -175,6 +184,9 @@ namespace SGA_Desktop.Models
         // Usuarios de auditoría
         public int? UsuarioCreacion { get; set; }
         public int? UsuarioModificacion { get; set; }
+        
+        // Contador de operarios usando esta configuración
+        public int OperariosUsando { get; set; } = 0;
     }
 
     public class ConfiguracionPredefinidaDto
@@ -201,9 +213,25 @@ namespace SGA_Desktop.Models
         public string PermisosResumen => $"{CantidadPermisos} permisos";
         public string EmpresasResumen => $"{CantidadEmpresas} empresas";
         public string AlmacenesResumen => $"{CantidadAlmacenes} almacenes";
-        public string LimitesResumen => LimiteEuros.HasValue || LimiteUnidades.HasValue 
-            ? $"€{LimiteEuros?.ToString("F2") ?? "0"} / {LimiteUnidades?.ToString("F0") ?? "0"} uds"
-            : "Sin límites";
+        public string LimitesResumen 
+        {
+            get
+            {
+                var limites = new List<string>();
+                
+                if (LimiteEuros.HasValue && LimiteEuros.Value > 0)
+                {
+                    limites.Add($"€{LimiteEuros.Value.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)}");
+                }
+                
+                if (LimiteUnidades.HasValue && LimiteUnidades.Value > 0)
+                {
+                    limites.Add($"{LimiteUnidades.Value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} unidades");
+                }
+                
+                return limites.Any() ? string.Join(" / ", limites) : "Sin límites";
+            }
+        }
         public int OperariosUsando { get; set; } = 0; // TODO: Implementar contador de operarios que usan esta configuración
     }
 
@@ -250,5 +278,32 @@ namespace SGA_Desktop.Models
         public int OperarioId { get; set; }
         public int ConfiguracionId { get; set; }
         public bool ReemplazarExistente { get; set; } = false;
+    }
+
+    /// <summary>
+    /// DTO para empleados disponibles para dar de alta en SGA
+    /// </summary>
+    public class EmpleadoDisponibleDto
+    {
+        public int CodigoEmpleado { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string Departamento { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Telefono { get; set; } = string.Empty;
+        public bool IsSelected { get; set; } = false; // Para selección múltiple
+    }
+
+    /// <summary>
+    /// DTO para dar de alta un empleado en SGA
+    /// </summary>
+    public class DarAltaEmpleadoDto
+    {
+        public int CodigoEmpleado { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string? Contraseña { get; set; }
+        public string? CodigoCentro { get; set; }
+        public List<short> PermisosIniciales { get; set; } = new List<short>();
+        public List<short> EmpresasIniciales { get; set; } = new List<short>();
+        public List<string> AlmacenesIniciales { get; set; } = new List<string>();
     }
 }

@@ -90,15 +90,74 @@
                        VerticalAlignment="Center"
                        HorizontalAlignment="Center"
                        Margin="0,0,30,0"            />
-                    <!-- 3) Operario, alineado a la derecha -->
-                    <TextBlock Grid.Column="2"
-                       Text="{Binding NombreOperario, StringFormat='OPERARIO: {0}'}"
-                       Foreground="White"
-                       FontFamily="{StaticResource FuentePrincipal}"
-                       FontSize="24"
-                       FontWeight="Bold"
-                       VerticalAlignment="Center"
-                       HorizontalAlignment="Right"/>
+                    <!-- 3) Operario y Campanita, alineados a la derecha -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding NombreOperario, StringFormat='OPERARIO: {0}'}"
+                                   Foreground="White"
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,15,0"/>
+                        
+                        <!-- Icono de Campanita con contador -->
+                        <Button Command="{Binding AbrirNotificacionesCommand}" 
+                                Background="Transparent" 
+                                BorderThickness="0"
+                                Padding="8"
+                                ToolTip="Ver notificaciones">
+                            <StackPanel>
+                                <!-- Icono de campanita -->
+                                <TextBlock Text="🔔" 
+                                           FontSize="24" 
+                                           Foreground="White"
+                                           HorizontalAlignment="Center" 
+                                           VerticalAlignment="Center"/>
+                                
+                                <!-- Contadores de notificaciones -->
+                                <Grid HorizontalAlignment="Right"
+                                      VerticalAlignment="Top"
+                                      Margin="0,-12,0,0"
+                                      Width="18"
+                                      Height="18">
+                                    
+                                    <!-- Contador de notificaciones positivas (verde) - arriba -->
+                                    <Border Background="#4CAF50" 
+                                            Width="16" 
+                                            Height="16" 
+                                            CornerRadius="8"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Top"
+                                            Margin="0,0,0,2"
+                                            Visibility="{Binding ContadorNotificacionesPositivas, Converter={StaticResource IntToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding ContadorNotificacionesPositivas}" 
+                                                   Foreground="White" 
+                                                   FontSize="9" 
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    
+                                    <!-- Contador de notificaciones negativas (rojo) - abajo -->
+                                    <Border Background="#F44336" 
+                                            Width="16" 
+                                            Height="16" 
+                                            CornerRadius="8"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Bottom"
+                                            Margin="0,2,0,0"
+                                            Visibility="{Binding ContadorNotificacionesNegativas, Converter={StaticResource IntToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding ContadorNotificacionesNegativas}" 
+                                                   Foreground="White" 
+                                                   FontSize="9" 
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -119,7 +178,9 @@
             Margin="10"
             CornerRadius="8"
             BorderBrush="{StaticResource BrushPrincipal}"  
-                    BorderThickness="2">
+                    BorderThickness="2"
+                    Cursor="Hand"
+                    MouseLeftButtonDown="LogoBorder_MouseLeftButtonDown">
                     <!-- grosor del borde -->
                     <Image Source="Assets/iconoSGA.jpg"
                Height="60"

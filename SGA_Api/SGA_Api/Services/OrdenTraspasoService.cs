@@ -91,6 +91,14 @@ namespace SGA_Api.Services
 
             await _context.SaveChangesAsync();
 
+            // Verificar si todas las líneas tienen operarios asignados
+            var todasLasLineasTienenOperario = orden.Lineas.All(l => l.IdOperarioAsignado > 0);
+            if (!todasLasLineasTienenOperario)
+            {
+                orden.Estado = "SIN_ASIGNAR";
+                await _context.SaveChangesAsync();
+            }
+
             return MapToDto(orden);
         }
 
@@ -132,6 +140,8 @@ namespace SGA_Api.Services
 
             if (dto.IdOperarioAsignado > 0)
                 linea.IdOperarioAsignado = dto.IdOperarioAsignado;
+            else if (dto.IdOperarioAsignado == 0) // Permitir quitar asignación
+                linea.IdOperarioAsignado = 0;
 
             if (dto.FechaInicio.HasValue)
                 linea.FechaInicio = dto.FechaInicio.Value;
@@ -142,9 +152,85 @@ namespace SGA_Api.Services
             if (dto.IdTraspaso.HasValue)
                 linea.IdTraspaso = dto.IdTraspaso.Value;
 
-
             await _context.SaveChangesAsync();
+
+            // Lógica para actualizar el estado de la orden si todas las líneas tienen operario o no
+            var orden = await _context.OrdenTraspasoCabecera
+                .Include(o => o.Lineas)
+                .FirstOrDefaultAsync(o => o.IdOrdenTraspaso == linea.IdOrdenTraspaso);
+            
+            if (orden != null)
+            {
+                var todasLasLineasTienenOperario = orden.Lineas.All(l => l.IdOperarioAsignado > 0 || l.Estado == "CANCELADA" || l.Estado == "COMPLETADA" || l.Estado == "SUBDIVIDIDO");
+                var algunaLineaSinOperario = orden.Lineas.Any(l => l.IdOperarioAsignado <= 0 && l.Estado != "CANCELADA" && l.Estado != "COMPLETADA" && l.Estado != "SUBDIVIDIDO");
+
+                if (todasLasLineasTienenOperario && orden.Estado == "SIN_ASIGNAR")
+                {
+                    orden.Estado = "PENDIENTE";
+                    await _context.SaveChangesAsync();
+                }
+                else if (algunaLineaSinOperario && orden.Estado == "PENDIENTE")
+                {
+                    orden.Estado = "SIN_ASIGNAR";
+                    await _context.SaveChangesAsync();
+                }
+            }
+
             return true;
+        }
+
+        public async Task<LineaOrdenTraspasoDetalleDto?> CrearLineaOrdenTraspasoAsync(Guid idOrden, CrearLineaOrdenTraspasoDto dto)
+        {
+            // Verificar que la orden existe
+            var orden = await _context.OrdenTraspasoCabecera.FindAsync(idOrden);
+            if (orden == null) return null;
+
+            // Obtener el siguiente número de línea
+            var siguienteNumero = await _context.OrdenTraspasoLinea
+                .Where(l => l.IdOrdenTraspaso == idOrden)
+                .MaxAsync(l => (int?)l.NumeroLinea) ?? 0;
+
+            var linea = new OrdenTraspasoLinea
+            {
+                IdOrdenTraspaso = idOrden,
+                NumeroLinea = siguienteNumero + 1,
+                CodigoArticulo = dto.CodigoArticulo,
+                DescripcionArticulo = dto.DescripcionArticulo,
+                FechaCaducidad = dto.FechaCaducidad,
+                CantidadPlan = dto.CantidadPlan,
+                CodigoAlmacenOrigen = dto.CodigoAlmacenOrigen,
+                UbicacionOrigen = dto.UbicacionOrigen,
+                Partida = dto.Partida,
+                PaletOrigen = dto.PaletOrigen,
+                CodigoAlmacenDestino = dto.CodigoAlmacenDestino,
+                UbicacionDestino = dto.UbicacionDestino,
+                PaletDestino = dto.PaletDestino,
+                Estado = dto.Estado ?? "PENDIENTE",
+                CantidadMovida = 0,
+                Completada = false,
+                IdOperarioAsignado = dto.IdOperarioAsignado
+            };
+
+            _context.OrdenTraspasoLinea.Add(linea);
+            await _context.SaveChangesAsync();
+
+            // Verificar si la orden debe cambiar de estado
+            var todasLasLineasTienenOperario = await _context.OrdenTraspasoLinea
+                .Where(l => l.IdOrdenTraspaso == idOrden)
+                .AllAsync(l => l.IdOperarioAsignado > 0 || l.Estado == "CANCELADA" || l.Estado == "COMPLETADA" || l.Estado == "SUBDIVIDIDO");
+
+            if (!todasLasLineasTienenOperario && orden.Estado == "PENDIENTE")
+            {
+                orden.Estado = "SIN_ASIGNAR";
+                await _context.SaveChangesAsync();
+            }
+            else if (todasLasLineasTienenOperario && orden.Estado == "SIN_ASIGNAR")
+            {
+                orden.Estado = "PENDIENTE";
+                await _context.SaveChangesAsync();
+            }
+
+            return MapLineaToDto(linea);
         }
 
         public async Task<bool> CompletarOrdenTraspasoAsync(Guid id)
@@ -168,8 +254,8 @@ namespace SGA_Api.Services
             if (orden == null) 
                 return false;
 
-            // Validación: Solo se puede cancelar si está PENDIENTE o EN_PROCESO
-            if (orden.Estado != "PENDIENTE" && orden.Estado != "EN_PROCESO")
+            // Validación: Solo se puede cancelar si está PENDIENTE o SIN_ASIGNAR
+            if (orden.Estado != "PENDIENTE" && orden.Estado != "SIN_ASIGNAR")
                 return false;
 
             // Validación: No se puede cancelar si ya hay movimientos realizados
@@ -180,8 +266,58 @@ namespace SGA_Api.Services
             orden.Estado = "CANCELADA";
             orden.FechaFinalizacion = DateTime.Now;
 
+            // Cancelar solo las líneas que están pendientes o sin asignar
+            foreach (var linea in orden.Lineas)
+            {
+                if (linea.Estado == "PENDIENTE" || linea.Estado == "SIN_ASIGNAR")
+                {
+                    linea.Estado = "CANCELADA";
+                }
+            }
+
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<bool> CancelarLineasPendientesAsync(Guid idOrden)
+        {
+            var orden = await _context.OrdenTraspasoCabecera
+                .Include(o => o.Lineas)
+                .FirstOrDefaultAsync(o => o.IdOrdenTraspaso == idOrden);
+            
+            if (orden == null) 
+                return false;
+
+            // Solo se puede cancelar líneas si la orden está EN_PROCESO
+            if (orden.Estado != "EN_PROCESO")
+                return false;
+
+            // Cancelar solo las líneas que están pendientes o sin asignar
+            var lineasCanceladas = 0;
+            foreach (var linea in orden.Lineas)
+            {
+                if (linea.Estado == "PENDIENTE" || linea.Estado == "SIN_ASIGNAR")
+                {
+                    linea.Estado = "CANCELADA";
+                    lineasCanceladas++;
+                }
+            }
+
+            // Si se cancelaron líneas, verificar si todas las líneas restantes están completadas
+            if (lineasCanceladas > 0)
+            {
+                var todasCompletadas = orden.Lineas.All(l => 
+                    l.Estado == "COMPLETADA" || l.Estado == "CANCELADA" || l.Estado == "SUBDIVIDIDO");
+                
+                if (todasCompletadas)
+                {
+                    orden.Estado = "COMPLETADA";
+                    orden.FechaFinalizacion = DateTime.Now;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return lineasCanceladas > 0;
         }
 
         public async Task<bool> EliminarOrdenTraspasoAsync(Guid id)
