@@ -38,6 +38,9 @@ fun AppScreen(navController: NavHostController, sessionViewModel: SessionViewMod
     val user = userState.value
 
     val showReauthDialog = remember { mutableStateOf(false) }
+    val mostrarDialogoPassword = remember { mutableStateOf(false) }
+    val passwordInput = remember { mutableStateOf("") }
+    val errorPassword = remember { mutableStateOf(false) }
     val tokenExpirado by sessionViewModel.tokenExpirado.collectAsState()
 
     LaunchedEffect(user) {
@@ -49,7 +52,12 @@ fun AppScreen(navController: NavHostController, sessionViewModel: SessionViewMod
             }
         } else {
             InactivityTracker.stop()
+            showReauthDialog.value = false
+            mostrarDialogoPassword.value = false
+            sessionViewModel.marcarTokenExpirado(false)
+            sessionViewModel.ocultarMensajeCaducidad()
         }
+
     }
 
     NavGraph(
@@ -88,9 +96,6 @@ fun AppScreen(navController: NavHostController, sessionViewModel: SessionViewMod
             showReauthDialog.value = true
         }
     }
-    val mostrarDialogoPassword = remember { mutableStateOf(false) }
-    val passwordInput = remember { mutableStateOf("") }
-    val errorPassword = remember { mutableStateOf(false) }
 
     if (showReauthDialog.value && user != null) {
         AlertDialog(

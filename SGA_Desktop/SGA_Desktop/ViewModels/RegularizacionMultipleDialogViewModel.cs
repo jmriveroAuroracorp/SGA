@@ -11,6 +11,8 @@ using SGA_Desktop.Helpers;
 using System.Windows.Data;
 using SGA_Desktop.Dialog;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Windows.Controls;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -19,9 +21,11 @@ namespace SGA_Desktop.ViewModels
 		private readonly TraspasosService _traspasosService;
 		private readonly StockService _stockService;
 
-		public ObservableCollection<ArticuloConStockDto> ArticulosConStock { get; } = new();
-		public ObservableCollection<StockDisponibleDto> LineasPendientes { get; } = new();
-		public ObservableCollection<AlmacenDto> AlmacenesDestino { get; } = new();
+	public ObservableCollection<ArticuloConStockDto> ArticulosConStock { get; } = new();
+	public ObservableCollection<StockDisponibleDto> LineasPendientes { get; } = new();
+	public ObservableCollection<AlmacenDto> AlmacenesDestino { get; } = new();
+	
+	// Vista filtrable para almacenes destino
 
 		// NUEVAS PROPIEDADES DESTINO COMÚN
 		[ObservableProperty]
@@ -35,13 +39,13 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private string comentariosTexto = "";
 
-		// NUEVO: Ubicaciones destino común
-		public ObservableCollection<UbicacionDto> UbicacionesDestinoComun { get; } = new();
+	// NUEVO: Ubicaciones destino común
+	public ObservableCollection<UbicacionDto> UbicacionesDestinoComun { get; } = new();
 
-		partial void OnDestinoComunAlmacenChanged(AlmacenDto value)
-		{
-			_ = CargarUbicacionesDestinoComunAsync();
-		}
+	partial void OnDestinoComunAlmacenChanged(AlmacenDto value)
+	{
+		_ = CargarUbicacionesDestinoComunAsync();
+	}
 
 		private async Task CargarUbicacionesDestinoComunAsync()
 		{
@@ -66,7 +70,6 @@ namespace SGA_Desktop.ViewModels
 		{
 			_traspasosService = traspasosService;
 			_stockService = stockService;
-
 		}
 
 		public async Task InitializeAsync()
@@ -84,6 +87,7 @@ namespace SGA_Desktop.ViewModels
 				AlmacenesDestino.Add(a);
 
 			OnPropertyChanged(nameof(AlmacenesDestino));
+			
 		}
 
 		public async Task CargarUbicacionesDestinoAsync(StockDisponibleDto linea)

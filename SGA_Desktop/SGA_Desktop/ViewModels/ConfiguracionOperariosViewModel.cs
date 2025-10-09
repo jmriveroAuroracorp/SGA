@@ -278,8 +278,12 @@ namespace SGA_Desktop.ViewModels
                             Almacenes = operario.Almacenes,
                             CantidadPermisos = operario.CantidadPermisos,
                             CantidadAlmacenes = operario.CantidadAlmacenes,
-                            PlantillaAplicada = operario.PlantillaAplicada
+                            PlantillaAplicada = operario.PlantillaAplicada,
+                            RolNombre = operario.RolNombre,
+                            NivelJerarquico = operario.NivelJerarquico
                         };
+                        
+                        
                         Operarios.Add(operarioLista);
                     }
                     

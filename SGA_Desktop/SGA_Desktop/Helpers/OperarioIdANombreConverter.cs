@@ -24,7 +24,16 @@ namespace SGA_Desktop.Helpers
 				// Como fallback, muestra el propio ID
 				return id.ToString();
 			}
-			return string.Empty;
+			else if (value is string idString && int.TryParse(idString, out int parsedId))
+			{
+				// Manejar cuando el valor viene como string (como en UsuarioBloqueo)
+				if (parsedId == SessionManager.Operario)
+					return SessionManager.NombreOperario;
+
+				// Como fallback, muestra el propio ID
+				return idString;
+			}
+			return value?.ToString() ?? string.Empty;
 		}
 
 		public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

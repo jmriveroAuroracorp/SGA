@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using SGA_Api.Data;
@@ -29,10 +30,47 @@ builder.Services.AddDbContext<MobilityWH3DbContext>(options =>
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(Program).Assembly)
+    .AddControllersAsServices()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    });
+
+// Configurar rutas case-insensitive
+builder.Services.Configure<RouteOptions>(options =>
+{
+    options.LowercaseUrls = true;
+    options.LowercaseQueryStrings = true;
+});
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "SGA API",
+        Version = "v1",
+        Description = "API para el Sistema de Gestión de Almacén"
+    });
+    
+    // Configurar para manejar referencias circulares y problemas de serialización
+    c.UseInlineDefinitionsForEnums();
+    c.SupportNonNullableReferenceTypes();
+    c.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
+    
+    // Ignorar propiedades problemáticas
+    c.IgnoreObsoleteActions();
+    c.IgnoreObsoleteProperties();
+    
+    // Configurar para manejar referencias circulares sin filtro personalizado
+    
+    // Configurar para evitar problemas de serialización
+    c.DocInclusionPredicate((docName, apiDesc) => true);
+    c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+});
 builder.Services.AddScoped<IPesajeService, PesajeLogic>();
 builder.Services.AddScoped<IConteosService>(provider => 
     new ConteosService(
@@ -44,6 +82,8 @@ builder.Services.AddScoped<IConteosService>(provider =>
 builder.Services.AddScoped<IOrdenTraspasoService, OrdenTraspasoService>();
 builder.Services.AddScoped<INotificacionesTraspasosService, NotificacionesTraspasosService>();
 builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
+builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
+builder.Services.AddScoped<ICalidadService, CalidadService>();
 builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
 
 // Configuración de SignalR
@@ -62,10 +102,16 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseRouting();
+
 //if (app.Environment.IsDevelopment())
 //{
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SGA API v1");
+        c.RoutePrefix = "swagger";
+    });
 //}
 app.UseStaticFiles(); // Para wwwroot (si lo usas, opcional)
 
@@ -76,7 +122,6 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/actualizaciones"
 });
 app.UseMiddleware<TokenValidationMiddleware>();
-
 app.UseAuthorization();
 
 app.MapControllers();

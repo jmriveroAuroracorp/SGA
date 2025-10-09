@@ -24,7 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.sga.data.dto.etiquetas.LogImpresionDto
-import com.example.sga.service.LectorPDA.DeviceUtils
+import com.example.sga.service.lector.DeviceUtils
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import com.example.sga.service.scanner.QRScannerView
 import com.example.sga.view.app.SessionViewModel
@@ -86,6 +87,7 @@ fun EtiquetasScreen(
     viewModel.init(sessionViewModel)
     val empresa by sessionViewModel.empresaSeleccionada.collectAsState()
     val codigoEmpresa: Short? = empresa?.codigo?.toShort()
+    val context = LocalContext.current
     var pestañaSeleccionada by remember { mutableStateOf(0) }
     val pestañas = listOf("Artículos", "Ubicaciones")
 
@@ -107,6 +109,7 @@ fun EtiquetasScreen(
     val impresoraNombre = sessionViewModel.impresoraSeleccionada.collectAsState().value
     val impresoraSel = impresoras.find { it.nombre == impresoraNombre }
     val resultado by viewModel.resultado.collectAsState()
+    val usuario by sessionViewModel.user.collectAsState()
 
     /* ----- Cargar impresoras una sola vez ----- */
     LaunchedEffect(Unit) { viewModel.cargarImpresoras() }
@@ -127,7 +130,7 @@ fun EtiquetasScreen(
             )
         }
     ) { padding ->
-        if (DeviceUtils.isHoneywell) {
+        if (DeviceUtils.hasHardwareScanner(context)) {
             val focusRequester = remember { FocusRequester() }
 
             Box(
@@ -180,7 +183,7 @@ fun EtiquetasScreen(
 
             if (pestañaSeleccionada == 0) {
                 /* Escáner QR o campos de búsqueda */
-                if (escaneando && !DeviceUtils.isHoneywell) {
+                if (escaneando && !DeviceUtils.hasHardwareScanner(context)) {
                     item {
                         Box(
                             modifier = Modifier
@@ -220,7 +223,7 @@ fun EtiquetasScreen(
                 }else {
                     /* Botón escanear */
                     item {
-                        if (!DeviceUtils.isHoneywell) {
+                        if (!DeviceUtils.hasHardwareScanner(context)) {
                             Button(
                                 onClick = {
                                     viewModel.setError(null)
@@ -312,7 +315,22 @@ fun EtiquetasScreen(
                         Spacer(Modifier.height(16.dp))
                     }
                 }
-                items(resultado) { stock ->
+                
+                // Aplicar filtrado de almacenes permitidos y del centro
+                val resultadoFiltrado = resultado.filter { stock ->
+                    // 1️⃣ Filtro por permisos específicos del usuario
+                    val porPermisoEspecifico = usuario?.codigosAlmacen?.contains(stock.codigoAlmacen) == true
+                    
+                    // 2️⃣ Filtro por almacenes del centro del usuario (código de almacén contiene el código del centro)
+                    val porCentro = usuario?.codigoCentro?.let { centro ->
+                        stock.codigoAlmacen.contains(centro)
+                    } ?: false
+                    
+                    // Combinar permisos: específicos OR del centro
+                    porPermisoEspecifico || porCentro
+                }
+                
+                items(resultadoFiltrado) { stock ->
                     var mostrarModal by remember { mutableStateOf(false) }
 
                     Card(

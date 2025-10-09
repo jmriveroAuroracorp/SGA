@@ -578,75 +578,28 @@ namespace SGA_Api.Controllers.Ubicacion
 		//		return Ok(vaciasOEsp);
 		//	}
 
-		[HttpGet("vacias-o-especiales")]
-		public async Task<IActionResult> UbicacionesVaciasOEsp(
-			[FromQuery] short codigoEmpresa,
-			[FromQuery] string codigoAlmacen,
-			[FromQuery] List<string>? ubicacionesActuales = null)
-		{
-			var logMsg = "Ubicaciones actuales recibidas: " + (ubicacionesActuales == null ? "null" : string.Join(" | ", ubicacionesActuales));
-			System.Diagnostics.Debug.WriteLine(logMsg);
-			Console.WriteLine(logMsg); // Para asegurar que se ve en consola
-
-			var ejercicio = await _sageContext.Periodos
-				.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
-				.OrderByDescending(p => p.Fechainicio)
-				.Select(p => p.Ejercicio)
-				.FirstOrDefaultAsync();
-
-			if (ejercicio == 0)
-				return BadRequest("Sin ejercicio");
-
-			var vaciasOEsp = await _storageContext.Ubicaciones
-				.Where(u =>
-					u.CodigoEmpresa == codigoEmpresa &&
-					u.CodigoAlmacen == codigoAlmacen &&
-					(
-						!EF.Functions.Like(u.Ubicacion, "UB%")
-						||
-						(
-							EF.Functions.Like(u.Ubicacion, "UB%") &&
-							!_storageContext.AcumuladoStockUbicacion.Any(a =>
-								a.CodigoEmpresa == codigoEmpresa &&
-								a.Ejercicio == ejercicio &&
-								a.CodigoAlmacen == codigoAlmacen &&
-								a.Ubicacion == u.Ubicacion &&
-								a.UnidadSaldo != 0)
-						)
-					)
-				)
-				.Select(u => new
-				{
-					codigoAlmacen = u.CodigoAlmacen,
-					ubicacion = u.Ubicacion
-				})
-				.ToListAsync();
-
-			// Añadir ubicaciones actuales si no están ya (insensible a mayúsculas y espacios)
-			if (ubicacionesActuales != null && ubicacionesActuales.Any())
+	[HttpGet("vacias-o-especiales")]
+	public async Task<IActionResult> UbicacionesVaciasOEsp(
+		[FromQuery] short codigoEmpresa,
+		[FromQuery] string codigoAlmacen,
+		[FromQuery] List<string>? ubicacionesActuales = null)
+	{
+		// MODIFICACIÓN: Ahora devuelve TODAS las ubicaciones sin filtrar por stock
+		// Esto permite colocar múltiples palets en la misma ubicación
+		
+		var todasUbicaciones = await _storageContext.Ubicaciones
+			.Where(u =>
+				u.CodigoEmpresa == codigoEmpresa &&
+				u.CodigoAlmacen == codigoAlmacen)
+			.Select(u => new
 			{
-				var yaIncluidas = new HashSet<string>(vaciasOEsp.Select(u => u.ubicacion.Trim().ToUpper()));
-				var ubicacionesAnhadidas = new List<string>();
-				foreach (var ubic in ubicacionesActuales)
-				{
-					var ubicClean = ubic.Trim().ToUpper();
-					if (!yaIncluidas.Contains(ubicClean))
-					{
-						vaciasOEsp.Add(new
-						{
-							codigoAlmacen = codigoAlmacen,
-							ubicacion = ubic
-						});
-						ubicacionesAnhadidas.Add(ubic);
-					}
-				}
-				var logAdd = "Ubicaciones añadidas al resultado: " + (ubicacionesAnhadidas.Count == 0 ? "ninguna" : string.Join(" | ", ubicacionesAnhadidas));
-				System.Diagnostics.Debug.WriteLine(logAdd);
-				Console.WriteLine(logAdd);
-			}
+				codigoAlmacen = u.CodigoAlmacen,
+				ubicacion = u.Ubicacion
+			})
+			.ToListAsync();
 
-			return Ok(vaciasOEsp);
-		}
+		return Ok(todasUbicaciones);
+	}
 
 
 		[HttpGet("validar-ubicacion")]
@@ -660,47 +613,17 @@ namespace SGA_Api.Controllers.Ubicacion
 			if (string.IsNullOrWhiteSpace(codigoAlmacen) || string.IsNullOrWhiteSpace(ubicacion))
 				return BadRequest("Almacén y ubicación son obligatorios.");
 
-			var alm = codigoAlmacen.Trim().ToUpperInvariant();
-			var ubi = ubicacion.Trim().ToUpperInvariant();
-
-			// Solo aplicamos restricción a ubicaciones "normales"
-			if (!ubi.StartsWith("UB", StringComparison.OrdinalIgnoreCase))
-				return Ok(new { ok = true });
-
+			// MODIFICACIÓN: Eliminar restricción de ocupación
+			// Ahora se permite múltiples palets en la misma ubicación
+			// Solo validamos que la ubicación existe (opcional)
+			
 			// (Opcional) Validar que la ubicación existe en maestro:
 			// if (!await _storageContext.Ubicaciones.AsNoTracking()
 			//     .AnyAsync(u => u.CodigoAlmacen == alm && u.Ubicacion == ubi)) {
 			//     return NotFound("La ubicación no existe.");
 			// }
 
-			// Subquery: última fecha COMPLETADO/PALET por palet
-			var ultimasFechas = _auroraSgaContext.Traspasos
-				.AsNoTracking()
-				.Where(t => t.TipoTraspaso == "PALET" && t.CodigoEstado == "COMPLETADO")
-				.GroupBy(t => t.PaletId)
-				.Select(g => new
-				{
-					PaletId = g.Key,
-					MaxFecha = g.Max(x => x.FechaFinalizacion)
-				});
-
-			// Join para obtener la ÚLTIMA fila de cada palet y comprobar ocupación en (alm, ubi)
-			var ocupada = await (
-				from t in _auroraSgaContext.Traspasos.AsNoTracking()
-				join u in ultimasFechas
-					on new { t.PaletId, t.FechaFinalizacion }
-					equals new { u.PaletId, FechaFinalizacion = u.MaxFecha }
-				where t.PaletId != paletId
-					&& t.TipoTraspaso == "PALET"
-					&& t.CodigoEstado == "COMPLETADO"
-					&& t.AlmacenDestino == alm
-					&& (t.UbicacionDestino ?? "") == ubi
-				select 1
-			).AnyAsync();
-
-			if (ocupada)
-				return StatusCode(StatusCodes.Status409Conflict, new { ok = false, motivo = "Ubicación ocupada por otro palet." });
-
+			// Siempre permitir el movimiento - sin restricciones de ocupación
 			return Ok(new { ok = true });
 		}
 

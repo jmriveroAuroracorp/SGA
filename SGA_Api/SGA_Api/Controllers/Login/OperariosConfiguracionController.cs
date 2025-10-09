@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Login;
+using SGA_Api.Services;
 
 namespace SGA_Api.Controllers.Login
 {
@@ -11,11 +12,13 @@ namespace SGA_Api.Controllers.Login
     {
         private readonly SageDbContext _context;
         private readonly AuroraSgaDbContext _auroraContext;
+        private readonly IRolesSgaService _rolesSgaService;
 
-        public OperariosConfiguracionController(SageDbContext context, AuroraSgaDbContext auroraContext)
+        public OperariosConfiguracionController(SageDbContext context, AuroraSgaDbContext auroraContext, IRolesSgaService rolesSgaService)
         {
             _context = context;
             _auroraContext = auroraContext;
+            _rolesSgaService = rolesSgaService;
         }
 
         /// <summary>
@@ -99,6 +102,23 @@ namespace SGA_Api.Controllers.Login
                     .Select(oca => oca.ConfiguracionPredefinidaNombre)
                     .FirstOrDefaultAsync();
                 operario.PlantillaAplicada = plantillaAplicada;
+
+                // Información del rol SGA (tabla Usuarios)
+                var usuario = await _auroraContext.Usuarios
+                    .Where(u => u.IdUsuario == operario.Id)
+                    .Select(u => new { u.IdRol })
+                    .FirstOrDefaultAsync();
+                
+                if (usuario?.IdRol.HasValue == true)
+                {
+                    // Obtener información del rol
+                    var rolInfo = await ObtenerInformacionRolAsync(usuario.IdRol.Value);
+                    if (rolInfo != null)
+                    {
+                        operario.RolNombre = rolInfo.Nombre;
+                        operario.NivelJerarquico = rolInfo.NivelJerarquico;
+                    }
+                }
             }
 
             return Ok(operarios);
@@ -166,8 +186,24 @@ namespace SGA_Api.Controllers.Login
                     .FirstOrDefaultAsync();
                 operario.PlantillaAplicada = plantillaAplicada;
 
+                // Información del rol SGA (tabla Usuarios)
+                var usuario = await _auroraContext.Usuarios
+                    .Where(u => u.IdUsuario == operario.Id)
+                    .Select(u => new { u.IdUsuario, u.IdRol })
+                    .FirstOrDefaultAsync();
+                
+                if (usuario?.IdRol.HasValue == true)
+                {
+                    // Obtener información del rol
+                    var rolInfo = await ObtenerInformacionRolAsync(usuario.IdRol.Value);
+                    if (rolInfo != null)
+                    {
+                        operario.RolNombre = rolInfo.Nombre;
+                        operario.NivelJerarquico = rolInfo.NivelJerarquico;
+                    }
+                }
+
                 // Calcular resumen de límites
-                System.Diagnostics.Debug.WriteLine($"Operario {operario.Id}: LimiteImporte={operario.LimiteImporte}, LimiteUnidades={operario.LimiteUnidades}");
                 
                 if (operario.LimiteImporte.HasValue && operario.LimiteImporte.Value > 0.0000000m)
                 {
@@ -254,6 +290,27 @@ namespace SGA_Api.Controllers.Login
                     .Select(oca => oca.ConfiguracionPredefinidaNombre)
                     .FirstOrDefaultAsync();
 
+                // Obtener información del rol SGA
+                var usuario = await _auroraContext.Usuarios
+                    .Where(u => u.IdUsuario == id)
+                    .Select(u => new { u.IdRol })
+                    .FirstOrDefaultAsync();
+
+                int? idRol = null;
+                string? rolNombre = null;
+                int? nivelJerarquico = null;
+
+                if (usuario?.IdRol.HasValue == true)
+                {
+                    idRol = usuario.IdRol.Value;
+                    var rolInfo = await ObtenerInformacionRolAsync(usuario.IdRol.Value);
+                    if (rolInfo != null)
+                    {
+                        rolNombre = rolInfo.Nombre;
+                        nivelJerarquico = rolInfo.NivelJerarquico;
+                    }
+                }
+
                 var configuracion = new OperarioConfiguracionDto
                 {
                     Id = operario.Id,
@@ -263,6 +320,9 @@ namespace SGA_Api.Controllers.Login
                     CodigoCentro = operario.CodigoCentro,
                     LimiteInventarioEuros = operario.MRH_LimiteInventarioEuros,
                     LimiteInventarioUnidades = operario.MRH_LimiteInventarioUnidades,
+                    IdRol = idRol,
+                    RolNombre = rolNombre,
+                    NivelJerarquico = nivelJerarquico,
                     Permisos = permisos,
                     Empresas = empresas,
                     Almacenes = almacenes,
@@ -705,13 +765,19 @@ namespace SGA_Api.Controllers.Login
             // Quitar almacenes que ya no son necesarios
             if (almacenesAQuitar.Any())
             {
-                var almacenesParaEliminar = await _context.OperariosAlmacenes
-                    .Where(a => a.Operario == operarioId && 
-                               almacenesAQuitar.Contains(a.CodigoAlmacen ?? ""))
-                    .ToListAsync();
+                // Usar consultas individuales para evitar problemas con Contains
+                foreach (var codigoAlmacen in almacenesAQuitar)
+                {
+                    var almacenesParaEliminar = await _context.OperariosAlmacenes
+                        .Where(a => a.Operario == operarioId && a.CodigoAlmacen == codigoAlmacen)
+                        .ToListAsync();
 
-                _context.OperariosAlmacenes.RemoveRange(almacenesParaEliminar);
-                huboCambios = true;
+                    if (almacenesParaEliminar.Any())
+                    {
+                        _context.OperariosAlmacenes.RemoveRange(almacenesParaEliminar);
+                        huboCambios = true;
+                    }
+                }
             }
 
             // Agregar solo los almacenes nuevos
@@ -1164,6 +1230,27 @@ namespace SGA_Api.Controllers.Login
                     message = $"Error al dar de alta al empleado: {ex.Message}" 
                 });
             }
+        }
+
+        /// <summary>
+        /// Helper method para obtener información de un rol por ID
+        /// </summary>
+        private async Task<dynamic?> ObtenerInformacionRolAsync(int rolId)
+        {
+            // Usar el servicio de roles SGA para obtener la información del rol
+            try
+            {
+                var rol = await _rolesSgaService.GetRolSgaByIdAsync(rolId);
+                if (rol != null)
+                {
+                    return new { Id = rol.Id, Nombre = rol.Nombre, NivelJerarquico = rol.NivelJerarquico };
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error silently
+            }
+            return null;
         }
     }
 }

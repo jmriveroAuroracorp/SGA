@@ -1,10 +1,14 @@
 package com.example.sga.service.Traspasos
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import com.example.sga.data.ApiManager
 import kotlinx.coroutines.*
 import retrofit2.Call
@@ -14,14 +18,18 @@ import retrofit2.Response
 object EstadoTraspasosService {
 
     private var checkerJob: Job? = null
-    private val estadosPrevios = mutableMapOf<String, String>()
 
     fun iniciar(usuarioId: Int, context: Context) {
-        if (checkerJob?.isActive == true) return
+        if (checkerJob?.isActive == true) {
+            Log.d("EstadoTraspasosService", "🔄 Reiniciando servicio con nuevo contexto")
+            detener()
+        }
+
+        Log.d("EstadoTraspasosService", "▶️ Iniciando servicio de comprobación de traspasos para usuario $usuarioId")
 
         checkerJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
-                delay(60_000L) // cada 60 segundos
+                delay(5_000L) // cada 5 segundos (ajusta si quieres)
 
                 ApiManager.traspasosApi.obtenerEstadosTraspasosPorUsuario(usuarioId)
                     .enqueue(object : Callback<List<TraspasoEstadoDto>> {
@@ -29,43 +37,43 @@ object EstadoTraspasosService {
                             call: Call<List<TraspasoEstadoDto>>,
                             response: Response<List<TraspasoEstadoDto>>
                         ) {
-                            if (!response.isSuccessful) return
-
-                            val lista = response.body().orEmpty()
-
-                            // Agrupar por codigoPalet si existe, si no por id
-                            val agrupados = lista.groupBy {
-                                it.codigoPalet?.takeIf { it.isNotBlank() } ?: it.id
+                            if (!response.isSuccessful) {
+                                Log.w("EstadoTraspasosService", "Respuesta no exitosa: ${response.code()}")
+                                return
                             }
 
-                            for ((clave, traspasos) in agrupados) {
-                                val estadoPrevio = traspasos.minOfOrNull { estadosPrevios[it.id] ?: "" } ?: ""
-                                val estadoActual = traspasos.minOfOrNull { it.codigoEstado } ?: ""
+                            val lista = response.body().orEmpty()
+                            if (lista.isEmpty()) return
 
-                                if (estadoPrevio == "PENDIENTE_ERP" && estadoActual == "COMPLETADO") {
-                                    val codigo = traspasos.firstNotNullOfOrNull {
-                                        it.codigoPalet?.takeIf { it.isNotBlank() }
-                                    } ?: traspasos.firstNotNullOfOrNull {
-                                        it.codigoArticulo?.takeIf { it.isNotBlank() }
-                                    } ?: "desconocido"
-
-                                    mostrarNotificacion(context, "✅ Traspaso $codigo completado correctamente", clave.hashCode())
-
+                            // El API ya devuelve solo los no notificados y los marca como notificados.
+                            for (t in lista) {
+                                val codigo = when {
+                                    !t.codigoPalet.isNullOrBlank() -> t.codigoPalet
+                                    !t.codigoArticulo.isNullOrBlank() -> t.codigoArticulo
+                                    else -> "desconocido"
                                 }
 
-                                if (estadoPrevio == "PENDIENTE_ERP" && estadoActual == "ERROR_ERP") {
-                                    val codigo = traspasos.firstNotNullOfOrNull {
-                                        it.codigoPalet?.takeIf { it.isNotBlank() }
-                                    } ?: traspasos.firstNotNullOfOrNull {
-                                        it.codigoArticulo?.takeIf { it.isNotBlank() }
-                                    } ?: "desconocido"
-
-                                    mostrarNotificacion(context, "❌ Traspaso $codigo ha fallado. Revisa el stock.", clave.hashCode())
-                                }
-
-                                // Guardamos estado actual para todos los IDs del grupo
-                                for (traspaso in traspasos) {
-                                    estadosPrevios[traspaso.id] = traspaso.codigoEstado
+                                when (t.codigoEstado.uppercase()) {
+                                    "COMPLETADO" -> {
+                                        mostrarNotificacion(
+                                            context = context,
+                                            titulo = "Estado del traspaso",
+                                            mensaje = "✅ Traspaso $codigo completado correctamente",
+                                            id = t.id.hashCode()
+                                        )
+                                    }
+                                    "ERROR_ERP" -> {
+                                        val detalle = t.comentario?.takeIf { it.isNotBlank() } ?: "Error en ERP."
+                                        mostrarNotificacion(
+                                            context = context,
+                                            titulo = "Estado del traspaso",
+                                            mensaje = "❌ Traspaso $codigo ha fallado. $detalle",
+                                            id = t.id.hashCode()
+                                        )
+                                    }
+                                    else -> {
+                                        // No notificar otros estados
+                                    }
                                 }
                             }
                         }
@@ -81,35 +89,35 @@ object EstadoTraspasosService {
     fun detener() {
         checkerJob?.cancel()
         checkerJob = null
-        estadosPrevios.clear()
+        Log.d("EstadoTraspasosService", "⏹️ Servicio detenido")
     }
 
-    private fun mostrarNotificacion(context: Context, mensaje: String, id: Int) {
+    private fun mostrarNotificacion(context: Context, titulo: String, mensaje: String, id: Int) {
         crearCanalNotificaciones(context)
 
-        val builder = androidx.core.app.NotificationCompat.Builder(context, "traspasos_estado")
+        val builder = NotificationCompat.Builder(context, "traspasos_estado")
             .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("Estado del traspaso")
+            .setContentTitle(titulo)
             .setContentText(mensaje)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
 
         val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(id, builder.build())
 
-        // 🟡 También mostramos un Toast si la app está abierta
+        // También mostramos un Toast si la app está abierta
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
         }
     }
 
     private fun crearCanalNotificaciones(context: Context) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val canal = android.app.NotificationChannel(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val canal = NotificationChannel(
                 "traspasos_estado",
                 "Notificaciones de Traspasos",
-                android.app.NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Avisos cuando un traspaso es completado o falla"
                 enableLights(false)
@@ -117,7 +125,7 @@ object EstadoTraspasosService {
                 setSound(null, null)
             }
 
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(canal)
         }
     }
@@ -126,6 +134,7 @@ object EstadoTraspasosService {
         val id: String,
         val codigoEstado: String,
         val codigoPalet: String?,
-        val codigoArticulo: String?
+        val codigoArticulo: String?,
+        val comentario: String?
     )
 }

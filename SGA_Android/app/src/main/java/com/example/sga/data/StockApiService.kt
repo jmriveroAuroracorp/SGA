@@ -10,7 +10,7 @@ interface StockApiService {
 
     @GET("Stock/consulta-stock")
     fun consultarStock(
-        @Query("codigoEmpresa") codigoEmpresa: Int,
+        @Query("codigoEmpresa") codigoEmpresa: Short,
         @Query("codigoUbicacion") codigoUbicacion: String? = null,
         @Query("codigoAlmacen") codigoAlmacen: String? = null,
         @Query("codigoArticulo") codigoArticulo: String? = null,

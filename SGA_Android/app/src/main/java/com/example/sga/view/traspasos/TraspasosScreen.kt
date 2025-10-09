@@ -1,9 +1,11 @@
 package com.example.sga.view.traspasos
 
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -32,7 +34,8 @@ import com.example.sga.view.components.AppTopBar
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import com.example.sga.data.dto.traspasos.PaletDto
-import com.example.sga.service.LectorPDA.DeviceUtils
+import com.example.sga.service.lector.DeviceUtils
+import androidx.compose.ui.platform.LocalContext
 import com.example.sga.service.scanner.QRScannerView
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.focus.focusRequester
@@ -54,9 +57,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoPaletDto
 import java.time.LocalDateTime
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.focus.onFocusChanged
-
+import androidx.compose.ui.platform.LocalContext
+import com.example.sga.data.dto.traspasos.LineaPaletDto
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import com.example.sga.utils.SoundUtils
 
 @Composable
 fun StockSelectionCards(
@@ -136,8 +141,11 @@ fun TraspasosScreen(
     /* ------------------  State que ya tenías  ------------------ */
     val empresa   = sessionViewModel.empresaSeleccionada.collectAsState().value?.codigo?.toShort() ?: return
     val usuarioId = sessionViewModel.user.collectAsState().value?.id?.toIntOrNull() ?: return
+    val context = LocalContext.current
 
     val paletCreado by viewModel.paletCreado.collectAsState()
+    // bloqueo SOLO cuando el palet se ha creado en esta pantalla
+    val flujoCreacionActivo = viewModel.flujoCreacionPaletActivo.collectAsState().value
 
     /* ------------------ 1️⃣  Lista de opciones  ------------------ */
     val tiposPalet  by viewModel.tiposPalet.collectAsState()
@@ -159,20 +167,36 @@ fun TraspasosScreen(
     var esperandoUbicacionParaCerrar by remember { mutableStateOf(false) }
 
     var traspasoPendienteId by remember { mutableStateOf<String?>(null) }
-    var articuloPendienteMoverLocal by remember { mutableStateOf<ArticuloDto?>(null) }
+
+    var precheckConfirmar by remember { mutableStateOf(false) }
+
 
     LaunchedEffect(Unit) {
         viewModel.setTraspasoEsDePalet(esPalet)
     }
+
     LaunchedEffect(Unit) {
         viewModel.setTraspasoDirectoDesdePaletCerrado(directoDesdePaletCerrado)
     }
+    LaunchedEffect(Unit) {
+        PaletFlujoStore.init(navController.context)  // sin imports extra
+    }
+
+    LaunchedEffect(usuarioId) {
+        viewModel.reanudarFlujoSiAplica(
+            usuarioIdActual = usuarioId,
+            onListo = { palet ->
+                viewModel.obtenerLineasDePalet(palet.id)
+            }
+        )
+    }
+
+    val traspasos = viewModel.traspasosPendientes.collectAsState().value
 
     LaunchedEffect(Unit) {
         viewModel.comprobarTraspasoPendiente(
             usuarioId = usuarioId,
-            onSuccess = { idTraspaso ->
-                traspasoPendienteId = idTraspaso
+            onSuccess = {
                 esperandoUbicacionDestino = true
             },
             onNoPendiente = {},
@@ -209,7 +233,7 @@ fun TraspasosScreen(
     val impresoraSel = impresoras.find { it.nombre == impresoraNombre }
     var articuloPendienteMover by remember { mutableStateOf<ArticuloDto?>(null) }
     var mostrarDialogoUbicacionPrimero by remember { mutableStateOf(false) }
-    var mostrarDialogoMoverArticulo by remember { mutableStateOf(false) }
+    //var mostrarDialogoMoverArticulo by remember { mutableStateOf(false) }
     var mostrarDialogoCancelarArticulo by remember { mutableStateOf(false) }
     var ubicacionEscaneada by remember { mutableStateOf<Pair<String,String>?>(null) }
     var mostrarDialogoCantidad by remember { mutableStateOf(false) }
@@ -221,18 +245,81 @@ fun TraspasosScreen(
     val articuloPendienteMoverVM by viewModel.articuloPendienteMover.collectAsState()
     var mostrarDialogoMoverArticuloVM by remember { mutableStateOf(false) }
     var errorTraspasoArticulo by remember { mutableStateOf<String?>(null) }
+    
+    // Observar errores del ViewModel
+    val errorViewModel by viewModel.error.collectAsState()
 
 
     var mostrarDialogoExito by remember { mutableStateOf(false) }
     var mostrarDialogoErrorFinalizar by remember { mutableStateOf<String?>(null) }
     var mostrarDialogoTraspasoDirecto by remember { mutableStateOf(false) }
-    //var traspasoMoverPaletPendiente by remember { mutableStateOf(false) }
+    var esPaletRecienCreado by remember { mutableStateOf(false) }
+    var cerrarPaletDespuesDeImprimir by remember { mutableStateOf(false) }
+    var reactivarEscaner by remember { mutableStateOf(false) }
+
+    var mostrarDialogoCantidadDesdePalet by remember { mutableStateOf(false) }
+    var lineaSeleccionada by remember { mutableStateOf<LineaPaletDto?>(null) }
+    var cantidadExtraer by remember { mutableStateOf("1.0") }
+
+    // --- PRECHECK palet en destino (ARTÍCULO) ---
+    var mostrarDialogoPrecheck by remember { mutableStateOf(false) }
+    var precheckAviso by remember { mutableStateOf<String?>(null) }
+// Acción diferida a ejecutar si el usuario confirma
+    var accionTrasConfirmacion by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var comentarioTraspaso by remember { mutableStateOf("") }
+
+
+    LaunchedEffect(reactivarEscaner) {
+        if (reactivarEscaner&& DeviceUtils.hasHardwareScanner(context)) {
+            delay(200)
+            focusRequester.requestFocus()
+            reactivarEscaner = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.cargarAlmacenesPermitidos(
             sessionViewModel = sessionViewModel,
             codigoEmpresa = empresa.toInt()
         )
+        SoundUtils.getInstance().initialize(context)
+    }
+    LaunchedEffect(esperandoUbicacionDestino) {
+        if (esperandoUbicacionDestino) {
+            Log.d("ESCANEO_DESTINO", "📌 Lanzando focusRequester")
+
+            // ✅ Si no tienes pendientes cargados, vuelve a consultarlos
+            if (viewModel.traspasosPendientes.value.isEmpty()) {
+                Log.d("ESCANEO_DESTINO", "📡 Cargando traspasos pendientes tras reinicio")
+
+                viewModel.comprobarTraspasoPendiente(
+                    usuarioId = usuarioId,
+                    onSuccess = { lista ->
+                        if (lista.isNotEmpty()) {
+                            Log.d("ESCANEO_DESTINO", "✅ Cargados ${lista.size} traspasos pendientes")
+                            viewModel.setTraspasosPendientes(lista)
+                            esperandoUbicacionDestino = true // ya estaba en true, pero por claridad
+                        } else {
+                            Log.d("ESCANEO_DESTINO", "⚠️ No había pendientes tras relanzar flujo")
+                            esperandoUbicacionDestino = false
+                        }
+                    },
+                    onNoPendiente = {
+                        Log.d("ESCANEO_DESTINO", "⚠️ No se encontraron pendientes")
+                        esperandoUbicacionDestino = false
+                    },
+                    onError = {
+                        Log.d("ESCANEO_DESTINO", "❌ Error al cargar pendientes: $it")
+                        mostrarDialogoErrorFinalizar = it
+                        esperandoUbicacionDestino = false
+                    }
+                )
+            }
+            if (DeviceUtils.hasHardwareScanner(context)) {
+                delay(200)
+                focusRequester.requestFocus()
+            }
+        }
     }
 
     Scaffold(
@@ -243,10 +330,26 @@ fun TraspasosScreen(
                     navController = navController,
                     title = ""
                 )
+                if (flujoCreacionActivo || esperandoUbicacionDestino) {
+                    // Tapa SOLO la AppBar (incluida la flecha) sin tocar el contenido
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { /* bloqueado */ }
+                    )
+                }
             }
         }
     ) { padding ->
-        if (DeviceUtils.isHoneywell) {
+        // 1) Bloquear botón "atrás" físico/gestual mientras dure el flujo de creación
+        androidx.activity.compose.BackHandler(
+            enabled = flujoCreacionActivo || esperandoUbicacionDestino
+        ) { /* no-op: evita salir de Traspasos */ }
+
+        if (DeviceUtils.hasHardwareScanner(context) && !esperandoUbicacionDestino) {
             Box(
                 modifier = Modifier
                     .focusRequester(focusRequester)
@@ -266,13 +369,22 @@ fun TraspasosScreen(
                                         almacen = null,
 
                                         onUbicacionDetectada = { codAlm, codUbi ->
-                                            ubicacionEscaneada = codAlm to codUbi
+                                            // Validar que el usuario tenga permisos para el almacén de origen
+                                            if (viewModel.almacenesPermitidos.value.contains(codAlm)) {
+                                                ubicacionEscaneada = codAlm to codUbi
+                                                SoundUtils.getInstance().playSuccessSound()
+                                            } else {
+                                                mostrarDialogoErrorFinalizar = "No tienes permisos para operar en el almacén '$codAlm'. Ubicación no permitida."
+                                                SoundUtils.getInstance().playErrorSound()
+                                            }
                                             escaneoProcesado = false
                                         },
                                         onPaletDetectado = { palet ->
                                             if (ubicacionEscaneada == null) {
                                                 mostrarDialogoUbicacionPrimero = true
                                                 escaneoProcesado = false
+                                                reactivarEscaner = true
+                                                SoundUtils.getInstance().playErrorSound()
                                             } else {
                                                 viewModel.validarUbicacionDePalet(
                                                     palet = palet,
@@ -281,35 +393,38 @@ fun TraspasosScreen(
                                                         viewModel.setPaletSeleccionado(palet)
                                                         viewModel.obtenerLineasDePalet(palet.id)
                                                         idPaletParaCerrar = palet.id
-                                                        // NO se abre el diálogo aquí
                                                         escaneoProcesado = false
+                                                        reactivarEscaner = true
                                                     },
                                                     onError = { msg ->
                                                         mostrarDialogoErrorFinalizar = msg
                                                         escaneoProcesado = false
+                                                        reactivarEscaner = true
                                                     }
                                                 )
                                             }
                                         },
-                                                onArticuloDetectado = { articuloDto ->
-                                            val loc = ubicacionEscaneada         // ← guarda la referencia
+                                        onArticuloDetectado = { articuloDto ->
+                                            val loc = ubicacionEscaneada
                                             if (loc == null) {
                                                 mostrarDialogoUbicacionPrimero = true
+                                                reactivarEscaner = true
                                                 Log.e("TRASPASOS_UI", "Se ha escaneado un artículo sin ubicación. Mostrando diálogo de ubicación requerida.")
+                                                SoundUtils.getInstance().playErrorSound()
                                             } else if (paletEscaneado != null &&
                                                 paletEscaneado!!.estado.equals("Abierto", ignoreCase = true) &&
-                                                empresaId != null) {
-
-                                                val (codAlm, codUbi) = loc      // ← ahora es seguro desestructurar
+                                                empresaId != null
+                                            ) {
+                                                val (codAlm, codUbi) = loc
                                                 viewModel.buscarStockYMostrar(
-                                                    codigoArticulo      = articuloDto.codigoArticulo,
-                                                    empresaId           = empresaId,
-                                                    codigoAlmacen       = codAlm,
-                                                    codigoUbicacion     = codUbi,
+                                                    codigoArticulo = articuloDto.codigoArticulo,
+                                                    empresaId = empresaId,
+                                                    codigoAlmacen = codAlm,
+                                                    codigoUbicacion = codUbi,
                                                     almacenesPermitidos = viewModel.almacenesPermitidos.value
                                                 )
                                             } else {
-                                                articuloPendiente        = articuloDto
+                                                articuloPendiente = articuloDto
                                                 mostrarDialogoCrearPalet = true
                                             }
                                             escaneoProcesado = false
@@ -317,7 +432,9 @@ fun TraspasosScreen(
                                         onMultipleArticulos = { articulos ->
                                             if (ubicacionEscaneada == null) {
                                                 mostrarDialogoUbicacionPrimero = true
+                                                reactivarEscaner = true
                                                 Log.e("TRASPASOS_UI", "Se ha escaneado un artículo sin ubicación. Mostrando diálogo de ubicación requerida.")
+                                                SoundUtils.getInstance().playErrorSound()
                                             } else {
                                                 viewModel.setArticulosFiltrados(articulos)
                                                 viewModel.setMostrarDialogoSeleccion(true)
@@ -326,6 +443,7 @@ fun TraspasosScreen(
                                         },
                                         onError = {
                                             escaneoProcesado = false
+                                            reactivarEscaner = true
                                         }
                                     )
                                 }
@@ -340,6 +458,12 @@ fun TraspasosScreen(
             )
             LaunchedEffect(Unit) {
                 focusRequester.requestFocus()
+            }
+            LaunchedEffect(reactivarEscaner) {
+                if (reactivarEscaner && DeviceUtils.hasHardwareScanner(context)) {
+                    focusRequester.requestFocus()
+                    reactivarEscaner = false
+                }
             }
         }
 
@@ -376,7 +500,7 @@ fun TraspasosScreen(
             }
 
             Text("Traspasos", style = MaterialTheme.typography.titleLarge)
-            if (escaneando && !DeviceUtils.isHoneywell) {
+            if (escaneando && !DeviceUtils.hasHardwareScanner(context)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -384,10 +508,10 @@ fun TraspasosScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Escaneando código de palet...",
+                        "Escaneando...",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     QRScannerView(
                         modifier = Modifier
@@ -407,13 +531,21 @@ fun TraspasosScreen(
                                     almacen = null,
 
                                     onUbicacionDetectada = { codAlm, codUbi ->
-                                        ubicacionEscaneada = codAlm to codUbi
+                                        // Validar que el usuario tenga permisos para el almacén de origen
+                                        if (viewModel.almacenesPermitidos.value.contains(codAlm)) {
+                                            ubicacionEscaneada = codAlm to codUbi
+                                            SoundUtils.getInstance().playSuccessSound()
+                                        } else {
+                                            mostrarDialogoErrorFinalizar = "No tienes permisos para operar en el almacén '$codAlm'. Ubicación no permitida."
+                                            SoundUtils.getInstance().playErrorSound()
+                                        }
                                         escaneoProcesado = false
                                     },
                                     onPaletDetectado = { palet ->
                                         if (ubicacionEscaneada == null) {
                                             mostrarDialogoUbicacionPrimero = true
                                             escaneoProcesado = false
+                                            SoundUtils.getInstance().playErrorSound()
                                         } else {
                                             viewModel.validarUbicacionDePalet(
                                                 palet = palet,
@@ -437,6 +569,7 @@ fun TraspasosScreen(
                                         if (loc == null) {
                                             mostrarDialogoUbicacionPrimero = true
                                             Log.e("TRASPASOS_UI", "Se ha escaneado un artículo sin ubicación. Mostrando diálogo de ubicación requerida.")
+                                            SoundUtils.getInstance().playErrorSound()
                                         } else if (
                                             paletEscaneado != null &&
                                             paletEscaneado!!.estado.equals("Abierto", ignoreCase = true) &&
@@ -460,6 +593,7 @@ fun TraspasosScreen(
                                         if (ubicacionEscaneada == null) {
                                             mostrarDialogoUbicacionPrimero = true
                                             Log.e("TRASPASOS_UI", "Se ha escaneado un artículo sin ubicación. Mostrando diálogo de ubicación requerida.")
+                                            SoundUtils.getInstance().playErrorSound()
                                         } else {
                                             viewModel.setArticulosFiltrados(articulos)
                                             viewModel.setMostrarDialogoSeleccion(true)
@@ -474,13 +608,13 @@ fun TraspasosScreen(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                     Button(onClick = { escaneando = false }) {
                         Text("Cancelar escaneo")
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-            } else if (!DeviceUtils.isHoneywell) {
+            } else if (!DeviceUtils.hasHardwareScanner(context)) {
                 Button(
                     onClick = {
                         escaneoProcesado = false
@@ -488,7 +622,7 @@ fun TraspasosScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Escanear Palet o Artículo")
+                    Text("Escanear")
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -529,7 +663,9 @@ fun TraspasosScreen(
                         Text("Tipo: ${palet.tipoPaletCodigo}")
                         Text("Orden: ${palet.ordenTrabajoId ?: "Sin orden"}")
 
-                        val lineas = lineasPalet[palet.id] ?: emptyList()
+                        //val lineas = lineasPalet[palet.id] ?: emptyList()
+                        val lineas = (lineasPalet[palet.id] ?: emptyList())
+                            .filter { it.cantidad > 0.0 }
                         val estaAbiertoInicial = palet.estado.equals("Abierto", ignoreCase = true)
                         //var estaAbierto by remember(palet.id) { mutableStateOf(estaAbiertoInicial) }
                         val estaAbierto = palet.estado.equals("Abierto", ignoreCase = true)
@@ -572,7 +708,9 @@ fun TraspasosScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { viewModel.clearPaletSeleccionado()}
+                                .clickable(enabled = !flujoCreacionActivo) {
+                                    viewModel.clearPaletSeleccionado()
+                                }
                                 .padding(bottom = 8.dp)
                         ) {
                             Icon(
@@ -618,21 +756,46 @@ fun TraspasosScreen(
                                             }
 
                                             if (palet.estado.equals("Abierto", ignoreCase = true)) {
-                                                IconButton(
-                                                    onClick = {
-                                                        viewModel.eliminarLineaPalet(
-                                                            idLinea = linea.id,
-                                                            usuarioId = usuarioId,
-                                                            paletId = palet.id
+                                                if (flujoCreacionActivo) {
+                                                    // Comportamiento actual (eliminar línea)
+                                                    IconButton(
+                                                        onClick = {
+                                                            viewModel.eliminarLineaPalet(
+                                                                idLinea = linea.id,
+                                                                usuarioId = usuarioId,
+                                                                paletId = palet.id
+                                                            )
+                                                        },
+                                                        modifier = Modifier.align(Alignment.TopEnd)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = "Eliminar línea",
+                                                            tint = Color.Red
                                                         )
-                                                    },
-                                                    modifier = Modifier.align(Alignment.TopEnd)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = "Eliminar línea",
-                                                        tint = Color.Red
-                                                    )
+                                                    }
+                                                } else {
+                                                    // NUEVO: sacar artículo del palet (traspaso artículo)
+                                                    IconButton(
+                                                        onClick = {
+                                                            val ubi = viewModel.ubicacionOrigen.value
+                                                            if (ubi == null) {
+                                                                // Por seguridad, si alguien abre sin escanear ubicación
+                                                                mostrarDialogoUbicacionPrimero = true
+                                                                SoundUtils.getInstance().playErrorSound()
+                                                            } else {
+                                                                lineaSeleccionada = linea
+                                                                cantidadExtraer = linea.cantidad.toString()
+                                                                mostrarDialogoCantidadDesdePalet = true
+                                                            }
+                                                        },
+                                                        modifier = Modifier.align(Alignment.TopEnd)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.SwapVert,
+                                                            contentDescription = "Sacar artículo del palet"
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -648,8 +811,10 @@ fun TraspasosScreen(
                             ) {
                                 IconButton(
                                     onClick = {
-                                        paletParaImprimir = palet
-                                        mostrarDialogoImpresion = true
+                                        viewModel.obtenerPalet(palet.id) {
+                                            paletParaImprimir = it
+                                            mostrarDialogoImpresion = true
+                                        }
                                     }
                                 ) {
                                     Icon(Icons.Default.Print, contentDescription = "Imprimir etiqueta de palet")
@@ -697,6 +862,7 @@ fun TraspasosScreen(
                             viewModel.limpiarStock()
                             ubicacionEscaneada = null
                             viewModel.clearUbicacionOrigen()
+                            reactivarEscaner = true
                         }
                     }
                 )
@@ -755,9 +921,13 @@ fun TraspasosScreen(
                             usuarioAperturaId = usuarioId,
                             tipoPaletCodigo = tipoSeleccionado ?: return@Button,
                             ordenTrabajoId = ordenTrabajo.takeIf { it.isNotBlank() }
-                        )
+                        ),
+                        onSuccess = { nuevoPalet ->
+                            paletParaImprimir = nuevoPalet      // ✅ ASIGNAR AQUÍ
+                        }
                     )
                     triggerLineaPendiente = true
+                    esPaletRecienCreado = true
                 },
                 enabled = tipoSeleccionado != null,
                 modifier = Modifier.fillMaxWidth()
@@ -767,8 +937,9 @@ fun TraspasosScreen(
 
             }
             if (mostrarDialogoCerrarPalet && idPaletParaCerrar != null) {
-                val lineasDelPalet = lineasPalet[idPaletParaCerrar] ?: emptyList()
-
+                //val lineasDelPalet = lineasPalet[idPaletParaCerrar] ?: emptyList()
+                val lineasDelPalet = (lineasPalet[idPaletParaCerrar] ?: emptyList())
+                    .filter { it.cantidad > 0.0 }
                 // Campos para peso y altura
                 var peso by remember { mutableStateOf("0") }
                 var altura by remember { mutableStateOf("0") }
@@ -830,27 +1001,24 @@ fun TraspasosScreen(
 
                             mostrarDialogoCerrarPalet = false
 
-                            val (codigoAlmacen, ubicacion) = ubicacionEscaneada
-                                ?: run {
-                                    Log.e("CERRAR_PALET", "❌ ubicacionEscaneada es null, no se puede cerrar el palet")
-                                    return@TextButton
-                                }
+                            if (esPaletRecienCreado) {
+                                Log.d("CERRAR_PALET", "🆕 Palet recién creado, se lanza impresión antes de cierre")
+                                cerrarPaletDespuesDeImprimir = true
+                                mostrarDialogoImpresion = true
+                                return@TextButton
+                            }
 
-                            Log.d("CERRAR_PALET", """
-        📤 Enviando datos a cerrarPalet:
-        - Palet ID: $idPaletParaCerrar
-        - Usuario ID: $usuarioId
-        - Empresa: $empresa
-        - Código Almacén: $codigoAlmacen
-        - Ubicación Origen: $ubicacion
-    """.trimIndent())
+                            val (codigoAlmacen, ubicacion) = ubicacionEscaneada ?: run {
+                                Log.e("CERRAR_PALET", "❌ ubicacionEscaneada es null, no se puede cerrar el palet")
+                                return@TextButton
+                            }
 
                             viewModel.cerrarPalet(
                                 id = idPaletParaCerrar!!,
                                 usuarioId = usuarioId,
                                 codigoAlmacen = codigoAlmacen,
                                 codigoEmpresa = empresa,
-                                ubicacionOrigen = ubicacion,
+                                //ubicacionOrigen = ubicacion,
                                 onSuccess = { traspasoId ->
                                     Log.d("CERRAR_PALET", "✅ Palet cerrado correctamente. Traspaso ID: $traspasoId")
                                     traspasoPendienteId = traspasoId
@@ -907,6 +1075,7 @@ fun TraspasosScreen(
                                 "TRASPASOS_UI",
                                 "Se ha escaneado un artículo sin ubicación. Mostrando diálogo de ubicación requerida."
                             )
+                            SoundUtils.getInstance().playErrorSound()
                         } else {                                  // ← a partir de aquí loc es no-nulo
                             if (
                                 paletEscaneado != null &&
@@ -936,6 +1105,18 @@ fun TraspasosScreen(
         AlertDialog(
             onDismissRequest = { mostrarDialogoTraspasoDirecto = false },
             title = { Text("¿Desea realizar un traspaso de este palet?") },
+            text = {
+                Column {
+                    Text("Puede añadir un comentario opcional para este traspaso:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = comentarioTraspaso,
+                        onValueChange = { comentarioTraspaso = it },
+                        label = { Text("Comentario (opcional)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     mostrarDialogoTraspasoDirecto = false
@@ -951,7 +1132,7 @@ fun TraspasosScreen(
                         codigoEmpresa = empresa,
                         fechaInicio = fechaAhora.toString(),
                         tipoTraspaso = "PALET",
-                        comentario = null
+                        comentario = comentarioTraspaso.takeIf { it.isNotBlank() }
                     )
                     viewModel.moverPalet(
                         dto = dto,
@@ -1018,6 +1199,7 @@ fun TraspasosScreen(
                             if (ubicOrigen == null) {
                                 mostrarDialogoUbicacionPrimero = true
                                 Log.e("TRASPASOS_UI", "Intento de crear traspaso sin ubicación. Mostrando diálogo de ubicación requerida.")
+                                SoundUtils.getInstance().playErrorSound()
                                 return@TextButton
                             }
                             if (art != null) {
@@ -1066,18 +1248,7 @@ fun TraspasosScreen(
             text  = { Text("Escanee primero la ubicación del palet o del artículo.") }
         )
     }
-    if (mostrarDialogoMoverArticulo && articuloPendienteMover != null) {
-        AlertDialog(
-            onDismissRequest = { /* bloqueamos salida para forzar decisión */ },
-            title = { Text("Artículo pendiente") },
-            text = {
-                val codigo = articuloPendienteMover?.codigoArticulo ?: "—"
-                Text("Artículo $codigo en memoria. Escanee ubicación destino o cancele.")
-            },
-            confirmButton = { TextButton(onClick = { mostrarDialogoCancelarArticulo = true }) { Text("Cancelar") } },
-            dismissButton = { } // No botón “Cerrar” para que no se quede colgado
-        )
-    }
+
     if (mostrarDialogoCancelarArticulo) {
         AlertDialog(
             onDismissRequest = { mostrarDialogoCancelarArticulo = false },
@@ -1085,9 +1256,18 @@ fun TraspasosScreen(
             text  = { Text("¿Desea descartar el artículo escaneado?") },
             confirmButton = {
                 TextButton(onClick = {
-                    articuloPendienteMover = null
-                    mostrarDialogoMoverArticulo = false
+                    // Limpieza VM existente
+                    viewModel.setArticuloPendienteMover(null)
+                    mostrarDialogoMoverArticuloVM = false
                     mostrarDialogoCancelarArticulo = false
+
+                    // 🔽 Desbloqueo que faltaba:
+                    esperandoUbicacionDestino = false          // quita el overlay y el lector de destino
+                    traspasoPendienteId = null                 // olvida el id local
+                    viewModel.clearPendientes()                // vacía la lista local de pendientes
+                    viewModel.setTraspasoEsDePalet(false)      // asegura que no estamos en flujo palet
+                    //articuloPendienteMoverLocal = null
+                    ubicacionEscaneada = null                  // opcional: volvemos a estado neutro
                 }) { Text("Sí") }
             },
             dismissButton = {
@@ -1156,18 +1336,39 @@ fun TraspasosScreen(
                         usuario = usuario,
                         dispositivo = dispositivo,
                         idImpresora = impresora.id,
-                        etiquetaImpresa = 2,
-                        codigoArticulo = paletParaImprimir!!.codigoPalet,
-                        descripcionArticulo = "Etiqueta palet",
+                        etiquetaImpresa = 0,
+                        tipoEtiqueta = 2,
                         copias = copias,
-                        codigoAlternativo = "",
-                        fechaCaducidad = null,
-                        partida = null,
-                        alergenos = null,
-                        pathEtiqueta = "\\\\Null"
+
+                        pathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\PALET.nlbl",
+                        codigoGS1 = paletParaImprimir!!.codigoGS1,
+                        codigoPalet = paletParaImprimir!!.codigoPalet
                     )
                     viewModel.imprimirEtiquetaPalet(dto)
                     mostrarDialogoImpresion = false
+                    if (cerrarPaletDespuesDeImprimir) {
+                        cerrarPaletDespuesDeImprimir = false
+
+                        viewModel.cerrarPalet(
+                            id = idPaletParaCerrar!!,
+                            usuarioId = usuarioId,
+                            codigoAlmacen = null,
+                            codigoEmpresa = empresa,
+                            //ubicacionOrigen = null,
+                            onSuccess = { traspasoId ->
+                                Log.d("CERRAR_PALET", "✅ Palet cerrado correctamente tras impresión. Traspaso ID: $traspasoId")
+                                traspasoPendienteId = traspasoId
+                                viewModel.setTraspasoEsDePalet(true)
+                                esperandoUbicacionDestino = true
+                                idPaletParaCerrar = null
+                                esPaletRecienCreado = false
+                            },
+                            onError = {
+                                Log.e("CERRAR_PALET", "❌ Error al cerrar palet tras impresión: $it")
+                                mostrarDialogoErrorFinalizar = it
+                            }
+                        )
+                    }
                 }) {
                     Text("Imprimir")
                 }
@@ -1179,20 +1380,14 @@ fun TraspasosScreen(
             }
         )
     }
-
-    // Mostrar el diálogo de espera solo si hay artículo pendiente en el ViewModel y el flag local está activo
-    if (mostrarDialogoMoverArticuloVM && articuloPendienteMoverVM != null) {
-        AlertDialog(
-            onDismissRequest = { /* bloqueamos salida para forzar decisión */ },
-            title = { Text("Artículo pendiente") },
-            text = {
-                val codigo = articuloPendienteMoverVM?.codigoArticulo ?: "—"
-                Text("Artículo $codigo en memoria. Escanee ubicación destino o cancele.")
-            },
-            confirmButton = { TextButton(onClick = { mostrarDialogoCancelarArticulo = true }) { Text("Cancelar") } },
-            dismissButton = { } // No botón “Cerrar” para que no se quede colgado
-        )
+    LaunchedEffect(mostrarDialogoImpresion) {
+        if (!mostrarDialogoImpresion && DeviceUtils.hasHardwareScanner(context)) {
+            // damos tiempo a que se recomponga el Box con focusRequester
+            delay(200)
+            reactivarEscaner = true   // ya tienes un LaunchedEffect(reactivarEscaner) que llama a requestFocus()
+        }
     }
+
     // Mostrar error si lo hay
     if (errorTraspasoArticulo != null) {
         AlertDialog(
@@ -1204,7 +1399,26 @@ fun TraspasosScreen(
         )
     }
 
-    if (mostrarDialogoCantidad && articuloParaTraspaso != null) {
+    // Mostrar error del ViewModel (ej: cuando no hay stock disponible)
+    if (errorViewModel != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.setError(null) },
+            title = { Text("Error") },
+            text = { Text(errorViewModel!!) },
+            confirmButton = { 
+                TextButton(onClick = { 
+                    viewModel.setError(null)
+                    // Reactivar el escáner después de cerrar el error
+                    reactivarEscaner = true
+                }) { 
+                    Text("OK") 
+                } 
+            },
+            dismissButton = {}
+        )
+    }
+
+    /*if (mostrarDialogoCantidad && articuloParaTraspaso != null) {
         val stocks = viewModel.resultadoStock.collectAsState().value.filter {
             it.codigoArticulo == articuloParaTraspaso!!.codigoArticulo &&
             (articuloParaTraspaso!!.partida == null || it.partida == articuloParaTraspaso!!.partida)
@@ -1213,7 +1427,7 @@ fun TraspasosScreen(
         val fechaCaducidadEscaneada = articuloParaTraspaso!!.fechaCaducidad
         if (stocks.isNotEmpty()) {
             AlertDialog(
-                onDismissRequest = { /* vacío a propósito */ },
+                onDismissRequest = {  },
                 title = { Text("Cantidad a traspasar") },
                 text = {
                     StockSelectionCards(
@@ -1226,6 +1440,7 @@ fun TraspasosScreen(
                             }
                             viewModel.crearTraspasoArticulo(
                                 dto = CrearTraspasoArticuloDto(
+                                    codigoEmpresa = empresaId?: return@StockSelectionCards,
                                     almacenOrigen = stock.codigoAlmacen,
                                     ubicacionOrigen = stock.ubicacion ?: "",
                                     codigoArticulo = stock.codigoArticulo,
@@ -1234,25 +1449,29 @@ fun TraspasosScreen(
                                     partida = partidaEscaneada,
                                     fechaCaducidad = fechaCaducidadEscaneada,
                                     finalizar = false,
+                                    comentario = comentarioTraspaso.takeIf { it.isNotBlank() },
                                 ),
                                 onSuccess = {
                                     Log.d("TRASPASOS_UI", "POST traspaso artículo OK. ID guardado.")
                                     viewModel.setArticuloPendienteMover(articuloParaTraspaso)
                                     traspasoPendienteId = it
-                                    articuloPendienteMoverLocal = articuloParaTraspaso
+                                    //articuloPendienteMoverLocal = articuloParaTraspaso
                                     esperandoUbicacionDestino = true
                                     mostrarDialogoMoverArticuloVM = true  // ← mantener visible el diálogo bloqueante
+                                    SoundUtils.getInstance().playSuccessSound()
                                 },
                                 onError = { msg ->
                                     Log.e("TRASPASOS_UI", "Error en POST traspaso artículo: $msg")
                                     errorTraspasoArticulo = msg
                                     mostrarDialogoMoverArticuloVM = false
+                                    SoundUtils.getInstance().playErrorSound()
                                 }
                             )
                             mostrarDialogoCantidad = false
                             articuloParaTraspaso = null
                             ubicacionParaTraspaso = null
                             cantidadArticulo = "1.0"
+                            comentarioTraspaso = ""
                             viewModel.limpiarStock()
                         }
                     )
@@ -1264,6 +1483,7 @@ fun TraspasosScreen(
                             articuloParaTraspaso = null
                             ubicacionParaTraspaso = null
                             cantidadArticulo = "1.0"
+                            comentarioTraspaso = ""
                             viewModel.limpiarStock()
                         }
                     ) {
@@ -1273,7 +1493,124 @@ fun TraspasosScreen(
                 dismissButton = null
             )
         }
+    }*/
+
+// Diálogo de cantidad + comentario
+if (mostrarDialogoCantidad && articuloParaTraspaso != null) {
+    val stocks = viewModel.resultadoStock.collectAsState().value.filter {
+        it.codigoArticulo == articuloParaTraspaso!!.codigoArticulo &&
+        (articuloParaTraspaso!!.partida == null || it.partida == articuloParaTraspaso!!.partida)
     }
+    val partidaEscaneada = articuloParaTraspaso!!.partida
+    val fechaCaducidadEscaneada = articuloParaTraspaso!!.fechaCaducidad
+
+    if (stocks.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { /* vacío a propósito */ },
+            title = { Text("Cantidad a traspasar") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 500.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val focusManager = LocalFocusManager.current
+                    OutlinedTextField(
+                        value = comentarioTraspaso,
+                        onValueChange = { if (it.length <= 200) comentarioTraspaso = it },
+                        label = { Text("Comentario (opcional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        singleLine = false,
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                focusManager.clearFocus()
+                            }
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+            
+                    StockSelectionCards(
+                        stocks = stocks,
+                        botonLabel = "Traspasar artículo",
+                        onConfirm = { stock, cantidad ->
+                            if (partidaEscaneada == null) {
+                                Log.e("TRASPASOS_UI", "ERROR: partida es null antes del POST.")
+                                return@StockSelectionCards
+                            }
+                            viewModel.crearTraspasoArticulo(
+                                dto = CrearTraspasoArticuloDto(
+                                    codigoEmpresa   = empresaId ?: return@StockSelectionCards,
+                                    almacenOrigen   = stock.codigoAlmacen,
+                                    ubicacionOrigen = stock.ubicacion ?: "",
+                                    codigoArticulo  = stock.codigoArticulo,
+                                    cantidad        = cantidad,
+                                    usuarioId       = usuarioId,
+                                    partida         = partidaEscaneada,
+                                    fechaCaducidad  = fechaCaducidadEscaneada,
+                                    finalizar       = false,
+                                    comentario      = comentarioTraspaso.trim().takeUnless { it.isBlank() },
+                                ),
+                                onSuccess = {
+                                    viewModel.setArticuloPendienteMover(articuloParaTraspaso)
+                                    traspasoPendienteId = it
+                                    esperandoUbicacionDestino = true
+                                    mostrarDialogoMoverArticuloVM = true
+                                    SoundUtils.getInstance().playSuccessSound()
+                                },
+                                onError = {
+                                    errorTraspasoArticulo = it
+                                    mostrarDialogoMoverArticuloVM = false
+                                    SoundUtils.getInstance().playErrorSound()
+                                }
+                            )
+                            mostrarDialogoCantidad = false
+                            articuloParaTraspaso = null
+                            ubicacionParaTraspaso = null
+                            cantidadArticulo = "1.0"
+                            comentarioTraspaso = ""
+                            viewModel.limpiarStock()
+                        }
+                    )
+            
+                    // Pie del diálogo controlado por ti
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp.coerceAtLeast(0.dp)),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                mostrarDialogoCantidad = false
+                                articuloParaTraspaso = null
+                                ubicacionParaTraspaso = null
+                                cantidadArticulo = "1.0"
+                                comentarioTraspaso = ""
+                                viewModel.limpiarStock()
+                            }
+                        ) {
+                            Text("Cancelar")
+                        }
+                    }
+                }
+            },
+            confirmButton = {}, // <- lo dejamos vacío
+            dismissButton = null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()     
+        )       
+    }
+}
 
     if (esperandoUbicacionDestino) {
         Box(
@@ -1298,8 +1635,201 @@ fun TraspasosScreen(
         }
     }
 
-    // Escaneo de ubicación destino (Honeywell físico)
-    if (esperandoUbicacionDestino && DeviceUtils.isHoneywell) {
+
+    // 1) Lógica de "lote" que ya tienes en Honeywell (la reutilizamos tal cual)
+    fun resolverDestino(almacenDestino: String, ubicacionDestino: String) {
+        val pendientes = viewModel.traspasosPendientes.value
+            .filter { it.codigoEstado.equals("PENDIENTE", true) }
+
+        if (pendientes.isEmpty()) {
+            mostrarDialogoErrorFinalizar = "No hay traspasos pendientes"
+            return
+        }
+
+        val tipo = pendientes.first().tipoTraspaso.uppercase()
+        val paletCerrado = pendientes.first().paletCerrado
+
+        val total = pendientes.size
+        var completados = 0
+        var exitos = 0
+        var fallo = false
+
+        fun onFinDeLote() {
+            if (fallo) {
+                esperandoUbicacionDestino = true
+                mostrarDialogoExito = false
+            } else {
+                esperandoUbicacionDestino = false
+                mostrarDialogoExito = true
+                mostrarDialogoMoverArticuloVM = false
+                articuloPendienteMover = null
+                ubicacionEscaneada = null
+                idPaletParaCerrar = null
+                traspasoPendienteId = null
+                viewModel.clearPaletSeleccionado()
+                viewModel.setTraspasoEsDePalet(false)
+                viewModel.setTraspasoDirectoDesdePaletCerrado(false)
+                viewModel.clearPendientes()
+                viewModel.setArticuloPendienteMover(null)
+            }
+            // 🔁 SIEMPRE limpiamos la bandera al cerrar lote
+            precheckConfirmar = false   // <-- añadido
+            escaneoProcesado = false
+        }
+
+        when {
+            // ——— PALET CERRADO ———
+            tipo == "PALET" && paletCerrado -> {
+                val body = FinalizarTraspasoPaletDto(
+                    almacenDestino        = almacenDestino,
+                    ubicacionDestino      = ubicacionDestino,
+                    usuarioFinalizacionId = usuarioId,
+                    codigoEstado          = "PENDIENTE_ERP"
+                )
+                pendientes.forEach { dtoItem ->
+                    viewModel.finalizarTraspasoPalet(
+                        traspasoId = dtoItem.id,
+                        dto        = body,
+                        paletId    = paletEscaneado?.id,
+                        onSuccess  = { 
+                            exitos++; completados++; 
+                            if (completados == total) onFinDeLote()
+                            SoundUtils.getInstance().playSuccessSound()
+                        },
+                        onError    = { msg ->
+                            mostrarDialogoErrorFinalizar = msg
+                            fallo = true; completados++; 
+                            if (completados == total) onFinDeLote()
+                            SoundUtils.getInstance().playErrorSound()
+                        }
+                    )
+                }
+            }
+
+            // ——— PALET ABIERTO ———
+            tipo == "PALET" -> {
+                pendientes.forEach { dtoItem ->
+                    viewModel.completarTraspaso(
+                        id = dtoItem.id,
+                        codigoAlmacenDestino = almacenDestino,
+                        ubicacionDestino = ubicacionDestino,
+                        usuarioId = usuarioId,
+                        paletId = paletEscaneado?.id,
+                        onSuccess = { 
+                            exitos++; completados++; 
+                            if (completados == total) onFinDeLote()
+                            SoundUtils.getInstance().playSuccessSound()
+                        },
+                        onError = { msg ->
+                            mostrarDialogoErrorFinalizar = msg
+                            fallo = true; completados++; 
+                            if (completados == total) onFinDeLote()
+                            SoundUtils.getInstance().playErrorSound()
+                        }
+                    )
+                }
+                paletEscaneado?.id?.let { id ->
+                    viewModel.obtenerPalet(id) { viewModel.setPaletSeleccionado(it) }
+                    viewModel.obtenerLineasDePalet(id)
+                }
+            }
+
+            // ——— ARTÍCULO ———
+            else -> {
+                pendientes.forEach { dtoItem ->
+                    viewModel.precheckFinalizarArticulo(
+                        codigoEmpresa = empresa,
+                        almacenDestino = almacenDestino,
+                        ubicacionDestino = ubicacionDestino,
+                        onResult = { existe, _, _, aviso ->
+                            if (existe) {
+                                precheckAviso = aviso ?: "Hay un palet en destino. ¿Desea continuar?"
+                                accionTrasConfirmacion = {
+                                    // ✅ MARCAMOS LA BANDERA GLOBAL COMO EN TU PRIMER BLOQUE
+                                    precheckConfirmar = true   // <-- añadido
+
+                                    viewModel.finalizarTraspasoArticulo(
+                                        id = dtoItem.id,
+                                        dto = FinalizarTraspasoArticuloDto(
+                                            almacenDestino = almacenDestino,
+                                            ubicacionDestino = ubicacionDestino,
+                                            usuarioId = usuarioId,
+                                            confirmarAgregarAPalet = true
+                                        ),
+                                        onSuccess = { 
+                                            exitos++; completados++; 
+                                            if (completados == total) onFinDeLote()
+                                            SoundUtils.getInstance().playSuccessSound()
+                                        },
+                                        onError = { msg2 ->
+                                            mostrarDialogoErrorFinalizar = msg2
+                                            fallo = true; completados++; 
+                                            if (completados == total) onFinDeLote()
+                                            SoundUtils.getInstance().playErrorSound()
+                                        }
+                                    )
+                                }
+                                mostrarDialogoPrecheck = true
+                                esperandoUbicacionDestino = true
+                            } else {
+                                // 🧹 Aseguramos no heredar confirmaciones anteriores
+                                precheckConfirmar = false   // <-- añadido
+
+                                viewModel.finalizarTraspasoArticulo(
+                                    id = dtoItem.id,
+                                    dto = FinalizarTraspasoArticuloDto(
+                                        almacenDestino = almacenDestino,
+                                        ubicacionDestino = ubicacionDestino,
+                                        usuarioId = usuarioId,
+                                        confirmarAgregarAPalet = null
+                                    ),
+                                    onSuccess = { 
+                                        exitos++; completados++; 
+                                        if (completados == total) onFinDeLote()
+                                        SoundUtils.getInstance().playSuccessSound()
+                                    },
+                                    onError = { msg ->
+                                        mostrarDialogoErrorFinalizar = msg
+                                        fallo = true; completados++; 
+                                        if (completados == total) onFinDeLote()
+                                        SoundUtils.getInstance().playErrorSound()
+                                    }
+                                )
+                            }
+                        },
+                        onError = { msg ->
+                            mostrarDialogoErrorFinalizar = msg
+                            fallo = true; completados++; 
+                            if (completados == total) onFinDeLote()
+                            SoundUtils.getInstance().playErrorSound()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // 2) Captura común que usa procesarCodigoEscaneado y desemboca en la misma lógica de destino
+    fun manejarCodigoDestino(code: String) {
+        viewModel.procesarCodigoEscaneado(
+            code = code,
+            empresaId = empresa,
+            onUbicacionDetectada = { almacenDestino, ubicacionDestino ->
+                if (!viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
+                    mostrarDialogoErrorFinalizar = "Ubicación no permitida."
+                    return@procesarCodigoEscaneado
+                }
+                resolverDestino(almacenDestino, ubicacionDestino)
+            },
+            // En la fase de destino, el resto de detecciones NO aplican
+            onArticuloDetectado = { /* no-op */ },
+            onMultipleArticulos = { /* no-op */ },
+            onPaletDetectado    = { /* no-op */ },
+            onError = { msg -> mostrarDialogoErrorFinalizar = msg }
+        )
+    }
+
+    if (esperandoUbicacionDestino && DeviceUtils.hasHardwareScanner(context)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1308,195 +1838,60 @@ fun TraspasosScreen(
                 .onPreviewKeyEvent { event ->
                     if (event.nativeKeyEvent?.action == android.view.KeyEvent.ACTION_MULTIPLE) {
                         event.nativeKeyEvent.characters?.let { code ->
-                            Log.d("ESCANEO_DESTINO", "📥 Código escaneado: '$code'")
-                            val trimmed = code.trim()
-
-                            Log.d("ESCANEO_DESTINO", "📦 Almacenes permitidos: ${viewModel.almacenesPermitidos.value}")
-                            val (almacenDestino, ubicacionDestino) = if (trimmed.contains('$')) {
-                                val parts = trimmed.split('$')
-                                if (parts.size == 2) parts[0] to parts[1] else return@onPreviewKeyEvent false
-                            } else {
-                                "PR" to trimmed
-                            }
-
-                            Log.d("ESCANEO_DESTINO", "✅ Interpretado -> Almacén: $almacenDestino | Ubicación: $ubicacionDestino")
-
-                            if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
-                                Log.d("ESCANEO_DESTINO", "🟢 Ubicación permitida")
-                                Log.d("PUT", "DTO -> almacen: $almacenDestino | ubicacion: $ubicacionDestino | user: $usuarioId | id: $traspasoPendienteId ")
-
-                                if (viewModel.traspasoEsDePalet.value && viewModel.traspasoDirectoDesdePaletCerrado.value) {
-                                    Log.d("ESCANEO_DESTINO", "🚚 Finalizando traspaso directo desde palet cerrado")
-
-                                    val dto = FinalizarTraspasoPaletDto(
-                                        almacenDestino = almacenDestino,
-                                        ubicacionDestino = ubicacionDestino,
-                                        usuarioFinalizacionId = usuarioId,
-                                        codigoEstado = "PENDIENTE_ERP"
-                                    )
-                                    Log.d("ESCANEO_DESTINO", "🚚 $dto")
-                                    viewModel.finalizarTraspasoPalet(
-                                        traspasoId = viewModel.traspasoPendienteId.value ?: return@onPreviewKeyEvent false,
-                                        dto = dto,
-                                        onSuccess = {
-                                            Log.d("ESCANEO_DESTINO", "✅ finalizado correctamente")
-                                            esperandoUbicacionDestino = false
-                                            mostrarDialogoExito = true
-                                            idPaletParaCerrar = null
-                                            traspasoPendienteId = null
-                                            ubicacionEscaneada = null
-                                            viewModel.setTraspasoEsDePalet(false)
-                                            viewModel.setTraspasoDirectoDesdePaletCerrado(false)
-                                        },
-                                        onError = { msg ->
-                                            Log.d("ESCANEO_DESTINO", "❌ Error: $msg")
-                                            mostrarDialogoErrorFinalizar = msg
-                                        }
-                                    )
-                                } else if (viewModel.traspasoEsDePalet.value) {
-                                    Log.d("ESCANEO_DESTINO", "🟡 Finalizando traspaso desde palet (no directo)")
-
-                                    viewModel.completarTraspaso(
-                                        id = traspasoPendienteId!!,
-                                        codigoAlmacenDestino = almacenDestino,
-                                        ubicacionDestino = ubicacionDestino,
-                                        usuarioId = usuarioId,
-                                        onSuccess = {
-                                            Log.d("ESCANEO_DESTINO", "✅ completarTraspaso ok")
-                                            esperandoUbicacionDestino = false
-                                            mostrarDialogoExito = true
-                                            mostrarDialogoMoverArticuloVM = false
-                                            mostrarDialogoMoverArticulo = false
-                                            articuloPendienteMover = null
-                                            paletEscaneado?.id?.let { id ->
-                                                viewModel.obtenerPalet(id) { viewModel.setPaletSeleccionado(it) }
-                                                viewModel.obtenerLineasDePalet(id)
-                                            }
-                                            traspasoPendienteId = null
-                                            articuloPendienteMoverLocal = null
-                                            viewModel.setTraspasoEsDePalet(false)
-                                            viewModel.clearPaletSeleccionado()
-                                            ubicacionEscaneada = null
-                                        },
-                                        onError = { msg ->
-                                            Log.d("ESCANEO_DESTINO", "❌ completarTraspaso ERROR: $msg")
-                                            mostrarDialogoErrorFinalizar = msg
-                                        }
-                                    )
-                                } else {
-                                    Log.d("ESCANEO_DESTINO", "🧪 Finalizando traspaso de artículo")
-                                    viewModel.finalizarTraspasoArticulo(
-                                        id = traspasoPendienteId!!,
-                                        dto = FinalizarTraspasoArticuloDto(
-                                            almacenDestino = almacenDestino,
-                                            ubicacionDestino = ubicacionDestino,
-                                            usuarioId = usuarioId
-                                        ),
-                                        onSuccess = {
-                                            Log.d("ESCANEO_DESTINO", "✅ finalizarTraspasoArticulo ok")
-                                            esperandoUbicacionDestino = false
-                                            mostrarDialogoExito = true
-                                            mostrarDialogoMoverArticuloVM = false
-                                            mostrarDialogoMoverArticulo = false
-                                            articuloPendienteMover = null
-                                            traspasoPendienteId = null
-                                            articuloPendienteMoverLocal = null
-                                            viewModel.clearPaletSeleccionado()
-                                            ubicacionEscaneada = null
-                                        },
-                                        onError = { msg ->
-                                            Log.d("ESCANEO_DESTINO", "❌ finalizarTraspasoArticulo ERROR: $msg")
-                                            mostrarDialogoErrorFinalizar = msg
-                                        }
-                                    )
-                                }
-                            } else {
-                                Log.d("ESCANEO_DESTINO", "❌ Ubicación '$almacenDestino' no permitida")
-                                mostrarDialogoErrorFinalizar = "Ubicación no permitida."
-                            }
+                            manejarCodigoDestino(code)
+                            return@onPreviewKeyEvent true
                         }
-                        true
-                    } else false
+                    }
+                    false
                 }
         ) {}
 
-        LaunchedEffect(esperandoUbicacionDestino) {
-            if (esperandoUbicacionDestino) {
-                Log.d("ESCANEO_DESTINO", "📌 Lanzando focusRequester")
+        LaunchedEffect(esperandoUbicacionDestino && DeviceUtils.hasHardwareScanner(context)) {
+            if (esperandoUbicacionDestino){
+                delay(200)
                 focusRequester.requestFocus()
             }
         }
     }
+    // —— Estado para evitar reescaneos continuos en cámara ——
+    val scope = rememberCoroutineScope()
+    var procesandoDestino by remember { mutableStateOf(false) }
+    var ultimoCodigo by remember { mutableStateOf<String?>(null) }
 
-    // Escaneo de ubicación destino (QRScannerView)
-    if (esperandoUbicacionDestino && !DeviceUtils.isHoneywell) {
+// Escaneo de ubicación destino (QRScannerView) — MÓVIL / TABLET
+    if (esperandoUbicacionDestino && !DeviceUtils.hasHardwareScanner(context)) {
         QRScannerView(
-            modifier = Modifier.fillMaxWidth().height(250.dp),
-            onCodeScanned = { code ->
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .height(250.dp),
+            onCodeScanned = { raw ->
                 if (!esperandoUbicacionDestino) return@QRScannerView
-                val trimmed = code.trim()
-                val (almacenDestino, ubicacionDestino) = if (trimmed.contains('$')) {
-                    val parts = trimmed.split('$')
-                    val esUbicacion = trimmed.startsWith("UBI", ignoreCase = true) || trimmed.contains('$')
-                    if (!esUbicacion) {
-                        mostrarDialogoErrorFinalizar = "Escanee primero una **ubicación** válida."
-                        return@QRScannerView
-                    }
-                    if (parts.size == 2) parts[0] to parts[1] else return@QRScannerView
-                } else {
-                    "PR" to trimmed
-                }
-                if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
-                    esperandoUbicacionDestino = false
-                    if (viewModel.traspasoEsDePalet.value) {
-                        viewModel.completarTraspaso(
-                            id = traspasoPendienteId!!,
-                            codigoAlmacenDestino = almacenDestino,
-                            ubicacionDestino = ubicacionDestino,
-                            usuarioId = usuarioId,
-                            onSuccess = {
-                                esperandoUbicacionDestino = false
-                                mostrarDialogoExito = true
-                                mostrarDialogoMoverArticuloVM = false
-                                mostrarDialogoMoverArticulo = false
-                                articuloPendienteMover = null
-                                // limpiar estados
-                                traspasoPendienteId = null
-                                articuloPendienteMoverLocal = null
-                                viewModel.setTraspasoEsDePalet(false)
-                            },
-                            onError = { msg ->
-                                mostrarDialogoErrorFinalizar = msg
-                            }
-                        )
-                    } else {
-                        viewModel.finalizarTraspasoArticulo(
-                            id = traspasoPendienteId!!,
-                            dto = FinalizarTraspasoArticuloDto(
-                                almacenDestino = almacenDestino,
-                                ubicacionDestino = ubicacionDestino,
-                                usuarioId = usuarioId
-                            ),
-                            onSuccess = {
-                                esperandoUbicacionDestino = false
-                                mostrarDialogoExito = true
-                                mostrarDialogoMoverArticuloVM = false
-                                mostrarDialogoMoverArticulo = false
-                                articuloPendienteMover = null
-                                // limpiar estados
-                                traspasoPendienteId = null
-                                articuloPendienteMoverLocal = null
-                            },
-                            onError = { msg ->
-                                mostrarDialogoErrorFinalizar = msg
-                            }
-                        )
-                    }
-                }   else {
-                    mostrarDialogoErrorFinalizar = "Ubicación no permitida."
+
+                val code = raw.trim()
+                // Debounce: ignora si ya estamos procesando o si es el mismo código repetido
+                if (procesandoDestino || ultimoCodigo == code) return@QRScannerView
+
+                procesandoDestino = true
+                ultimoCodigo = code
+
+                // Usa SIEMPRE la misma entrada común que en PDA
+                manejarCodigoDestino(code)
+
+                // Pequeña ventana para evitar múltiples lecturas consecutivas del mismo QR
+                scope.launch {
+                    kotlinx.coroutines.delay(900) // ajusta si hace falta
+                    procesandoDestino = false
                 }
             }
         )
+    }
+
+// (Opcional) Cuando se cierre el flujo de destino, resetea el lock
+    LaunchedEffect(esperandoUbicacionDestino) {
+        if (!esperandoUbicacionDestino) {
+            procesandoDestino = false
+            ultimoCodigo = null
+        }
     }
 
     // Mensaje de éxito
@@ -1504,19 +1899,45 @@ fun TraspasosScreen(
         AlertDialog(
             onDismissRequest = {
                 mostrarDialogoExito = false
-                // limpiar todos los estados y navegar a pantalla principal
-                navController.popBackStack(navController.graph.startDestinationId, false)
+                ubicacionEscaneada = null
+                escaneoProcesado = false
+                idPaletParaCerrar = null
+                traspasoPendienteId = null
+                articuloPendienteMover = null
+
+                viewModel.clearPaletSeleccionado()
+                viewModel.setTraspasoEsDePalet(false)
+                viewModel.setTraspasoDirectoDesdePaletCerrado(false)
+                viewModel.clearPendientes()
+                viewModel.setArticuloPendienteMover(null)
             },
             title = { Text("Traspaso realizado") },
             text = { Text("Traspaso realizado con éxito.") },
             confirmButton = {
                 TextButton(onClick = {
                     mostrarDialogoExito = false
-                    navController.popBackStack(navController.graph.startDestinationId, false)
+                    ubicacionEscaneada = null
+                    escaneoProcesado = false
+                    idPaletParaCerrar = null
+                    traspasoPendienteId = null
+                    articuloPendienteMover = null
+                    viewModel.clearPaletSeleccionado()
+                    viewModel.setTraspasoEsDePalet(false)
+                    viewModel.setTraspasoDirectoDesdePaletCerrado(false)
+                    viewModel.clearPendientes()
+                    viewModel.setArticuloPendienteMover(null)
                 }) { Text("Aceptar") }
             },
             dismissButton = null
         )
+    }
+
+    LaunchedEffect(mostrarDialogoExito) {
+        if (!mostrarDialogoExito && ubicacionEscaneada == null && DeviceUtils.hasHardwareScanner(context)) {
+            escaneoProcesado = false
+            delay(200)
+            focusRequester.requestFocus()
+        }
     }
 
     // Mensaje de error
@@ -1552,93 +1973,130 @@ fun TraspasosScreen(
                 Text("Para cerrar el palet, escanee una ubicación válida de destino.")
             }
         }
-
-        if (esperandoUbicacionDestino && DeviceUtils.isHoneywell) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .focusRequester(focusRequester)
-                    .focusable()
-                    .onPreviewKeyEvent { event ->
-                        if (event.nativeKeyEvent?.action == android.view.KeyEvent.ACTION_MULTIPLE) {
-                            val code = event.nativeKeyEvent.characters ?: return@onPreviewKeyEvent false
-                            val trimmed = code.trim()
-
-                            val (almacenDestino, ubicacionDestino) = if (trimmed.contains('$')) {
-                                val parts = trimmed.split('$')
-                                if (parts.size == 2) parts[0] to parts[1] else return@onPreviewKeyEvent false
-                            } else {
-                                "PR" to trimmed
-                            }
-
-                            if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
-                                viewModel.completarTraspaso(
-                                    id = traspasoPendienteId!!,
-                                    codigoAlmacenDestino = almacenDestino,
-                                    ubicacionDestino = ubicacionDestino,
-                                    usuarioId = usuarioId,
-                                    onSuccess = {
-                                        esperandoUbicacionDestino = false
-                                        mostrarDialogoExito = true
-                                        mostrarDialogoMoverArticuloVM = false
-                                        mostrarDialogoMoverArticulo = false
-                                        articuloPendienteMover = null
-                                        traspasoPendienteId = null
-                                        articuloPendienteMoverLocal = null
-                                    },
-                                    onError = { msg ->
-                                        mostrarDialogoErrorFinalizar = msg
-                                    }
-                                )
-                            } else {
-                                mostrarDialogoErrorFinalizar = "Ubicación no permitida."
-                            }
-                            true
-                        } else false
-                    }
-            ) {}
-            LaunchedEffect(esperandoUbicacionDestino) {
-                focusRequester.requestFocus()
-            }
-        }
-        if (esperandoUbicacionDestino && !DeviceUtils.isHoneywell) {
-            QRScannerView(
-                modifier = Modifier.fillMaxWidth().height(250.dp),
-                onCodeScanned = { code ->
-                    val trimmed = code.trim()
-                    val (almacenDestino, ubicacionDestino) = if (trimmed.contains('$')) {
-                        val parts = trimmed.split('$')
-                        if (parts.size == 2) parts[0] to parts[1] else return@QRScannerView
-                    } else {
-                        "PR" to trimmed
-                    }
-
-                    if (viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
-                        viewModel.completarTraspaso(
-                            id = traspasoPendienteId!!,
-                            codigoAlmacenDestino = almacenDestino,
-                            ubicacionDestino = ubicacionDestino,
-                            usuarioId = usuarioId,
-                            onSuccess = {
-                                esperandoUbicacionDestino = false
-                                mostrarDialogoExito = true
-                                mostrarDialogoMoverArticuloVM = false
-                                mostrarDialogoMoverArticulo = false
-                                articuloPendienteMover = null
-                                traspasoPendienteId = null
-                                articuloPendienteMoverLocal = null
-                            },
-                            onError = { msg ->
-                                mostrarDialogoErrorFinalizar = msg
-                            }
-                        )
-                    } else {
-                        mostrarDialogoErrorFinalizar = "Ubicación no permitida."
-                    }
+    }
+    if (!esperandoUbicacionDestino && mostrarDialogoCantidadDesdePalet && lineaSeleccionada != null) {
+        AlertDialog(
+            onDismissRequest = { /* bloqueamos para forzar acción */ },
+            title = { Text("Cantidad a extraer") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = cantidadExtraer,
+                        onValueChange = {
+                            val limpio = it.filter { c -> c.isDigit() || c=='.' }
+                            cantidadExtraer = limpio
+                        },
+                        label = { Text("Cantidad (máx. ${lineaSeleccionada!!.cantidad})") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            )
-        }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val qty = cantidadExtraer.toDoubleOrNull() ?: 0.0
+                    val max = lineaSeleccionada!!.cantidad
+                    if (qty <= 0.0 || qty > max) return@TextButton
 
+                    val ubi = viewModel.ubicacionOrigen.value ?: return@TextButton
+                    val (almOrigen, ubicOrigen) = ubi
+                    val linea = lineaSeleccionada!!
+
+                    // CERRAR YA EL DIÁLOGO Y LIMPIAR SELECCIÓN
+                    mostrarDialogoCantidadDesdePalet = false
+                    lineaSeleccionada = null
+                    cantidadExtraer = "1.0"
+                    comentarioTraspaso = ""
+                    escaneoProcesado = false   // permite el siguiente escaneo
+
+                    viewModel.cargarArticuloPorCodigo(
+                        empresaId = empresaId ?: return@TextButton,
+                        codigoArticulo = linea.codigoArticulo,
+                        onSuccess = { artApi ->
+                            val articuloDesdeLinea = artApi.copy(
+                                partida = linea.lote,
+                                fechaCaducidad = linea.fechaCaducidad
+                            )
+
+                            viewModel.crearTraspasoArticulo(
+                                dto = CrearTraspasoArticuloDto(
+                                    codigoEmpresa   = empresa,
+                                    almacenOrigen   = almOrigen,
+                                    ubicacionOrigen = ubicOrigen,
+                                    codigoArticulo  = linea.codigoArticulo,
+                                    cantidad        = qty,
+                                    usuarioId       = usuarioId,
+                                    partida         = linea.lote,
+                                    fechaCaducidad  = linea.fechaCaducidad,
+                                    finalizar       = false,
+                                    descripcionArticulo = linea.descripcion ?: artApi.descripcion,
+                                    comentario = comentarioTraspaso.takeIf { it.isNotBlank() },
+                                ),
+                                onSuccess = { id ->
+                                    viewModel.setArticuloPendienteMover(articuloDesdeLinea)
+                                    traspasoPendienteId = id
+                                    esperandoUbicacionDestino = true
+                                    mostrarDialogoMoverArticuloVM = true  // tu bloqueo
+                                    SoundUtils.getInstance().playSuccessSound()
+                                },
+                                onError = { msg ->
+                                    errorTraspasoArticulo = msg
+                                    SoundUtils.getInstance().playErrorSound()
+                                }
+                            )
+                        },
+                        onError = { msg -> 
+                            errorTraspasoArticulo = msg
+                            SoundUtils.getInstance().playErrorSound()
+                        }
+                    )
+                }) {
+                    Text("Traspasar artículo")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mostrarDialogoCantidadDesdePalet = false
+                    lineaSeleccionada = null
+                    cantidadExtraer = "1.0"
+                    comentarioTraspaso = ""
+                }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    // ——— Diálogo de confirmación PRECHECK (ARTÍCULO) ———
+    if (mostrarDialogoPrecheck) {
+        AlertDialog(
+            onDismissRequest = {
+                mostrarDialogoPrecheck = false
+                precheckAviso = null
+                accionTrasConfirmacion = null
+                precheckConfirmar = false
+                esperandoUbicacionDestino = true
+            },
+            title = { Text("Confirmar paletización") },
+            text  = { Text(precheckAviso ?: "Hay un palet en destino. ¿Desea continuar?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    precheckConfirmar = true
+                    val accion = accionTrasConfirmacion
+                    mostrarDialogoPrecheck = false
+                    precheckAviso = null
+                    accionTrasConfirmacion = null
+                    accion?.invoke()
+                }) { Text("Continuar") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mostrarDialogoPrecheck = false
+                    precheckAviso = null
+                    accionTrasConfirmacion = null
+                    precheckConfirmar = false
+                    esperandoUbicacionDestino = true
+                }) { Text("Cancelar") }
+            }
+        )
     }
 
 }

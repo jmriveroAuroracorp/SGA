@@ -3,6 +3,7 @@ package com.example.sga.data.dto.traspasos
 import java.util.*
 
 data class CrearTraspasoArticuloDto(
+    val codigoEmpresa: Short,
     val almacenOrigen: String,
     val ubicacionOrigen: String,
     val codigoArticulo: String,
@@ -16,8 +17,8 @@ data class CrearTraspasoArticuloDto(
     val movPosicionOrigen: String? = null,
     val movPosicionDestino: String? = null,
     val descripcionArticulo: String? = null,
-    val codigoEmpresa: Short? = null,
     val unidadMedida: String? = null,
     val observaciones: String? = null,
-    val reabrirSiCerradoOrigen: Boolean? = null
+    val comentario: String? = null,
+    val paletIdDestino: String? = null  // ID del palet destino seleccionado manualmente
 ) 

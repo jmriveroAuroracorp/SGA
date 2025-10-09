@@ -128,7 +128,7 @@
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="1">
                                                                     <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="2">
                                                                     <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>

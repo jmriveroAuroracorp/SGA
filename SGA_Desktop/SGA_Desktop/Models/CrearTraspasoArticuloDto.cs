@@ -19,6 +19,10 @@ namespace SGA_Desktop.Models
 		public string? Observaciones { get; set; }
 		public string? Comentario { get; set; }
 		public bool? ReabrirSiCerradoOrigen { get; set; }  // default null/false
-
+		
+		/// <summary>
+		/// Opcional: ID del palet destino seleccionado manualmente por el usuario
+		/// </summary>
+		public Guid? PaletIdDestino { get; set; }
 	}
 } 

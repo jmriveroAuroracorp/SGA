@@ -79,7 +79,21 @@ class AlmacenLogic(
                     Log.d("ALMACEN", "← code=${response.code()} body=${response.body()}")
                     if (response.isSuccessful) {
                         val lista = response.body().orEmpty()
-                        // Ordenamos por “código + nombre” para que aparezcan agrupados
+                        
+                        // 🔍 LOGS DE DEBUG DETALLADOS
+                        Log.d("ALMACEN_DEBUG", """
+                            🏢 Centro usuario: ${user.codigoCentro}
+                            👤 Códigos almacén específicos: ${user.codigosAlmacen}
+                            📦 Total almacenes recibidos: ${lista.size}
+                            
+                            📋 DETALLE DE ALMACENES:
+                            ${lista.joinToString("\n") { almacen ->
+                                "  • ${almacen.codigoAlmacen} - ${almacen.nombreAlmacen} | esDelCentro: ${almacen.esDelCentro} | empresa: ${almacen.codigoEmpresa}"
+                            }}
+                            ═══════════════════════════════
+                        """.trimIndent())
+                        
+                        // Ordenamos por "código + nombre" para que aparezcan agrupados
                         viewModel.setLista(lista.sortedBy { it.codigoAlmacen + it.nombreAlmacen })
                         viewModel.setError(null)
                     } else {

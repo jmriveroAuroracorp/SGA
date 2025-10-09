@@ -9,13 +9,18 @@ object StockMapper {
             codigoEmpresa = dto.codigoEmpresa,
             codigoArticulo = dto.codigoArticulo,
             descripcionArticulo = dto.descripcionArticulo,
-            codigoCentro = dto.codigoCentro,
             codigoAlmacen = dto.codigoAlmacen,
             almacen = dto.almacen,
             ubicacion = dto.ubicacion,
             partida = dto.partida,
             fechaCaducidad = dto.fechaCaducidad,
-            unidadesSaldo = dto.unidadSaldo
+            unidadesSaldo = dto.unidadSaldo,
+            reservado = dto.reservado,
+            disponible = dto.disponible,
+            tipoStock = dto.tipoStock,
+            paletId = dto.paletId,
+            codigoPalet = dto.codigoPalet,
+            estadoPalet = dto.estadoPalet
         )
     }
 }

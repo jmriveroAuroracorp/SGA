@@ -90,7 +90,8 @@ namespace SGA_Api.Controllers.Login
                     IdUsuario = operario.Id,
                     IdEmpresa = null, // valor por defecto
                     Impresora = null, // o null si la columna lo permite
-                    Etiqueta = null   // lo mismo aquí
+                    IdRol = null,   // valor por defecto
+                    Etiqueta = null // valor por defecto
                 });
 
                 await _auroraSgaContext.SaveChangesAsync(); // importante guardar aquí

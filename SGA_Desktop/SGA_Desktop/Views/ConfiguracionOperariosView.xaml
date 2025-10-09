@@ -346,6 +346,29 @@
                                                                Foreground="#34495E"/>
                                                 </Grid>
 
+                                                <!-- Rol SGA -->
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="Rol Notif.: "
+                                                               FontWeight="SemiBold"
+                                                               FontSize="12"
+                                                               Foreground="#7F8C8D"/>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding RolNombre}"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="12"
+                                                                   Foreground="#3498DB"/>
+                                                        <TextBlock Text="{Binding NivelJerarquico, StringFormat=' (Nivel {0})'}"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="12"
+                                                                   Foreground="#3498DB"/>
+                                                    </StackPanel>
+                                                </Grid>
+
 
                                                 <!-- Límites -->
                                                 <Grid Margin="0,8,0,0">

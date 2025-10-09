@@ -26,6 +26,9 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
 		= new ObservableCollection<AlmacenDto>();
 	[ObservableProperty] private AlmacenDto? selectedAlmacenCombo;
+	
+	// Vista filtrable para almacenes combo
+	public ICollectionView AlmacenesComboView { get; private set; }
 
 	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
 		= new ObservableCollection<UbicacionDetalladaDto>();
@@ -62,6 +65,13 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 
 	[ObservableProperty]
 	private bool isBusy;
+	
+	// Propiedades para filtrado de almacenes
+	[ObservableProperty]
+	private string filtroAlmacenesCombo = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenAlmacenes = false;
 
 	public ObservableCollection<int?> AlturasDisponibles { get; } = new();
 	[ObservableProperty] private int? alturaSeleccionada;
@@ -346,6 +356,11 @@ $"Posición: {ubicacion.Posicion}";
 
 		// 2) Seleccionamos el primero y disparamos carga de ubicaciones
 		SelectedAlmacenCombo = AlmacenesCombo.FirstOrDefault();
+		
+		// 🔷 NUEVO: Inicializar la vista filtrable después de cargar los datos
+		AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
+		AlmacenesComboView.Filter = FiltraAlmacenesCombo;
+		OnPropertyChanged(nameof(AlmacenesComboView));
 	}
 
 	partial void OnSelectedAlmacenComboChanged(
@@ -552,5 +567,35 @@ $"Posición: {ubicacion.Posicion}";
 			   (ubicacion.Posicion?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
 	}
 
+	// Métodos para filtrado de almacenes combo
+	private bool FiltraAlmacenesCombo(object obj)
+	{
+		if (obj is not AlmacenDto almacen) return false;
+		if (string.IsNullOrEmpty(FiltroAlmacenesCombo)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+	}
+	
+	// Método para manejar cambios en el filtro
+	partial void OnFiltroAlmacenesComboChanged(string value)
+	{
+		AlmacenesComboView?.Refresh();
+	}
+	
+	// Comandos para controlar dropdown
+	[RelayCommand]
+	private void AbrirDropDownAlmacenes()
+	{
+		// Limpiar el filtro para permitir escribir desde cero
+		FiltroAlmacenesCombo = "";
+		IsDropDownOpenAlmacenes = true;
+	}
+	
+	[RelayCommand]
+	private void CerrarDropDownAlmacenes()
+	{
+		IsDropDownOpenAlmacenes = false;
+	}
 
 }

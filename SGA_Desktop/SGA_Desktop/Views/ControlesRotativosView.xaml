@@ -827,7 +827,7 @@
                                                    FontWeight="SemiBold" 
                                                    FontSize="12"
                                                    Foreground="#7F8C8D"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding CantidadStock, StringFormat=N2}" 
+                                        <TextBlock Grid.Column="1" Text="{Binding CantidadStock, StringFormat=F4}" 
                                                    FontSize="12"
                                                    Foreground="#34495E"/>
                                         <TextBlock Grid.Column="2" Text="Contado: " 
@@ -835,7 +835,7 @@
                                                    FontSize="12"
                                                    Foreground="#7F8C8D"
                                                    Margin="10,0,0,0"/>
-                                        <TextBlock Grid.Column="3" Text="{Binding CantidadContada, StringFormat=N2}" 
+                                        <TextBlock Grid.Column="3" Text="{Binding CantidadContada, StringFormat=F4}" 
                                                    FontSize="12"
                                                    Foreground="#34495E"/>
                                     </Grid>

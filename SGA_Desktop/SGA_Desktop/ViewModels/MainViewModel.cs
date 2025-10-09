@@ -64,6 +64,12 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private int contadorNotificacionesNegativas = 0;
 
+		[ObservableProperty]
+		private bool tieneNotificaciones = false;
+
+		[ObservableProperty]
+		private bool separadorVisible = false;
+
 		private async Task InicializarEmpresaPreferidaAsync()
 		{
 			var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
@@ -155,6 +161,13 @@ namespace SGA_Desktop.ViewModels
 		CurrentHeader = "TRASPASOS DE STOCK";
 	}
 
+	[RelayCommand]
+	public void IrACalidad()
+	{
+		NavigationStore.Navigate("Calidad");
+		CurrentHeader = "CALIDAD";
+	}
+
 		[RelayCommand]
 		private async Task CerrarSesion()
 		{
@@ -181,9 +194,7 @@ namespace SGA_Desktop.ViewModels
 			{
 				try
 				{
-					// Verificar si la aplicación se está cerrando antes de continuar
-					if (SessionManager.IsClosing)
-						return;
+					// El logout debe ejecutarse aunque la aplicación se esté cerrando
 
 					if (!string.IsNullOrWhiteSpace(SessionManager.Token))
 					{
@@ -251,13 +262,17 @@ namespace SGA_Desktop.ViewModels
 				NotificacionesManager.OnNotificacionAgregada += OnNotificacionRecibida;
 				NotificacionesManager.OnContadorCambiado += OnContadorCambiado;
 
-				// Inicializar contadores
+				// Inicializar contadores (pueden estar en 0 si aún no se han cargado desde BD)
 				ContadorNotificaciones = NotificacionesManager.ContadorPendientes;
 				
 				// Calcular contadores separados
 				var notificaciones = NotificacionesManager.ObtenerNotificacionesPendientes();
 				ContadorNotificacionesPositivas = notificaciones.Count(n => n.EsPositiva);
 				ContadorNotificacionesNegativas = notificaciones.Count(n => n.EsNegativa);
+				
+				// Calcular propiedades para la UI
+				TieneNotificaciones = ContadorNotificaciones > 0;
+				SeparadorVisible = ContadorNotificacionesPositivas > 0 && ContadorNotificacionesNegativas > 0;
 
 				System.Diagnostics.Debug.WriteLine("✅ Sistema de notificaciones con campanita configurado");
 			}
@@ -296,6 +311,10 @@ namespace SGA_Desktop.ViewModels
 			var notificaciones = NotificacionesManager.ObtenerNotificacionesPendientes();
 			ContadorNotificacionesPositivas = notificaciones.Count(n => n.EsPositiva);
 			ContadorNotificacionesNegativas = notificaciones.Count(n => n.EsNegativa);
+			
+			// Calcular propiedades para la UI
+			TieneNotificaciones = nuevoContador > 0;
+			SeparadorVisible = ContadorNotificacionesPositivas > 0 && ContadorNotificacionesNegativas > 0;
 			
 			System.Diagnostics.Debug.WriteLine($"🔔 Contador total: {nuevoContador}, Positivas: {ContadorNotificacionesPositivas}, Negativas: {ContadorNotificacionesNegativas}");
 		}

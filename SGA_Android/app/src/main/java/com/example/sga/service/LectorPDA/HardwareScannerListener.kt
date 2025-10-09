@@ -1,4 +1,4 @@
-package com.example.sga.service.LectorPDA
+package com.example.sga.service.lector
 
 import android.util.Log
 import androidx.compose.foundation.focusable

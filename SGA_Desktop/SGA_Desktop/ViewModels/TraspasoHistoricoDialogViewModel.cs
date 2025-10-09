@@ -112,7 +112,7 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 // Establecer fechas por defecto (últimos días para ver traspasos recientes)
-                FechaDesde = DateTime.Today.AddDays(-2); // Últimos 2 días como InventarioViewModel
+                FechaDesde = DateTime.Today; // Fecha de hoy
                 FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
 
                 // Cargar almacenes
@@ -191,7 +191,7 @@ namespace SGA_Desktop.ViewModels
                 var empresa = SessionManager.EmpresaSeleccionada!.Value;
                 
                 // Asegurar que las fechas estén bien configuradas (misma lógica que InventarioViewModel)
-                var fechaDesde = FechaDesde ?? DateTime.Today.AddDays(-2);
+                var fechaDesde = FechaDesde ?? DateTime.Today;
                 var fechaHasta = FechaHasta ?? DateTime.Today;
                 
                 System.Diagnostics.Debug.WriteLine($"Cargando traspasos desde: {fechaDesde:yyyy-MM-dd} hasta: {fechaHasta:yyyy-MM-dd}");
@@ -274,7 +274,7 @@ namespace SGA_Desktop.ViewModels
 
         private void LimpiarFiltros()
         {
-            FechaDesde = DateTime.Today.AddDays(-2); // Últimos 2 días
+            FechaDesde = DateTime.Today; // Fecha de hoy
             FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
             CodigoArticulo = "";
             OperarioSeleccionado = null;

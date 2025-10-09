@@ -188,13 +188,33 @@ namespace SGA_Desktop.Services
 		public Task<string> ConsultarEstadoPaletOrigenAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
 			=> ConsultarEstadoPaletAsync(codigoEmpresa, codigoAlmacen, ubicacion);
 
-		// NUEVO: reabrir palet
-		public async Task<bool> ReabrirPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
-		{
-			var payload = new { codigoEmpresa, codigoAlmacen, ubicacion };
-			var resp = await _httpClient.PostAsJsonAsync("palet/reabrir", payload); // ajusta ruta si hace falta
-			return resp.IsSuccessStatusCode;
-		}
+	// NUEVO: reabrir palet
+	public async Task<bool> ReabrirPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
+	{
+		var payload = new { codigoEmpresa, codigoAlmacen, ubicacion };
+		var resp = await _httpClient.PostAsJsonAsync("palet/reabrir", payload); // ajusta ruta si hace falta
+		return resp.IsSuccessStatusCode;
+	}
+
+	// NUEVO: Consultar palets disponibles en una ubicación (precheck)
+	public async Task<PrecheckFinalizarArticuloResponse> PrecheckFinalizarArticuloAsync(
+		int codigoEmpresa, 
+		string almacenDestino, 
+		string? ubicacionDestino = null)
+	{
+		var url = $"traspasos/articulo/precheck-finalizar?codigoEmpresa={codigoEmpresa}&almacenDestino={almacenDestino}";
+		if (!string.IsNullOrWhiteSpace(ubicacionDestino))
+			url += $"&ubicacionDestino={ubicacionDestino}";
+
+		var resp = await _httpClient.GetAsync(url);
+		if (!resp.IsSuccessStatusCode)
+			return new PrecheckFinalizarArticuloResponse { Existe = false };
+
+		var text = await resp.Content.ReadAsStringAsync();
+		return JsonSerializer.Deserialize<PrecheckFinalizarArticuloResponse>(text,
+			new JsonSerializerOptions(JsonSerializerDefaults.Web)) 
+			?? new PrecheckFinalizarArticuloResponse { Existe = false };
+	}
 
 
 	}

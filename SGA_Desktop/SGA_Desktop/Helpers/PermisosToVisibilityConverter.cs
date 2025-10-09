@@ -22,6 +22,7 @@ namespace SGA_Desktop.Helpers
 					//case "Inventario": return PermisosHelper.PuedeAccederAInventario() ? Visibility.Visible : Visibility.Collapsed;
 					case "Pesaje": return PermisosHelper.PuedeAccederAPesaje() ? Visibility.Visible : Visibility.Collapsed;
 					case "ImpresionEtiquetas": return PermisosHelper.PuedeAccederAImpresionEtiquetas() ? Visibility.Visible : Visibility.Collapsed;
+					case "Calidad": return PermisosHelper.PuedeAccederACalidad() ? Visibility.Visible : Visibility.Collapsed;
 						// etc...
 				}
 			}

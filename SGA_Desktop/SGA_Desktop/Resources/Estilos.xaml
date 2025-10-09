@@ -4,6 +4,7 @@
 
     <!-- 🔧 Convertidores -->
     <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    <helpers:BoolToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <helpers:BoolToVisibilityConverter x:Key="BoolToVis"/>
     <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
@@ -12,6 +13,7 @@
     <helpers:ProgressWidthConverter x:Key="ProgressWidthConverter"/>
     <helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
     <helpers:IntToVisibilityConverter x:Key="IntToVisibilityConverter"/>
+    <helpers:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
 
     <!-- 🎨 Colores -->
     <!--<Color x:Key="ColorPrincipal">#0067C3</Color>-->

@@ -17,6 +17,7 @@ class SessionLogic(private val sessionViewModel: SessionViewModel) {
         val user = sessionViewModel.user.value
         if (user == null) {
             sessionViewModel.clearSession()
+            sessionViewModel.ocultarMensajeCaducidad()
             onFinalizado()
             return
         }
@@ -39,6 +40,7 @@ class SessionLogic(private val sessionViewModel: SessionViewModel) {
                 Log.d("SGA_SESSION", "✅ Dispositivo desactivado correctamente.")
                 sessionViewModel.resetVigilancia()
                 sessionViewModel.clearSession()
+                sessionViewModel.ocultarMensajeCaducidad()
                 onFinalizado()
             }
 
@@ -46,6 +48,7 @@ class SessionLogic(private val sessionViewModel: SessionViewModel) {
                 Log.e("SGA_SESSION", "❌ Error al desactivar dispositivo: ${t.localizedMessage}")
                 sessionViewModel.resetVigilancia()
                 sessionViewModel.clearSession()
+                sessionViewModel.ocultarMensajeCaducidad()
                 onFinalizado()
             }
         })

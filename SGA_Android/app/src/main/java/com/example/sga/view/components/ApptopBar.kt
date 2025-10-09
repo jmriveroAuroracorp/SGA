@@ -81,7 +81,15 @@ fun AppTopBar(
             when {
                 customNavigationIcon != null -> customNavigationIcon()
                 showBackButton -> {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = {
+                        val popped = navController.popBackStack()
+                        if (!popped) {
+                            navController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver"

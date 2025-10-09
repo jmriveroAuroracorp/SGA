@@ -19,5 +19,6 @@ namespace SGA_Desktop.Helpers
 		public static bool PuedeAccederAConsultaStock() => PuedeAccederA(10);
 		public static bool PuedeAccederAImpresionEtiquetas() => PuedeAccederA(11);
 		public static bool PuedeAccederATraspasos() => PuedeAccederA(12);
+		public static bool PuedeAccederACalidad() => PuedeAccederA(16);
 	}
 }

@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="Traspaso de Stock"
         Width="600"
         Height="540"
@@ -83,18 +84,50 @@
             <!-- Columna derecha: Destino -->
             <StackPanel Grid.Row="0" Grid.Column="1" Grid.RowSpan="6">
                 <TextBlock Text="Almacén Destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-                <ComboBox ItemsSource="{Binding AlmacenesDestino}"
+                <ComboBox ItemsSource="{Binding AlmacenesDestinoView}"
                           SelectedItem="{Binding AlmacenDestinoSeleccionado, Mode=TwoWay}"
+                          Text="{Binding FiltroAlmacenesDestino, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                           DisplayMemberPath="DescripcionCombo"
-                          Style="{StaticResource EstiloComboBox}" Margin="0,0,0,12"/>
+                          Style="{StaticResource EstiloComboBox}" 
+                          IsEditable="True"
+                          IsTextSearchEnabled="False"
+                          StaysOpenOnEdit="True"
+                          IsDropDownOpen="{Binding IsDropDownOpenAlmacenes}"
+                          Margin="0,0,0,12">
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="GotFocus">
+                            <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesCommand}"/>
+                        </i:EventTrigger>
+                        <i:EventTrigger EventName="SelectionChanged">
+                            <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesCommand}"/>
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                    <ComboBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ComboBox.ItemsPanel>
+                </ComboBox>
 
-                <TextBlock Text="Ubicación destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-                <ComboBox ItemsSource="{Binding UbicacionesDestino}"
-                          SelectedItem="{Binding UbicacionDestinoSeleccionada, Mode=TwoWay}"
-                          DisplayMemberPath="UbicacionMostrada"
-                          Style="{StaticResource EstiloComboBox}" Margin="0,0,0,12"/>
+            <TextBlock Text="Ubicación destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
+            <ComboBox ItemsSource="{Binding UbicacionesDestino}"
+                      SelectedItem="{Binding UbicacionDestinoSeleccionada, Mode=TwoWay}"
+                      DisplayMemberPath="UbicacionMostrada"
+                      Style="{StaticResource EstiloComboBox}" Margin="0,0,0,12"/>
 
-                <TextBlock Text="Cantidad a traspasar:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
+            <!-- NUEVO: Selector de palet (visible solo si hay múltiples palets) -->
+            <TextBlock Text="Palet destino:" 
+                       Style="{StaticResource LabelStyle}" 
+                       Margin="0,0,0,8"
+                       Visibility="{Binding MostrarSelectorPalets, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <ComboBox ItemsSource="{Binding PaletsDisponibles}"
+                      SelectedItem="{Binding PaletDestinoSeleccionado, Mode=TwoWay}"
+                      DisplayMemberPath="Descripcion"
+                      Style="{StaticResource EstiloComboBox}" 
+                      Margin="0,0,0,12"
+                      Visibility="{Binding MostrarSelectorPalets, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+            <TextBlock Text="Cantidad a traspasar:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBox Text="{Binding CantidadATraspasarTexto, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource EstiloCajaTexto}" Margin="0,0,0,12"/>
 

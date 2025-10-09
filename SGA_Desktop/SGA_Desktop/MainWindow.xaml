@@ -114,47 +114,59 @@
                                            HorizontalAlignment="Center" 
                                            VerticalAlignment="Center"/>
                                 
-                                <!-- Contadores de notificaciones -->
-                                <Grid HorizontalAlignment="Right"
-                                      VerticalAlignment="Top"
-                                      Margin="0,-12,0,0"
-                                      Width="18"
-                                      Height="18">
-                                    
-                                    <!-- Contador de notificaciones positivas (verde) - arriba -->
-                                    <Border Background="#4CAF50" 
-                                            Width="16" 
-                                            Height="16" 
-                                            CornerRadius="8"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Top"
-                                            Margin="0,0,0,2"
-                                            Visibility="{Binding ContadorNotificacionesPositivas, Converter={StaticResource IntToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding ContadorNotificacionesPositivas}" 
-                                                   Foreground="White" 
-                                                   FontSize="9" 
-                                                   FontWeight="Bold"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
-                                    
-                                    <!-- Contador de notificaciones negativas (rojo) - abajo -->
-                                    <Border Background="#F44336" 
-                                            Width="16" 
-                                            Height="16" 
-                                            CornerRadius="8"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Bottom"
-                                            Margin="0,2,0,0"
-                                            Visibility="{Binding ContadorNotificacionesNegativas, Converter={StaticResource IntToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding ContadorNotificacionesNegativas}" 
-                                                   Foreground="White" 
-                                                   FontSize="9" 
-                                                   FontWeight="Bold"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
-                                </Grid>
+                                <!-- Contador de notificaciones unificado -->
+                                <Border Background="White" 
+                                        CornerRadius="12"
+                                        Padding="6,3"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Margin="0,-2,0,0"
+                                        MinWidth="20"
+                                        Visibility="{Binding TieneNotificaciones, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <!-- Contador verde -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,4,0"
+                                                    Visibility="{Binding ContadorNotificacionesPositivas, Converter={StaticResource IntToVisibilityConverter}}">
+                                            <TextBlock Text="✓" 
+                                                       Foreground="#4CAF50" 
+                                                       FontSize="8" 
+                                                       FontWeight="Bold"
+                                                       Margin="0,0,2,0"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding ContadorNotificacionesPositivas}" 
+                                                       Foreground="#4CAF50" 
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       FontFamily="{StaticResource FuentePrincipal}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        
+                                        <!-- Separador -->
+                                        <TextBlock Text="•" 
+                                                   Foreground="#999" 
+                                                   FontSize="8" 
+                                                   Margin="0,0,4,0"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding SeparadorVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                        
+                                        <!-- Contador rojo -->
+                                        <StackPanel Orientation="Horizontal"
+                                                    Visibility="{Binding ContadorNotificacionesNegativas, Converter={StaticResource IntToVisibilityConverter}}">
+                                            <TextBlock Text="⚠" 
+                                                       Foreground="#F44336" 
+                                                       FontSize="8" 
+                                                       FontWeight="Bold"
+                                                       Margin="0,0,2,0"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding ContadorNotificacionesNegativas}" 
+                                                       Foreground="#F44336" 
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       FontFamily="{StaticResource FuentePrincipal}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -224,6 +236,11 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
                     <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}" -->
+                    <Button Content="Calidad"
+                    Command="{Binding IrACalidadCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Calidad}"/>
                     <Button Content="Órdenes de Traspaso"
                     Command="{Binding IrAOrdenTrabajoCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

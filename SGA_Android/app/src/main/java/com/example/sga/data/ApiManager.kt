@@ -43,6 +43,8 @@ object ApiManager {
     lateinit var almacenApi: AlmacenApiService
     lateinit var etiquetasApiService: EtiquetasApiService
     lateinit var traspasosApi: TraspasosApiService
+    lateinit var conteosApi: ConteosApiService
+    lateinit var ordenTraspasoApi: OrdenTraspasoApiService
 
     fun init(sessionViewModel: SessionViewModel, onUnauthorized: () -> Unit) {
         val retrofit = createRetrofit(sessionViewModel, onUnauthorized)
@@ -53,6 +55,8 @@ object ApiManager {
         almacenApi = retrofit.create(AlmacenApiService::class.java)
         etiquetasApiService = retrofit.create(EtiquetasApiService::class.java)
         traspasosApi = retrofit.create(TraspasosApiService::class.java)
+        conteosApi = retrofit.create(ConteosApiService::class.java)
+        ordenTraspasoApi = retrofit.create(OrdenTraspasoApiService::class.java)
     }
 }
 

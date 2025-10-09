@@ -40,35 +40,57 @@
                                FontWeight="Bold"
                                FontFamily="{StaticResource FuentePrincipal}"
                                VerticalAlignment="Center"/>
-                    <StackPanel Orientation="Horizontal" 
-                                Margin="15,0,0,0"
-                                VerticalAlignment="Center">
-                        
-                        <!-- Contador de notificaciones positivas (verde) con etiqueta -->
-                        <Border Background="#4CAF50"
-                                CornerRadius="12"
-                                Padding="8,4"
-                                Margin="0,0,8,0"
-                                Visibility="{Binding ContadorNotificacionesPositivas, Converter={StaticResource IntToVisibilityConverter}}">
-                            <TextBlock Text="{Binding ContadorNotificacionesPositivas}" 
+                    <!-- Contador de notificaciones con diseño compacto -->
+                    <Border Background="White" 
+                            CornerRadius="16"
+                            Padding="12,6"
+                            Margin="15,0,0,0"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding TieneNotificaciones, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <!-- Contador verde -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,8,0"
+                                        Visibility="{Binding ContadorNotificacionesPositivas, Converter={StaticResource IntToVisibilityConverter}}">
+                                <TextBlock Text="✓" 
+                                           Foreground="#4CAF50" 
+                                           FontSize="12" 
+                                           FontWeight="Bold"
+                                           Margin="0,0,4,0"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ContadorNotificacionesPositivas}" 
+                                           Foreground="#4CAF50" 
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           FontFamily="{StaticResource FuentePrincipal}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            
+                            <!-- Separador -->
+                            <TextBlock Text="•" 
                                        Foreground="White" 
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       FontFamily="{StaticResource FuentePrincipal}"/>
-                        </Border>
-                        
-                        <!-- Contador de notificaciones negativas (rojo) con etiqueta -->
-                        <Border Background="#F44336"
-                                CornerRadius="12"
-                                Padding="8,4"
-                                Visibility="{Binding ContadorNotificacionesNegativas, Converter={StaticResource IntToVisibilityConverter}}">
-                            <TextBlock Text="{Binding ContadorNotificacionesNegativas}" 
-                                       Foreground="White" 
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       FontFamily="{StaticResource FuentePrincipal}"/>
-                        </Border>
-                    </StackPanel>
+                                       FontSize="14" 
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding SeparadorVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            
+                            <!-- Contador rojo -->
+                            <StackPanel Orientation="Horizontal"
+                                        Visibility="{Binding ContadorNotificacionesNegativas, Converter={StaticResource IntToVisibilityConverter}}">
+                                <TextBlock Text="⚠" 
+                                           Foreground="#F44336" 
+                                           FontSize="12" 
+                                           FontWeight="Bold"
+                                           Margin="0,0,4,0"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ContadorNotificacionesNegativas}" 
+                                           Foreground="#F44336" 
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           FontFamily="{StaticResource FuentePrincipal}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
             
@@ -91,6 +113,7 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         
                                         <TextBlock Grid.Column="0"
@@ -100,7 +123,18 @@
                                                    FontFamily="{StaticResource FuentePrincipal}"
                                                    Foreground="{Binding Color, Converter={StaticResource ColorToBrushConverter}}"/>
                                         
-                                        <TextBlock Grid.Column="1"
+                                        <Button Grid.Column="1"
+                                                Content="✓"
+                                                Command="{Binding DataContext.MarcarComoLeidaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource EstiloBotonSecundario}"
+                                                Width="30" Height="30"
+                                                FontSize="14"
+                                                Margin="5,0"
+                                                ToolTip="Marcar como leída"
+                                                IsEnabled="{Binding Leida, Converter={StaticResource InverseBooleanConverter}}"/>
+                                        
+                                        <TextBlock Grid.Column="2"
                                                    Text="{Binding FechaCreacion, StringFormat='{}{0:HH:mm}'}" 
                                                    Foreground="Gray" 
                                                    FontSize="12" 
@@ -177,17 +211,44 @@
                     CornerRadius="0,0,6,6"
                     BorderBrush="#E0E0E0"
                     BorderThickness="0,1,0,0">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Marcar todas como leídas" 
-                            Command="{Binding MarcarTodasLeidasCommand}"
-                            Style="{StaticResource EstiloBotonSecundario}"
-                            Margin="0,0,10,0"
-                            IsEnabled="{Binding TieneNotificaciones}"/>
-                    <Button Content="Cerrar" 
-                            Command="{Binding CerrarCommand}"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                            Width="80"/>
-                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Indicador de estado -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="🔄" 
+                                   Visibility="{Binding EstaCargando, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                   FontSize="16" Margin="0,0,5,0"/>
+                        <TextBlock Text="{Binding MensajeError}" 
+                                   Foreground="Red" 
+                                   FontSize="12"
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   Visibility="{Binding HayErrorConexion, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </StackPanel>
+                    
+                    <!-- Botones -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="🔄" 
+                                Command="{Binding RecargarNotificacionesCommand}"
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Width="35" Height="35"
+                                FontSize="14"
+                                Margin="0,0,10,0"
+                                ToolTip="Recargar notificaciones"/>
+                        <Button Content="Marcar todas como leídas" 
+                                Command="{Binding MarcarTodasLeidasCommand}"
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Margin="0,0,10,0"
+                                IsEnabled="{Binding TieneNotificaciones}"/>
+                        <Button Content="Cerrar" 
+                                Command="{Binding CerrarCommand}"
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                Width="80"/>
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Border>

@@ -45,7 +45,12 @@ namespace SGA_Api.Services
         /// <summary>
         /// Elimina una notificación (soft delete - marca como inactiva)
         /// </summary>
-        Task<bool> EliminarNotificacionAsync(Guid idNotificacion);
+        Task<bool> EliminarNotificacionAsync(Guid idNotificacion, int usuarioId);
+
+        /// <summary>
+        /// Marca todas las notificaciones de un usuario como leídas
+        /// </summary>
+        Task<int> MarcarTodasComoLeidasAsync(int usuarioId);
 
         /// <summary>
         /// Obtiene notificaciones por tipo y proceso

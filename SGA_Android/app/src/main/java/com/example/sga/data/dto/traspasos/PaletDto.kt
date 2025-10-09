@@ -45,5 +45,9 @@ data class PaletDto(
     val fechaVaciado: String?,
 
     @SerializedName("codigoEmpresa")
-    val codigoEmpresa: Short
+    val codigoEmpresa: Short,
+
+    @SerializedName("codigoGS1")
+    val codigoGS1: String?
+
 )

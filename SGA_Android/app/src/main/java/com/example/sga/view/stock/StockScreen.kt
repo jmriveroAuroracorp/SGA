@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,21 +43,24 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import com.example.sga.service.LectorPDA.DeviceUtils
+import com.example.sga.service.lector.DeviceUtils
 import android.view.KeyEvent
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalFocusManager
+import com.example.sga.utils.SoundUtils
 
 @Composable
 fun StockCard(
     stock: Stock,
     onPrintClick: (Stock) -> Unit,          // ← nuevo callback
+    sessionViewModel: SessionViewModel,      // ← agregado para verificar permisos
     modifier: Modifier = Modifier
 ) {
     val fechaCorta     = stock.fechaCaducidad?.take(10) ?: "Sin fecha"
-    val saldoPositivo  = stock.unidadesSaldo > 0
+    val saldoPositivo  = stock.disponible > 0
     val colorSaldo     = if (saldoPositivo)
         MaterialTheme.colorScheme.onSurface
     else
@@ -68,38 +70,110 @@ fun StockCard(
     else
         MaterialTheme.typography.bodyLarge
 
+    // Colores para el tipo de stock
+    val colorTipoStock = when (stock.tipoStock) {
+        "Suelto" -> Color(0xFF4CAF50) // Verde
+        "Paletizado" -> Color(0xFF2196F3) // Azul
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text  = "📦 ${stock.codigoArticulo} — ${stock.descripcionArticulo}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("🏬 Almacén: ${stock.codigoAlmacen} - ${stock.almacen}")
-                Text("📍 Ubicación: ${stock.ubicacion}")
-                Text("📋 Partida: ${stock.partida}")
-                Text("🗓 Caducidad: $fechaCorta")
-                Text(
-                    text  = "📦 Saldo: ${"%.2f".format(stock.unidadesSaldo)}",
-                    color = colorSaldo,
-                    style = estiloSaldo
-                )
-            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text  = "📦 ${stock.codigoArticulo} — ${stock.descripcionArticulo}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("🏬 Almacén: ${stock.codigoAlmacen} - ${stock.almacen}")
+                    Text("📍 Ubicación: ${stock.ubicacion}")
+                    Text("📋 Partida: ${stock.partida}")
+                    Text("🗓 Caducidad: $fechaCorta")
+                }
 
-            IconButton(onClick = { onPrintClick(stock) }) {
-                Icon(Icons.Default.Print, contentDescription = "Imprimir etiqueta")
+                // Solo mostrar el icono de impresión si el usuario tiene permiso 11
+                if (sessionViewModel.tienePermiso(11)) {
+                    IconButton(onClick = { onPrintClick(stock) }) {
+                        Icon(Icons.Default.Print, contentDescription = "Imprimir etiqueta")
+                    }
+                }
+            }
+            
+            Spacer(Modifier.height(8.dp))
+            
+            // Información de stock
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "📦 Disponible: ${"%.2f".format(stock.disponible)}",
+                        color = colorSaldo,
+                        style = estiloSaldo
+                    )
+                    if (stock.reservado > 0) {
+                        Text("🔒 Reservado: ${"%.2f".format(stock.reservado)}")
+                    }
+                }
+                
+                // Badge del tipo de stock
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = colorTipoStock.copy(alpha = 0.1f)
+                    ),
+                    modifier = Modifier.padding(4.dp)
+                ) {
+                    Text(
+                        text = when (stock.tipoStock) {
+                            "Suelto" -> "📦 Suelto"
+                            "Paletizado" -> "🏗️ Paletizado"
+                            else -> stock.tipoStock
+                        },
+                        color = colorTipoStock,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            
+            // Información del palet (solo si es paletizado)
+            if (stock.tipoStock == "Paletizado" && stock.codigoPalet != null) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text(
+                            text = "🏗️ Información del Palet",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF2196F3)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text("📋 Código: ${stock.codigoPalet}")
+                        Text("📊 Estado: ${stock.estadoPalet}")
+                        if (stock.paletId != null) {
+                            Text("🆔 ID: ${stock.paletId}")
+                        }
+                    }
+                }
             }
         }
     }
@@ -152,7 +226,7 @@ fun StockScreen(
     stockViewModel: StockViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val stockLogic = remember { StockLogic(stockViewModel) }
+    val stockLogic = remember { StockLogic(stockViewModel, context) }
     val almacenVM: AlmacenViewModel = viewModel()
     val almacenLogic = remember { AlmacenLogic(almacenVM, sessionViewModel) }
     val impresionLogic = remember {
@@ -163,6 +237,8 @@ fun StockScreen(
     LaunchedEffect(Unit) {
         almacenLogic.cargarAlmacenes()
         impresionLogic.cargarImpresoras()
+        // 🔊 Inicializar sonidos del sistema
+        SoundUtils.getInstance().initialize(context)
     }
 
     val listaAlmacenes by almacenVM.lista.collectAsState()
@@ -179,7 +255,7 @@ fun StockScreen(
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val opcionesVista = listOf("Almacén", "Partida", "Artículo")
+    val opcionesVista = listOf("Almacén", "Partida", "Artículo", "Tipo Stock")
     var vistaSeleccionadaIndex by remember { mutableStateOf(0) }
     val vistaSeleccionada = opcionesVista[vistaSeleccionadaIndex]
 
@@ -187,7 +263,7 @@ fun StockScreen(
     var escaneando by remember { mutableStateOf(false) }
     var escaneoProcesado by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (DeviceUtils.isHoneywell) escaneando = true
+        if (DeviceUtils.hasHardwareScanner(context)) escaneando = true
     }
     val usuario by sessionViewModel.user.collectAsState()
     var descripcionBusqueda by remember { mutableStateOf(TextFieldValue("")) }
@@ -202,42 +278,151 @@ fun StockScreen(
     var skipNextDescripcionSearch by remember { mutableStateOf(false) }
     val empresaCodigo: Short? = empresa?.codigo?.toShort()          // ← nuevo
     val almacenFiltro: String? = almacenSel?.takeIf { it != "Todos" } // ← nuevo
+    val wedgeFocusRequester = remember { FocusRequester() }
 
-    fun lanzarConsulta() {
-        val empresaId = empresa?.codigo ?: return
+    val focusManager = LocalFocusManager.current
 
-        Log.d(
-            "CONSULTA_STOCK",
-            "🔍 Articulo=${codigoArticulo.text}  Ubicacion=${codigoUbicacion.text}  Almacen=$almacenSel"
-        )
+/*fun lanzarConsulta() {
+    val empresaId = empresa?.codigo ?: return
 
-        when {
-            codigoArticulo.text.isNotBlank() -> {
-                Log.d("CONSULTA_STOCK", "🟢 Consultando por artículo")
-                stockLogic.consultarStock(
-                    codigoEmpresa = empresaId,
-                    codigoArticulo = codigoArticulo.text,
-                    codigoUbicacion = null
-                )
-            }
+    // Normalizar ubicación/almacén si viene en formato "213$UB..."
+    val rawUbi = codigoUbicacion.text.trim()
+    var ubi = rawUbi
+    var alm: String? = almacenSel?.takeIf { it.isNotBlank() && it != "Todos" }
 
-            codigoUbicacion.text.isNotBlank() && almacenSel != null && almacenSel != "Todos" -> {
-                Log.d("CONSULTA_STOCK", "🟡 Consultando por ubicación y almacén")
-                stockLogic.consultarStock(
-                    codigoEmpresa = empresaId,
-                    codigoArticulo = null,
-                    codigoUbicacion = codigoUbicacion.text,
-                    codigoAlmacen = almacenSel,
-                    partida = stockViewModel.partidaSeleccionada.value
-                )
-            }
-
-            else -> {
-                Log.d("CONSULTA_STOCK", "🔴 No se cumple ninguna condición")
-                stockViewModel.setError("Introduce un código de artículo o una ubicación con almacén válido.")
+    if (rawUbi.contains('$')) {
+        val parts = rawUbi.split('$', limit = 2)
+        if (parts.size == 2) {
+            val prefijo = parts[0]
+            val cuerpo  = parts[1]
+            if (prefijo.isNotBlank()) {
+                alm = prefijo        // almacén extraído del escaneo
+                ubi = cuerpo         // ubicación limpia
+            } else {
+                // caso "$UB..." -> solo nos quedamos con lo de después
+                ubi = cuerpo
             }
         }
     }
+
+    Log.d("CONSULTA_STOCK", "🔍 Articulo=${codigoArticulo.text}  Ubicacion=$ubi  Almacen=$alm")
+    val onFinallyUI: () -> Unit = {
+        // limpia el campo artículo SIEMPRE
+        codigoArticulo = TextFieldValue("")
+        codigoUbicacion = TextFieldValue("")
+        almacenLogic.onAlmacenSeleccionado("Todos")
+        if (DeviceUtils.hasHardwareScanner(context)) {
+            // vuelve a dar foco al "campo fantasma" para captar el siguiente escaneo
+            wedgeFocusRequester.requestFocus()
+        } else {
+            // en tablets/móviles sí liberamos foco
+            focusManager.clearFocus(force = true)
+        }
+    }
+
+    when {
+        codigoArticulo.text.isNotBlank() -> {
+            Log.d("CONSULTA_STOCK", "🟢 Consultando por artículo")
+            stockLogic.consultarStock(
+                codigoEmpresa   = empresaId.toShort(),
+                codigoArticulo  = codigoArticulo.text,
+                codigoUbicacion = null,
+                onFinally       = onFinallyUI
+            )
+        }
+        ubi.isNotBlank() && alm != null -> {
+            Log.d("CONSULTA_STOCK", "🟡 Consultando por ubicación y almacén")
+            stockLogic.consultarStock(
+                codigoEmpresa   = empresaId.toShort(),
+                codigoArticulo  = null,
+                codigoUbicacion = ubi,
+                codigoAlmacen   = alm,
+                onFinally       = onFinallyUI
+            )
+        }
+        else -> {
+            Log.d("CONSULTA_STOCK", "🔴 No se cumple ninguna condición")
+            stockViewModel.setError("Introduce un código de artículo o una ubicación con almacén válido.")
+        }
+    }
+}*/
+fun lanzarConsulta() {
+    val empresaId = empresa?.codigo ?: return
+
+    // Normalizar ubicación/almacén: "ALM$UB...", "ALM$", "$UB..."
+    val rawUbi = codigoUbicacion.text.trim()
+    var ubi = rawUbi
+    var alm: String? = almacenSel?.takeIf { it.isNotBlank() && it != "Todos" }
+    var esSinUbicar = false // ← ALM$ (ubi = "")
+
+    if (rawUbi.contains('$')) {
+        val parts = rawUbi.split('$', limit = 2)
+        if (parts.size == 2) {
+            val prefijo = parts[0].trim()
+            val cuerpo  = parts[1].trim()
+
+            if (prefijo.isNotEmpty()) {
+                // "ALM$..." (incluye "ALM$" => sin ubicar)
+                alm = prefijo
+                ubi = cuerpo            // "" si es ALM$
+                esSinUbicar = cuerpo.isEmpty()
+            } else {
+                // "$UB..." -> solo nos quedamos con lo de después
+                ubi = cuerpo
+            }
+        }
+    }
+
+    Log.d("CONSULTA_STOCK", "🔍 Articulo=${codigoArticulo.text}  Ubicacion=$ubi  Almacen=$alm  SinUbicar=$esSinUbicar")
+
+    val onFinallyUI: () -> Unit = {
+        // limpia el campo artículo SIEMPRE
+        codigoArticulo = TextFieldValue("")
+        codigoUbicacion = TextFieldValue("")
+        almacenLogic.onAlmacenSeleccionado("Todos")
+        if (DeviceUtils.hasHardwareScanner(context)) {
+            // vuelve a dar foco al "campo fantasma" para captar el siguiente escaneo
+            wedgeFocusRequester.requestFocus()
+        } else {
+            // en tablets/móviles sí liberamos foco
+            focusManager.clearFocus(force = true)
+        }
+    }
+
+    when {
+        // 1) Consulta por artículo (código directo o EAN ya resuelto a código)
+        codigoArticulo.text.isNotBlank() -> {
+            Log.d("CONSULTA_STOCK", "🟢 Consultando por artículo")
+            stockLogic.consultarStock(
+                codigoEmpresa   = empresaId.toShort(),
+                codigoArticulo  = codigoArticulo.text,
+                codigoUbicacion = null,
+                onFinally       = onFinallyUI
+            )
+        }
+
+        // 2) Consulta por almacén + ubicación
+        //    - ubi normal (no vacía), o
+        //    - ALM$ => esSinUbicar = true (ubi vacía permitida)
+        alm != null && (ubi.isNotBlank() || esSinUbicar) -> {
+            Log.d("CONSULTA_STOCK", "🟡 Consultando por ubicación y almacén (sinUbicar=$esSinUbicar)")
+            stockLogic.consultarStock(
+                codigoEmpresa   = empresaId.toShort(),
+                codigoArticulo  = null,
+                codigoUbicacion = ubi,   // "" si es ALM$ (sin ubicar)
+                codigoAlmacen   = alm,
+                onFinally       = onFinallyUI
+            )
+        }
+
+        // 3) Nada válido
+        else -> {
+            Log.d("CONSULTA_STOCK", "🔴 No se cumple ninguna condición")
+            stockViewModel.setError("Introduce un código de artículo o una ubicación con almacén válido.")
+        }
+    }
+}
+
     LaunchedEffect(Unit) {
         snapshotFlow { descripcionBusqueda.text }
             .debounce(900)
@@ -254,6 +439,8 @@ fun StockScreen(
                     codigoAlmacen = almacenFiltro,
                     descripcion = texto,
                     onUnico = { codArticulo ->
+                        codigoUbicacion = TextFieldValue("")
+                        almacenLogic.onAlmacenSeleccionado("Todos")
                         codigoArticulo = TextFieldValue(codArticulo)
                         stockViewModel.setMostrarDialogoSeleccion(false)
                         lanzarConsulta()
@@ -286,13 +473,14 @@ fun StockScreen(
             Modifier
                 .fillMaxSize()
         ) {
+
+
             /* ── 1. Campo fantasma SOLO en PDA Honeywell ─────────────── */
-            if (DeviceUtils.isHoneywell) {
-                val focusRequester = remember { FocusRequester() }
+            if (DeviceUtils.hasHardwareScanner(context)) {
 
                 Box(
                     modifier = Modifier
-                        .focusRequester(focusRequester)
+                        .focusRequester(wedgeFocusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
                             if (event.nativeKeyEvent?.action == KeyEvent.ACTION_MULTIPLE) {
@@ -302,13 +490,63 @@ fun StockScreen(
                                         almacenSel = almacenSel,
                                         empresaId  = empresa?.codigo?.toShort()
                                             ?: return@onPreviewKeyEvent true,
-                                        onCodigoArticuloDetectado = { codigoArticulo = it },
-                                        onUbicacionDetectada      = { codigoUbicacion = it },
+                                        //onCodigoArticuloDetectado = { codigoArticulo = it },
+                                        onCodigoArticuloDetectado = {
+                                            codigoUbicacion = TextFieldValue("")
+                                            almacenLogic.onAlmacenSeleccionado("Todos")
+                                            codigoArticulo = it
+                                            lanzarConsulta()
+                                        },
+
+                                        //onUbicacionDetectada      = { codigoUbicacion = it },
+                                        /*onUbicacionDetectada = { tfv ->
+                                            val s = tfv.text.trim()
+                                            if (s.contains('$')) {
+                                                val parts = s.split('$', limit = 2)
+                                                if (parts.size == 2 && parts[0].isNotBlank()) {
+                                                    // 213$UB...
+                                                    almacenLogic.onAlmacenSeleccionado(parts[0])     // ← marca almacén en la pantalla
+                                                    codigoUbicacion = TextFieldValue(parts[1])       // ← deja solo "UB..."
+                                                } else {
+                                                    // "$UB..." o algo raro: quita el "$" y usa lo que haya después
+                                                    codigoUbicacion = TextFieldValue(parts.getOrNull(1) ?: s.removePrefix("$"))
+                                                }
+                                            } else {
+                                                codigoUbicacion = tfv
+                                            }
+                                        }*/
+                                        onUbicacionDetectada = { tfv ->
+                                            val s = tfv.text.trim()
+                                            if (s.contains('$')) {
+                                                val parts = s.split('$', limit = 2)
+                                                if (parts.size == 2 && parts[0].isNotBlank()) {
+                                                    // "ALM$UB..."  o  "ALM$"
+                                                    val almCode = parts[0]
+                                                    val cuerpo  = parts[1]
+                                                    // selecciona visualmente el almacén si quieres
+                                                    // almacenLogic.onAlmacenSeleccionado(almCode)
+
+                                                    // ⬅️ clave: si es "ALM$" dejamos "ALM$" en el TextField
+                                                    codigoUbicacion = if (cuerpo.isBlank())
+                                                        TextFieldValue("$almCode$")
+                                                    else
+                                                        TextFieldValue(s) // deja "ALM$UB..."
+                                                } else {
+                                                    // "$UB..." -> deja "UB..." (sin "$")
+                                                    codigoUbicacion = TextFieldValue(parts.getOrNull(1) ?: s.removePrefix("$"))
+                                                }
+                                            } else {
+                                                codigoUbicacion = tfv
+                                            }
+                                        },
                                         onMultipleArticulos       = { lista ->
                                             stockViewModel.setArticulosFiltrados(lista)
                                             stockViewModel.setMostrarDialogoSeleccion(true)
                                         },
-                                        onError         = { stockViewModel.setError(it) },
+                                        onError         = { 
+                                            stockViewModel.setError(it)
+                                            SoundUtils.getInstance().playErrorSound()
+                                        },
                                         lanzarConsulta  = { lanzarConsulta() }
                                     )
                                 }
@@ -322,7 +560,7 @@ fun StockScreen(
                         }
                 )
 
-                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                LaunchedEffect(Unit) { wedgeFocusRequester.requestFocus() }
             }
 
             /* ───────────────────────────────────────────────────────── */
@@ -348,7 +586,7 @@ fun StockScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            if (!DeviceUtils.isHoneywell) {
+                            if (!DeviceUtils.hasHardwareScanner(context)) {
                                 Button(
                                     onClick = {
                                         Log.d(
@@ -364,7 +602,7 @@ fun StockScreen(
                                     Text("Escanear QR")
                                 }
                             }
-                            if (almacenSel == null || almacenSel == "Todos") {
+                            /*if (almacenSel == null || almacenSel == "Todos") {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(top = 4.dp)
@@ -382,7 +620,7 @@ fun StockScreen(
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
-                            }
+                            }*/
                         }
                     }
 
@@ -397,6 +635,8 @@ fun StockScreen(
                                 codigoAlmacen = almacenFiltro,
                                 descripcion = descripcionBusqueda.text,
                                 onUnico = { codArticulo ->
+                                    codigoUbicacion = TextFieldValue("")
+                                    almacenLogic.onAlmacenSeleccionado("Todos")
                                     codigoArticulo = TextFieldValue(codArticulo)
                                     stockViewModel.setMostrarDialogoSeleccion(false)
                                     lanzarConsulta()
@@ -411,20 +651,10 @@ fun StockScreen(
                             )
                         }
                     )
-                    val impresoraActiva =
-                        sessionViewModel.impresoraSeleccionada.collectAsState().value
-
-                    OutlinedTextField(
-                        value = impresoraActiva ?: "Sin impresora asignada",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Impresora asignada") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
                     Spacer(Modifier.height(16.dp))
 
 
-                    Text("Almacén", style = MaterialTheme.typography.titleMedium)
+                    /* Text("Almacén", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     var dropOpen by remember { mutableStateOf(false) }
@@ -478,20 +708,8 @@ fun StockScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(8.dp)) */
 
-
-                    TabRow(selectedTabIndex = vistaSeleccionadaIndex) {
-                        opcionesVista.forEachIndexed { index, texto ->
-                            Tab(
-                                selected = vistaSeleccionadaIndex == index,
-                                onClick = { vistaSeleccionadaIndex = index },
-                                text = { Text(texto.capitalize()) }
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
 
                     Button(
                         onClick = { lanzarConsulta() },
@@ -499,8 +717,25 @@ fun StockScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Consultar Stock") }
 
+                    Spacer(Modifier.height(12.dp))
 
-                    Spacer(Modifier.height(16.dp))
+                    // Solo mostrar el selector de vista cuando hay resultados
+                    if (resultado.isNotEmpty()) {
+                        ScrollableTabRow(
+                            selectedTabIndex = vistaSeleccionadaIndex,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            opcionesVista.forEachIndexed { index, texto ->
+                                Tab(
+                                    selected = vistaSeleccionadaIndex == index,
+                                    onClick = { vistaSeleccionadaIndex = index },
+                                    text = { Text(texto.capitalize()) }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                    }
 
                     if (error != null) {
                         Text("⚠️ $error", color = MaterialTheme.colorScheme.error)
@@ -510,20 +745,40 @@ fun StockScreen(
 
                 /** --------- FILTRO DE RESULTADOS --------- **/
                 val filtrado = resultado.filter { item ->
-                    val porPermiso = item.codigoCentro == usuario?.codigoCentro ||
-                            usuario?.codigosAlmacen?.contains(item.codigoAlmacen) == true
-
+                    // 1️⃣ Filtro por permisos específicos del usuario
+                    val porPermisoEspecifico = usuario?.codigosAlmacen?.contains(item.codigoAlmacen) == true
+                    
+                    // 2️⃣ Filtro por almacenes del centro del usuario
+                    val porCentro = listaAlmacenes.any { almacen -> 
+                        almacen.codigoAlmacen == item.codigoAlmacen && almacen.esDelCentro 
+                    }
+                    
+                    // 3️⃣ Filtro por almacén seleccionado en UI
                     val porAlmacen =
                         almacenSel == null || almacenSel == "Todos" || item.codigoAlmacen == almacenSel
 
-                    porPermiso && porAlmacen
+                    // 🔍 LOGS DE DEBUG
+                    Log.d("STOCK_FILTER", """
+                        📦 Almacén: ${item.codigoAlmacen}
+                        👤 Usuario codigosAlmacen: ${usuario?.codigosAlmacen}
+                        🏢 Usuario codigoCentro: ${usuario?.codigoCentro}
+                        ✅ porPermisoEspecifico: $porPermisoEspecifico
+                        🏭 porCentro: $porCentro
+                        🎯 porAlmacen: $porAlmacen
+                        📋 Lista almacenes disponibles: ${listaAlmacenes.map { "${it.codigoAlmacen}(esDelCentro=${it.esDelCentro})" }}
+                        ⚖️ Resultado final: ${(porPermisoEspecifico || porCentro) && porAlmacen}
+                        ═══════════════════════════════
+                    """.trimIndent())
+
+                    // Combinar permisos: específicos OR del centro
+                    (porPermisoEspecifico || porCentro) && porAlmacen
                 }
 
                 val agrupado = when (vistaSeleccionada) {
                     "Almacén" -> filtrado.groupBy { it.almacen }
                     "Partida" -> filtrado.groupBy { it.partida }
-                    // "Fecha Cad"    -> filtrado.groupBy { it.fechaCaducidad }
                     "Artículo" -> filtrado.groupBy { it.codigoArticulo }
+                    "Tipo Stock" -> filtrado.groupBy { it.tipoStock }
                     else -> filtrado.groupBy { "Sin clasificar" }
                 }
 
@@ -532,10 +787,14 @@ fun StockScreen(
                     item {
                         Text(
                             text = when (vistaSeleccionada) {
-                                "Fecha Cad" -> "🗓 Caducidad: $grupo"
                                 "Almacén" -> "📦 Almacén: $grupo"
                                 "Partida" -> "📋 Partida: $grupo"
                                 "Artículo" -> "🔢 Artículo: $grupo"
+                                "Tipo Stock" -> when (grupo) {
+                                    "Suelto" -> "📦 Stock Suelto"
+                                    "Paletizado" -> "🏗️ Stock Paletizado"
+                                    else -> "📊 Tipo: $grupo"
+                                }
                                 else -> grupo
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -569,13 +828,16 @@ fun StockScreen(
 
                         StockCard(
                             stock = stock,
-                            onPrintClick = { mostrarModal = true }
+                            onPrintClick = { mostrarModal = true },
+                            sessionViewModel = sessionViewModel
                         )
 
                         if (mostrarModal) {
+
                             var dropOpen by remember { mutableStateOf(false) }
-                            val impresoraSel = impresionLogic.impresoras.value.find {
-                                it.nombre == sessionViewModel.impresoraSeleccionada.value
+                            val impresoraSeleccionadaNombre by sessionViewModel.impresoraSeleccionada.collectAsState()
+                            val impresoraSel = remember(impresoraSeleccionadaNombre, impresionLogic.impresoras.value) {
+                                impresionLogic.impresoras.value.find { imp -> imp.nombre == impresoraSeleccionadaNombre }
                             }
                             var copias by remember { mutableStateOf(1) }
 
@@ -686,6 +948,8 @@ fun StockScreen(
                                         .padding(vertical = 4.dp)
                                         .clickable {
                                             skipNextDescripcionSearch = true
+                                            codigoUbicacion = TextFieldValue("")
+                                            almacenLogic.onAlmacenSeleccionado("Todos")
                                             codigoArticulo = TextFieldValue(articulo.codigoArticulo)
                                             descripcionBusqueda =
                                                 TextFieldValue(articulo.descripcion ?: "")
@@ -724,7 +988,7 @@ fun StockScreen(
 
         }
 
-        if (escaneando && !DeviceUtils.isHoneywell) {     // ← únicamente tablets/móviles
+        if (escaneando && !DeviceUtils.hasHardwareScanner(context)) {     // ← únicamente tablets/móviles
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -756,13 +1020,59 @@ fun StockScreen(
                                 almacenSel = almacenSel,
                                 empresaId = empresa?.codigo?.toShort()
                                     ?: return@QRScannerView,
-                                onCodigoArticuloDetectado = { codigoArticulo = it },
-                                onUbicacionDetectada = { codigoUbicacion = it },
+                                //onCodigoArticuloDetectado = { codigoArticulo = it },
+                                onCodigoArticuloDetectado = {
+                                    codigoArticulo = it
+                                    lanzarConsulta()
+                                },
+
+                                /*onUbicacionDetectada = { tfv ->
+                                    val s = tfv.text.trim()
+                                    if (s.contains('$')) {
+                                        val parts = s.split('$', limit = 2)
+                                        if (parts.size == 2 && parts[0].isNotBlank()) {
+                                            almacenLogic.onAlmacenSeleccionado(parts[0])
+                                            codigoUbicacion = TextFieldValue(parts[1])
+                                        } else {
+                                            codigoUbicacion = TextFieldValue(parts.getOrNull(1) ?: s.removePrefix("$"))
+                                        }
+                                    } else {
+                                        codigoUbicacion = tfv
+                                    }
+                                }*/
+                                onUbicacionDetectada = { tfv ->
+                                    val s = tfv.text.trim()
+                                    if (s.contains('$')) {
+                                        val parts = s.split('$', limit = 2)
+                                        if (parts.size == 2 && parts[0].isNotBlank()) {
+                                            // "ALM$UB..."  o  "ALM$"
+                                            val almCode = parts[0]
+                                            val cuerpo  = parts[1]
+                                            // selecciona visualmente el almacén si quieres
+                                            // almacenLogic.onAlmacenSeleccionado(almCode)
+
+                                            // ⬅️ clave: si es "ALM$" dejamos "ALM$" en el TextField
+                                            codigoUbicacion = if (cuerpo.isBlank())
+                                                TextFieldValue("$almCode$")
+                                            else
+                                                TextFieldValue(s) // deja "ALM$UB..."
+                                        } else {
+                                            // "$UB..." -> deja "UB..." (sin "$")
+                                            codigoUbicacion = TextFieldValue(parts.getOrNull(1) ?: s.removePrefix("$"))
+                                        }
+                                    } else {
+                                        codigoUbicacion = tfv
+                                    }
+                                }
+                                ,
                                 onMultipleArticulos = { lista ->
                                     stockViewModel.setArticulosFiltrados(lista)
                                     stockViewModel.setMostrarDialogoSeleccion(true)
                                 },
-                                onError = { stockViewModel.setError(it) },
+                                onError = { 
+                                    stockViewModel.setError(it)
+                                    SoundUtils.getInstance().playErrorSound()
+                                },
                                 lanzarConsulta = { lanzarConsulta() }
                             )
                         }

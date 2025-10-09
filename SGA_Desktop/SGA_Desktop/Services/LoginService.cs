@@ -83,6 +83,34 @@ public class LoginService : ApiService
 		}
 	}
 
+	/// <summary>
+	/// Versión del registro de log que permite ejecutarse durante el cierre (para logout)
+	/// </summary>
+	public async Task RegistrarLogEventoAsync(LogEvento log, bool permitirDuranteCierre)
+	{
+		// Asegurarse de que el token se está usando en este POST manual
+		if (!string.IsNullOrWhiteSpace(SessionManager.Token))
+		{
+			_httpClient.DefaultRequestHeaders.Authorization =
+				new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SessionManager.Token);
+		}
+
+		// Si la aplicación se está cerrando y no se permite durante el cierre, no hacer llamadas HTTP
+		if (SessionManager.IsClosing && !permitirDuranteCierre)
+			throw new OperationCanceledException("La aplicación se está cerrando");
+
+		var json = JsonSerializer.Serialize(log);
+		var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+		var response = await _httpClient.PostAsync("LogEvento/crear", content);
+
+		if (!response.IsSuccessStatusCode)
+		{
+			var error = await response.Content.ReadAsStringAsync();
+			throw new Exception($"Error al registrar el evento de login: {error}");
+		}
+	}
+
 	public async Task<bool> DesactivarDispositivoAsync(string idDispositivo, string tipo, int idUsuario)
 	{
 		var dispositivo = new

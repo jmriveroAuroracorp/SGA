@@ -1,6 +1,5 @@
 package com.example.sga.view.traspasos
 
-
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.sga.data.dto.almacenes.AlmacenDto
@@ -17,11 +16,30 @@ import com.example.sga.data.dto.traspasos.CrearTraspasoArticuloDto
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoArticuloDto
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoPaletDto
 import com.example.sga.data.dto.traspasos.MoverPaletDto
+import com.example.sga.data.dto.traspasos.TraspasoPendienteDto
 import com.example.sga.data.model.stock.Stock
-import com.example.sga.view.app.SessionLogic
 import com.example.sga.view.app.SessionViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+
+
+object PaletFlujoStore {
+    private const val FILE = "palet_flujo"
+    private const val K_ID = "paletId"
+    private const val K_USER = "usuarioId"
+    private lateinit var ctx: android.content.Context
+    fun init(c: android.content.Context) { ctx = c.applicationContext }
+    private fun prefs() = ctx.getSharedPreferences(FILE, android.content.Context.MODE_PRIVATE)
+    fun save(paletId: String, usuarioId: Int) {
+        prefs().edit().putString(K_ID, paletId).putInt(K_USER, usuarioId).apply()
+    }
+    fun load(): Pair<String, Int>? {
+        val p = prefs(); val id = p.getString(K_ID, null) ?: return null
+        val uid = p.getInt(K_USER, -1); if (uid == -1) return null
+        return id to uid
+    }
+    fun clear() { prefs().edit().clear().apply() }
+}
 
 class TraspasosViewModel : ViewModel() {
 
@@ -67,6 +85,27 @@ class TraspasosViewModel : ViewModel() {
     fun clearUbicacionOrigen() {
         _ubicacionOrigen.value = null
     }
+    // --- Bloqueo SOLO cuando el palet se ha creado desde esta pantalla ---
+    private val _flujoCreacionPaletActivo = MutableStateFlow(false)
+    val flujoCreacionPaletActivo: StateFlow<Boolean> = _flujoCreacionPaletActivo
+
+    private val _paletEnFlujoId = MutableStateFlow<String?>(null)
+    val paletEnFlujoId: StateFlow<String?> = _paletEnFlujoId
+
+
+
+
+    fun activarFlujoCreacion(paletId: String, usuarioId: Int) {
+        _paletEnFlujoId.value = paletId
+        _flujoCreacionPaletActivo.value = true
+        PaletFlujoStore.save(paletId, usuarioId) // guardamos para reanudar
+    }
+
+    fun finalizarFlujoCreacion() {
+        _paletEnFlujoId.value = null
+        _flujoCreacionPaletActivo.value = false
+        PaletFlujoStore.clear() // limpiamos persistencia
+    }
 
     fun cargarAlmacenesPermitidos(sessionViewModel: SessionViewModel, codigoEmpresa: Int) {
         val user = sessionViewModel.user.value ?: return
@@ -76,7 +115,10 @@ class TraspasosViewModel : ViewModel() {
             codigoEmpresa = codigoEmpresa,
             onSuccess = { lista ->
                 _almacenesAutorizados.value = lista
-                almacenesPermitidos.value = lista.mapNotNull { it.codigoAlmacen }
+                // Incluir tanto almacenes específicos como del centro
+                val almacenesEspecificos = user.codigosAlmacen
+                val almacenesDelCentro = lista.filter { it.esDelCentro }.map { it.codigoAlmacen }
+                almacenesPermitidos.value = (almacenesEspecificos + almacenesDelCentro).distinct()
             },
             onError = { _error.value = it }
         )
@@ -89,15 +131,19 @@ class TraspasosViewModel : ViewModel() {
         )
     }
 
-    fun crearPalet(dto: PaletCrearDto) {
+    fun crearPalet(dto: PaletCrearDto, onSuccess: (PaletDto) -> Unit = {}) {
         _cargando.value = true
         _error.value = null
 
         logic.crearPalet(
             dto = dto,
-            onSuccess = {
-                _paletCreado.value = it
+            onSuccess = { nuevo ->
+                _paletCreado.value = nuevo
+                setPaletSeleccionado(nuevo)
+                val usuarioId = dto.usuarioAperturaId
+                activarFlujoCreacion(nuevo.id, usuarioId)
                 _cargando.value = false
+                onSuccess(nuevo)
             },
             onError = {
                 _error.value = it
@@ -105,6 +151,29 @@ class TraspasosViewModel : ViewModel() {
             }
         )
     }
+
+    fun reanudarFlujoSiAplica(usuarioIdActual: Int, onListo: (PaletDto) -> Unit) {
+        val saved = PaletFlujoStore.load() ?: return
+        val (paletId, usuarioIdGuardado) = saved
+        if (usuarioIdGuardado != usuarioIdActual) {
+            PaletFlujoStore.clear()
+            return
+        }
+        obtenerPalet(
+            id = paletId,
+            onSuccess = { palet ->
+                if (palet.estado.equals("Abierto", true)) {
+                    setPaletSeleccionado(palet)
+                    _paletEnFlujoId.value = palet.id
+                    _flujoCreacionPaletActivo.value = true
+                    onListo(palet)
+                } else {
+                    PaletFlujoStore.clear()
+                }
+            }
+        )
+    }
+
     fun obtenerPalet(id: String, onSuccess: (PaletDto) -> Unit) {
         logic.obtenerPalet(
             idPalet = id,
@@ -130,9 +199,9 @@ class TraspasosViewModel : ViewModel() {
     fun cerrarPalet(
         id: String,
         usuarioId: Int,
-        codigoAlmacen: String,
+        codigoAlmacen: String?,
         codigoEmpresa: Short,
-        ubicacionOrigen: String?, // ✅ AÑADIDO AQUÍ
+        //ubicacionOrigen: String?, // ✅ AÑADIDO AQUÍ
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -141,8 +210,14 @@ class TraspasosViewModel : ViewModel() {
             usuarioId = usuarioId,
             codigoAlmacen = codigoAlmacen,
             codigoEmpresa = codigoEmpresa,
-            ubicacionOrigen = ubicacionOrigen, // ✅ Y AQUÍ
-            onSuccess = { traspasoId -> onSuccess(traspasoId) },
+            //ubicacionOrigen = ubicacionOrigen, // ✅ Y AQUÍ
+            onSuccess = { traspasoId ->
+                // ✅ Si el palet cerrado era el que estaba en flujo de creación, se termina el flujo
+                if (_paletEnFlujoId.value == id) {
+                    finalizarFlujoCreacion()
+                }
+                onSuccess(traspasoId)
+            },
             onError = { onError(it) }
         )
     }
@@ -153,19 +228,39 @@ class TraspasosViewModel : ViewModel() {
         onValidado: () -> Unit,
         onError: (String) -> Unit
     ) {
+        val TAG = "VALIDAR_PALET"
+
         val almacenEscaneado = ubicacionEscaneada.first.trim().uppercase()
-        val ubicacionEscaneadaNormalizada = ubicacionEscaneada.second.trim().uppercase()
+        val ubicEscaneadaNorm = ubicacionEscaneada.second.trim().uppercase()
+
+        // 🔎 Contexto de entrada
+        android.util.Log.d(TAG, "▷ validarUbicacionDePalet() id=${palet.id}, codigo=${palet.codigoPalet}")
+        android.util.Log.d(TAG, "   escaneado → almacen='$almacenEscaneado', ubicacion='$ubicEscaneadaNorm' (raw='${ubicacionEscaneada.first}'|'${ubicacionEscaneada.second}')")
 
         logic.obtenerUbicacionDePalet(
             idPalet = palet.id,
-            onResult = { almacen, ubicacion ->
-                if (almacen != almacenEscaneado || ubicacion != ubicacionEscaneadaNormalizada) {
+            onResult = { almApi, ubiApi ->
+                android.util.Log.d(TAG, "   backend  → almacen='$almApi', ubicacion='$ubiApi'")
+
+                val coincideAlm = almApi == almacenEscaneado
+                val coincideUbi = ubiApi == ubicEscaneadaNorm
+                android.util.Log.d(TAG, "   comparación → almacenOK=$coincideAlm, ubicOK=$coincideUbi")
+
+                if (!coincideAlm || !coincideUbi) {
+                    android.util.Log.e(
+                        TAG,
+                        "❌ NO COINCIDE. escaneado=[$almacenEscaneado|$ubicEscaneadaNorm] vs backend=[$almApi|$ubiApi]"
+                    )
                     onError("La ubicación escaneada y el palet escaneado no coinciden.")
                 } else {
+                    android.util.Log.d(TAG, "✅ Ubicación de palet VALIDADA")
                     onValidado()
                 }
             },
-            onError = onError
+            onError = { msg ->
+                android.util.Log.e(TAG, "❌ Error obtenerUbicacionDePalet(id=${palet.id}): $msg")
+                onError(msg)
+            }
         )
     }
 
@@ -174,6 +269,7 @@ class TraspasosViewModel : ViewModel() {
         codigoAlmacenDestino: String,
         ubicacionDestino: String,
         usuarioId: Int,
+        paletId: String? = null,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -189,6 +285,7 @@ class TraspasosViewModel : ViewModel() {
         logic.completarTraspaso(
             idTraspaso = id,
             dto = dto,
+            paletId = paletId,
             onSuccess = {
                 clearTraspasoArticuloPendiente()
                 clearUbicacionOrigen()
@@ -429,27 +526,54 @@ class TraspasosViewModel : ViewModel() {
         )
     }
 
+    fun precheckFinalizarArticulo(
+        codigoEmpresa: Short,
+        almacenDestino: String,
+        ubicacionDestino: String,
+        onResult: (existe: Boolean, paletId: String?, cerrado: Boolean, aviso: String?) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        logic.precheckFinalizarArticulo(
+            codigoEmpresa = codigoEmpresa,
+            almacenDestino = almacenDestino,
+            ubicacionDestino = ubicacionDestino,
+            onResult = onResult,
+            onError = onError
+        )
+    }
 
     fun comprobarTraspasoPendiente(
         usuarioId: Int,
-        onSuccess: (String) -> Unit,
+        onSuccess: (List<TraspasoPendienteDto>) -> Unit,
         onNoPendiente: () -> Unit,
         onError: (String) -> Unit
     ) {
         logic.comprobarTraspasoPendiente(
             usuarioId = usuarioId,
-            onSuccess = { dto ->
-                if (dto != null && dto.codigoEstado.equals("PENDIENTE", ignoreCase = true)) {
-                    onSuccess(dto.id)
+            onSuccess = { lista ->
+                val pendientes = lista
+                    .filter { it.codigoEstado.equals("PENDIENTE", ignoreCase = true) }
+
+                // ✅ Guarda los traspasos para que estén disponibles luego
+                _traspasosPendientes.value = pendientes
+
+                if (pendientes.isNotEmpty()) {
+                    onSuccess(pendientes)
                 } else {
                     onNoPendiente()
                 }
             },
-            onError = { error ->
-                onError(error)
-            }
+            onError = { error -> onError(error) }
         )
     }
+
+    private val _traspasosPendientes = MutableStateFlow<List<TraspasoPendienteDto>>(emptyList())
+    val traspasosPendientes: StateFlow<List<TraspasoPendienteDto>> = _traspasosPendientes
+
+    fun setTraspasosPendientes(lista: List<TraspasoPendienteDto>) {
+        _traspasosPendientes.value = lista
+    }
+
     private val _traspasoEsDePalet = MutableStateFlow(false)
     val traspasoEsDePalet: StateFlow<Boolean> = _traspasoEsDePalet
 
@@ -476,10 +600,14 @@ class TraspasosViewModel : ViewModel() {
     }
     private val _traspasoPendienteId = MutableStateFlow<String?>(null)
     val traspasoPendienteId: StateFlow<String?> = _traspasoPendienteId
+    fun clearPendientes() {
+        _traspasosPendientes.value = emptyList()
+    }
 
     fun finalizarTraspasoPalet(
         traspasoId: String,
         dto: FinalizarTraspasoPaletDto,
+        paletId: String? = null,               // <-- NUEVO
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -487,6 +615,7 @@ class TraspasosViewModel : ViewModel() {
         logic.finalizarTraspasoPalet(
             traspasoId = traspasoId,
             dto = dto,
+            paletId = paletId,                  // <-- PROPAGAR
             onSuccess = {
                 _cargando.value = false
                 onSuccess()
@@ -497,6 +626,7 @@ class TraspasosViewModel : ViewModel() {
             }
         )
     }
+
     private val _traspasoDirectoDesdePaletCerrado = MutableStateFlow(false)
     val traspasoDirectoDesdePaletCerrado: StateFlow<Boolean> = _traspasoDirectoDesdePaletCerrado
 
@@ -504,24 +634,24 @@ class TraspasosViewModel : ViewModel() {
         _traspasoDirectoDesdePaletCerrado.value = valor
     }
 
-    fun finalizarPaletPorPaletId(
-        paletId: String,
-        dto: FinalizarTraspasoPaletDto,
-        onSuccess: () -> Unit,
+    // TraspasosViewModel.kt
+    fun cargarArticuloPorCodigo(
+        empresaId: Short,
+        codigoArticulo: String,
+        codigoAlmacen: String? = null,
+        codigoCentro: String? = null,
+        almacen: String? = null,
+        onSuccess: (ArticuloDto) -> Unit,
         onError: (String) -> Unit
     ) {
-        _cargando.value = true
-        logic.finalizarTraspasoPaletPorPaletId(
-            paletId = paletId,
-            dto = dto,
-            onSuccess = {
-                _cargando.value = false
-                onSuccess()
-            },
-            onError = {
-                _cargando.value = false
-                onError(it)
-            }
+        logic.buscarArticuloPorCodigo(
+            codigoEmpresa = empresaId,
+            codigoArticulo = codigoArticulo,
+            codigoAlmacen = codigoAlmacen,
+            codigoCentro = codigoCentro,
+            almacen = almacen,
+            onSuccess = onSuccess,
+            onError = onError
         )
     }
 

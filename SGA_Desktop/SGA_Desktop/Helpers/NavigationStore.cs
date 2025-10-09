@@ -37,6 +37,7 @@ namespace SGA_Desktop.Helpers
 					"OrdenTraspaso" => new OrdenTraspasoView(),
 					"ControlesRotativos" => new ControlesRotativosView(),
 					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
+					"Calidad" => new CalidadView(),
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};
 
@@ -62,7 +63,6 @@ namespace SGA_Desktop.Helpers
 					"ConsultaStock" => new ConsultaStockView(),
 					"Traspasos" => new TraspasosView(),
 					"Ubicaciones" => new GestionUbicacionesView(),
-					//"Inventario" => new InventarioView(),
 					"Etiquetas" => new ImpresionEtiquetasView(),
 					"SeleccionEmpresa" => new EmpresaView(),
 					"Paletizacion" => new PaletizacionView(),
@@ -71,6 +71,7 @@ namespace SGA_Desktop.Helpers
 					"OrdenTraspaso" => new OrdenTraspasoView(),
 					"ControlesRotativos" => new ControlesRotativosView(),
 					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
+					"Calidad" => new CalidadView(),
 
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};

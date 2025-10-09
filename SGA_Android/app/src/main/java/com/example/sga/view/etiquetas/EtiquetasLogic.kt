@@ -85,7 +85,7 @@ class EtiquetasLogic(
             }
         })
     }
-    fun procesarCodigoEscaneado(
+    /*fun procesarCodigoEscaneado(
         code: String,
         empresaId: Short,
         onCodigoDetectado: (TextFieldValue) -> Unit,
@@ -122,6 +122,104 @@ class EtiquetasLogic(
         } else {
             onError("El código escaneado no es un EAN válido")
         }
+    }*/
+    fun procesarCodigoEscaneado(
+        code: String,
+        empresaId: Short,
+        onCodigoDetectado: (TextFieldValue) -> Unit,
+        onMultipleArticulos: (List<ArticuloDto>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        Log.d("ESCANEO", "📷 Código recibido: $code")
+        val trimmed = code.trim()
+
+        // 1) GS1 con AI(01): "010" + GTIN → extraemos EAN13 como ya haces en otro módulo
+        if (trimmed.startsWith("010") && trimmed.length >= 16) {
+            val ean13 = trimmed.substring(3, 16)
+            Log.d("ESCANEO", "📦 EAN extraído (GS1-01): $ean13")
+
+            ApiManager.etiquetasApiService.buscarArticulo(
+                codigoEmpresa = empresaId,
+                codigoAlternativo = ean13
+            ).enqueue(object : Callback<List<ArticuloDto>> {
+                override fun onResponse(
+                    call: Call<List<ArticuloDto>>,
+                    response: Response<List<ArticuloDto>>
+                ) {
+                    val lista = response.body().orEmpty()
+                    when {
+                        !response.isSuccessful -> onError("Error HTTP ${response.code()}")
+                        lista.isEmpty()        -> onError("No se encontró ningún artículo con el EAN escaneado.")
+                        lista.size == 1        -> onCodigoDetectado(TextFieldValue(lista.first().codigoArticulo))
+                        else                   -> onMultipleArticulos(lista)
+                    }
+                }
+
+                override fun onFailure(call: Call<List<ArticuloDto>>, t: Throwable) {
+                    onError("Fallo al buscar artículo por EAN: ${t.message}")
+                }
+            })
+            return
+        }
+
+        // 2) EAN-13 “plano” (solo dígitos 13)
+        if (trimmed.length == 13 && trimmed.all { it.isDigit() }) {
+            Log.d("ESCANEO", "📦 EAN13 detectado: $trimmed")
+
+            ApiManager.etiquetasApiService.buscarArticulo(
+                codigoEmpresa = empresaId,
+                codigoAlternativo = trimmed
+            ).enqueue(object : Callback<List<ArticuloDto>> {
+                override fun onResponse(
+                    call: Call<List<ArticuloDto>>,
+                    response: Response<List<ArticuloDto>>
+                ) {
+                    val lista = response.body().orEmpty()
+                    when {
+                        !response.isSuccessful -> onError("Error HTTP ${response.code()}")
+                        lista.isEmpty()        -> onError("No se encontró ningún artículo con el EAN escaneado.")
+                        lista.size == 1        -> onCodigoDetectado(TextFieldValue(lista.first().codigoArticulo))
+                        else                   -> onMultipleArticulos(lista)
+                    }
+                }
+
+                override fun onFailure(call: retrofit2.Call<List<ArticuloDto>>, t: Throwable) {
+                    onError("Fallo al buscar artículo por EAN: ${t.message}")
+                }
+            })
+            return
+        }
+
+        // 3) Código de artículo (alfa-numérico razonable)
+        if (trimmed.length in 4..25 && trimmed.all { it.isLetterOrDigit() }) {
+            Log.d("ESCANEO", "🔍 Código de artículo detectado: $trimmed")
+
+            ApiManager.etiquetasApiService.buscarArticulo(
+                codigoEmpresa = empresaId,
+                codigoArticulo = trimmed.uppercase()
+            ).enqueue(object : retrofit2.Callback<List<ArticuloDto>> {
+                override fun onResponse(
+                    call: retrofit2.Call<List<ArticuloDto>>,
+                    response: retrofit2.Response<List<ArticuloDto>>
+                ) {
+                    val lista = response.body().orEmpty()
+                    when {
+                        !response.isSuccessful -> onError("Error HTTP ${response.code()}")
+                        lista.isEmpty()        -> onError("No se encontró ningún artículo con ese código.")
+                        lista.size == 1        -> onCodigoDetectado(TextFieldValue(lista.first().codigoArticulo))
+                        else                   -> onMultipleArticulos(lista)
+                    }
+                }
+
+                override fun onFailure(call: retrofit2.Call<List<ArticuloDto>>, t: Throwable) {
+                    onError("Fallo al buscar artículo: ${t.message}")
+                }
+            })
+            return
+        }
+
+        // 4) Formato no reconocido
+        onError("❌ Código no válido o formato no reconocido.")
     }
 
     fun consultarStock(
@@ -132,7 +230,7 @@ class EtiquetasLogic(
     ) {
 
         ApiManager.stockApi.consultarStock(
-            codigoEmpresa = codigoEmpresa.toInt(),   // ← el backend espera Int
+            codigoEmpresa = codigoEmpresa,   // ← ahora el API espera Short
             codigoArticulo = codigoArticulo
         ).enqueue(object : retrofit2.Callback<List<StockDto>> {
 

@@ -9,5 +9,5 @@ data class MoverPaletDto(
     val tipoTraspaso: String = "PALET",
     val codigoEstado: String = "PENDIENTE",
     val comentario: String? = null,
-)
+    )
 

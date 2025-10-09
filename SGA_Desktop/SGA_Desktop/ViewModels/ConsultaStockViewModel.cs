@@ -83,9 +83,12 @@ namespace SGA_Desktop.ViewModels
 		public ObservableCollection<string> Ubicaciones { get; }
 		public ObservableCollection<StockDto> ResultadosStock { get; }
 		public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
-		public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
-		public ObservableCollection<StockDto> StockFiltrado { get; } = new();
-		public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
+	public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
+	public ObservableCollection<StockDto> StockFiltrado { get; } = new();
+	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
+	
+	// Vista filtrable para almacenes combo
+	public ICollectionView AlmacenesComboView { get; private set; }
 
 		[ObservableProperty]
 		private string almacenSeleccionado;
@@ -126,8 +129,15 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private bool filtrarUbicacionesConStock = true;
 
-		[ObservableProperty]
-		private StockDto? articuloSeleccionadoParaImprimir;
+	[ObservableProperty]
+	private StockDto? articuloSeleccionadoParaImprimir;
+	
+	// Propiedades para filtrado de almacenes
+	[ObservableProperty]
+	private string filtroAlmacenesCombo = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenAlmacenes = false;
 
 		#endregion
 
@@ -685,6 +695,20 @@ namespace SGA_Desktop.ViewModels
 		}
 
 		[RelayCommand]
+		private void CopiarLote(string lote)
+		{
+			if (!string.IsNullOrWhiteSpace(lote))
+				Clipboard.SetText(lote);
+		}
+
+		[RelayCommand]
+		private void CopiarFechaCaducidad(DateTime? fechaCaducidad)
+		{
+			if (fechaCaducidad.HasValue)
+				Clipboard.SetText(fechaCaducidad.Value.ToString("dd/MM/yyyy"));
+		}
+
+		[RelayCommand]
 		private async Task RefrescarAsync()
 		{
 			try
@@ -735,6 +759,11 @@ namespace SGA_Desktop.ViewModels
 					AlmacenesCombo.Add(a);
 
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+				
+				// 🔷 NUEVO: Inicializar la vista filtrable después de cargar los datos
+				AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
+				AlmacenesComboView.Filter = FiltraAlmacenesCombo;
+				OnPropertyChanged(nameof(AlmacenesComboView));
 			}
 			catch (Exception ex)
 			{
@@ -948,6 +977,37 @@ namespace SGA_Desktop.ViewModels
 
 			return (stock.CodigoArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false)
 				|| (stock.DescripcionArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
+		}
+
+		// Métodos para filtrado de almacenes combo
+		private bool FiltraAlmacenesCombo(object obj)
+		{
+			if (obj is not AlmacenDto almacen) return false;
+			if (string.IsNullOrEmpty(FiltroAlmacenesCombo)) return true;
+			
+			return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+				.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+		}
+		
+		// Método para manejar cambios en el filtro
+		partial void OnFiltroAlmacenesComboChanged(string value)
+		{
+			AlmacenesComboView?.Refresh();
+		}
+		
+		// Comandos para controlar dropdown
+		[RelayCommand]
+		private void AbrirDropDownAlmacenes()
+		{
+			// Limpiar el filtro para permitir escribir desde cero
+			FiltroAlmacenesCombo = "";
+			IsDropDownOpenAlmacenes = true;
+		}
+		
+		[RelayCommand]
+		private void CerrarDropDownAlmacenes()
+		{
+			IsDropDownOpenAlmacenes = false;
 		}
 	}
 }

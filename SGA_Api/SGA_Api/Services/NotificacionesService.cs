@@ -202,7 +202,7 @@ namespace SGA_Api.Services
                     IdLectura = Guid.NewGuid(),
                     IdNotificacion = idNotificacion,
                     UsuarioId = usuarioId,
-                    FechaLeida = DateTime.UtcNow
+                    FechaLeida = DateTime.Now
                 };
 
                 _context.NotificacionesLecturas.Add(lectura);
@@ -239,7 +239,7 @@ namespace SGA_Api.Services
                     IdLectura = Guid.NewGuid(),
                     IdNotificacion = id,
                     UsuarioId = usuarioId,
-                    FechaLeida = DateTime.UtcNow
+                    FechaLeida = DateTime.Now
                 }).ToList();
 
                 _context.NotificacionesLecturas.AddRange(nuevasLecturas);
@@ -338,12 +338,14 @@ namespace SGA_Api.Services
         /// <summary>
         /// Elimina una notificación (soft delete - marca como inactiva)
         /// </summary>
-        public async Task<bool> EliminarNotificacionAsync(Guid idNotificacion)
+        public async Task<bool> EliminarNotificacionAsync(Guid idNotificacion, int usuarioId)
         {
             try
             {
                 var notificacion = await _context.Notificaciones
-                    .FirstOrDefaultAsync(n => n.IdNotificacion == idNotificacion);
+                    .FirstOrDefaultAsync(n => n.IdNotificacion == idNotificacion && 
+                                             n.EsActiva && 
+                                             n.Destinatarios.Any(d => d.UsuarioId == usuarioId && d.EsActiva));
 
                 if (notificacion == null)
                 {
@@ -353,13 +355,55 @@ namespace SGA_Api.Services
                 notificacion.EsActiva = false;
                 await _context.SaveChangesAsync();
 
-                _logger.LogDebug("Notificación eliminada (soft delete): {IdNotificacion}", idNotificacion);
+                _logger.LogDebug("Notificación eliminada (soft delete): {IdNotificacion} por usuario {UsuarioId}", idNotificacion, usuarioId);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al eliminar notificación {IdNotificacion}", idNotificacion);
+                _logger.LogError(ex, "Error al eliminar notificación {IdNotificacion} por usuario {UsuarioId}", idNotificacion, usuarioId);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Marca todas las notificaciones de un usuario como leídas
+        /// </summary>
+        public async Task<int> MarcarTodasComoLeidasAsync(int usuarioId)
+        {
+            try
+            {
+                // Obtener todas las notificaciones no leídas del usuario
+                var notificacionesNoLeidas = await _context.Notificaciones
+                    .Where(n => n.EsActiva && 
+                               n.Destinatarios.Any(d => d.UsuarioId == usuarioId && d.EsActiva) &&
+                               !n.Lecturas.Any(l => l.UsuarioId == usuarioId))
+                    .Select(n => n.IdNotificacion)
+                    .ToListAsync();
+
+                if (!notificacionesNoLeidas.Any())
+                {
+                    return 0; // No hay notificaciones para marcar como leídas
+                }
+
+                // Crear las lecturas
+                var nuevasLecturas = notificacionesNoLeidas.Select(id => new NotificacionLectura
+                {
+                    IdLectura = Guid.NewGuid(),
+                    IdNotificacion = id,
+                    UsuarioId = usuarioId,
+                    FechaLeida = DateTime.Now
+                }).ToList();
+
+                _context.NotificacionesLecturas.AddRange(nuevasLecturas);
+                await _context.SaveChangesAsync();
+
+                _logger.LogDebug("Marcadas {Cantidad} notificaciones como leídas para usuario {UsuarioId}", nuevasLecturas.Count, usuarioId);
+                return nuevasLecturas.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al marcar todas las notificaciones como leídas para usuario {UsuarioId}", usuarioId);
+                return 0;
             }
         }
 

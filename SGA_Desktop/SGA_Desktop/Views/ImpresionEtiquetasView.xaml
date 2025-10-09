@@ -113,7 +113,7 @@
 
                         <!-- Saldo -->
                         <TextBlock Grid.Column="3"
-                           Text="{Binding UnidadSaldo, StringFormat=N2}"
+                           Text="{Binding UnidadSaldo, StringFormat=F4}"
                            FontSize="16"
                            FontWeight="Bold"
                            VerticalAlignment="Center"

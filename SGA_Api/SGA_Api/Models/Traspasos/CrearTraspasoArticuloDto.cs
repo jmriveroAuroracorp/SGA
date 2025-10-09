@@ -24,5 +24,11 @@ namespace SGA_Api.Models.Traspasos
 		public string? Comentario { get; set; }
 
 		public bool? ReabrirSiCerradoOrigen { get; set; }  // default null/false
+		
+		/// <summary>
+		/// Opcional: ID del palet destino donde se quiere añadir el artículo.
+		/// Si se especifica, se usará ese palet. Si no, se busca/crea automáticamente.
+		/// </summary>
+		public Guid? PaletIdDestino { get; set; }
 	}
 } 

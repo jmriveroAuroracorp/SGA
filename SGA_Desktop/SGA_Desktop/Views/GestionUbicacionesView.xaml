@@ -36,9 +36,28 @@
                     <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                     <ComboBox Width="250"
                         Style="{StaticResource EstiloComboBox}"
-                        ItemsSource="{Binding AlmacenesCombo}"
+                        ItemsSource="{Binding AlmacenesComboView}"
+                        Text="{Binding FiltroAlmacenesCombo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                         DisplayMemberPath="DescripcionCombo"
-                        SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"/>
+                        SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"
+                        IsEditable="True"
+                        IsTextSearchEnabled="False"
+                        StaysOpenOnEdit="True"
+                        IsDropDownOpen="{Binding IsDropDownOpenAlmacenes}">
+                        <i:Interaction.Triggers>
+                            <i:EventTrigger EventName="GotFocus">
+                                <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesCommand}"/>
+                            </i:EventTrigger>
+                            <i:EventTrigger EventName="SelectionChanged">
+                                <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesCommand}"/>
+                            </i:EventTrigger>
+                        </i:Interaction.Triggers>
+                        <ComboBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel/>
+                            </ItemsPanelTemplate>
+                        </ComboBox.ItemsPanel>
+                    </ComboBox>
                 </StackPanel>
                 
                 <StackPanel Orientation="Vertical">

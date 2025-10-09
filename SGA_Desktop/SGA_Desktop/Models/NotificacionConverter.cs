@@ -14,19 +14,29 @@ namespace SGA_Desktop.Models
         /// </summary>
         public static NotificacionDto ConvertirADesktopDto(this NotificacionApiDto apiDto)
         {
+            // Determinar el tipo basado en el estado actual
+            var tipo = apiDto.EstadoActual switch
+            {
+                "COMPLETADO" => "success",
+                "ERROR_ERP" => "error", 
+                "PENDIENTE_ERP" => "warning",
+                "PENDIENTE" => "info",
+                _ => "info"
+            };
+
             return new NotificacionDto
             {
                 Id = apiDto.IdNotificacion,
                 Titulo = apiDto.Titulo,
                 Mensaje = apiDto.Mensaje,
-                Tipo = apiDto.TipoIcono,
+                Tipo = tipo,
                 FechaCreacion = apiDto.FechaCreacion,
                 Leida = apiDto.Leida,
-                UsuarioId = apiDto.Destinatarios?.FirstOrDefault()?.UsuarioId ?? 0,
+                UsuarioId = apiDto.Destinatarios?.FirstOrDefault()?.UsuarioId ?? 0, // Se asignará desde el usuario actual si es 0
                 TraspasoId = apiDto.ProcesoId?.ToString(),
                 EstadoAnterior = apiDto.EstadoAnterior,
                 EstadoActual = apiDto.EstadoActual,
-                TipoTraspaso = apiDto.TipoNotificacion == "TRASPASO" ? "TRASPASO" : null,
+                TipoTraspaso = apiDto.TipoNotificacion == "TRASPASO" ? "ARTICULO" : null, // Asumimos artículo por defecto
                 // Los datos adicionales se pueden extraer del objeto DatosAdicionales si es necesario
             };
         }

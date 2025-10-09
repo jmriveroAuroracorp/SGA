@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Alergenos;
+using SGA_Api.Models.Calidad;
 using SGA_Api.Models.Impresion;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Registro;
@@ -71,6 +72,9 @@ namespace SGA_Api.Data
 		public DbSet<ConfiguracionPredefinidaAlmacen> ConfiguracionesPredefinidasAlmacenes { get; set; }
 		public DbSet<OperarioConfiguracionAplicada> OperariosConfiguracionesAplicadas { get; set; }
 
+		// Entidades de Calidad
+		public DbSet<BloqueoCalidad> BloqueosCalidad { get; set; }
+
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
@@ -139,6 +143,8 @@ namespace SGA_Api.Data
 				.Property(u => u.IdEmpresa).HasColumnName("IdEmpresa");
 			modelBuilder.Entity<Usuario>()
 				.Property(u => u.Impresora).HasColumnName("Impresora");
+			modelBuilder.Entity<Usuario>()
+				.Property(u => u.IdRol).HasColumnName("IdRol");
 			modelBuilder.Entity<Usuario>()
 				.Property(u => u.Etiqueta).HasColumnName("Etiqueta");
 
@@ -451,7 +457,7 @@ namespace SGA_Api.Data
                 entity.Property(e => e.CreadoPorCodigo).HasColumnName("CreadoPorCodigo").HasMaxLength(50).IsRequired();
                 entity.Property(e => e.Estado).HasColumnName("Estado").HasMaxLength(20).HasDefaultValue("PLANIFICADO");
                 entity.Property(e => e.Prioridad).HasColumnName("Prioridad").HasColumnType("tinyint").HasDefaultValue((byte)3);
-                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysdatetime()");
                 entity.Property(e => e.CodigoOperario).HasColumnName("CodigoOperario").HasMaxLength(50);
                 entity.Property(e => e.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
                 entity.Property(e => e.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
@@ -544,7 +550,7 @@ namespace SGA_Api.Data
                 entity.Property(e => e.Mensaje).HasColumnName("Mensaje").HasMaxLength(500).IsRequired();
                 entity.Property(e => e.EstadoAnterior).HasColumnName("EstadoAnterior").HasMaxLength(20);
                 entity.Property(e => e.EstadoActual).HasColumnName("EstadoActual").HasMaxLength(20);
-                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysdatetime()");
                 entity.Property(e => e.EsActiva).HasColumnName("EsActiva").HasDefaultValue(true);
                 entity.Property(e => e.EsGrupal).HasColumnName("EsGrupal").HasDefaultValue(false);
                 entity.Property(e => e.GrupoDestino).HasColumnName("GrupoDestino").HasMaxLength(50);
@@ -571,7 +577,7 @@ namespace SGA_Api.Data
                 entity.Property(e => e.IdDestinatario).HasColumnName("IdDestinatario").HasDefaultValueSql("NEWID()");
                 entity.Property(e => e.IdNotificacion).HasColumnName("IdNotificacion").IsRequired();
                 entity.Property(e => e.UsuarioId).HasColumnName("UsuarioId").IsRequired();
-                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("sysdatetime()");
                 entity.Property(e => e.EsActiva).HasColumnName("EsActiva").HasDefaultValue(true);
 
                 // Relación con Usuario (asumiendo que existe la tabla usuarios)
@@ -590,7 +596,7 @@ namespace SGA_Api.Data
                 entity.Property(e => e.IdLectura).HasColumnName("IdLectura").HasDefaultValueSql("NEWID()");
                 entity.Property(e => e.IdNotificacion).HasColumnName("IdNotificacion").IsRequired();
                 entity.Property(e => e.UsuarioId).HasColumnName("UsuarioId").IsRequired();
-                entity.Property(e => e.FechaLeida).HasColumnName("FechaLeida").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.FechaLeida).HasColumnName("FechaLeida").HasDefaultValueSql("sysdatetime()");
 
                 // Relación con Usuario
                 entity.HasOne(l => l.Usuario)
@@ -602,6 +608,29 @@ namespace SGA_Api.Data
                 entity.HasIndex(e => new { e.IdNotificacion, e.UsuarioId })
                       .IsUnique()
                       .HasDatabaseName("IX_NotificacionesLecturas_Notificacion_Usuario");
+            });
+
+            // Configuración para BloqueoCalidad
+            modelBuilder.Entity<BloqueoCalidad>(entity =>
+            {
+                entity.ToTable("BloqueosCalidad");
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.Id).HasColumnName("Id");
+                entity.Property(e => e.CodigoEmpresa).HasColumnName("CodigoEmpresa");
+                entity.Property(e => e.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
+                entity.Property(e => e.LotePartida).HasColumnName("LotePartida").HasMaxLength(50);
+                entity.Property(e => e.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
+                entity.Property(e => e.Ubicacion).HasColumnName("Ubicacion").HasMaxLength(30);
+                entity.Property(e => e.Bloqueado).HasColumnName("Bloqueado");
+                entity.Property(e => e.UsuarioBloqueoId).HasColumnName("UsuarioBloqueoId");
+                entity.Property(e => e.FechaBloqueo).HasColumnName("FechaBloqueo");
+                entity.Property(e => e.ComentarioBloqueo).HasColumnName("ComentarioBloqueo").HasMaxLength(500);
+                entity.Property(e => e.UsuarioDesbloqueoId).HasColumnName("UsuarioDesbloqueoId");
+                entity.Property(e => e.FechaDesbloqueo).HasColumnName("FechaDesbloqueo");
+                entity.Property(e => e.ComentarioDesbloqueo).HasColumnName("ComentarioDesbloqueo").HasMaxLength(500);
+                entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion");
+                entity.Property(e => e.FechaModificacion).HasColumnName("FechaModificacion");
             });
 
         }

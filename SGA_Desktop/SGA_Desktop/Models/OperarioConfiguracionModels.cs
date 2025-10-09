@@ -13,6 +13,11 @@ namespace SGA_Desktop.Models
         public decimal? LimiteInventarioEuros { get; set; }
         public decimal? LimiteInventarioUnidades { get; set; }
         
+        // Rol SGA asignado
+        public int? IdRol { get; set; }
+        public string? RolNombre { get; set; }
+        public int? NivelJerarquico { get; set; }
+        
         // Permisos del operario
         public List<short> Permisos { get; set; } = new List<short>();
         
@@ -92,6 +97,10 @@ namespace SGA_Desktop.Models
         public decimal? LimiteImporte { get; set; } // Límite de importe del operario (MRH_LimiteInventarioEuros)
         public decimal? LimiteUnidades { get; set; } // Límite de unidades del operario (MRH_LimiteInventarioUnidades)
         public string LimitesResumen { get; set; } = string.Empty; // Resumen de límites formateado
+        
+        // Rol SGA asignado
+        public string? RolNombre { get; set; }
+        public int? NivelJerarquico { get; set; }
     }
 
     /// <summary>
@@ -144,6 +153,10 @@ namespace SGA_Desktop.Models
         public int CantidadPermisos { get; set; } // Número de permisos asignados
         public int CantidadAlmacenes { get; set; } // Número de almacenes asignados
         public string? PlantillaAplicada { get; set; } // Nombre de la plantilla aplicada
+        
+        // Rol SGA asignado
+        public string? RolNombre { get; set; }
+        public int? NivelJerarquico { get; set; }
     }
 
 
@@ -305,5 +318,37 @@ namespace SGA_Desktop.Models
         public List<short> PermisosIniciales { get; set; } = new List<short>();
         public List<short> EmpresasIniciales { get; set; } = new List<short>();
         public List<string> AlmacenesIniciales { get; set; } = new List<string>();
+    }
+
+    /// <summary>
+    /// DTO para roles SGA disponibles
+    /// </summary>
+    public class RolSgaDto
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+        public int NivelJerarquico { get; set; }
+        public bool Activo { get; set; } = true;
+    }
+
+    /// <summary>
+    /// DTO para asignar rol a un operario
+    /// </summary>
+    public class AsignarRolDto
+    {
+        public int OperarioId { get; set; }
+        public int RolId { get; set; }
+    }
+
+    /// <summary>
+    /// DTO para sugerir rol basado en permisos ERP
+    /// </summary>
+    public class RolSugeridoDto
+    {
+        public int? RolId { get; set; }
+        public string? RolNombre { get; set; }
+        public string? Descripcion { get; set; }
+        public string? Justificacion { get; set; }
     }
 }

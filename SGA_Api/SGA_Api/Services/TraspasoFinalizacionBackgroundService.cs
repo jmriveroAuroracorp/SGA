@@ -35,6 +35,7 @@ namespace SGA_Api.Services
 					using (var scope = _serviceProvider.CreateScope())
 					{
 						var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+						var sageDbContext = scope.ServiceProvider.GetRequiredService<SageDbContext>();
 						var notificacionesService = scope.ServiceProvider.GetRequiredService<INotificacionesTraspasosService>();
 						var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraspasoFinalizacionBackgroundService>>();
 
@@ -48,7 +49,11 @@ namespace SGA_Api.Services
 							.Distinct()
 							.ToListAsync();
 
-						foreach (var paletId in paletIdsConTempLineas)
+					foreach (var paletId in paletIdsConTempLineas)
+					{
+						// Usar transacción para garantizar consistencia
+						using var transaction = await dbContext.Database.BeginTransactionAsync();
+						try
 						{
 							// 1) Todas las temporales pendientes de este palet (en orden)
 							var tempsPendientes = await dbContext.TempPaletLineas
@@ -56,11 +61,31 @@ namespace SGA_Api.Services
 								.OrderBy(l => l.FechaAgregado)
 								.ToListAsync();
 
-							foreach (var temp in tempsPendientes)
+						foreach (var temp in tempsPendientes)
+						{
+							// 2) Busca el traspaso de la temporal
+							var traspaso = await dbContext.Traspasos.FindAsync(temp.TraspasoId);
+							if (traspaso == null) continue;
+							
+						// 2.1) Si falta DescripcionArticulo, intentar recuperarla
+						if (string.IsNullOrWhiteSpace(temp.DescripcionArticulo))
+						{
+							var descripcionRecuperada = await ObtenerDescripcionArticuloAsync(
+								dbContext, sageDbContext, temp.PaletId, temp.CodigoArticulo, 
+								temp.CodigoEmpresa, logger);
+							
+							if (!string.IsNullOrWhiteSpace(descripcionRecuperada))
 							{
-								// 2) Busca el traspaso de la temporal
-								var traspaso = await dbContext.Traspasos.FindAsync(temp.TraspasoId);
-								if (traspaso == null) continue;
+								temp.DescripcionArticulo = descripcionRecuperada;
+								logger.LogInformation("✅ Recuperada DescripcionArticulo para {CodigoArticulo}: {Descripcion}", 
+									temp.CodigoArticulo, temp.DescripcionArticulo);
+							}
+							else
+							{
+								logger.LogWarning("⚠️ No se pudo recuperar DescripcionArticulo para TempLinea {TempId}, Articulo={CodigoArticulo}, PaletId={PaletId}", 
+									temp.Id, temp.CodigoArticulo, temp.PaletId);
+							}
+						}
 
 								// Si quieres exigir �completado�, acepta lo que ponga el controller
 								var esCompletado =
@@ -69,66 +94,103 @@ namespace SGA_Api.Services
 
 								if (!esCompletado) continue;
 
-								// 3) Busca la l�nea definitiva (misma clave)
-								var existente = await dbContext.PaletLineas.FirstOrDefaultAsync(l =>
-									l.PaletId == temp.PaletId &&
-									l.CodigoArticulo == temp.CodigoArticulo &&
-									l.Lote == temp.Lote &&
+							// 3) Busca la línea definitiva (misma clave)
+							// Normalizar valores para comparación
+							var tempCodigoAlmacen = (temp.CodigoAlmacen ?? "").Trim().ToUpper();
+							var tempUbicacion = (temp.Ubicacion ?? "").Trim().ToUpper();
+							var tempLote = (temp.Lote ?? "").Trim();
+							
+							var lineasCandidatas = await dbContext.PaletLineas
+								.Where(l => l.PaletId == temp.PaletId && 
+											l.CodigoArticulo == temp.CodigoArticulo)
+								.ToListAsync();
+							
+							var existente = lineasCandidatas
+								.Where(l => 
+									(l.Lote ?? "").Trim() == tempLote &&
 									l.FechaCaducidad == temp.FechaCaducidad &&
-									(l.CodigoAlmacen ?? "") == (temp.CodigoAlmacen ?? "") &&
-									(l.Ubicacion ?? "") == (temp.Ubicacion ?? "")
-								);
+									(l.CodigoAlmacen ?? "").Trim().ToUpper() == tempCodigoAlmacen &&
+									(l.Ubicacion ?? "").Trim().ToUpper() == tempUbicacion
+								)
+								.FirstOrDefault();
 
-								if (existente != null)
-								{
-									if (!temp.EsHeredada)
-										existente.Cantidad += temp.Cantidad;  // ? DELTA (+/-)
+						if (existente != null)
+						{
+							if (!temp.EsHeredada)
+								existente.Cantidad += temp.Cantidad;  // DELTA (+/-)
 
-									if (existente.Cantidad <= 0m)  // CAMBIO: <= en lugar de ==
-									{
-										dbContext.PaletLineas.Remove(existente);
-									}
-									else
-									{
-										existente.UsuarioId = temp.UsuarioId;
-										existente.Observaciones = temp.Observaciones;
-										existente.TraspasoId = traspaso.Id;
-										existente.DescripcionArticulo = temp.DescripcionArticulo; // Propaga DescripcionArticulo
-										
-										// Debug: Log para verificar la propagaci�n de descripci�n
-										logger.LogDebug("Propagando descripci�n '{DescripcionArticulo}' para art�culo {CodigoArticulo}", temp.DescripcionArticulo, temp.CodigoArticulo);
-										
-										dbContext.PaletLineas.Update(existente);
-									}
-								}
-								else
-								{
-									if (temp.Cantidad != 0m) // evita crear l�neas 0
-									{
-										dbContext.PaletLineas.Add(new SGA_Api.Models.Palet.PaletLinea
-										{
-											Id = Guid.NewGuid(),
-											PaletId = temp.PaletId,
-											CodigoEmpresa = temp.CodigoEmpresa,
-											CodigoArticulo = temp.CodigoArticulo,
-											DescripcionArticulo = temp.DescripcionArticulo,
-											Cantidad = temp.Cantidad,      // ? DELTA (+)
-											UnidadMedida = temp.UnidadMedida,
-											Lote = temp.Lote,
-											FechaCaducidad = temp.FechaCaducidad,
-											CodigoAlmacen = temp.CodigoAlmacen,
-											Ubicacion = temp.Ubicacion,
-											UsuarioId = temp.UsuarioId,
-											FechaAgregado = temp.FechaAgregado,
-											Observaciones = temp.Observaciones,
-											TraspasoId = traspaso.Id
-										});
-									}
-								}
-
-								temp.Procesada = true;
-								dbContext.TempPaletLineas.Update(temp);
+							if (existente.Cantidad <= 0m)
+							{
+								dbContext.PaletLineas.Remove(existente);
 							}
+							else
+							{
+								existente.UsuarioId = temp.UsuarioId;
+								existente.Observaciones = temp.Observaciones?.Trim();
+								existente.TraspasoId = traspaso.Id;
+								
+								// Propagar/Completar DescripcionArticulo
+								if (!string.IsNullOrWhiteSpace(temp.DescripcionArticulo))
+								{
+									// Si temp tiene descripción, usarla
+									existente.DescripcionArticulo = temp.DescripcionArticulo.Trim();
+								}
+								else if (string.IsNullOrWhiteSpace(existente.DescripcionArticulo))
+								{
+									// Si ni temp ni existente tienen descripción, intentar recuperarla
+									var descripcionRecuperada = await ObtenerDescripcionArticuloAsync(
+										dbContext, sageDbContext, temp.PaletId, temp.CodigoArticulo, 
+										temp.CodigoEmpresa, logger);
+									
+									if (!string.IsNullOrWhiteSpace(descripcionRecuperada))
+									{
+										existente.DescripcionArticulo = descripcionRecuperada;
+										logger.LogInformation("✅ Completada DescripcionArticulo en línea existente para {CodigoArticulo}: {Descripcion}", 
+											temp.CodigoArticulo, existente.DescripcionArticulo);
+									}
+								}
+								
+								dbContext.PaletLineas.Update(existente);
+							}
+						}
+						else
+						{
+						if (temp.Cantidad != 0m) // evita crear líneas 0
+						{
+							// Validar solo CodigoAlmacen (Ubicacion puede estar vacía = "sin ubicar")
+							if (string.IsNullOrWhiteSpace(temp.CodigoAlmacen))
+							{
+								logger.LogWarning("⚠️ TempLinea {TempId} tiene CodigoAlmacen nulo/vacío. PaletId={PaletId}, Articulo={Articulo}. Se marca como procesada SIN consolidar.", 
+									temp.Id, temp.PaletId, temp.CodigoArticulo);
+								// NO hacer continue aquí - marcar como procesada al final para no quedar en bucle
+							}
+							else
+							{
+								dbContext.PaletLineas.Add(new SGA_Api.Models.Palet.PaletLinea
+								{
+									Id = Guid.NewGuid(),
+									PaletId = temp.PaletId,
+									CodigoEmpresa = temp.CodigoEmpresa,
+									CodigoArticulo = temp.CodigoArticulo?.Trim() ?? "",
+									DescripcionArticulo = temp.DescripcionArticulo?.Trim(),
+									Cantidad = temp.Cantidad,      // DELTA (+)
+									UnidadMedida = temp.UnidadMedida?.Trim(),
+									Lote = temp.Lote?.Trim(),
+									FechaCaducidad = temp.FechaCaducidad,
+									CodigoAlmacen = temp.CodigoAlmacen.Trim(),
+									Ubicacion = (temp.Ubicacion ?? "").Trim(),  // Permitir vacío
+									UsuarioId = temp.UsuarioId,
+									FechaAgregado = temp.FechaAgregado,
+									Observaciones = temp.Observaciones?.Trim(),
+									TraspasoId = traspaso.Id
+								});
+							}
+						}
+						}
+
+						temp.Procesada = true;
+						dbContext.TempPaletLineas.Update(temp);
+					}
 
 							// 4) Solo mover l�neas por TRASPASO DE PALET (no por art�culo)
 							var traspasosMoverPalet = await dbContext.Traspasos
@@ -192,23 +254,33 @@ namespace SGA_Api.Services
 
 										dbContext.Palets.Update(palet);
 
-										dbContext.LogPalet.Add(new LogPalet
-										{
-											PaletId = palet.Id,
-											Fecha = DateTime.Now,
-											IdUsuario = palet.UsuarioVaciadoId ?? 0,
-											Accion = "Vaciado",
-											Detalle = "Marcado vaciado tras consolidaci�n: total=0 y sin temporales pendientes."
-										});
-
-										await dbContext.SaveChangesAsync();
-									}
+									dbContext.LogPalet.Add(new LogPalet
+									{
+										PaletId = palet.Id,
+										Fecha = DateTime.Now,
+										IdUsuario = palet.UsuarioVaciadoId ?? 0,
+										Accion = "Vaciado",
+										Detalle = "Marcado vaciado tras consolidación: total=0 y sin temporales pendientes."
+									});
 								}
 							}
+						}
 
-							await dbContext.SaveChangesAsync();
+						// Guardar todos los cambios de este palet en una sola operación
+						await dbContext.SaveChangesAsync();
+						
+						// Si todo salió bien, confirmar la transacción
+						await transaction.CommitAsync();
+					}
+					catch (Exception ex)
+					{
+						// Si algo falló, revertir todos los cambios
+						await transaction.RollbackAsync();
+						logger.LogError(ex, "❌ Error al consolidar palet {PaletId}. Se revirtieron todos los cambios.", paletId);
+						// Continuar con el siguiente palet
+					}
 
-							//	Buscar todos los traspasos COMPLETADOS para ese palet
+						//	Buscar todos los traspasos COMPLETADOS para ese palet
 							//	var traspasosCompletados = await dbContext.Traspasos
 							//		.Where(t => t.PaletId == paletId && t.CodigoEstado == "COMPLETADO")
 							//		.OrderBy(t => t.FechaFinalizacion)
@@ -412,8 +484,8 @@ namespace SGA_Api.Services
 					.Select(t => new { t.Id, t.CodigoEstado, t.TipoTraspaso, t.UsuarioInicioId, t.CodigoPalet, t.CodigoArticulo })
 					.ToListAsync();
 
-				// Solo log cuando hay traspasos activos para revisar
-				if (traspasosActivos.Count > 0)
+				// Solo log cuando hay muchos traspasos activos (para evitar spam)
+				if (traspasosActivos.Count > 10)
 				{
 					logger.LogDebug("?? BackgroundService: Revisando {Cantidad} traspasos activos", traspasosActivos.Count);
 				}
@@ -425,10 +497,10 @@ namespace SGA_Api.Services
 					var estadoAnterior = _estadosAnterioresTraspasos.GetValueOrDefault(traspaso.Id, "");
 					var estadoActual = traspaso.CodigoEstado ?? "";
 
-						// Log todos los traspasos para debug
-						if (string.IsNullOrEmpty(estadoAnterior))
+						// Log solo traspasos nuevos con estados importantes
+						if (string.IsNullOrEmpty(estadoAnterior) && (estadoActual == "PENDIENTE_ERP" || estadoActual == "ERROR_ERP"))
 						{
-							logger.LogDebug("?? Nuevo traspaso detectado: {TraspasoId} - Estado inicial: {EstadoActual} (Usuario: {UsuarioId}, Tipo: {TipoTraspaso})", 
+							logger.LogInformation("?? Nuevo traspaso detectado: {TraspasoId} - Estado inicial: {EstadoActual} (Usuario: {UsuarioId}, Tipo: {TipoTraspaso})", 
 								traspaso.Id, estadoActual, traspaso.UsuarioInicioId, traspaso.TipoTraspaso);
 						}
 
@@ -455,7 +527,7 @@ namespace SGA_Api.Services
 							}
 							else
 							{
-								logger.LogWarning("?? No se puede enviar notificaci�n para traspaso {TraspasoId}: CodigoIdentificador={CodigoIdentificador}, UsuarioId={UsuarioId}", 
+								logger.LogWarning("?? No se puede enviar notificación para traspaso {TraspasoId}: CodigoIdentificador={CodigoIdentificador}, UsuarioId={UsuarioId}", 
 									traspaso.Id, codigoIdentificador, traspaso.UsuarioInicioId);
 							}
 					}
@@ -500,19 +572,16 @@ namespace SGA_Api.Services
 
 				var codigoIdentificador = tipoTraspaso == "PALET" ? codigoPalet : codigoArticulo;
 
-				logger.LogDebug("?? Preparando notificaci�n: TraspasoId={TraspasoId}, UsuarioId={UsuarioId}, Tipo={TipoTraspaso}, Codigo={CodigoIdentificador}, Estado={EstadoActual}", 
-					traspasoId, usuarioId, tipoTraspaso, codigoIdentificador, estadoActual);
 
 				if (usuarioId <= 0 || string.IsNullOrEmpty(codigoIdentificador))
 				{
-					logger.LogWarning("?? No se puede enviar notificaci�n: UsuarioId={UsuarioId}, CodigoIdentificador={CodigoIdentificador}", usuarioId, codigoIdentificador);
+					logger.LogWarning("?? No se puede enviar notificación: UsuarioId={UsuarioId}, CodigoIdentificador={CodigoIdentificador}", usuarioId, codigoIdentificador);
 					return;
 				}
 
 				// Obtener informaci�n adicional del traspaso desde la base de datos
 				var informacionAdicional = await ObtenerInformacionAdicionalTraspasoAsync(traspasoId, tipoTraspaso, logger);
 				
-				logger.LogDebug("?? Informaci�n adicional obtenida: '{InformacionAdicional}'", informacionAdicional);
 
 				string titulo, mensaje, tipoNotificacion;
 
@@ -524,31 +593,30 @@ namespace SGA_Api.Services
 						if (tipoTraspaso == "PALET")
 							mensaje = $"Traspaso de palet {codigoIdentificador} completado exitosamente";
 						else
-							mensaje = $"Traspaso de art�culo {codigoIdentificador} completado exitosamente";
+							mensaje = $"Traspaso de artículo {codigoIdentificador} completado exitosamente";
 						tipoNotificacion = "success";
 						break;
 
 					case "PENDIENTE_ERP":
 						titulo = "Traspaso en Proceso";
 						if (tipoTraspaso == "PALET")
-							mensaje = $"Traspaso de palet {codigoIdentificador} proces�ndose";
+							mensaje = $"Traspaso de palet {codigoIdentificador} procesándose";
 						else
-							mensaje = $"Traspaso de art�culo {codigoIdentificador} proces�ndose";
+							mensaje = $"Traspaso de artículo {codigoIdentificador} procesándose";
 						tipoNotificacion = "info";
 						break;
 
 					case "ERROR_ERP":
 						titulo = "Error en Traspaso";
 						if (tipoTraspaso == "PALET")
-							mensaje = $"Traspaso de palet {codigoIdentificador} fall�";
+							mensaje = $"Traspaso de palet {codigoIdentificador} falló";
 						else
-							mensaje = $"Traspaso de art�culo {codigoIdentificador} fall�";
+							mensaje = $"Traspaso de artículo {codigoIdentificador} falló";
 						tipoNotificacion = "error";
 						break;
 
 					default:
 						// Para otros estados, no enviar notificaci�n espec�fica
-						logger.LogDebug("?? Estado no notificable: {EstadoActual}", estadoActual);
 						return;
 				}
 
@@ -571,7 +639,7 @@ namespace SGA_Api.Services
 				}
 				catch (Exception ex)
 				{
-					logger.LogError(ex, "? Error cr�tico al guardar notificaci�n en BD para traspaso {TraspasoId}", traspasoId);
+					logger.LogError(ex, "? Error crítico al guardar notificación en BD para traspaso {TraspasoId}", traspasoId);
 					// Continuar con SignalR aunque falle la BD
 				}
 
@@ -585,18 +653,16 @@ namespace SGA_Api.Services
 					try
 					{
 						intento++;
-						logger.LogDebug("?? Enviando notificaci�n SignalR (intento {Intento}/{MaxIntentos}): {Titulo} - {Mensaje}", 
-							intento, maxIntentos, titulo, mensaje);
 
 						await notificacionesService.NotificarPopupUsuarioAsync(usuarioId, titulo, mensajeCompleto, tipoNotificacion);
 						enviadoSignalR = true;
 						
-						logger.LogInformation("? Notificaci�n SignalR enviada exitosamente para traspaso {TraspasoId}: {EstadoAnterior} -> {EstadoActual} | BD: {GuardadoEnBD}", 
-							traspasoId, estadoAnterior, estadoActual, guardadoEnBD ? "?" : "?");
+											logger.LogInformation("Notificación enviada para traspaso {TraspasoId}: {EstadoAnterior} -> {EstadoActual}", 
+												traspasoId, estadoAnterior, estadoActual);
 					}
 					catch (Exception ex)
 					{
-						logger.LogWarning(ex, "?? Error al enviar notificaci�n SignalR (intento {Intento}/{MaxIntentos}) para traspaso {TraspasoId}", 
+						logger.LogWarning(ex, "?? Error al enviar notificación SignalR (intento {Intento}/{MaxIntentos}) para traspaso {TraspasoId}", 
 							intento, maxIntentos, traspasoId);
 						
 						if (intento < maxIntentos)
@@ -608,14 +674,14 @@ namespace SGA_Api.Services
 
 				if (!enviadoSignalR)
 				{
-					logger.LogError("? No se pudo enviar notificaci�n SignalR despu�s de {MaxIntentos} intentos para traspaso {TraspasoId} | BD: {GuardadoEnBD}", 
+					logger.LogError("? No se pudo enviar notificación SignalR después de {MaxIntentos} intentos para traspaso {TraspasoId} | BD: {GuardadoEnBD}", 
 						maxIntentos, traspasoId, guardadoEnBD ? "?" : "?");
 				}
 			}
 			catch (Exception ex)
 			{
 				var traspasoId = traspaso.GetType().GetProperty("Id")?.GetValue(traspaso)?.ToString() ?? "desconocido";
-				logger.LogError(ex, "? Error cr�tico al enviar notificaci�n para traspaso {TraspasoId}", traspasoId);
+				logger.LogError(ex, "? Error crítico al enviar notificación para traspaso {TraspasoId}", traspasoId);
 			}
 		}
 
@@ -668,14 +734,12 @@ namespace SGA_Api.Services
 				// Agregar ubicaci�n formateada
 				if (!string.IsNullOrEmpty(ubicacionOrigen) || !string.IsNullOrEmpty(ubicacionDestino))
 				{
-					informacion.Add($"Ubicaci�n: {ubicacionOrigen} ? {ubicacionDestino}");
+					informacion.Add($"Ubicación: {ubicacionOrigen} - {ubicacionDestino}");
 				}
 
 				// Para traspasos de art�culo, obtener cantidad y descripci�n
 				if (tipoTraspaso == "ARTICULO" && !string.IsNullOrEmpty(traspaso.CodigoArticulo))
 				{
-					logger.LogDebug("?? Buscando informaci�n de cantidad para TraspasoId={TraspasoId}, CodigoArticulo={CodigoArticulo}", 
-						traspasoId, traspaso.CodigoArticulo);
 
 					var cantidadEncontrada = false;
 
@@ -683,7 +747,6 @@ namespace SGA_Api.Services
 					if (traspaso.Cantidad != null && traspaso.Cantidad != 0)
 					{
 						informacion.Add($"Cantidad: {Math.Abs(traspaso.Cantidad.Value):F4}");
-						logger.LogDebug("? Cantidad encontrada en Traspasos: {Cantidad}", Math.Abs(traspaso.Cantidad.Value));
 						cantidadEncontrada = true;
 					}
 
@@ -696,13 +759,10 @@ namespace SGA_Api.Services
 
 						if (tempLinea != null)
 						{
-							logger.LogDebug("?? TempLinea encontrada: TraspasoId={TraspasoId}, CodigoArticulo={CodigoArticulo}, Cantidad={Cantidad}, UnidadMedida={UnidadMedida}", 
-								traspasoId, traspaso.CodigoArticulo, tempLinea.Cantidad, tempLinea.UnidadMedida);
 							
 							if (tempLinea.Cantidad != 0)
 							{
 								informacion.Add($"Cantidad: {Math.Abs(tempLinea.Cantidad):F4}");
-								logger.LogDebug("? Cantidad encontrada en TempPaletLineas: {Cantidad}", Math.Abs(tempLinea.Cantidad));
 								cantidadEncontrada = true;
 							}
 						}
@@ -711,8 +771,6 @@ namespace SGA_Api.Services
 					// 3. TERCERO: Buscar en PaletLineas (para l�neas ya consolidadas)
 					if (!cantidadEncontrada)
 					{
-						logger.LogDebug("?? TempLinea NO encontrada para TraspasoId={TraspasoId}, CodigoArticulo={CodigoArticulo}, buscando en PaletLineas", 
-							traspasoId, traspaso.CodigoArticulo);
 						
 						var paletLinea = await dbContext.PaletLineas
 							.Where(pl => pl.TraspasoId == traspasoId && pl.CodigoArticulo == traspaso.CodigoArticulo)
@@ -720,13 +778,10 @@ namespace SGA_Api.Services
 
 						if (paletLinea != null)
 						{
-							logger.LogDebug("?? PaletLinea encontrada: TraspasoId={TraspasoId}, CodigoArticulo={CodigoArticulo}, Cantidad={Cantidad}, UnidadMedida={UnidadMedida}", 
-								traspasoId, traspaso.CodigoArticulo, paletLinea.Cantidad, paletLinea.UnidadMedida);
 							
 							if (paletLinea.Cantidad != 0)
 							{
 								informacion.Add($"Cantidad: {Math.Abs(paletLinea.Cantidad):F4}");
-								logger.LogDebug("? Cantidad encontrada en PaletLineas: {Cantidad}", Math.Abs(paletLinea.Cantidad));
 								cantidadEncontrada = true;
 							}
 						}
@@ -735,22 +790,17 @@ namespace SGA_Api.Services
 					// 4. Si no encontramos cantidad en ning�n lado, log de debug
 					if (!cantidadEncontrada)
 					{
-						logger.LogWarning("?? No se encontr� informaci�n de cantidad para TraspasoId={TraspasoId}, CodigoArticulo={CodigoArticulo}", 
+						logger.LogDebug("No se encontró información de cantidad para TraspasoId={TraspasoId}, CodigoArticulo={CodigoArticulo}", 
 							traspasoId, traspaso.CodigoArticulo);
-						
-						// Debug: mostrar todos los datos del traspaso
-						logger.LogWarning("?? Datos del traspaso: Cantidad={Cantidad}, AlmacenOrigen={AlmacenOrigen}, AlmacenDestino={AlmacenDestino}, UbicacionOrigen={UbicacionOrigen}, UbicacionDestino={UbicacionDestino}", 
-							traspaso.Cantidad, traspaso.AlmacenOrigen, traspaso.AlmacenDestino, traspaso.UbicacionOrigen, traspaso.UbicacionDestino);
 					}
 				}
 
 				var resultado = string.Join("\n", informacion);
-				logger.LogDebug("?? Resultado final de informaci�n adicional: '{Resultado}'", resultado);
 				return resultado;
 			}
 			catch (Exception ex)
 			{
-				logger.LogWarning(ex, "Error al obtener informaci�n adicional del traspaso {TraspasoId}", traspasoId);
+				logger.LogWarning(ex, "Error al obtener información adicional del traspaso {TraspasoId}", traspasoId);
 				return "";
 			}
 		}
@@ -786,7 +836,7 @@ namespace SGA_Api.Services
 						Mensaje = mensaje,
 						EstadoAnterior = estadoAnterior,
 						EstadoActual = estadoActual,
-						FechaCreacion = DateTime.UtcNow,
+						FechaCreacion = DateTime.Now,
 						EsActiva = true,
 						EsGrupal = false,
 						GrupoDestino = null,
@@ -801,7 +851,7 @@ namespace SGA_Api.Services
 						IdDestinatario = Guid.NewGuid(),
 						IdNotificacion = notificacion.IdNotificacion,
 						UsuarioId = usuarioId,
-						FechaCreacion = DateTime.UtcNow,
+						FechaCreacion = DateTime.Now,
 						EsActiva = true
 					};
 
@@ -811,25 +861,82 @@ namespace SGA_Api.Services
 					await dbContext.SaveChangesAsync();
 					await transaction.CommitAsync();
 
-					logger.LogDebug("?? Notificaci�n guardada en BD: {IdNotificacion} para usuario {UsuarioId}", 
-						notificacion.IdNotificacion, usuarioId);
 
 					return true;
 				}
 				catch (Exception ex)
 				{
 					await transaction.RollbackAsync();
-					logger.LogError(ex, "? Error al guardar notificaci�n en BD para traspaso {ProcesoId}, usuario {UsuarioId}", 
+					logger.LogError(ex, "? Error al guardar notificación en BD para traspaso {ProcesoId}, usuario {UsuarioId}", 
 						procesoId, usuarioId);
 					return false;
 				}
 			}
 			catch (Exception ex)
 			{
-				logger.LogError(ex, "? Error cr�tico al guardar notificaci�n en BD para traspaso {ProcesoId}, usuario {UsuarioId}", 
+				logger.LogError(ex, "? Error crítico al guardar notificación en BD para traspaso {ProcesoId}, usuario {UsuarioId}", 
 					procesoId, usuarioId);
-				return false;
-			}
+			return false;
 		}
 	}
+	
+	/// <summary>
+	/// Intenta obtener la descripción de un artículo desde múltiples fuentes
+	/// </summary>
+	private async Task<string?> ObtenerDescripcionArticuloAsync(
+		AuroraSgaDbContext dbContext,
+		SageDbContext sageDbContext,
+		Guid paletId,
+		string codigoArticulo,
+		short codigoEmpresa,
+		ILogger<TraspasoFinalizacionBackgroundService> logger)
+	{
+		try
+		{
+			// 1. Buscar en PaletLineas del mismo palet
+			var descripcion = await dbContext.PaletLineas
+				.Where(l => l.PaletId == paletId && 
+							l.CodigoArticulo == codigoArticulo && 
+							!string.IsNullOrWhiteSpace(l.DescripcionArticulo))
+				.Select(l => l.DescripcionArticulo)
+				.FirstOrDefaultAsync();
+			
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				return descripcion.Trim();
+			
+			// 2. Buscar en TempPaletLineas del mismo palet
+			descripcion = await dbContext.TempPaletLineas
+				.Where(l => l.PaletId == paletId && 
+							l.CodigoArticulo == codigoArticulo && 
+							!string.IsNullOrWhiteSpace(l.DescripcionArticulo))
+				.Select(l => l.DescripcionArticulo)
+				.FirstOrDefaultAsync();
+			
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				return descripcion.Trim();
+			
+			// 3. ÚLTIMO RECURSO: Buscar en la tabla maestra de Articulos
+			descripcion = await sageDbContext.Articulos
+				.Where(a => a.CodigoEmpresa == codigoEmpresa && 
+							a.CodigoArticulo == codigoArticulo &&
+							!string.IsNullOrWhiteSpace(a.DescripcionArticulo))
+				.Select(a => a.DescripcionArticulo)
+				.FirstOrDefaultAsync();
+			
+			if (!string.IsNullOrWhiteSpace(descripcion))
+			{
+				logger.LogInformation("✅ Descripción recuperada desde tabla Articulos para {CodigoArticulo}: {Descripcion}", 
+					codigoArticulo, descripcion);
+				return descripcion.Trim();
+			}
+			
+			return null;
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "⚠️ Error al intentar recuperar descripción para artículo {CodigoArticulo}", codigoArticulo);
+			return null;
+		}
+	}
+}
 }

@@ -7,5 +7,7 @@ data class User(
     val codigosAlmacen: List<String>,
     val empresas: List<Empresa>,         // ← lista de empresas permitidas
     val codigoCentro: String,             // ← valor por defecto que viene en login
-    val impresora: String? = null
+    val impresora: String? = null,
+    val mrhLimiteInventarioEuros: Double? = null,  // Límite de inventario en euros
+    val mrhLimiteInventarioUnidades: Double? = null  // Límite de inventario en unidades
 )

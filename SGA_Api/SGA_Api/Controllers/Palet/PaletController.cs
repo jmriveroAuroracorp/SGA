@@ -168,6 +168,7 @@ public class PaletController : ControllerBase
 			Id = palet.Id,
 			CodigoEmpresa = palet.CodigoEmpresa,
 			Codigo = palet.Codigo,
+			CodigoGS1 = palet.CodigoGS1,
 			Estado = palet.Estado,
 			TipoPaletCodigo = palet.TipoPaletCodigo,
 			FechaApertura = palet.FechaApertura,
@@ -192,6 +193,46 @@ public class PaletController : ControllerBase
 	}
 
 	#endregion
+
+	//#region GET: Por Id
+	//[HttpGet("{id:guid}", Name = "GetPaletById")]
+	//public async Task<ActionResult<PaletDto>> GetPaletById(Guid id)
+	//{
+	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
+	//	if (palet == null) return NotFound();
+
+	//	var nombreDict = await _auroraSgaContext.vUsuariosConNombre
+	//		.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
+	//	var dto = new PaletDto
+	//	{
+	//		Id = palet.Id,
+	//		CodigoEmpresa = palet.CodigoEmpresa,
+	//		Codigo = palet.Codigo,
+	//		Estado = palet.Estado,
+	//		TipoPaletCodigo = palet.TipoPaletCodigo,
+	//		FechaApertura = palet.FechaApertura,
+	//		FechaCierre = palet.FechaCierre,
+	//		UsuarioAperturaId = palet.UsuarioAperturaId,
+	//		UsuarioCierreId = palet.UsuarioCierreId,
+	//		Altura = palet.Altura,
+	//		Peso = palet.Peso,
+	//		EtiquetaGenerada = palet.EtiquetaGenerada,
+	//		IsVaciado = palet.IsVaciado,
+	//		FechaVaciado = palet.FechaVaciado,
+	//		OrdenTrabajoId = palet.OrdenTrabajoId
+	//	};
+
+	//	if (dto.UsuarioAperturaId.HasValue && nombreDict.TryGetValue(dto.UsuarioAperturaId.Value, out var nombreA))
+	//		dto.UsuarioAperturaNombre = nombreA;
+
+	//	if (dto.UsuarioCierreId.HasValue && nombreDict.TryGetValue(dto.UsuarioCierreId.Value, out var nombreC))
+	//		dto.UsuarioCierreNombre = nombreC;
+
+	//	return Ok(dto);
+	//}
+
+	//#endregion
 
 	//#region POST: Crear palet
 	//[HttpPost]

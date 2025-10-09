@@ -19,6 +19,10 @@ namespace SGA_Desktop
 	{
 		public App()
 		{
+			// Configurar cultura española para toda la aplicación
+			System.Globalization.CultureInfo.DefaultThreadCurrentCulture = new System.Globalization.CultureInfo("es-ES");
+			System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = new System.Globalization.CultureInfo("es-ES");
+
 			AppDomain.CurrentDomain.UnhandledException += (s, e) =>
 			{
 				MessageBox.Show(e.ExceptionObject.ToString(), "Error global");

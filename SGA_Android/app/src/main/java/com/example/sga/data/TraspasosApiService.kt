@@ -96,8 +96,7 @@ interface TraspasosApiService {
     @GET("Traspasos/pendiente-usuario")
     fun comprobarTraspasoPendiente(
         @Query("usuarioId") usuarioId: Int
-    ): Call<TraspasoPendienteDto>
-
+    ): Call<List<TraspasoPendienteDto>>
     @POST("Traspasos/mover-palet")
     fun moverPalet(@Body dto: MoverPaletDto): Call<MoverPaletResponse>
 
@@ -107,13 +106,20 @@ interface TraspasosApiService {
         @Body dto: FinalizarTraspasoPaletDto
     ): Call<Void>
 
-    @PUT("traspasos/palet/{paletId}/finalizar")
-    fun finalizarTraspasoPaletPorPaletId(
-        @Path("paletId") paletId: String,
-        @Body dto: FinalizarTraspasoPaletDto
-    ): Call<Void>
-
-    @GET("Traspaso/estado-usuario")
+    @GET("Traspasos/estado-usuario")
     fun obtenerEstadosTraspasosPorUsuario(@Query("usuarioId") usuarioId: Int): Call<List<EstadoTraspasosService.TraspasoEstadoDto>>
 
+    @GET("ubicaciones/validar-ubicacion")
+    fun validarUbicacionDestino(
+        @Query("paletId") paletId: String,
+        @Query("codigoAlmacen") codigoAlmacen: String,
+        @Query("ubicacion") ubicacion: String
+    ): Call<ValidarUbicacionResponse>
+
+    @GET("Traspasos/articulo/precheck-finalizar")
+    fun precheckFinalizarArticulo(
+        @Query("codigoEmpresa") codigoEmpresa: Short,
+        @Query("almacenDestino") almacenDestino: String,
+        @Query("ubicacionDestino") ubicacionDestino: String
+    ): Call<PrecheckResp>
 }

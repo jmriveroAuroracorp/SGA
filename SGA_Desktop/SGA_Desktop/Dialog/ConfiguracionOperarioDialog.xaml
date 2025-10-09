@@ -94,6 +94,41 @@
                         </Grid>
                     </GroupBox>
 
+                    <!-- Rol SGA -->
+                    <GroupBox Header="Rol de Notificaciones SGA" Margin="0,0,0,15">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Selección de rol -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Rol de notificaciones:" VerticalAlignment="Center" Margin="0,5"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="CmbRolSga" Margin="0,5" 
+                                      DisplayMemberPath="Nombre" SelectedValuePath="Id"
+                                      SelectionChanged="CmbRolSga_SelectionChanged"/>
+
+                            <!-- Información del nivel jerárquico -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Nivel jerárquico:" VerticalAlignment="Center" Margin="0,5"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,5">
+                                <TextBlock x:Name="TxtNivelJerarquico" Text="-" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtDescripcionNivel" Text="" Margin="10,0,0,0" VerticalAlignment="Center" FontStyle="Italic" Foreground="{StaticResource BrushSecundario}"/>
+                            </StackPanel>
+
+                            <!-- Descripción del rol -->
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Descripción:" VerticalAlignment="Top" Margin="0,5"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TxtDescripcionRol" 
+                                       Text="Seleccione un rol de notificaciones para ver su descripción" 
+                                       TextWrapping="Wrap" Margin="0,5" FontStyle="Italic" 
+                                       Foreground="{StaticResource BrushSecundario}"/>
+                        </Grid>
+                    </GroupBox>
+
                     <!-- Límites del operario -->
                     <GroupBox Header="Límites Diarios Inventario/Conteos" Margin="0,0,0,15">
                         <Grid Margin="10">

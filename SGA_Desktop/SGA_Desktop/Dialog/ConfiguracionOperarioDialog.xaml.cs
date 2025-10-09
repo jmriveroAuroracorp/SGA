@@ -18,6 +18,9 @@ namespace SGA_Desktop.Dialog
         private readonly OperariosConfiguracionService _service;
         private readonly ConfiguracionesPredefinidasService _configuracionesService;
         private readonly OperarioConfiguracionDto _operario;
+        
+        // Lista de roles SGA disponibles
+        private List<RolSgaDto> _rolesSgaDisponibles;
 
         // Colecciones para los controles
         private readonly ObservableCollection<EmpresaOperarioDto> _empresas;
@@ -81,6 +84,9 @@ namespace SGA_Desktop.Dialog
             {
                 // Cargar configuraciones predefinidas
                 await CargarConfiguracionesPredefinidasAsync();
+                
+                // Cargar roles SGA
+                await CargarRolesSgaAsync();
                 
                 // Cargar límites
                 TxtLimiteEuros.Text = _operario.LimiteInventarioEuros?.ToString("F4") ?? "";
@@ -313,20 +319,53 @@ namespace SGA_Desktop.Dialog
                     updateDto.AlmacenesAsignar = almacenesActuales.ToList();
                 }
 
-                // Guardar
-                try
-                {
-                    var resultado = await _service.ActualizarOperarioAsync(updateDto.Id, updateDto);
+        // DEBUG: Solo información del ROL
+        MessageBox.Show($"DEBUG: Operario {_operario.Id} ({_operario.Nombre})\n" +
+                       $"IdRol: {_operario.IdRol}\n" +
+                       $"RolNombre: {_operario.RolNombre}\n" +
+                       $"NivelJerarquico: {_operario.NivelJerarquico}",
+                       "DEBUG - ROL", MessageBoxButton.OK, MessageBoxImage.Information);
+
+        // Guardar configuración del operario
+        try
+        {
+            var resultado = await _service.ActualizarOperarioAsync(updateDto.Id, updateDto);
+                    
+                    // Verificar si hubo cambios en el rol
+                    bool huboCambioRol = false;
+                    
+                    // Asignar rol SGA si se ha seleccionado uno
+                    if (_operario.IdRol.HasValue && _operario.IdRol.Value > 0)
+                    {
+                        var rolAsignado = await _service.AsignarRolOperarioAsync(_operario.Id, _operario.IdRol.Value);
+                        if (rolAsignado)
+                        {
+                            huboCambioRol = true;
+                        }
+                        else
+                        {
+                            var warningDialog = new WarningDialog(
+                                "Advertencia",
+                                "La configuración se guardó correctamente, pero hubo un problema al asignar el rol SGA. Intente asignarlo nuevamente.",
+                                "\uE814" // ícono de advertencia
+                            );
+                            var ownerWarning = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                             ?? Application.Current.MainWindow;
+                            if (ownerWarning != null && ownerWarning != warningDialog)
+                                warningDialog.Owner = ownerWarning;
+                            warningDialog.ShowDialog();
+                        }
+                    }
                     
                     var successDialog = new WarningDialog(
                         "Configuración de Operarios",
-                        resultado.HuboCambios ? "Configuración actualizada correctamente." : "No se detectaron cambios en la configuración.",
+                        (resultado.HuboCambios || huboCambioRol) ? "Configuración actualizada correctamente." : "No se detectaron cambios en la configuración.",
                         "\uE946" // ícono de información/éxito
                     );
-                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-                             ?? Application.Current.MainWindow;
-                    if (owner != null && owner != successDialog)
-                        successDialog.Owner = owner;
+                    var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                      ?? Application.Current.MainWindow;
+                    if (ownerSuccess != null && ownerSuccess != successDialog)
+                        successDialog.Owner = ownerSuccess;
                     successDialog.ShowDialog();
                     
                     DialogResult = true;
@@ -1443,6 +1482,111 @@ namespace SGA_Desktop.Dialog
                     errorDialog.Owner = owner;
                 errorDialog.ShowDialog();
             }
+        }
+
+        #endregion
+
+        #region Roles SGA
+
+        private async Task CargarRolesSgaAsync()
+        {
+            try
+            {
+                var roles = await _service.ObtenerRolesSgaAsync();
+                if (roles != null && roles.Any())
+                {
+                    _rolesSgaDisponibles = roles;
+                    
+                    // Agregar opción "Sin rol"
+                    var rolesConOpcionVacia = new List<RolSgaDto>
+                    {
+                        new RolSgaDto { Id = 0, Nombre = "-- Sin rol asignado --", Descripcion = "No se ha asignado ningún rol SGA", NivelJerarquico = 0 }
+                    };
+                    rolesConOpcionVacia.AddRange(roles);
+                    
+                    CmbRolSga.ItemsSource = rolesConOpcionVacia;
+                    
+                    // Seleccionar el rol actual del operario si existe
+                    if (_operario.IdRol.HasValue && _operario.IdRol.Value > 0)
+                    {
+                        var rolActual = rolesConOpcionVacia.FirstOrDefault(r => r.Id == _operario.IdRol.Value);
+                        if (rolActual != null)
+                        {
+                            CmbRolSga.SelectedItem = rolActual;
+                        }
+                        else
+                        {
+                            CmbRolSga.SelectedIndex = 0; // Sin rol asignado
+                        }
+                    }
+                    else
+                    {
+                        CmbRolSga.SelectedIndex = 0; // Sin rol asignado
+                    }
+                }
+                else
+                {
+                    var warningDialog = new WarningDialog(
+                        "Advertencia",
+                        "No se pudieron cargar los roles SGA disponibles.",
+                        "\uE814" // ícono de advertencia
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != warningDialog)
+                        warningDialog.Owner = owner;
+                    warningDialog.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al cargar roles SGA: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
+            }
+        }
+
+        private void CmbRolSga_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CmbRolSga.SelectedItem is RolSgaDto rolSeleccionado)
+            {
+                // Actualizar información del rol
+                _operario.IdRol = rolSeleccionado.Id > 0 ? rolSeleccionado.Id : null;
+                _operario.RolNombre = rolSeleccionado.Id > 0 ? rolSeleccionado.Nombre : null;
+                _operario.NivelJerarquico = rolSeleccionado.Id > 0 ? rolSeleccionado.NivelJerarquico : null;
+                
+                // Actualizar UI
+                if (rolSeleccionado.Id > 0)
+                {
+                    TxtNivelJerarquico.Text = rolSeleccionado.NivelJerarquico.ToString();
+                    TxtDescripcionNivel.Text = ObtenerDescripcionNivel(rolSeleccionado.NivelJerarquico);
+                    TxtDescripcionRol.Text = rolSeleccionado.Descripcion;
+                }
+                else
+                {
+                    TxtNivelJerarquico.Text = "-";
+                    TxtDescripcionNivel.Text = "";
+                    TxtDescripcionRol.Text = "No se ha asignado ningún rol SGA al operario";
+                }
+            }
+        }
+
+        private string ObtenerDescripcionNivel(int nivel)
+        {
+            return nivel switch
+            {
+                10 => "(Operario - Acceso básico)",
+                20 => "(Supervisor - Acceso intermedio)",
+                30 => "(Admin - Acceso completo)",
+                _ => $"(Nivel {nivel})"
+            };
         }
 
         #endregion

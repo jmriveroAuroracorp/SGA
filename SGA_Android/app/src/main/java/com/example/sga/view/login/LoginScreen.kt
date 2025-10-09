@@ -24,6 +24,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import com.example.sga.R.drawable.logo_aurorasga
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 
 @Composable
 fun LoginScreen(
@@ -39,8 +41,17 @@ fun LoginScreen(
     var contraseña by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
 
+    // Auto-ocultar error después de 2 segundos
+    LaunchedEffect(localError) {
+        if (localError.isNotBlank()) {
+            kotlinx.coroutines.delay(2000)
+            localError = ""
+        }
+    }
+
     val user by loginViewModel.user.collectAsState()
     val backendError by loginViewModel.error.collectAsState()
+    val isLoading by loginViewModel.isLoading.collectAsState() // Agregar estado de carga
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusContraseña = remember { androidx.compose.ui.focus.FocusRequester() }
     // Navegación reactiva según el destino que emita el ViewModel
@@ -49,6 +60,12 @@ fun LoginScreen(
             when (destino) {
                 is LoginViewModel.Destino.Traspasos -> navController.navigate("traspasos/${destino.esPalet}/${destino.directoDesdePaletCerrado}") {
                     popUpTo("login") { inclusive = true } // ✅ Elimina Login del backstack
+                }
+                LoginViewModel.Destino.OrdenTraspaso -> {
+                    android.util.Log.d("LOGIN_NAVIGATION", "🔍 Navegando a ordenes (con traspaso pendiente)")
+                    navController.navigate("ordenes") {
+                        popUpTo("login") { inclusive = true }
+                    }
                 }
                 LoginViewModel.Destino.Home -> navController.navigate("home") {
                     popUpTo("login") { inclusive = true } // ✅ Igual aquí
@@ -96,6 +113,34 @@ fun LoginScreen(
             text = "Acceso:",
             style = MaterialTheme.typography.titleMedium
         )
+
+        // Mostrar error si existe
+        if (localError.isNotBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Error",
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = localError,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -171,15 +216,20 @@ fun LoginScreen(
                     }
                 )
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading // Deshabilitar durante carga
         ) {
-            Text("Entrar")
-        }
-
-        val errorToShow = localError.ifBlank { backendError ?: "" }
-        if (errorToShow.isNotBlank()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(text = errorToShow, color = MaterialTheme.colorScheme.error)
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Conectando...")
+            } else {
+                Text("Entrar")
+            }
         }
     }
     // Diálogo de confirmación

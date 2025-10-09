@@ -119,7 +119,7 @@
                                                                                     <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                                                                     <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
                                                                                     <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=d}" Margin="2,0,0,0"/>
+                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,0,0"/>
                                                                                 </StackPanel>
 
                                                                                 <!-- NUEVA FILA: Información del palet (solo si es paletizado) -->

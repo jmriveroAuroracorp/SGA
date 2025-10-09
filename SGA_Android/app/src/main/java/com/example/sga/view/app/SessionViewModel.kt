@@ -51,6 +51,7 @@ class SessionViewModel : ViewModel() {
         Log.w("SGA_SESSION", "⚠️ Sesión cerrada o token inválido. Cerrando sesión.")
         sessionToken = null
         setUser(null)
+        _tokenTimestamp.value = null  // ✅ Limpiar también el timestamp
     }
     private val _mensajeCaducidad = MutableStateFlow(false)
     val mensajeCaducidad: StateFlow<Boolean> = _mensajeCaducidad

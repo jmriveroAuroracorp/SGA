@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Windows.Data;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -24,8 +25,18 @@ namespace SGA_Desktop.ViewModels
         public string AlmacenOrigenNombre { get; set; }
         public decimal CantidadDisponible { get; set; }
         public ObservableCollection<AlmacenDto> AlmacenesDestino { get; set; }
+        
+        // Vista filtrable para almacenes destino
+        public ICollectionView AlmacenesDestinoView { get; private set; }
+        
         [ObservableProperty]
         private AlmacenDto almacenDestinoSeleccionado;
+        
+        [ObservableProperty]
+        private string filtroAlmacenesDestino = "";
+        
+        [ObservableProperty]
+        private bool isDropDownOpenAlmacenes = false;
         [ObservableProperty]
         private string cantidadATraspasarTexto;
 
@@ -69,34 +80,107 @@ namespace SGA_Desktop.ViewModels
             ConfirmarCommand.NotifyCanExecuteChanged();
         }
 
-        partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto value)
-        {
-            ConfirmarCommand.NotifyCanExecuteChanged();
-            _ = CargarUbicacionesDestinoAsync();
-        }
+    partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto value)
+    {
+        ConfirmarCommand.NotifyCanExecuteChanged();
+        _ = CargarUbicacionesDestinoAsync();
+    }
+
+    // NUEVO: Cuando cambia la ubicación destino, consultar palets disponibles
+    partial void OnUbicacionDestinoSeleccionadaChanged(UbicacionDto value)
+    {
+        _ = ConsultarPaletsDisponiblesAsync();
+    }
 
         [ObservableProperty]
         private ObservableCollection<UbicacionDto> ubicacionesDestino = new();
 
-        [ObservableProperty]
-        private UbicacionDto ubicacionDestinoSeleccionada;
+    [ObservableProperty]
+    private UbicacionDto ubicacionDestinoSeleccionada;
 
-        private readonly UbicacionesService _ubicacionesService = new UbicacionesService();
+    // NUEVO: Propiedades para selección de palets
+    [ObservableProperty]
+    private ObservableCollection<PaletDisponibleDto> paletsDisponibles = new();
 
-        private async Task CargarUbicacionesDestinoAsync()
+    [ObservableProperty]
+    private PaletDisponibleDto paletDestinoSeleccionado;
+
+    [ObservableProperty]
+    private bool mostrarSelectorPalets = false;
+
+    private readonly UbicacionesService _ubicacionesService = new UbicacionesService();
+
+    private async Task CargarUbicacionesDestinoAsync()
+    {
+        UbicacionesDestino.Clear();
+        if (AlmacenDestinoSeleccionado == null) return;
+        var lista = await _ubicacionesService.ObtenerUbicacionesAsync(
+            AlmacenDestinoSeleccionado.CodigoAlmacen,
+            SessionManager.EmpresaSeleccionada.Value
+        );
+        if (lista != null)
         {
-            UbicacionesDestino.Clear();
-            if (AlmacenDestinoSeleccionado == null) return;
-            var lista = await _ubicacionesService.ObtenerUbicacionesAsync(
+            foreach (var u in lista)
+                UbicacionesDestino.Add(u);
+        }
+    }
+
+    // NUEVO: Consultar palets disponibles en la ubicación destino
+    private async Task ConsultarPaletsDisponiblesAsync()
+    {
+        // Limpiar lista anterior
+        PaletsDisponibles.Clear();
+        PaletDestinoSeleccionado = null;
+        MostrarSelectorPalets = false;
+
+        // Validar que tengamos almacén y ubicación destino
+        if (AlmacenDestinoSeleccionado == null || UbicacionDestinoSeleccionada == null)
+            return;
+
+        try
+        {
+            // Llamar al endpoint precheck
+            var resultado = await _traspasoService.PrecheckFinalizarArticuloAsync(
+                SessionManager.EmpresaSeleccionada.Value,
                 AlmacenDestinoSeleccionado.CodigoAlmacen,
-                SessionManager.EmpresaSeleccionada.Value
+                UbicacionDestinoSeleccionada.Ubicacion
             );
-            if (lista != null)
+
+            if (resultado != null && resultado.CantidadPalets > 0)
             {
-                foreach (var u in lista)
-                    UbicacionesDestino.Add(u);
+                // Añadir palets a la lista
+                foreach (var palet in resultado.Palets)
+                {
+                    PaletsDisponibles.Add(new PaletDisponibleDto
+                    {
+                        PaletId = palet.PaletId,
+                        CodigoPalet = palet.CodigoPalet,
+                        Estado = palet.Estado,
+                        Cerrado = palet.Cerrado,
+                        Descripcion = palet.Descripcion
+                    });
+                }
+
+                if (resultado.CantidadPalets == 1)
+                {
+                    // Solo hay 1 palet → seleccionarlo automáticamente
+                    PaletDestinoSeleccionado = PaletsDisponibles.First();
+                    MostrarSelectorPalets = false; // No mostrar el selector
+                }
+                else
+                {
+                    // Hay múltiples palets → mostrar selector para que el usuario elija
+                    MostrarSelectorPalets = true;
+                    // No seleccionar ninguno por defecto para forzar la selección manual
+                }
             }
         }
+        catch (Exception ex)
+        {
+            // Si falla el precheck, no pasa nada, funcionará como antes (sin selector)
+            // Opcionalmente podrías loguear o mostrar un mensaje
+        }
+    }
 
         public string CodigoArticulo { get; set; }
         public string UbicacionOrigen => _stockSeleccionado.Ubicacion;
@@ -124,11 +208,15 @@ namespace SGA_Desktop.ViewModels
             _traspasoService = traspasoService;
             _fechaBusqueda = fechaBusqueda;
             
+            // 🔷 NUEVO: La vista filtrable se inicializará después de cargar los datos
+            
             // 🔷 NUEVO: Cargar información del palet
             TipoStock = stockSeleccionado.TipoStock;
             CodigoPalet = stockSeleccionado.CodigoPalet ?? "";
             EstadoPalet = stockSeleccionado.EstadoPalet ?? "";
             
+            // 🔷 NUEVO: Establecer la cantidad disponible como valor por defecto
+            CantidadATraspasarTexto = stockSeleccionado.Disponible.ToString("F4");
             
             _ = InitializeAsync();
         }
@@ -149,6 +237,11 @@ namespace SGA_Desktop.ViewModels
                 foreach (var a in almacenes)
                     AlmacenesDestino.Add(a);
                 OnPropertyChanged(nameof(AlmacenesDestino));
+                
+                // 🔷 NUEVO: Inicializar la vista filtrable después de cargar los datos
+                AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
+                AlmacenesDestinoView.Filter = FiltraAlmacenesDestino;
+                OnPropertyChanged(nameof(AlmacenesDestinoView));
             }
             catch (Exception ex)
             {
@@ -259,28 +352,31 @@ namespace SGA_Desktop.ViewModels
 				}
 			}
 
-			// --- Construir DTO y llamar a API ---
-			var dto = new CrearTraspasoArticuloDto
-			{
-				AlmacenOrigen = _stockSeleccionado.CodigoAlmacen,
-				UbicacionOrigen = _stockSeleccionado.Ubicacion ?? string.Empty,
-				CodigoArticulo = _stockSeleccionado.CodigoArticulo,
-				Cantidad = cantidad,
-				UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
-				AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
-				UbicacionDestino = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino,
-				FechaCaducidad = _stockSeleccionado.FechaCaducidad,
-				Partida = _stockSeleccionado.Partida,
-				Finalizar = true,
-				CodigoEmpresa = empresa,
-				FechaInicio = _fechaBusqueda,
-				DescripcionArticulo = _stockSeleccionado.DescripcionArticulo,
-				UnidadMedida = null,
-				Comentario = comentariosTexto, // Usar comentarios del usuario
+		// --- Construir DTO y llamar a API ---
+		var dto = new CrearTraspasoArticuloDto
+		{
+			AlmacenOrigen = _stockSeleccionado.CodigoAlmacen,
+			UbicacionOrigen = _stockSeleccionado.Ubicacion ?? string.Empty,
+			CodigoArticulo = _stockSeleccionado.CodigoArticulo,
+			Cantidad = cantidad,
+			UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
+			AlmacenDestino = AlmacenDestinoSeleccionado.CodigoAlmacen,
+			UbicacionDestino = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino,
+			FechaCaducidad = _stockSeleccionado.FechaCaducidad,
+			Partida = _stockSeleccionado.Partida,
+			Finalizar = true,
+			CodigoEmpresa = empresa,
+			FechaInicio = _fechaBusqueda,
+			DescripcionArticulo = _stockSeleccionado.DescripcionArticulo,
+			UnidadMedida = null,
+			Comentario = comentariosTexto, // Usar comentarios del usuario
 
-				// 🔹 nuevo flag para que el backend reabra el palet de ORIGEN si estaba cerrado
-				ReabrirSiCerradoOrigen = reabrirOrigen
-			};
+			// 🔹 nuevo flag para que el backend reabra el palet de ORIGEN si estaba cerrado
+			ReabrirSiCerradoOrigen = reabrirOrigen,
+
+			// 🔹 NUEVO: Enviar el palet destino seleccionado manualmente (si existe)
+			PaletIdDestino = PaletDestinoSeleccionado?.PaletId
+		};
 
 			var resultado = await _traspasoService.CrearTraspasoArticuloAsync(dto);
 
@@ -340,6 +436,37 @@ namespace SGA_Desktop.ViewModels
             dialog.ShowDialog();
         }
 
+
+        // Métodos para filtrado de almacenes destino
+        private bool FiltraAlmacenesDestino(object obj)
+        {
+            if (obj is not AlmacenDto almacen) return false;
+            if (string.IsNullOrEmpty(FiltroAlmacenesDestino)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesDestino, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+        
+        // Método para manejar cambios en el filtro
+        partial void OnFiltroAlmacenesDestinoChanged(string value)
+        {
+            AlmacenesDestinoView?.Refresh();
+        }
+        
+        // Comandos para controlar dropdown
+        [RelayCommand]
+        private void AbrirDropDownAlmacenes()
+        {
+            // Limpiar el filtro para permitir escribir desde cero
+            FiltroAlmacenesDestino = "";
+            IsDropDownOpenAlmacenes = true;
+        }
+        
+        [RelayCommand]
+        private void CerrarDropDownAlmacenes()
+        {
+            IsDropDownOpenAlmacenes = false;
+        }
 
         // No es necesario implementar PropertyChanged, lo gestiona ObservableObject
     }

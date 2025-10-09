@@ -7,5 +7,7 @@ data class LoginResponseDto(
     val codigosAlmacen: List<String>,
     val empresas: List<EmpresaDto>,
     val token: String,
-    val codigoCentro: String
+    val codigoCentro: String,
+    val mrhLimiteInventarioEuros: Double? = null,
+    val mrhLimiteInventarioUnidades: Double? = null
 )

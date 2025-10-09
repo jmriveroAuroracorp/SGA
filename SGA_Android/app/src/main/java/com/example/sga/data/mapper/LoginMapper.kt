@@ -17,7 +17,9 @@ class LoginMapper {
                 permisos = dto.codigosAplicacion,
                 codigosAlmacen = dto.codigosAlmacen,
                 empresas = empresas,
-                codigoCentro = dto.codigoCentro
+                codigoCentro = dto.codigoCentro,
+                mrhLimiteInventarioEuros = dto.mrhLimiteInventarioEuros,
+                mrhLimiteInventarioUnidades = dto.mrhLimiteInventarioUnidades
             )
         }
     }

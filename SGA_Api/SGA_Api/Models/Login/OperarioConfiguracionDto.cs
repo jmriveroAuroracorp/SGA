@@ -13,6 +13,11 @@ namespace SGA_Api.Models.Login
         public decimal? LimiteInventarioEuros { get; set; }
         public decimal? LimiteInventarioUnidades { get; set; }
         
+        // Rol SGA asignado
+        public int? IdRol { get; set; }
+        public string? RolNombre { get; set; }
+        public int? NivelJerarquico { get; set; }
+        
         // Permisos del operario
         public List<short> Permisos { get; set; } = new List<short>();
         
@@ -91,6 +96,10 @@ namespace SGA_Api.Models.Login
         public decimal? LimiteImporte { get; set; } // Límite de importe del operario (MRH_LimiteInventarioEuros)
         public decimal? LimiteUnidades { get; set; } // Límite de unidades del operario (MRH_LimiteInventarioUnidades)
         public string LimitesResumen { get; set; } = string.Empty; // Resumen de límites formateado
+        
+        // Rol SGA asignado
+        public string? RolNombre { get; set; }
+        public int? NivelJerarquico { get; set; }
     }
 
     public class EmpresaConfiguracionDto
@@ -129,6 +138,10 @@ namespace SGA_Api.Models.Login
         public int CantidadPermisos { get; set; } // Número de permisos asignados
         public int CantidadAlmacenes { get; set; } // Número de almacenes asignados
         public string? PlantillaAplicada { get; set; } // Nombre de la plantilla aplicada
+        
+        // Rol SGA asignado
+        public string? RolNombre { get; set; }
+        public int? NivelJerarquico { get; set; }
     }
 
     public class PermisoDisponibleDto

@@ -370,6 +370,116 @@ namespace SGA_Desktop.Services
                 return false;
             }
         }
+
+        /// <summary>
+        /// Obtiene los roles SGA disponibles
+        /// </summary>
+        public async Task<List<RolSgaDto>?> ObtenerRolesSgaAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync("rolessga/all");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    
+                    var roles = JsonSerializer.Deserialize<List<RolSgaDto>>(content, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        PropertyNameCaseInsensitive = true
+                    });
+                    
+                    return roles;
+                }
+                
+                return null;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener roles SGA: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtiene el rol sugerido para un operario basado en sus permisos ERP
+        /// </summary>
+        public async Task<RolSugeridoDto?> ObtenerRolSugeridoAsync(int operarioId)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"api/roles-sga/sugerido/{operarioId}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    return JsonSerializer.Deserialize<RolSugeridoDto>(content, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    });
+                }
+                
+                return null;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener rol sugerido para operario {operarioId}: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Asigna un rol SGA a un operario
+        /// </summary>
+        public async Task<bool> AsignarRolOperarioAsync(int operarioId, int rolId)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(rolId, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                });
+                
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PutAsync($"usuarios/{operarioId}/rol", content);
+                
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al asignar rol al operario {operarioId}: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtiene el rol asignado a un operario
+        /// </summary>
+        public async Task<int?> ObtenerRolOperarioAsync(int operarioId)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"api/usuarios/{operarioId}/rol");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var result = JsonSerializer.Deserialize<Dictionary<string, object>>(content, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    });
+                    
+                    if (result != null && result.ContainsKey("rolId"))
+                    {
+                        return Convert.ToInt32(result["rolId"]);
+                    }
+                }
+                
+                return null;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener rol del operario {operarioId}: {ex.Message}", ex);
+            }
+        }
     }
 
     /// <summary>
