@@ -638,8 +638,8 @@ public class TraspasosController : ControllerBase
 			}
 
 		// Determinar palet destino: manual (especificado por usuario) o automático (búsqueda)
-		Guid? paletIdDestino = null;
-		string codigoPaletDestino = null;
+			Guid? paletIdDestino = null;
+			string codigoPaletDestino = null;
 		
 		// OPCIÓN 1: Usuario especificó manualmente el palet destino
 		if (dto.PaletIdDestino.HasValue)
@@ -673,49 +673,19 @@ public class TraspasosController : ControllerBase
 		}
 		// OPCIÓN 2: Búsqueda automática (lógica original)
 		else if (!string.IsNullOrWhiteSpace(dto.AlmacenDestino) && !string.IsNullOrWhiteSpace(dto.UbicacionDestino))
-		{
-			// Buscar palets abiertos en la ubicación destino
-			var paletsAbiertos = await (
-				from p in _context.Palets
-				join l in _context.PaletLineas on p.Id equals l.PaletId
-				where p.Estado == "Abierto"
-					&& p.CodigoEmpresa == dto.CodigoEmpresa
-					&& l.CodigoAlmacen == dto.AlmacenDestino
-					&& l.Ubicacion == dto.UbicacionDestino
-				select new { p, l }
-			).ToListAsync();
-
-			var paletAbiertoEnUbicacion = paletsAbiertos
-				.GroupBy(x => new { x.p.Id, x.p.Codigo, x.p.Estado })
-				.Select(g => new
-				{
-					Palet = g.Key,
-					UltimaLinea = g.OrderByDescending(x => x.l.FechaAgregado).FirstOrDefault()
-				})
-				.Where(x => x.UltimaLinea != null && x.UltimaLinea.l.CodigoAlmacen == dto.AlmacenDestino && x.UltimaLinea.l.Ubicacion == dto.UbicacionDestino)
-				.Select(x => x.Palet.Id)
-				.FirstOrDefault();
-
-			if (paletAbiertoEnUbicacion != Guid.Empty)
 			{
-				paletIdDestino = paletAbiertoEnUbicacion;
-				var palet = await _context.Palets.FindAsync(paletIdDestino);
-				codigoPaletDestino = palet?.Codigo;
-			}
-			else
-			{
-				// Buscar palets cerrados en la ubicación destino
-				var paletsCerrados = await (
+				// Buscar palets abiertos en la ubicación destino
+				var paletsAbiertos = await (
 					from p in _context.Palets
 					join l in _context.PaletLineas on p.Id equals l.PaletId
-					where p.Estado == "Cerrado"
+					where p.Estado == "Abierto"
 						&& p.CodigoEmpresa == dto.CodigoEmpresa
 						&& l.CodigoAlmacen == dto.AlmacenDestino
 						&& l.Ubicacion == dto.UbicacionDestino
 					select new { p, l }
 				).ToListAsync();
 
-				var paletCerradoEnUbicacion = paletsCerrados
+				var paletAbiertoEnUbicacion = paletsAbiertos
 					.GroupBy(x => new { x.p.Id, x.p.Codigo, x.p.Estado })
 					.Select(g => new
 					{
@@ -726,31 +696,61 @@ public class TraspasosController : ControllerBase
 					.Select(x => x.Palet.Id)
 					.FirstOrDefault();
 
-				if (paletCerradoEnUbicacion != Guid.Empty)
+				if (paletAbiertoEnUbicacion != Guid.Empty)
 				{
-					var palet = await _context.Palets.FindAsync(paletCerradoEnUbicacion);
-					// Reabrir el palet
-					palet.Estado = "Abierto";
-					palet.FechaApertura = DateTime.Now; // Siempre usar la hora del servidor/API
-					palet.UsuarioAperturaId = dto.UsuarioId;
-					palet.FechaCierre = null;
-					palet.UsuarioCierreId = null;
-					_context.Palets.Update(palet);
-					_context.LogPalet.Add(new LogPalet
-					{       // (opcional)
-						PaletId = palet.Id,
-						Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
-						IdUsuario = dto.UsuarioId,
-						Accion = "Reabrir",
-						Detalle = "Reapertura automática al recibir stock en DESTINO"
-					});
+					paletIdDestino = paletAbiertoEnUbicacion;
+					var palet = await _context.Palets.FindAsync(paletIdDestino);
+					codigoPaletDestino = palet?.Codigo;
+				}
+				else
+				{
+					// Buscar palets cerrados en la ubicación destino
+					var paletsCerrados = await (
+						from p in _context.Palets
+						join l in _context.PaletLineas on p.Id equals l.PaletId
+						where p.Estado == "Cerrado"
+							&& p.CodigoEmpresa == dto.CodigoEmpresa
+							&& l.CodigoAlmacen == dto.AlmacenDestino
+							&& l.Ubicacion == dto.UbicacionDestino
+						select new { p, l }
+					).ToListAsync();
 
-					await _context.SaveChangesAsync();
-					paletIdDestino = palet.Id;
-					codigoPaletDestino = palet.Codigo;
+					var paletCerradoEnUbicacion = paletsCerrados
+						.GroupBy(x => new { x.p.Id, x.p.Codigo, x.p.Estado })
+						.Select(g => new
+						{
+							Palet = g.Key,
+							UltimaLinea = g.OrderByDescending(x => x.l.FechaAgregado).FirstOrDefault()
+						})
+						.Where(x => x.UltimaLinea != null && x.UltimaLinea.l.CodigoAlmacen == dto.AlmacenDestino && x.UltimaLinea.l.Ubicacion == dto.UbicacionDestino)
+						.Select(x => x.Palet.Id)
+						.FirstOrDefault();
+
+					if (paletCerradoEnUbicacion != Guid.Empty)
+					{
+						var palet = await _context.Palets.FindAsync(paletCerradoEnUbicacion);
+						// Reabrir el palet
+						palet.Estado = "Abierto";
+						palet.FechaApertura = DateTime.Now; // Siempre usar la hora del servidor/API
+						palet.UsuarioAperturaId = dto.UsuarioId;
+						palet.FechaCierre = null;
+						palet.UsuarioCierreId = null;
+						_context.Palets.Update(palet);
+						_context.LogPalet.Add(new LogPalet
+						{       // (opcional)
+							PaletId = palet.Id,
+							Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
+							IdUsuario = dto.UsuarioId,
+							Accion = "Reabrir",
+							Detalle = "Reapertura automática al recibir stock en DESTINO"
+						});
+
+						await _context.SaveChangesAsync();
+						paletIdDestino = palet.Id;
+						codigoPaletDestino = palet.Codigo;
+					}
 				}
 			}
-		}
 
 			var traspaso = new Traspaso
 			{
@@ -989,9 +989,9 @@ public class TraspasosController : ControllerBase
 				? $"Hay un palet CERRADO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {primerPalet.codigoPalet}). Se abrirá automáticamente."
 				: $"Hay un palet ABIERTO en {almacenDestino}-{ubicacionDestinoNormalizada} (Código: {primerPalet.codigoPalet}).";
 
-		return Ok(new
-		{
-			existe = true,
+			return Ok(new
+			{
+				existe = true,
 			// Compatibilidad con código existente (primer palet)
 			paletId = primerPalet.paletId,
 			codigoPalet = primerPalet.codigoPalet,
@@ -1000,7 +1000,7 @@ public class TraspasosController : ControllerBase
 			cantidadPalets = paletsList.Count,
 			palets = paletsList,
 			aviso = mensaje
-		});
+			});
 		}
 		catch (Exception ex)
 		{

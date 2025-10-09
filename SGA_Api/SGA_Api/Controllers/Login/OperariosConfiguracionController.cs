@@ -655,7 +655,8 @@ namespace SGA_Api.Controllers.Login
             bool huboCambios = false;
 
             // Quitar permisos - usar consultas individuales para evitar OPENJSON
-            foreach (var permisoId in quitar)
+            // IMPORTANTE: Nunca quitar permisos < 10 porque son del ERP
+            foreach (var permisoId in quitar.Where(p => p >= 10))
             {
                 var permisosAQuitar = await _context.AccesosOperarios
                     .Where(a => a.Operario == operarioId && a.MRH_CodigoAplicacion == permisoId && a.CodigoEmpresa == 1)

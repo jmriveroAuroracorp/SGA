@@ -544,8 +544,9 @@ namespace SGA_Api.Controllers.Login
                 if (dto.ReemplazarExistente)
                 {
                     // Eliminar permisos actuales
+                    // IMPORTANTE: Nunca eliminar permisos < 10 porque son del ERP
                     var permisosActuales = await _sageContext.AccesosOperarios
-                        .Where(a => a.Operario == dto.OperarioId && a.CodigoEmpresa == 1)
+                        .Where(a => a.Operario == dto.OperarioId && a.CodigoEmpresa == 1 && a.MRH_CodigoAplicacion >= 10)
                         .ToListAsync();
                     _sageContext.AccesosOperarios.RemoveRange(permisosActuales);
 
@@ -682,8 +683,9 @@ namespace SGA_Api.Controllers.Login
             var codigosPermisosPlantilla = configuracion.Permisos.Select(p => p.MRH_CodigoAplicacion).ToList();
 
             // Eliminar permisos que ya no están en la plantilla
+            // IMPORTANTE: Nunca eliminar permisos < 10 porque son del ERP
             var permisosAEliminar = permisosActuales
-                .Where(p => !codigosPermisosPlantilla.Contains(p.MRH_CodigoAplicacion))
+                .Where(p => !codigosPermisosPlantilla.Contains(p.MRH_CodigoAplicacion) && p.MRH_CodigoAplicacion >= 10)
                 .ToList();
 
             foreach (var permisoAEliminar in permisosAEliminar)

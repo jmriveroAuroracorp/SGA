@@ -94,6 +94,11 @@ namespace SGA_Desktop.ViewModels
 		{
 			linea.UbicacionesDestino.Clear();
 			linea.UbicacionDestino = null;
+			
+			// Limpiar palets disponibles al cambiar ubicación
+			linea.PaletsDisponibles.Clear();
+			linea.PaletDestinoSeleccionado = null;
+			linea.MostrarSelectorPalets = false;
 
 			if (string.IsNullOrWhiteSpace(linea.AlmacenDestino)) return;
 
@@ -112,6 +117,63 @@ namespace SGA_Desktop.ViewModels
 			else
 			{
 				new WarningDialog("Aviso", "No se recibieron ubicaciones (lista es null)").ShowDialog();
+			}
+		}
+		
+		// NUEVO: Método para consultar palets disponibles cuando cambia la ubicación destino
+		public async Task ConsultarPaletsDisponiblesAsync(StockDisponibleDto linea)
+		{
+			// Limpiar lista anterior
+			linea.PaletsDisponibles.Clear();
+			linea.PaletDestinoSeleccionado = null;
+			linea.MostrarSelectorPalets = false;
+
+			// Validar que tengamos almacén y ubicación destino
+			if (string.IsNullOrWhiteSpace(linea.AlmacenDestino) || string.IsNullOrWhiteSpace(linea.UbicacionDestino))
+				return;
+
+			try
+			{
+				// Usar el mismo método que funciona en TraspasoStockDialogViewModel
+				var resultado = await _traspasosService.PrecheckFinalizarArticuloAsync(
+					SessionManager.EmpresaSeleccionada.Value,
+					linea.AlmacenDestino,
+					linea.UbicacionDestino
+				);
+
+				if (resultado != null && resultado.CantidadPalets > 0)
+				{
+					// Limpiar lista antes de agregar
+					linea.PaletsDisponibles.Clear();
+					
+					// Añadir palets a la lista usando la estructura correcta
+					foreach (var palet in resultado.Palets)
+					{
+						linea.PaletsDisponibles.Add(new PaletDto
+						{
+							Id = palet.PaletId,
+							Codigo = palet.CodigoPalet,
+							Estado = palet.Estado
+						});
+					}
+
+					if (resultado.CantidadPalets == 1)
+					{
+						// Solo hay 1 palet → seleccionarlo automáticamente
+						linea.PaletDestinoSeleccionado = linea.PaletsDisponibles.First();
+						linea.PaletDestinoId = linea.PaletDestinoSeleccionado.Id.ToString();
+						linea.MostrarSelectorPalets = false;
+					}
+					else
+					{
+						// Hay múltiples palets → mostrar selector
+						linea.MostrarSelectorPalets = true;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				// Si falla el precheck, no pasa nada, funcionará como antes (sin selector)
 			}
 		}
 
@@ -204,6 +266,26 @@ namespace SGA_Desktop.ViewModels
 			dto.AlmacenDestinoChanged += async (s, e) => {
 				await CargarUbicacionesDestinoAsync(dto);
 			};
+			
+			// NUEVO: Evento para cuando cambie la ubicación destino
+			dto.PropertyChanged += async (s, e) => {
+				if (e.PropertyName == nameof(StockDisponibleDto.UbicacionDestino))
+				{
+					await ConsultarPaletsDisponiblesAsync(dto);
+				}
+				else if (e.PropertyName == nameof(StockDisponibleDto.PaletDestinoSeleccionado))
+				{
+					// Actualizar el ID del palet cuando se seleccione uno
+					if (dto.PaletDestinoSeleccionado != null)
+					{
+						dto.PaletDestinoId = dto.PaletDestinoSeleccionado.Id.ToString();
+					}
+					else
+					{
+						dto.PaletDestinoId = null;
+					}
+				}
+			};
 
 			LineasPendientes.Add(dto);
 		}
@@ -235,6 +317,13 @@ namespace SGA_Desktop.ViewModels
 				foreach (var dto in LineasPendientes)
 				{
 					dto.UbicacionDestino = DestinoComunUbicacion.Ubicacion;
+					
+					// NUEVO: Limpiar selección previa de palets antes de consultar nuevos
+					dto.PaletDestinoSeleccionado = null;
+					dto.PaletDestinoId = null;
+					
+					// NUEVO: Consultar palets disponibles después de asignar ubicación
+					await ConsultarPaletsDisponiblesAsync(dto);
 				}
 			}
 
@@ -457,6 +546,7 @@ namespace SGA_Desktop.ViewModels
 					continue;
 				}
 
+
 				var crearDto = new CrearTraspasoArticuloDto
 				{
 					AlmacenOrigen = dto.CodigoAlmacen,
@@ -473,6 +563,9 @@ namespace SGA_Desktop.ViewModels
 					Finalizar = true,
 					DescripcionArticulo = dto.DescripcionArticulo,
 					Comentario = comentariosTexto, // Añadir comentarios
+					
+					// NUEVO: Incluir ID del palet destino si está seleccionado
+					PaletIdDestino = !string.IsNullOrWhiteSpace(dto.PaletDestinoId) && Guid.TryParse(dto.PaletDestinoId, out var paletId) ? paletId : null,
 
 					// 🔹 clave: si el ORIGEN está Cerrado, pedimos reapertura automática
 					ReabrirSiCerradoOrigen = string.Equals(dto.EstadoPaletOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase)

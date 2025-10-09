@@ -101,4 +101,40 @@ public class StockDisponibleDto : INotifyPropertyChanged
     
     //  NUEVA: Para compatibilidad con el patrón de ConsultaStockView
     public bool EstaPaletizado => EsStockPaletizado;
+    
+    //  NUEVAS PROPIEDADES PARA SELECCIÓN DE PALET EN DESTINO
+    public ObservableCollection<PaletDto> PaletsDisponibles { get; set; } = new();
+    
+    private PaletDto? _paletDestinoSeleccionado;
+    public PaletDto? PaletDestinoSeleccionado 
+    { 
+        get => _paletDestinoSeleccionado;
+        set
+        {
+            _paletDestinoSeleccionado = value;
+            OnPropertyChanged();
+        }
+    }
+    
+    private bool _mostrarSelectorPalets;
+    public bool MostrarSelectorPalets 
+    { 
+        get => _mostrarSelectorPalets;
+        set
+        {
+            _mostrarSelectorPalets = value;
+            OnPropertyChanged();
+        }
+    }
+    
+    private string? _paletDestinoId;
+    public string? PaletDestinoId 
+    { 
+        get => _paletDestinoId;
+        set
+        {
+            _paletDestinoId = value;
+            OnPropertyChanged();
+        }
+    }
 }

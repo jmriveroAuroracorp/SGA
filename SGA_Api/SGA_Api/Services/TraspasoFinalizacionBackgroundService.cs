@@ -153,19 +153,22 @@ namespace SGA_Api.Services
 								dbContext.PaletLineas.Update(existente);
 							}
 						}
-						else
-						{
-						if (temp.Cantidad != 0m) // evita crear líneas 0
+					else
+					{
+						// No existe línea en la ubicación de la temporal
+						// IMPORTANTE: Solo crear nueva línea si temp.Cantidad es POSITIVO
+						// Si es NEGATIVO, significa que se intenta restar de una línea que no existe → error de datos
+						if (temp.Cantidad > 0m)
 						{
 							// Validar solo CodigoAlmacen (Ubicacion puede estar vacía = "sin ubicar")
 							if (string.IsNullOrWhiteSpace(temp.CodigoAlmacen))
 							{
 								logger.LogWarning("⚠️ TempLinea {TempId} tiene CodigoAlmacen nulo/vacío. PaletId={PaletId}, Articulo={Articulo}. Se marca como procesada SIN consolidar.", 
 									temp.Id, temp.PaletId, temp.CodigoArticulo);
-								// NO hacer continue aquí - marcar como procesada al final para no quedar en bucle
 							}
 							else
 							{
+								// Crear nueva línea SOLO si es cantidad positiva (agregar a palet)
 								dbContext.PaletLineas.Add(new SGA_Api.Models.Palet.PaletLinea
 								{
 									Id = Guid.NewGuid(),
@@ -173,20 +176,30 @@ namespace SGA_Api.Services
 									CodigoEmpresa = temp.CodigoEmpresa,
 									CodigoArticulo = temp.CodigoArticulo?.Trim() ?? "",
 									DescripcionArticulo = temp.DescripcionArticulo?.Trim(),
-									Cantidad = temp.Cantidad,      // DELTA (+)
+									Cantidad = temp.Cantidad,
 									UnidadMedida = temp.UnidadMedida?.Trim(),
 									Lote = temp.Lote?.Trim(),
 									FechaCaducidad = temp.FechaCaducidad,
 									CodigoAlmacen = temp.CodigoAlmacen.Trim(),
-									Ubicacion = (temp.Ubicacion ?? "").Trim(),  // Permitir vacío
+									Ubicacion = (temp.Ubicacion ?? "").Trim(),
 									UsuarioId = temp.UsuarioId,
 									FechaAgregado = temp.FechaAgregado,
 									Observaciones = temp.Observaciones?.Trim(),
 									TraspasoId = traspaso.Id
 								});
+								
+								logger.LogInformation("✅ Creada nueva línea definitiva: PaletId={PaletId}, Articulo={Articulo}, Cantidad={Cantidad}, Ubicacion={Almacen}-{Ubicacion}", 
+									temp.PaletId, temp.CodigoArticulo, temp.Cantidad, temp.CodigoAlmacen, temp.Ubicacion);
 							}
 						}
+						else if (temp.Cantidad < 0m)
+						{
+							// Línea temporal negativa pero no existe línea definitiva para restar
+							// Esto puede pasar cuando se mueve stock de un palet y no hay línea en destino
+							logger.LogWarning("⚠️ Línea temporal NEGATIVA {TempId} sin línea definitiva correspondiente. PaletId={PaletId}, Articulo={Articulo}, Cantidad={Cantidad}, Ubicacion={Almacen}-{Ubicacion}. Se ignora.", 
+								temp.Id, temp.PaletId, temp.CodigoArticulo, temp.Cantidad, temp.CodigoAlmacen, temp.Ubicacion);
 						}
+					}
 
 						temp.Procesada = true;
 						dbContext.TempPaletLineas.Update(temp);

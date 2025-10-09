@@ -290,7 +290,8 @@ namespace SGA_Desktop.Dialog
 
                 // Calcular diferencias de permisos
                 updateDto.PermisosAsignar = _operario.Permisos.Except(_permisosOriginales).ToList();
-                updateDto.PermisosQuitar = _permisosOriginales.Except(_operario.Permisos).ToList();
+                // IMPORTANTE: Nunca quitar permisos < 10 porque son del ERP
+                updateDto.PermisosQuitar = _permisosOriginales.Except(_operario.Permisos).Where(p => p >= 10).ToList();
 
                 // Calcular diferencias de empresas
                 var empresasActuales = _empresas.ToList();

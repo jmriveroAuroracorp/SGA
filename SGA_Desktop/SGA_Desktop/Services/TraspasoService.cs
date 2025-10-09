@@ -217,6 +217,7 @@ namespace SGA_Desktop.Services
 	}
 
 
+
 	}
 
 	public class ApiResult

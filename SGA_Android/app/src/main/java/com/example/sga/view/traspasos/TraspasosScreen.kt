@@ -1737,6 +1737,9 @@ if (mostrarDialogoCantidad && articuloParaTraspaso != null) {
             // ——— ARTÍCULO ———
             else -> {
                 pendientes.forEach { dtoItem ->
+                    // DEBUG: Ver qué valores se están enviando al precheck
+                    Log.d("DEBUG_PRECHECK", "📍 Enviando precheck - almacenDestino='$almacenDestino', ubicacionDestino='$ubicacionDestino'")
+                    
                     viewModel.precheckFinalizarArticulo(
                         codigoEmpresa = empresa,
                         almacenDestino = almacenDestino,
@@ -1811,10 +1814,14 @@ if (mostrarDialogoCantidad && articuloParaTraspaso != null) {
 
     // 2) Captura común que usa procesarCodigoEscaneado y desemboca en la misma lógica de destino
     fun manejarCodigoDestino(code: String) {
+        Log.d("DEBUG_ESCANEO", "📥 Código escaneado para destino: '$code'")
+        
         viewModel.procesarCodigoEscaneado(
             code = code,
             empresaId = empresa,
             onUbicacionDetectada = { almacenDestino, ubicacionDestino ->
+                Log.d("DEBUG_ESCANEO", "📍 Ubicación detectada - almacen='$almacenDestino', ubicacion='$ubicacionDestino'")
+                
                 if (!viewModel.almacenesPermitidos.value.contains(almacenDestino)) {
                     mostrarDialogoErrorFinalizar = "Ubicación no permitida."
                     return@procesarCodigoEscaneado
