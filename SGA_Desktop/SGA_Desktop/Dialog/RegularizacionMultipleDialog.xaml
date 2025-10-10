@@ -231,6 +231,37 @@
             Padding="10,2"/>
                     </StackPanel>
 
+                    <!-- NUEVO: Selector de palet común -->
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0" 
+                                Visibility="{Binding PaletsComunDisponibles.Count, Converter={StaticResource ZeroToCollapsedConverter}}">
+                        <TextBlock Text="Palet común:" Style="{StaticResource LabelStyle}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding PaletsComunDisponibles}"
+                                  SelectedItem="{Binding PaletComunSeleccionado, Mode=TwoWay}"
+                                  MinWidth="180"
+                                  MaxWidth="360"
+                                  FontSize="14"
+                                  Height="28"
+                                  Padding="6,2"
+                                  HorizontalAlignment="Stretch"
+                                  Style="{StaticResource EstiloComboBox}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Codigo}" FontWeight="Bold"/>
+                                        <TextBlock Text=" (" Margin="2,0,0,0"/>
+                                        <TextBlock Text="{Binding Estado}" Foreground="{StaticResource BrushGrisOscuro}"/>
+                                        <TextBlock Text=")" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="Aplicar palet"
+                                Command="{Binding AplicarPaletComunCommand}"
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                Padding="10,2"
+                                Margin="8,0,0,0"/>
+                    </StackPanel>
+
                     <!-- Campo de comentarios -->
                     <StackPanel Orientation="Vertical" Margin="0,10,0,10">
                         <TextBlock Text="Comentarios:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>

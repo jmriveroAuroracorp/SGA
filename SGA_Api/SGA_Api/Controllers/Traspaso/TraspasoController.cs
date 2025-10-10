@@ -517,53 +517,70 @@ public class TraspasosController : ControllerBase
 			// === NUEVA COMPROBACIÓN: ¿El stock está en un palet? ===
 			Guid? paletIdOrigen = null;
 			string codigoPaletOrigen = null;
-			// Log temporal para depuración
-			Console.WriteLine($"DTO: Articulo={dto.CodigoArticulo}, Almacen={dto.AlmacenOrigen}, Ubicacion={dto.UbicacionOrigen}, Lote={dto.Partida}");
+			
 			var loteDto = dto.Partida?.Trim() ?? "";
-			var lineaPalet = await _context.PaletLineas
-				.FirstOrDefaultAsync(pl =>
+			
+			// Primero: calcular cuánto stock hay paletizado en esta ubicación
+			var stockPaletizado = await _context.PaletLineas
+				.Where(pl =>
 					pl.CodigoArticulo == dto.CodigoArticulo &&
 					pl.CodigoAlmacen.Trim().ToUpper() == dto.AlmacenOrigen.Trim().ToUpper() &&
 					pl.Ubicacion.Trim().ToUpper() == dto.UbicacionOrigen.Trim().ToUpper() &&
-					(pl.Lote ?? "") == loteDto);
-
-			if (lineaPalet != null)
+					(pl.Lote ?? "") == loteDto)
+				.SumAsync(pl => pl.Cantidad);
+			
+			// Segundo: comparar con el stock total disponible
+			var stockTotal = stock.Disponible; // Ya lo tenemos de la validación anterior
+			
+			// SOLO si TODO el stock está paletizado, entonces validar el palet cerrado
+			// Si hay stock suelto (stockTotal > stockPaletizado), permitir el traspaso sin validar palets
+			if (stockPaletizado > 0 && stockPaletizado >= stockTotal)
 			{
-				paletIdOrigen = lineaPalet.PaletId;
-				var palet = await _context.Palets.FindAsync(lineaPalet.PaletId);
-				codigoPaletOrigen = palet?.Codigo;
-				//if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
-				//{
-				//    return BadRequest("No se puede extraer stock de un palet cerrado. Debe mover el palet o abrirlo antes de extraer stock.");
-				//}
-				if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
-				{
-					if (dto.ReabrirSiCerradoOrigen == true)
-					{
-						// Reabrir palet de ORIGEN (igual que haces para destino)
-						palet.Estado = "Abierto";               // normaliza a mayúsculas
-						palet.FechaApertura = DateTime.Now; // Siempre usar la hora del servidor/API
-						palet.UsuarioAperturaId = dto.UsuarioId;
-						palet.FechaCierre = null;
-						palet.UsuarioCierreId = null;
-						// (opcional) registra log de reapertura con dto.UsuarioId
-						_context.Palets.Update(palet);
-						_context.LogPalet.Add(new LogPalet
-						{                 // (opcional)
-							PaletId = palet.Id,
-							Fecha = DateTime.Now, // Siempre usar la hora del servidor/API
-							IdUsuario = dto.UsuarioId,
-							Accion = "Reabrir",
-							Detalle = "Reapertura de palet en ORIGEN desde traspaso de artículo"
-						});
+				// El stock está completamente paletizado, buscar el palet específico
+				var lineaPalet = await _context.PaletLineas
+					.FirstOrDefaultAsync(pl =>
+						pl.CodigoArticulo == dto.CodigoArticulo &&
+						pl.CodigoAlmacen.Trim().ToUpper() == dto.AlmacenOrigen.Trim().ToUpper() &&
+						pl.Ubicacion.Trim().ToUpper() == dto.UbicacionOrigen.Trim().ToUpper() &&
+						(pl.Lote ?? "") == loteDto);
 
-						await _context.SaveChangesAsync();
-					}
-					else
+				if (lineaPalet != null)
+				{
+					paletIdOrigen = lineaPalet.PaletId;
+					var palet = await _context.Palets.FindAsync(lineaPalet.PaletId);
+					codigoPaletOrigen = palet?.Codigo;
+					
+					if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
 					{
-						return BadRequest("No se puede extraer stock de un palet cerrado. Debe abrirlo o habilitar la reapertura automática.");
+						if (dto.ReabrirSiCerradoOrigen == true)
+						{
+							// Reabrir palet de ORIGEN
+							palet.Estado = "Abierto";
+							palet.FechaApertura = DateTime.Now;
+							palet.UsuarioAperturaId = dto.UsuarioId;
+							palet.FechaCierre = null;
+							palet.UsuarioCierreId = null;
+							_context.Palets.Update(palet);
+							_context.LogPalet.Add(new LogPalet
+							{
+								PaletId = palet.Id,
+								Fecha = DateTime.Now,
+								IdUsuario = dto.UsuarioId,
+								Accion = "Reabrir",
+								Detalle = "Reapertura de palet en ORIGEN desde traspaso de artículo"
+							});
+
+							await _context.SaveChangesAsync();
+						}
+						else
+						{
+							return BadRequest("No se puede extraer stock de un palet cerrado. Debe abrirlo o habilitar la reapertura automática.");
+						}
 					}
 				}
+			}
+			// Si stockPaletizado < stockTotal, significa que hay stock suelto disponible
+			// En ese caso, NO asociamos paletIdOrigen y permitimos el traspaso libremente
 				////// RESTAR la cantidad traspasada de la línea de palet
 				////lineaPalet.Cantidad -= dto.Cantidad ?? 0;
 				////            if (lineaPalet.Cantidad <= 0)
@@ -635,7 +652,6 @@ public class TraspasosController : ControllerBase
 				//		}
 				//	}
 				//}
-			}
 
 		// Determinar palet destino: manual (especificado por usuario) o automático (búsqueda)
 			Guid? paletIdDestino = null;
@@ -1009,8 +1025,6 @@ public class TraspasosController : ControllerBase
 			return Problem(detail: ex.ToString(), statusCode: 500, title: "Error en precheck de finalización");
 		}
 	}
-	/// <summary>
-	/// Finalizar traspaso de artículo individual (mobility, segunda fase).
 	/// </summary>
 	[HttpPut("articulo/{id}/finalizar")]
 	public async Task<IActionResult> FinalizarTraspasoArticulo(Guid id, [FromBody] FinalizarTraspasoArticuloDto dto)
@@ -1045,18 +1059,32 @@ public class TraspasosController : ControllerBase
 		// NUEVO (mínimo cambio): si hay palet en destino, pedir confirmación SIEMPRE,
 		// esté ABIERTO o CERRADO. No tocamos nada si no confirman.
 		// ─────────────────────────────────────────────────────────────────────────────
-		// IMPORTANTE: Solo considerar palets que NO estén en estado "Vaciado"
-		Guid? paletDestinoIdPre = await (
-			from t in _context.Traspasos.AsNoTracking()
-			join p in _context.Palets.AsNoTracking() on t.PaletId equals p.Id
-			where t.TipoTraspaso == "PALET"
-				  && t.CodigoEstado == "COMPLETADO"
-				  && (t.AlmacenDestino ?? "").ToUpper() == almKey
-				  && ((t.UbicacionDestino ?? "").ToUpper()) == ubiKey
-				  && p.Estado != "Vaciado"  // ← EXCLUIR palets vaciados
-			orderby t.FechaFinalizacion descending
-			select (Guid?)t.PaletId
+	// CORREGIDO: Buscar palets que ACTUALMENTE tienen líneas en esa ubicación
+	// (igual que en PrecheckFinalizarArticulo)
+	Guid? paletDestinoIdPre = null;
+
+	if (dto.PaletIdConfirmado.HasValue && dto.PaletIdConfirmado.Value != Guid.Empty)
+	{
+		// El usuario especificó un palet concreto → usarlo directamente
+		paletDestinoIdPre = dto.PaletIdConfirmado.Value;
+	}
+	else
+	{
+		// Búsqueda automática: buscar palets que ACTUALMENTE tienen líneas en esa ubicación
+		var paletEnDestino = await (
+			from l in _context.PaletLineas.AsNoTracking()
+			join p in _context.Palets.AsNoTracking() on l.PaletId equals p.Id
+			where p.CodigoEmpresa == traspaso.CodigoEmpresa
+			   && p.Estado != "Vaciado"
+			   && (l.CodigoAlmacen ?? "").Trim().ToUpper() == almKey
+			   && (l.Ubicacion ?? "").Trim().ToUpper() == ubiKey
+			   && l.Cantidad > 0
+			group l by l.PaletId into g
+			select g.Key
 		).FirstOrDefaultAsync();
+		
+		paletDestinoIdPre = paletEnDestino != Guid.Empty ? paletEnDestino : null;
+	}
 
 		bool hayPaletEnDestino = paletDestinoIdPre.HasValue && paletDestinoIdPre.Value != Guid.Empty;
 		if (hayPaletEnDestino)

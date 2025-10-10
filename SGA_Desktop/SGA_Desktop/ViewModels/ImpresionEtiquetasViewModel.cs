@@ -256,25 +256,34 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 			CodigoPalet = null // o el valor cuando sea tipo 2
 		};
 		
-		try
+	try
+	{
+		// Inserción en la base de datos
+		await _printService.InsertarRegistroImpresionAsync(dto);
+		await _loginService.RegistrarLogEventoAsync(new LogEvento
 		{
-			// Inserción en la base de datos
-			await _printService.InsertarRegistroImpresionAsync(dto);
-			await _loginService.RegistrarLogEventoAsync(new LogEvento
-			{
-				fecha = DateTime.Now,
-				idUsuario = SessionManager.Operario,
-				tipo = "IMPRESION_ETIQUETA",
-				origen = "ImpresionEtiquetasView",
-				descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
-				detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}",
-				idDispositivo = dto.Dispositivo
-			});
-		}
-		catch (Exception ex)
-		{
-			MessageBox.Show(ex.Message, "Error al encolar impresión", MessageBoxButton.OK, MessageBoxImage.Error);
-		}
+			fecha = DateTime.Now,
+			idUsuario = SessionManager.Operario,
+			tipo = "IMPRESION_ETIQUETA",
+			origen = "ImpresionEtiquetasView",
+			descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
+			detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}, Alergenos={dto.Alergenos}",
+			idDispositivo = dto.Dispositivo
+		});
+
+		// Confirmar impresión
+		var confirmacion = new ConfirmationDialog(
+			"Impresión registrada",
+			$"La etiqueta se ha encolado correctamente.\n\nAlérgenos guardados: {(string.IsNullOrEmpty(dto.Alergenos) ? "Ninguno" : dto.Alergenos)}",
+			"\uE73E" // icono de check
+		)
+		{ Owner = Application.Current.MainWindow };
+		confirmacion.ShowDialog();
+	}
+	catch (Exception ex)
+	{
+		MessageBox.Show(ex.Message, "Error al encolar impresión", MessageBoxButton.OK, MessageBoxImage.Error);
+	}
 	}
 
 	// -------------------

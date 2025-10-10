@@ -42,9 +42,21 @@ namespace SGA_Desktop.ViewModels
 	// NUEVO: Ubicaciones destino común
 	public ObservableCollection<UbicacionDto> UbicacionesDestinoComun { get; } = new();
 
+	// NUEVO: Palet común
+	[ObservableProperty]
+	private PaletDto paletComunSeleccionado;
+
+	// NUEVO: Palets disponibles para el palet común
+	public ObservableCollection<PaletDto> PaletsComunDisponibles { get; } = new();
+
 	partial void OnDestinoComunAlmacenChanged(AlmacenDto value)
 	{
 		_ = CargarUbicacionesDestinoComunAsync();
+	}
+
+	partial void OnDestinoComunUbicacionChanged(UbicacionDto value)
+	{
+		_ = ConsultarPaletsComunDisponiblesAsync();
 	}
 
 		private async Task CargarUbicacionesDestinoComunAsync()
@@ -120,6 +132,45 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 		
+		// NUEVO: Consultar palets disponibles para el palet común
+		private async Task ConsultarPaletsComunDisponiblesAsync()
+		{
+			PaletsComunDisponibles.Clear();
+			PaletComunSeleccionado = null;
+
+			if (DestinoComunAlmacen == null || DestinoComunUbicacion == null) return;
+
+			try
+			{
+				// Usar el primer artículo de las líneas pendientes para el precheck
+				var primeraLinea = LineasPendientes.FirstOrDefault();
+				if (primeraLinea == null) return;
+
+				var resultado = await _traspasosService.PrecheckFinalizarArticuloAsync(
+					SessionManager.EmpresaSeleccionada.Value,
+					DestinoComunAlmacen.CodigoAlmacen,
+					DestinoComunUbicacion.Ubicacion
+				);
+
+				if (resultado != null && resultado.CantidadPalets > 0)
+				{
+					foreach (var palet in resultado.Palets)
+					{
+						PaletsComunDisponibles.Add(new PaletDto
+						{
+							Id = palet.PaletId,
+							Codigo = palet.CodigoPalet,
+							Estado = palet.Estado
+						});
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				// Si falla el precheck, no pasa nada
+			}
+		}
+
 		// NUEVO: Método para consultar palets disponibles cuando cambia la ubicación destino
 		public async Task ConsultarPaletsDisponiblesAsync(StockDisponibleDto linea)
 		{
@@ -324,6 +375,27 @@ namespace SGA_Desktop.ViewModels
 					
 					// NUEVO: Consultar palets disponibles después de asignar ubicación
 					await ConsultarPaletsDisponiblesAsync(dto);
+				}
+			}
+
+			CollectionViewSource.GetDefaultView(LineasPendientes).Refresh();
+		}
+
+		// NUEVO: Comando para aplicar palet común
+		[RelayCommand]
+		private void AplicarPaletComun()
+		{
+			if (PaletComunSeleccionado == null) return;
+
+			// Aplicar el palet común a todas las líneas que van a la misma ubicación
+			foreach (var dto in LineasPendientes)
+			{
+				if (dto.AlmacenDestino == DestinoComunAlmacen?.CodigoAlmacen && 
+				    dto.UbicacionDestino == DestinoComunUbicacion?.Ubicacion)
+				{
+					dto.PaletDestinoSeleccionado = PaletComunSeleccionado;
+					dto.PaletDestinoId = PaletComunSeleccionado.Id.ToString();
+					dto.MostrarSelectorPalets = false;
 				}
 			}
 

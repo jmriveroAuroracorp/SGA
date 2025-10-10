@@ -38,18 +38,18 @@ namespace SGA_Desktop.ViewModels
 
 		#endregion
 
-		#region Fields & Services
-		private readonly StockService _stockService;
-		private readonly PrintQueueService _printService = new PrintQueueService();
-		private readonly LoginService _loginService;
-		public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; } = new();
+	#region Fields & Services
+	private readonly StockService _stockService;
+	private readonly PrintQueueService _printService = new PrintQueueService();
+	private readonly LoginService _loginService = new LoginService();
+	public ObservableCollection<ImpresoraDto> ImpresorasDisponibles { get; } = new();
 
-		#endregion
+	#endregion
 
-		#region Constructor
-		public ConsultaStockViewModel(StockService stockService)
-		{
-			_stockService = stockService;
+	#region Constructor
+	public ConsultaStockViewModel(StockService stockService)
+	{
+		_stockService = stockService;
 			EmpresaActual = ObtenerNombreEmpresaActual();
 			Almacenes = new ObservableCollection<string>();
 			Ubicaciones = new ObservableCollection<string>();
@@ -654,30 +654,63 @@ namespace SGA_Desktop.ViewModels
 						?? Application.Current.MainWindow
 			};
 
-			if (dlg.ShowDialog() != true) return;
+		if (dlg.ShowDialog() != true) return;
 
-			// ya está guardado en BD y en SessionManager por el propio diálogo
-			var seleccionada = dlgVm.ImpresoraSeleccionada;
-			// Construir el DTO para impresión
-			var dto = new LogImpresionDto
-			{
-				Usuario = SessionManager.Operario.ToString(),
-				Dispositivo = Environment.MachineName,
-				IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
-				EtiquetaImpresa = 0,
-				Copias = dlgVm.NumeroCopias,
-				CodigoArticulo = ArticuloSeleccionadoParaImprimir.CodigoArticulo,
-				DescripcionArticulo = ArticuloSeleccionadoParaImprimir.DescripcionArticulo ?? string.Empty,
-				CodigoAlternativo = ArticuloSeleccionadoParaImprimir.CodigoAlternativo,
-				FechaCaducidad = ArticuloSeleccionadoParaImprimir.FechaCaducidad,
-				Partida = ArticuloSeleccionadoParaImprimir.Partida,
-				Alergenos = null, // Puedes obtenerlos si lo necesitas
-				PathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
-				TipoEtiqueta = 1, // Etiqueta de stock
-				CodigoGS1 = null,
-				CodigoPalet = null
-			};
+		// ya está guardado en BD y en SessionManager por el propio diálogo
+		var seleccionada = dlgVm.ImpresoraSeleccionada;
+		
+		// Obtener alérgenos del artículo
+		var alergenos = await _stockService.ObtenerAlergenosArticuloAsync(
+			SessionManager.EmpresaSeleccionada!.Value,
+			ArticuloSeleccionadoParaImprimir.CodigoArticulo);
+
+		// Construir el DTO para impresión
+		var dto = new LogImpresionDto
+		{
+			Usuario = SessionManager.Operario.ToString(),
+			Dispositivo = Environment.MachineName,
+			IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
+			EtiquetaImpresa = 0,
+			Copias = dlgVm.NumeroCopias,
+			CodigoArticulo = ArticuloSeleccionadoParaImprimir.CodigoArticulo,
+			DescripcionArticulo = ArticuloSeleccionadoParaImprimir.DescripcionArticulo ?? string.Empty,
+			CodigoAlternativo = ArticuloSeleccionadoParaImprimir.CodigoAlternativo,
+			FechaCaducidad = ArticuloSeleccionadoParaImprimir.FechaCaducidad,
+			Partida = ArticuloSeleccionadoParaImprimir.Partida,
+			Alergenos = alergenos,
+			PathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
+			TipoEtiqueta = 1, // Etiqueta de stock
+			CodigoGS1 = null,
+			CodigoPalet = null
+		};
+		
+		try
+		{
 			await _printService.InsertarRegistroImpresionAsync(dto);
+			await _loginService.RegistrarLogEventoAsync(new LogEvento
+			{
+				fecha = DateTime.Now,
+				idUsuario = SessionManager.Operario,
+				tipo = "IMPRESION_ETIQUETA",
+				origen = "ConsultaStockView",
+				descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
+				detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}, Alergenos={dto.Alergenos}",
+				idDispositivo = dto.Dispositivo
+			});
+
+			// Confirmar impresión
+			var confirmacion = new ConfirmationDialog(
+				"Impresión registrada",
+				$"La etiqueta se ha encolado correctamente.\n\nAlérgenos guardados: {(string.IsNullOrEmpty(dto.Alergenos) ? "Ninguno" : dto.Alergenos)}",
+				"\uE73E" // icono de check
+			)
+			{ Owner = Application.Current.MainWindow };
+			confirmacion.ShowDialog();
+		}
+		catch (Exception ex)
+		{
+			MessageBox.Show(ex.Message, "Error al encolar impresión", MessageBoxButton.OK, MessageBoxImage.Error);
+		}
 		}
 
 		[RelayCommand]
