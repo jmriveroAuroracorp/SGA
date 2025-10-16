@@ -5,6 +5,7 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
       xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
       mc:Ignorable="d"
       Background="{StaticResource BrushFondo}">
 
@@ -98,26 +99,48 @@
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="250"
-                          ItemsSource="{Binding AlmacenesCombo}"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding AlmacenesComboArticleView}"
                           DisplayMemberPath="DescripcionCombo"
                           SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"
+                          Text="{Binding FiltroAlmacenesCombo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                           IsEnabled="{Binding CanEnableInputs}"
                           IsEditable="True"
-                          IsTextSearchEnabled="True"
-                          Height="28"
-                          FontSize="14"
-                          Padding="6,2"/>
+                          IsTextSearchEnabled="False"
+                          StaysOpenOnEdit="True">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="GotFocus">
+                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="TextChanged">
+                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesCommand}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                        </ComboBox>
                     </StackPanel>
 
                     <!-- Ubicación -->
-                    <StackPanel Orientation="Vertical">
+                    <StackPanel Orientation="Vertical" 
+                                Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="120"
                           Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding Ubicaciones}"
+                          ItemsSource="{Binding UbicacionesView}"
                           SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
-                          IsEnabled="{Binding CanEnableInputs}"
-                          MaxDropDownHeight="200"/>
+                          Text="{Binding FiltroUbicaciones, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                          IsEditable="True"
+                          IsTextSearchEnabled="False"
+                          StaysOpenOnEdit="True"
+                          MaxDropDownHeight="200">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="GotFocus">
+                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownUbicacionesCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="TextChanged">
+                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUbicacionesCommand}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                        </ComboBox>
                     </StackPanel>
 
                     <!-- Combo de Artículos únicos (solo tras búsqueda por descripción) -->
@@ -138,23 +161,46 @@
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="250"
-                         ItemsSource="{Binding AlmacenesCombo}"
+                         Style="{StaticResource EstiloComboBox}"
+                         ItemsSource="{Binding AlmacenesComboLocationView}"
                          DisplayMemberPath="DescripcionCombo"
                          SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"
+                         Text="{Binding FiltroAlmacenesComboLocation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          IsEditable="True"
-                         IsTextSearchEnabled="True"
-                         Height="28"
-                         FontSize="14"
-                         Padding="6,2"/>
+                         IsTextSearchEnabled="False"
+                         StaysOpenOnEdit="True">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="GotFocus">
+                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesLocationCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="TextChanged">
+                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesLocationCommand}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                        </ComboBox>
                     </StackPanel>
 
-                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0"
+                                Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="120"
                           Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding Ubicaciones}"
+                          ItemsSource="{Binding UbicacionesUbicacionView}"
                           SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
-                          KeyDown="TextBox_KeyDown"/>
+                          Text="{Binding FiltroUbicacionesUbicacion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                          IsEditable="True"
+                          IsTextSearchEnabled="False"
+                          StaysOpenOnEdit="True"
+                          KeyDown="TextBox_KeyDown">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="GotFocus">
+                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownUbicacionesUbicacionCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="TextChanged">
+                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUbicacionesUbicacionCommand}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                        </ComboBox>
                     </StackPanel>
                     <StackPanel Orientation="Vertical">
                         <TextBlock Text="Buscar" FontWeight="Bold" Margin="0,0,0,4"/>

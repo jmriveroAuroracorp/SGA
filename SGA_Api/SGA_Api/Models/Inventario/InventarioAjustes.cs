@@ -50,6 +50,18 @@ namespace SGA_Api.Models.Inventario
         [StringLength(50)]
         public string? Partida { get; set; }
 
+        // Campos para información de palet
+        public Guid? PaletId { get; set; }
+        
+        [StringLength(50)]
+        public string? CodigoPalet { get; set; }
+        
+        [StringLength(50)]
+        public string? CodigoGS1 { get; set; }
+
+        // Campo de control para evitar procesamiento duplicado
+        public bool ProcesadoPalet { get; set; } = false;
+
         // Navigation property
         [ForeignKey("IdInventario")]
         public virtual InventarioCabecera Inventario { get; set; } = null!;

@@ -88,9 +88,9 @@ namespace SGA_Api.Controllers.Login
                 _auroraSgaContext.Usuarios.Add(new Usuario
                 {
                     IdUsuario = operario.Id,
-                    IdEmpresa = null, // valor por defecto
+                    IdEmpresa = "1", // empresa por defecto
                     Impresora = null, // o null si la columna lo permite
-                    IdRol = null,   // valor por defecto
+                    IdRol = 1,   // rol por defecto
                     Etiqueta = null // valor por defecto
                 });
 

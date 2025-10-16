@@ -320,13 +320,6 @@ namespace SGA_Desktop.Dialog
                     updateDto.AlmacenesAsignar = almacenesActuales.ToList();
                 }
 
-        // DEBUG: Solo información del ROL
-        MessageBox.Show($"DEBUG: Operario {_operario.Id} ({_operario.Nombre})\n" +
-                       $"IdRol: {_operario.IdRol}\n" +
-                       $"RolNombre: {_operario.RolNombre}\n" +
-                       $"NivelJerarquico: {_operario.NivelJerarquico}",
-                       "DEBUG - ROL", MessageBoxButton.OK, MessageBoxImage.Information);
-
         // Guardar configuración del operario
         try
         {

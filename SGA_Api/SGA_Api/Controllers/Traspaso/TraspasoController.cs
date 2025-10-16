@@ -301,7 +301,8 @@ public class TraspasosController : ControllerBase
 		[FromQuery] int? usuarioId = null,
 		[FromQuery] string? codigoPalet = null,
 		[FromQuery] string? almacenOrigen = null,
-		[FromQuery] string? almacenDestino = null)
+		[FromQuery] string? almacenDestino = null,
+		[FromQuery] int? limite = 1000)
 	{
 		var q = _context.Traspasos.AsQueryable();
 		if (paletId.HasValue)
@@ -324,6 +325,7 @@ public class TraspasosController : ControllerBase
 		var nombreDict = await _context.vUsuariosConNombre
 			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
 
+		// 🚀 OPTIMIZACIÓN: Obtener todos los datos en una sola consulta con JOINs
 		var lista = await q.OrderByDescending(t => t.FechaInicio)
 			.Select(t => new TraspasoDto
 			{
@@ -343,48 +345,54 @@ public class TraspasosController : ControllerBase
 				TipoTraspaso = t.TipoTraspaso,
 				Cantidad = t.Cantidad,
 				Comentarios = t.Comentario,
-				DescripcionArticulo = null // Se llenará después si es necesario
+				DescripcionArticulo = _context.StockDisponible
+					.Where(s => s.CodigoArticulo == t.CodigoArticulo)
+					.Select(s => s.DescripcionArticulo)
+					.FirstOrDefault()
 			})
+			.Take(limite ?? 1000) // 🚀 Límite configurable para evitar cargas masivas
 			.ToListAsync();
 
+		// 🚀 OPTIMIZACIÓN: Resolver nombres de usuarios en memoria (ya cargados)
 		foreach (var traspaso in lista)
 		{
 			if (traspaso.UsuarioInicioId > 0 && nombreDict.TryGetValue(traspaso.UsuarioInicioId, out var nombreInicio))
 				traspaso.UsuarioInicioNombre = nombreInicio;
 
-			// Obtener descripción del artículo desde StockDisponible
-			if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
-			{
-				var stockInfo = await _context.StockDisponible
-					.Where(s => s.CodigoArticulo == traspaso.CodigoArticulo)
-					.Select(s => new { s.DescripcionArticulo })
-					.FirstOrDefaultAsync();
+			if (traspaso.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(traspaso.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
+				traspaso.UsuarioFinalizacionNombre = nombreFinalizacion;
+		}
 
-				if (stockInfo != null)
+		// 🚀 OPTIMIZACIÓN: Cargar líneas de palets en una sola consulta (solo si hay palets)
+		var paletIds = lista.Where(t => t.PaletId != Guid.Empty).Select(t => t.PaletId).Distinct().ToList();
+		if (paletIds.Any())
+		{
+			var lineasPalets = await _context.PaletLineas
+				.Where(pl => paletIds.Contains(pl.PaletId))
+				.Select(pl => new LineaPaletDto
 				{
-					traspaso.DescripcionArticulo = stockInfo.DescripcionArticulo;
-				}
-			}
+					Id = pl.Id,
+					PaletId = pl.PaletId,
+					CodigoArticulo = pl.CodigoArticulo,
+					DescripcionArticulo = pl.DescripcionArticulo,
+					Cantidad = pl.Cantidad,
+					CodigoAlmacen = pl.CodigoAlmacen,
+					Ubicacion = pl.Ubicacion,
+					Lote = pl.Lote,
+					FechaCaducidad = pl.FechaCaducidad
+				})
+				.ToListAsync();
 
-			// Cargar líneas del palet
-			if (traspaso.PaletId != Guid.Empty)
+			// Agrupar líneas por PaletId
+			var lineasPorPalet = lineasPalets.GroupBy(l => l.PaletId).ToDictionary(g => g.Key, g => g.ToList());
+
+			// Asignar líneas a cada traspaso
+			foreach (var traspaso in lista.Where(t => t.PaletId != Guid.Empty))
 			{
-				var lineas = await _context.PaletLineas
-					.Where(pl => pl.PaletId == traspaso.PaletId)
-					.Select(pl => new LineaPaletDto
-					{
-						Id = pl.Id,
-						CodigoArticulo = pl.CodigoArticulo,
-						DescripcionArticulo = pl.DescripcionArticulo,
-						Cantidad = pl.Cantidad,
-						CodigoAlmacen = pl.CodigoAlmacen,
-						Ubicacion = pl.Ubicacion,
-						Lote = pl.Lote,
-						FechaCaducidad = pl.FechaCaducidad
-					})
-					.ToListAsync();
-
-				traspaso.LineasPalet = lineas;
+				if (lineasPorPalet.TryGetValue(traspaso.PaletId, out var lineas))
+				{
+					traspaso.LineasPalet = lineas;
+				}
 			}
 		}
 
@@ -1640,6 +1648,50 @@ public class TraspasosController : ControllerBase
 				UbicacionOrigen = ultimosTraspasosPorPalet[p.Id].UbicacionDestino ?? "",
 				FechaUltimoTraspaso = ultimosTraspasosPorPalet[p.Id].FechaFinalizacion,
 				UsuarioUltimoTraspaso = ultimosTraspasosPorPalet[p.Id].UsuarioFinalizacionId
+			})
+			.ToList();
+
+		return Ok(resultado);
+	}
+
+	[HttpGet("palets-con-ubicacion")]
+	public async Task<IActionResult> GetPaletsConUbicacion()
+	{
+		// 1. Buscar todos los palets (abiertos y cerrados)
+		var todosLosPalets = await _context.Palets
+			.Where(p => p.Estado == "CERRADO" || p.Estado == "ABIERTO")
+			.ToListAsync();
+
+		// 2. Buscar traspasos completados agrupados por palet
+		var traspasosCompletados = await _context.Traspasos
+			.Where(t => t.CodigoEstado == "COMPLETADO" && t.TipoTraspaso == "PALET")
+			.OrderByDescending(t => t.FechaFinalizacion)
+			.ToListAsync();
+
+		var ultimosTraspasosPorPalet = traspasosCompletados
+			.GroupBy(t => t.PaletId)
+			.Select(g => g.First())
+			.ToDictionary(t => t.PaletId, t => t);
+
+		// 3. Crear resultado con información de ubicación para todos los palets
+		var resultado = todosLosPalets
+			.Select(p => new
+			{
+				p.Id,
+				p.Codigo,
+				p.Estado,
+				AlmacenOrigen = ultimosTraspasosPorPalet.ContainsKey(p.Id) 
+					? ultimosTraspasosPorPalet[p.Id].AlmacenDestino ?? "" 
+					: "",
+				UbicacionOrigen = ultimosTraspasosPorPalet.ContainsKey(p.Id) 
+					? ultimosTraspasosPorPalet[p.Id].UbicacionDestino ?? "" 
+					: "",
+				FechaUltimoTraspaso = ultimosTraspasosPorPalet.ContainsKey(p.Id) 
+					? ultimosTraspasosPorPalet[p.Id].FechaFinalizacion 
+					: (DateTime?)null,
+				UsuarioUltimoTraspaso = ultimosTraspasosPorPalet.ContainsKey(p.Id) 
+					? ultimosTraspasosPorPalet[p.Id].UsuarioFinalizacionId 
+					: (int?)null
 			})
 			.ToList();
 

@@ -67,6 +67,11 @@ fun ConteoProcesoScreen(
     val conteoCompletado by conteoViewModel.conteoCompletado.collectAsState()
     val modoLecturaManual by conteoViewModel.modoLecturaManual.collectAsState()
     
+    // Estados para selección de palets
+    val paletsDisponibles by conteoViewModel.paletsDisponibles.collectAsState()
+    val mostrarDialogoSeleccionPalet by conteoViewModel.mostrarDialogoSeleccionPalet.collectAsState()
+    val paletSeleccionado by conteoViewModel.paletSeleccionado.collectAsState()
+    
          // Estados locales
      var escaneando by remember { mutableStateOf(false) }
      var escaneoProcesado by remember { mutableStateOf(false) }
@@ -203,6 +208,7 @@ fun ConteoProcesoScreen(
                              estadoEscaneo = estadoEscaneo,
                              ubicacionEscaneada = ubicacionEscaneada,
                              articuloEscaneado = articuloEscaneado,
+                             paletSeleccionado = paletSeleccionado,
                              modoLecturaManual = modoLecturaManual
                          )
                      }
@@ -504,6 +510,20 @@ fun ConteoProcesoScreen(
                          )
                      }
                      
+                     // Mostrar información del palet si está seleccionado
+                     paletSeleccionado?.let { palet ->
+                         InfoRow(
+                             icon = Icons.Default.Inventory2,
+                             label = "Palet",
+                             value = palet.codigoPalet
+                         )
+                         InfoRow(
+                             icon = Icons.Default.QrCode,
+                             label = "GS1",
+                             value = palet.codigoGS1
+                         )
+                     }
+                     
                                            // Input de cantidad
                       OutlinedTextField(
                           value = cantidadInput,
@@ -574,6 +594,9 @@ fun ConteoProcesoScreen(
                                      articuloEscaneado!!.codigoUbicacion
                                  }
                                  
+                                 // Obtener información del palet seleccionado si existe
+                                 val paletSeleccionado = conteoViewModel.paletSeleccionado.value
+                                 
                                  conteoLogic.registrarLectura(
                                      ordenGuid = ordenGuid,
                                      codigoUbicacion = codigoUbicacion,
@@ -583,7 +606,10 @@ fun ConteoProcesoScreen(
                                      cantidadContada = cantidad,
                                      usuarioCodigo = user?.id ?: "",
                                      comentario = comentarioInput.takeIf { it.isNotEmpty() },
-                                     fechaCaducidad = articuloEscaneado!!.fechaCaducidad
+                                     fechaCaducidad = articuloEscaneado!!.fechaCaducidad,
+                                     paletId = paletSeleccionado?.paletId,
+                                     codigoPalet = paletSeleccionado?.codigoPalet,
+                                     codigoGS1 = paletSeleccionado?.codigoGS1
                                  )
                                  
                                  // Limpiar y continuar
@@ -620,6 +646,7 @@ fun ConteoProcesoScreen(
              }
          )
      }
+
  }
 
 // Función para procesar código escaneado
@@ -660,10 +687,44 @@ private fun procesarCodigoEscaneado(
             if (ubicacionActual != null) {
                 val (codAlm, codUbi) = ubicacionActual.split("$")
                 if (articulo.codigoAlmacen == codAlm && articulo.codigoUbicacion == codUbi) {
-                    // Artículo correcto, proceder a cantidad
-                    conteoViewModel.setArticuloEscaneado(articulo)
-                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
-                    conteoViewModel.setMensaje("Artículo ${articulo.codigoArticulo} confirmado. Introduzca la cantidad.")
+                    // Artículo correcto, verificar si hay múltiples palets
+                    conteoLogic.obtenerPaletsDisponibles(
+                        codigoAlmacen = codAlm,
+                        ubicacion = codUbi,
+                        codigoArticulo = articulo.codigoArticulo,
+                        lote = articulo.lotePartida,
+                        fechaCaducidad = articulo.fechaCaducidad,
+                        onSuccess = { palets ->
+                            if (palets.size > 1) {
+                                // Múltiples palets, pedir escaneo de etiqueta GS1
+                                Log.d("ConteoProcesoScreen", "🔍 Múltiples palets encontrados: ${palets.size}")
+                                conteoViewModel.setArticuloEscaneado(articulo)
+                                conteoViewModel.setPaletsDisponibles(palets)
+                                conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoPalet)
+                                conteoViewModel.setMensaje("Múltiples palets encontrados. Escanee la etiqueta GS1 del palet específico.")
+                            } else if (palets.size == 1) {
+                                // Un solo palet, continuar automáticamente
+                                Log.d("ConteoProcesoScreen", "✅ Un solo palet encontrado: ${palets.first().codigoPalet}")
+                                conteoViewModel.setPaletSeleccionado(palets.first())
+                                conteoViewModel.setArticuloEscaneado(articulo)
+                                conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                                conteoViewModel.setMensaje("Artículo ${articulo.codigoArticulo} confirmado. Introduzca la cantidad.")
+                            } else {
+                                // Sin palets, continuar sin palet
+                                Log.d("ConteoProcesoScreen", "⚠️ Sin palets encontrados, continuando sin palet")
+                                conteoViewModel.setArticuloEscaneado(articulo)
+                                conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                                conteoViewModel.setMensaje("Artículo ${articulo.codigoArticulo} confirmado. Introduzca la cantidad.")
+                            }
+                        },
+                        onError = { errorMsg ->
+                            Log.e("ConteoProcesoScreen", "❌ Error al obtener palets: $errorMsg")
+                            // En caso de error, continuar sin palet
+                            conteoViewModel.setArticuloEscaneado(articulo)
+                            conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                            conteoViewModel.setMensaje("Artículo ${articulo.codigoArticulo} confirmado. Introduzca la cantidad.")
+                        }
+                    )
                 } else {
                     // Artículo en ubicación diferente, mostrar diálogo de confirmación
                     conteoViewModel.setArticuloParaConfirmar(articulo)
@@ -690,6 +751,7 @@ fun EstadoEscaneoCard(
     estadoEscaneo: EstadoEscaneoConteo,
     ubicacionEscaneada: String?,
     articuloEscaneado: LecturaPendiente?,
+    paletSeleccionado: PaletDisponible?,
     modoLecturaManual: Boolean = false
 ) {
     Card(
@@ -758,6 +820,29 @@ fun EstadoEscaneoCard(
                         }
                     }
                 }
+                EstadoEscaneoConteo.EsperandoPalet -> {
+                    Column {
+                        Text(
+                            text = "📦 Escanee la etiqueta GS1 del palet",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        ubicacionEscaneada?.let { ubicacion ->
+                            Text(
+                                text = "Ubicación: $ubicacion",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        articuloEscaneado?.let { articulo ->
+                            Text(
+                                text = "Artículo: ${articulo.codigoArticulo}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
                 EstadoEscaneoConteo.EsperandoCantidad -> {
                     Column {
                         Text(
@@ -775,6 +860,19 @@ fun EstadoEscaneoCard(
                         articuloEscaneado?.let { articulo ->
                             Text(
                                 text = "Artículo: ${articulo.codigoArticulo}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        paletSeleccionado?.let { palet ->
+                            Text(
+                                text = "Palet: ${palet.codigoPalet}",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "GS1: ${palet.codigoGS1}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall
                             )

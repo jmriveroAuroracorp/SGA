@@ -1,6 +1,8 @@
 ﻿<Window x:Class="SGA_Desktop.Dialog.PaletFilterDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
         Title="Filtros de Palet"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
@@ -16,6 +18,7 @@
                 <!-- Ajusta la URI si tu Estilos.xaml está en otra carpeta -->
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <Helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -40,6 +43,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -48,7 +52,15 @@
 
             <!-- Código -->
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Código:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Codigo, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EstiloCajaTexto}" Width="200"/>
+            <StackPanel Grid.Row="0" Grid.Column="1">
+                <TextBox Text="{Binding Codigo, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EstiloCajaTexto}" Width="200"/>
+                <TextBlock Text="{Binding MensajeValidacionCodigo}" 
+                           Foreground="#FF8C00" 
+                           FontSize="10" 
+                           FontStyle="Italic"
+                           Margin="0,1,0,0"
+                           Visibility="{Binding MensajeValidacionCodigo, Converter={StaticResource NullToVisibilityConverter}}"/>
+            </StackPanel>
 
             <!-- Estado -->
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Estado:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
@@ -58,56 +70,120 @@
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Tipo de palet:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
             <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding TiposPaletDisponibles}" SelectedItem="{Binding TipoPaletSeleccionado}" Style="{StaticResource EstiloComboBox}" DisplayMemberPath="Descripcion" Width="200"/>
 
+            <!-- Almacén -->
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Almacén:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="3" Grid.Column="1" 
+                      ItemsSource="{Binding AlmacenesView}"
+                      SelectedItem="{Binding AlmacenSeleccionado, Mode=TwoWay}"
+                      Text="{Binding FiltroAlmacenes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      DisplayMemberPath="DescripcionCombo"
+                      Style="{StaticResource EstiloComboBox}" 
+                      IsEditable="True"
+                      IsTextSearchEnabled="False"
+                      StaysOpenOnEdit="True"
+                      IsDropDownOpen="{Binding IsDropDownOpenAlmacenes}"
+                      Width="200">
+                <i:Interaction.Triggers>
+                    <i:EventTrigger EventName="GotFocus">
+                        <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="SelectionChanged">
+                        <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="TextChanged">
+                        <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesCommand}"/>
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
+                <ComboBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ComboBox.ItemsPanel>
+            </ComboBox>
+
             <!-- Fecha Apertura exacta -->
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="Fecha Apertura:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <DatePicker Grid.Row="3" Grid.Column="1" SelectedDate="{Binding FechaApertura}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Fecha Apertura:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <DatePicker Grid.Row="4" Grid.Column="1" SelectedDate="{Binding FechaApertura}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
 
             <!-- Fecha Cierre exacta -->
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="Fecha Cierre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <DatePicker Grid.Row="4" Grid.Column="1" SelectedDate="{Binding FechaCierre}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Fecha Cierre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <DatePicker Grid.Row="5" Grid.Column="1" SelectedDate="{Binding FechaCierre}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
 
             <!-- Rango Apertura–Cierre -->
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Rango Apertura–Cierre:" FontWeight="Bold" Grid.ColumnSpan="2" Margin="0,10,0,0"/>
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="Desde:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <DatePicker Grid.Row="6" Grid.Column="1" SelectedDate="{Binding FechaDesde}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
-            <TextBlock Grid.Row="7" Grid.Column="0" Text="Hasta:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-            <DatePicker Grid.Row="7" Grid.Column="1" SelectedDate="{Binding FechaHasta}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Rango Apertura–Cierre:" FontWeight="Bold" Grid.ColumnSpan="2" Margin="0,10,0,0"/>
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Desde:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <DatePicker Grid.Row="7" Grid.Column="1" SelectedDate="{Binding FechaDesde}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Hasta:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <DatePicker Grid.Row="8" Grid.Column="1" SelectedDate="{Binding FechaHasta}" Style="{StaticResource EstiloDatePicker}" Width="200"/>
 
             <!-- Usuario Apertura -->
-            <TextBlock Grid.Row="8" Grid.Column="0" Text="Usuario Apertura:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Usuario Apertura:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
             <ComboBox
-    Grid.Row="8" Grid.Column="1"
-    ItemsSource="{Binding UsuariosDisponibles}"
-SelectedItem="{Binding UsuarioAperturaSeleccionado}"
-
-    DisplayMemberPath="NombreOperario"
-    SelectedValuePath="UsuarioId"
-    Style="{StaticResource EstiloComboBox}"
-    Width="200"
-
+                Grid.Row="9" Grid.Column="1"
+                ItemsSource="{Binding UsuariosAperturaView}"
+                SelectedItem="{Binding UsuarioAperturaSeleccionado}"
+                Text="{Binding FiltroUsuarioApertura, UpdateSourceTrigger=PropertyChanged}"
+                DisplayMemberPath="NombreOperario"
+                SelectedValuePath="UsuarioId"
+                Style="{StaticResource EstiloComboBox}"
+                Width="200"
                 IsEditable="True"
-    IsTextSearchEnabled="True"
-    StaysOpenOnEdit="True"
-/>
+                IsTextSearchEnabled="False"
+                StaysOpenOnEdit="True"
+                IsDropDownOpen="{Binding IsDropDownOpenUsuarioApertura}">
+                <i:Interaction.Triggers>
+                    <i:EventTrigger EventName="GotFocus">
+                        <i:InvokeCommandAction Command="{Binding AbrirDropDownUsuarioAperturaCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="SelectionChanged">
+                        <i:InvokeCommandAction Command="{Binding CerrarDropDownUsuarioAperturaCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="TextChanged">
+                        <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUsuarioAperturaCommand}"/>
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
+                <ComboBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ComboBox.ItemsPanel>
+            </ComboBox>
 
                 <!-- Usuario Cierre -->
-            <TextBlock Grid.Row="9" Grid.Column="0" Text="Usuario Cierre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Usuario Cierre:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
             <ComboBox
-    Grid.Row="9" Grid.Column="1"
-    ItemsSource="{Binding UsuariosDisponibles}"
-SelectedItem="{Binding UsuarioCierreSeleccionado}"
-    DisplayMemberPath="NombreOperario"
-    SelectedValuePath="UsuarioId"
-    Style="{StaticResource EstiloComboBox}"
-    Width="200"
-
-    IsEditable="True"
-    IsTextSearchEnabled="True"
-    StaysOpenOnEdit="True"
-/>
+                Grid.Row="10" Grid.Column="1"
+                ItemsSource="{Binding UsuariosCierreView}"
+                SelectedItem="{Binding UsuarioCierreSeleccionado}"
+                Text="{Binding FiltroUsuarioCierre, UpdateSourceTrigger=PropertyChanged}"
+                DisplayMemberPath="NombreOperario"
+                SelectedValuePath="UsuarioId"
+                Style="{StaticResource EstiloComboBox}"
+                Width="200"
+                IsEditable="True"
+                IsTextSearchEnabled="False"
+                StaysOpenOnEdit="True"
+                IsDropDownOpen="{Binding IsDropDownOpenUsuarioCierre}">
+                <i:Interaction.Triggers>
+                    <i:EventTrigger EventName="GotFocus">
+                        <i:InvokeCommandAction Command="{Binding AbrirDropDownUsuarioCierreCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="SelectionChanged">
+                        <i:InvokeCommandAction Command="{Binding CerrarDropDownUsuarioCierreCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="TextChanged">
+                        <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUsuarioCierreCommand}"/>
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
+                <ComboBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ComboBox.ItemsPanel>
+            </ComboBox>
 
             <!-- Botones -->
-            <StackPanel Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <StackPanel Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
                 <Button Content="Cancelar" Width="90" Margin="0,0,10,0" IsCancel="True" Style="{StaticResource EstiloBotonPrincipal}"/>
                 <Button Content="Aplicar"   Width="90" IsDefault="True"      Command="{Binding AplicarFiltrosCommand}" Style="{StaticResource EstiloBotonPrincipal}"/>
             </StackPanel>

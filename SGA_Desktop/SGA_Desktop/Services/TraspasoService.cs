@@ -89,7 +89,8 @@ namespace SGA_Desktop.Services
 	string? almacenOrigen,
 	string? almacenDestino,
 	DateTime? fechaInicioDesde,
-	DateTime? fechaInicioHasta)
+	DateTime? fechaInicioHasta,
+	int limite = 500) // 🚀 Límite por defecto más razonable
 		{
 			var query = new List<string>();
 			if (!string.IsNullOrWhiteSpace(estado))
@@ -104,6 +105,9 @@ namespace SGA_Desktop.Services
 				query.Add($"fechaDesde={fechaInicioDesde:yyyy-MM-dd}");
 			if (fechaInicioHasta.HasValue)
 				query.Add($"fechaHasta={fechaInicioHasta:yyyy-MM-dd}"); // API ahora maneja el fin de día automáticamente
+			
+			// 🚀 Agregar límite para optimizar rendimiento
+			query.Add($"limite={limite}");
 
 			var url = "traspasos";
 			if (query.Count > 0)
@@ -150,6 +154,15 @@ namespace SGA_Desktop.Services
 		public async Task<List<PaletMovibleDto>> ObtenerPaletsCerradosMoviblesAsync()
 		{
 			var resp = await _httpClient.GetAsync("traspasos/palets-cerrados-movibles");
+			if (!resp.IsSuccessStatusCode)
+				return new List<PaletMovibleDto>();
+			var text = await resp.Content.ReadAsStringAsync();
+			return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<PaletMovibleDto>();
+		}
+
+		public async Task<List<PaletMovibleDto>> ObtenerPaletsConUbicacionAsync()
+		{
+			var resp = await _httpClient.GetAsync("traspasos/palets-con-ubicacion");
 			if (!resp.IsSuccessStatusCode)
 				return new List<PaletMovibleDto>();
 			var text = await resp.Content.ReadAsStringAsync();

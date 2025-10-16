@@ -10,7 +10,7 @@ namespace SGA_Desktop.Services
     /// <summary>
     /// Servicio para manejar notificaciones de traspasos en tiempo real a través de SignalR
     /// </summary>
-    public class NotificacionesTraspasosService
+    public class NotificacionesTraspasosService : IAsyncDisposable
     {
         private HubConnection? _connection;
         private readonly string _apiUrl;

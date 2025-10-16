@@ -9,5 +9,8 @@ data class LecturaPendiente(
     val cantidadStock: Double?,
     val cantidadTeorica: Double?,
     val cantidadContada: Double?,
-    val fechaCaducidad: String?
+    val fechaCaducidad: String?,
+    val paletId: String? = null,
+    val codigoPalet: String? = null,
+    val codigoGS1: String? = null
 )

@@ -49,6 +49,22 @@
                 </TextBox>
                 <Button Content="🔍" Width="40" Height="40" Margin="8,0,0,0" Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding BuscarStockCommand}"/>
+                
+                <!-- NUEVO: Combo de almacenes para filtrar -->
+                <StackPanel Orientation="Horizontal" 
+                            Visibility="{Binding MostrarComboAlmacenes, Converter={StaticResource BoolToVisibilityConverter}}"
+                            Margin="20,0,0,0">
+                    <TextBlock Text="Filtrar por almacén:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox Width="250" Height="40" Margin="8,0,0,0"
+                              Style="{StaticResource EstiloComboBox}"
+                              ItemsSource="{Binding AlmacenesFiltroView}"
+                              DisplayMemberPath="DescripcionCombo"
+                              SelectedItem="{Binding AlmacenFiltroSeleccionado, Mode=TwoWay}"
+                              Text="{Binding FiltroAlmacenesTexto, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              StaysOpenOnEdit="True"/>
+                </StackPanel>
             </StackPanel>
             
             <!-- Lado derecho: Botones de acción -->

@@ -393,6 +393,9 @@ public class LoginService : ApiService
             }
         }
 
+        /// <summary>
+        /// Obtiene la lista de operarios con acceso específico a traspasos
+        /// </summary>
         public async Task<List<OperariosAccesoDto>> ObtenerOperariosConAccesoTraspasosAsync()
         {
             try

@@ -11,7 +11,7 @@ import retrofit2.converter.scalars.ScalarsConverterFactory
 import okhttp3.logging.HttpLoggingInterceptor
 
 object ApiManager {
-    private const val BASE_URL = "http://10.0.0.175:5234/api/"
+    private const val BASE_URL = "http://10.0.5.176:5234/api/"
     //private const val BASE_URL = "http://localhost:5234/api/"
     // Retrofit con interceptor, creado de forma dinámica
 

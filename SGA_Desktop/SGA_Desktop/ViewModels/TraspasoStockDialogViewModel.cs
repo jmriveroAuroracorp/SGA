@@ -92,11 +92,20 @@ namespace SGA_Desktop.ViewModels
         _ = ConsultarPaletsDisponiblesAsync();
     }
 
-        [ObservableProperty]
-        private ObservableCollection<UbicacionDto> ubicacionesDestino = new();
+    [ObservableProperty]
+    private ObservableCollection<UbicacionDto> ubicacionesDestino = new();
+
+    // Vista filtrable para ubicaciones destino
+    public ICollectionView UbicacionesDestinoView { get; private set; }
 
     [ObservableProperty]
     private UbicacionDto ubicacionDestinoSeleccionada;
+
+    [ObservableProperty]
+    private string filtroUbicacionesDestino = "";
+
+    [ObservableProperty]
+    private bool isDropDownOpenUbicaciones = false;
 
     // NUEVO: Propiedades para selección de palets
     [ObservableProperty]
@@ -123,6 +132,14 @@ namespace SGA_Desktop.ViewModels
             foreach (var u in lista)
                 UbicacionesDestino.Add(u);
         }
+
+        // Inicializar la vista filtrable
+        UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
+        UbicacionesDestinoView.Filter = FiltraUbicacionesDestino;
+        OnPropertyChanged(nameof(UbicacionesDestinoView));
+        
+        // Limpiar el filtro
+        FiltroUbicacionesDestino = "";
     }
 
     // NUEVO: Consultar palets disponibles en la ubicación destino
@@ -453,21 +470,53 @@ namespace SGA_Desktop.ViewModels
             AlmacenesDestinoView?.Refresh();
         }
         
-        // Comandos para controlar dropdown
-        [RelayCommand]
-        private void AbrirDropDownAlmacenes()
-        {
-            // Limpiar el filtro para permitir escribir desde cero
-            FiltroAlmacenesDestino = "";
-            IsDropDownOpenAlmacenes = true;
-        }
-        
-        [RelayCommand]
-        private void CerrarDropDownAlmacenes()
-        {
-            IsDropDownOpenAlmacenes = false;
-        }
-
-        // No es necesario implementar PropertyChanged, lo gestiona ObservableObject
+    // Comandos para controlar dropdown de almacenes
+    [RelayCommand]
+    private void AbrirDropDownAlmacenes()
+    {
+        // Limpiar el filtro para permitir escribir desde cero
+        FiltroAlmacenesDestino = "";
+        IsDropDownOpenAlmacenes = true;
     }
+    
+    [RelayCommand]
+    private void CerrarDropDownAlmacenes()
+    {
+        IsDropDownOpenAlmacenes = false;
+    }
+
+    // Métodos para filtrado de ubicaciones destino
+    private bool FiltraUbicacionesDestino(object obj)
+    {
+        if (obj is not UbicacionDto ubicacion) return false;
+        if (string.IsNullOrEmpty(FiltroUbicacionesDestino)) return true;
+        
+        return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+            .IndexOf(ubicacion.UbicacionMostrada, FiltroUbicacionesDestino, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+    }
+    
+    // Método para manejar cambios en el filtro de ubicaciones
+    partial void OnFiltroUbicacionesDestinoChanged(string value)
+    {
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            UbicacionesDestinoView?.Refresh();
+        }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+    
+    // Comandos para controlar dropdown de ubicaciones
+    [RelayCommand]
+    private void AbrirDropDownUbicaciones()
+    {
+        IsDropDownOpenUbicaciones = true;
+    }
+    
+    [RelayCommand]
+    private void CerrarDropDownUbicaciones()
+    {
+        IsDropDownOpenUbicaciones = false;
+    }
+
+    // No es necesario implementar PropertyChanged, lo gestiona ObservableObject
+}
 } 

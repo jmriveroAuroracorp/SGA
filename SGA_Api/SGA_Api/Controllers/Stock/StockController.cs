@@ -304,16 +304,32 @@ namespace SGA_Api.Controllers.Stock
 			var q = _auroraSgaContext.StockDisponible
 				.Where(a => a.CodigoEmpresa == codigoEmpresa);
 
-			if (flujoUbicacion)
+		if (flujoUbicacion)
+		{
+			q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
+
+			// 🔷 LÓGICA MEJORADA: Diferenciar entre todo el almacén, sin ubicación y ubicación específica
+			var queryString = Request.QueryString.ToString();
+			var tieneParametroUbicacion = queryString.Contains("codigoUbicacion=");
+
+			if (tieneParametroUbicacion)
 			{
-				q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
-
-				if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+				if (codigoUbicacion == null || codigoUbicacion == "")
+				{
+					// Se envió el parámetro pero es null o vacío → Solo artículos sin ubicar
+					q = q.Where(a => string.IsNullOrEmpty(a.Ubicacion));
+				}
+				else
+				{
+					// Se envió el parámetro con valor → Ubicación específica
 					q = q.Where(a => a.Ubicacion == codigoUbicacion);
-
-				if (flujoArticulo)
-					q = q.Where(a => a.CodigoArticulo == codigoArticulo);
+				}
 			}
+			// Si no se envió el parámetro, no aplicamos filtro de ubicación (todo el almacén)
+
+			if (flujoArticulo)
+				q = q.Where(a => a.CodigoArticulo == codigoArticulo);
+		}
 			else if (flujoArticulo)
 			{
 				q = q.Where(a => a.CodigoArticulo == codigoArticulo);

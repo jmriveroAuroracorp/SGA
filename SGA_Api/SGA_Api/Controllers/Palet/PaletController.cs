@@ -81,7 +81,8 @@ public class PaletController : ControllerBase
 		[FromQuery] DateTime? fechaHasta = null,
 		[FromQuery] int? usuarioApertura = null,
 		[FromQuery] int? usuarioCierre = null,
-		[FromQuery] bool sinCierre = false)
+		[FromQuery] bool sinCierre = false,
+		[FromQuery] string? almacen = null)
 	{
 		var nombreDict = await _auroraSgaContext.vUsuariosConNombre
 			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
@@ -89,8 +90,8 @@ public class PaletController : ControllerBase
 		var q = _auroraSgaContext.Palets
 			.Where(p => p.CodigoEmpresa == codigoEmpresa && p.FechaVaciado == null);
 
-		if (!string.IsNullOrWhiteSpace(codigo))
-			q = q.Where(p => p.Codigo == codigo);
+		if (!string.IsNullOrWhiteSpace(codigo) && codigo.Length >= 3)
+			q = q.Where(p => p.Codigo.Contains(codigo));
 
 		if (!string.IsNullOrWhiteSpace(estado))
 			q = q.Where(p => p.Estado == estado);
@@ -115,6 +116,22 @@ public class PaletController : ControllerBase
 
 		if (usuarioCierre.HasValue)
 			q = q.Where(p => p.UsuarioCierreId == usuarioCierre);
+
+		// Filtro por almacén: buscar palets que tengan traspasos completados en ese almacén
+		if (!string.IsNullOrWhiteSpace(almacen))
+		{
+			// Buscar IDs de palets que tengan traspasos completados en el almacén especificado
+			var paletIdsEnAlmacen = await _auroraSgaContext.Traspasos
+				.Where(t => t.TipoTraspaso == "PALET" && 
+						   t.CodigoEstado == "COMPLETADO" && 
+						   t.AlmacenDestino == almacen)
+				.Select(t => t.PaletId)
+				.Distinct()
+				.ToListAsync();
+
+			// Filtrar solo los palets que están en el almacén especificado
+			q = q.Where(p => paletIdsEnAlmacen.Contains(p.Id));
+		}
 
 		var lista = await q.OrderBy(p => p.Codigo)
 			.Select(p => new PaletDto

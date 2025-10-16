@@ -407,6 +407,10 @@ namespace SGA_Api.Data
                 ent.Property(i => i.EstadoErp).HasColumnName("EstadoErp").HasMaxLength(500).IsRequired(false);
                 ent.Property(i => i.FechaCaducidad).HasColumnName("FechaCaducidad").HasColumnType("DATETIME").IsRequired(false);
                 ent.Property(i => i.Partida).HasColumnName("Partida").HasMaxLength(50).IsRequired(false);
+                ent.Property(i => i.PaletId).HasColumnName("PaletId").IsRequired(false);
+                ent.Property(i => i.CodigoPalet).HasColumnName("CodigoPalet").HasMaxLength(50).IsRequired(false);
+                ent.Property(i => i.CodigoGS1).HasColumnName("CodigoGS1").HasMaxLength(50).IsRequired(false);
+                ent.Property(i => i.ProcesadoPalet).HasColumnName("ProcesadoPalet").HasDefaultValue(false);
                 ent.HasOne(i => i.Inventario)
                     .WithMany(ic => ic.Ajustes)
                     .HasForeignKey(i => i.IdInventario)

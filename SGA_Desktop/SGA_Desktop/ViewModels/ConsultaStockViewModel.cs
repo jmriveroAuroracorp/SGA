@@ -79,16 +79,22 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private string empresaActual;
 
-		public ObservableCollection<string> Almacenes { get; }
-		public ObservableCollection<string> Ubicaciones { get; }
-		public ObservableCollection<StockDto> ResultadosStock { get; }
-		public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
+	public ObservableCollection<string> Almacenes { get; }
+	public ObservableCollection<string> Ubicaciones { get; }
+	public ObservableCollection<StockDto> ResultadosStock { get; }
+	public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
 	public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
 	public ObservableCollection<StockDto> StockFiltrado { get; } = new();
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
 	
 	// Vista filtrable para almacenes combo
 	public ICollectionView AlmacenesComboView { get; private set; }
+	
+	// Vista filtrable para ubicaciones (modo artículo)
+	public ICollectionView UbicacionesView { get; private set; }
+	
+	// Vista filtrable para ubicaciones (modo ubicación)
+	public ICollectionView UbicacionesUbicacionView { get; private set; }
 
 		[ObservableProperty]
 		private string almacenSeleccionado;
@@ -132,12 +138,37 @@ namespace SGA_Desktop.ViewModels
 	[ObservableProperty]
 	private StockDto? articuloSeleccionadoParaImprimir;
 	
-	// Propiedades para filtrado de almacenes
+	// Propiedades para filtrado de almacenes (modo artículo)
 	[ObservableProperty]
 	private string filtroAlmacenesCombo = "";
 	
 	[ObservableProperty]
 	private bool isDropDownOpenAlmacenes = false;
+	
+	// Propiedades para filtrado de almacenes (modo ubicación)
+	[ObservableProperty]
+	private string filtroAlmacenesComboLocation = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenAlmacenesLocation = false;
+	
+	// Vistas filtrables para almacenes (una por modo)
+	public ICollectionView AlmacenesComboArticleView { get; set; }
+	public ICollectionView AlmacenesComboLocationView { get; set; }
+	
+	// Propiedades para filtrado de ubicaciones (modo artículo)
+	[ObservableProperty]
+	private string filtroUbicaciones = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenUbicaciones = false;
+	
+	// Propiedades para filtrado de ubicaciones (modo ubicación)
+	[ObservableProperty]
+	private string filtroUbicacionesUbicacion = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenUbicacionesUbicacion = false;
 
 		#endregion
 
@@ -263,8 +294,20 @@ namespace SGA_Desktop.ViewModels
 			if (newValue)
 			{
 				almacenUbicacionPorDefecto = AlmacenSeleccionadoCombo;
-				AlmacenSeleccionadoCombo = almacenArticuloPorDefecto ?? AlmacenesCombo.FirstOrDefault();
+				AlmacenSeleccionadoCombo = almacenArticuloPorDefecto; // No seleccionar automáticamente
 				SwitchMode(resetFilters: false, setArticle: true);
+				
+				// Sincronizar filtros de texto
+				FiltroUbicaciones = "";
+				FiltroUbicacionesUbicacion = "";
+				FiltroAlmacenesCombo = "";
+				FiltroAlmacenesComboLocation = "";
+				
+				// Limpiar selecciones
+				AlmacenSeleccionadoCombo = null;
+				FiltroUbicacion = "";
+				
+				// 🔷 CORREGIDO: NO recrear vistas aquí, SwitchMode() ya llama a LoadUbicacionesAsync()
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 			OnPropertyChanged(nameof(CanRefresh));
@@ -278,8 +321,20 @@ namespace SGA_Desktop.ViewModels
 			if (newValue)
 			{
 				almacenArticuloPorDefecto = AlmacenSeleccionadoCombo;
-				AlmacenSeleccionadoCombo = almacenUbicacionPorDefecto ?? AlmacenesCombo.FirstOrDefault();
+				AlmacenSeleccionadoCombo = almacenUbicacionPorDefecto; // No seleccionar automáticamente
 				SwitchMode(resetFilters: false, setArticle: false);
+				
+				// Sincronizar filtros de texto
+				FiltroUbicacionesUbicacion = "";
+				FiltroUbicaciones = "";
+				FiltroAlmacenesCombo = "";
+				FiltroAlmacenesComboLocation = "";
+				
+				// Limpiar selecciones
+				AlmacenSeleccionadoCombo = null;
+				FiltroUbicacion = "";
+				
+				// 🔷 CORREGIDO: NO recrear vistas aquí, SwitchMode() ya llama a LoadUbicacionesAsync()
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 			OnPropertyChanged(nameof(CanRefresh));
@@ -791,12 +846,18 @@ namespace SGA_Desktop.ViewModels
 				foreach (var a in resultado)
 					AlmacenesCombo.Add(a);
 
-				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+				// No seleccionar nada por defecto - que el usuario elija
+				AlmacenSeleccionadoCombo = null;
 				
 				// 🔷 NUEVO: Inicializar la vista filtrable después de cargar los datos
-				AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
-				AlmacenesComboView.Filter = FiltraAlmacenesCombo;
-				OnPropertyChanged(nameof(AlmacenesComboView));
+				// 🔷 NUEVO: Crear UNA SOLA vista filtrable que funcione para ambos modos
+				AlmacenesComboArticleView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
+				AlmacenesComboArticleView.Filter = FiltraAlmacenesCombo;
+				
+				AlmacenesComboLocationView = AlmacenesComboArticleView; // Usar la misma vista
+				
+				OnPropertyChanged(nameof(AlmacenesComboArticleView));
+				OnPropertyChanged(nameof(AlmacenesComboLocationView));
 			}
 			catch (Exception ex)
 			{
@@ -829,16 +890,13 @@ namespace SGA_Desktop.ViewModels
 					return;
 				}
 
-				// 🔷 CORREGIDO: Mantener lógica para ambos modos
-				if (IsArticleMode)
+				// 🔷 NUEVO: Solo una opción genérica para ambos modos
+				Ubicaciones.Add(TODO_ALMACEN);
+				
+				// 🔷 CORREGIDO: Solo añadir "Sin ubicación" en modo ubicación
+				if (!IsArticleMode)
 				{
-					// En modo artículo: "Todas" para consultar sin filtro de ubicación
-					Ubicaciones.Add(TODAS);
-				}
-				else
-				{
-					// En modo ubicación: "Todo el almacén" y "Sin ubicación"
-					Ubicaciones.Add(TODO_ALMACEN);
+					// En modo ubicación: "Sin ubicación"
 					Ubicaciones.Add(SIN_UBICACION);
 				}
 
@@ -854,14 +912,30 @@ namespace SGA_Desktop.ViewModels
 					Ubicaciones.Add(ubic);
 				}
 
-				// 🔷 CORREGIDO: Selección por defecto según el modo
-				FiltroUbicacion = IsArticleMode ? TODAS : TODO_ALMACEN;
-			}
-			catch (Exception ex)
+			// 🔷 NUEVO: No seleccionar nada por defecto
+			FiltroUbicacion = "";
+			FiltroUbicaciones = "";
+			FiltroUbicacionesUbicacion = "";
+			
+			// 🔷 CORREGIDO: Crear vistas solo para el modo activo
+			if (IsArticleMode)
 			{
-				MostrarError("Error cargando ubicaciones", ex);
+				UbicacionesView = CollectionViewSource.GetDefaultView(Ubicaciones);
+				UbicacionesView.Filter = FiltraUbicaciones;
+				OnPropertyChanged(nameof(UbicacionesView));
+			}
+			else if (IsLocationMode)
+			{
+				UbicacionesUbicacionView = CollectionViewSource.GetDefaultView(Ubicaciones);
+				UbicacionesUbicacionView.Filter = FiltraUbicacionesUbicacion;
+				OnPropertyChanged(nameof(UbicacionesUbicacionView));
 			}
 		}
+		catch (Exception ex)
+		{
+			MostrarError("Error cargando ubicaciones", ex);
+		}
+	}
 
 
 		#endregion
@@ -1012,37 +1086,133 @@ namespace SGA_Desktop.ViewModels
 				|| (stock.DescripcionArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
 		}
 
-		// Métodos para filtrado de almacenes combo
-		private bool FiltraAlmacenesCombo(object obj)
-		{
-			if (obj is not AlmacenDto almacen) return false;
-			if (string.IsNullOrEmpty(FiltroAlmacenesCombo)) return true;
-			
-			return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
-				.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
-		}
+	
+	// Métodos para filtrado de almacenes (modo artículo)
+	private bool FiltraAlmacenesCombo(object obj)
+	{
+		if (obj is not AlmacenDto almacen) return false;
+		if (string.IsNullOrEmpty(FiltroAlmacenesCombo)) return true;
 		
-		// Método para manejar cambios en el filtro
-		partial void OnFiltroAlmacenesComboChanged(string value)
-		{
-			AlmacenesComboView?.Refresh();
-		}
-		
-		// Comandos para controlar dropdown
-		[RelayCommand]
-		private void AbrirDropDownAlmacenes()
-		{
-			// Limpiar el filtro para permitir escribir desde cero
-			FiltroAlmacenesCombo = "";
-			IsDropDownOpenAlmacenes = true;
-		}
-		
-		[RelayCommand]
-		private void CerrarDropDownAlmacenes()
-		{
-			IsDropDownOpenAlmacenes = false;
-		}
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 	}
+	
+	// Método para manejar cambios en el filtro de almacenes (modo artículo)
+	partial void OnFiltroAlmacenesComboChanged(string value)
+	{
+		AlmacenesComboArticleView?.Refresh();
+	}
+	
+	// Método para manejar cambios en el filtro de almacenes (modo ubicación)
+	partial void OnFiltroAlmacenesComboLocationChanged(string value)
+	{
+		// Usar el mismo filtro que el modo artículo
+		FiltroAlmacenesCombo = value;
+		AlmacenesComboArticleView?.Refresh();
+	}
+	
+	// Comandos para controlar dropdown (ambos modos usan el mismo)
+	[RelayCommand]
+	private void AbrirDropDownAlmacenes()
+	{
+		FiltroAlmacenesCombo = ""; // Limpiar filtro para mostrar todo
+		IsDropDownOpenAlmacenes = true;
+	}
+	
+	[RelayCommand]
+	private void CerrarDropDownAlmacenes()
+	{
+		IsDropDownOpenAlmacenes = false;
+	}
+	
+	[RelayCommand]
+	private void AbrirDropDownAlmacenesLocation()
+	{
+		FiltroAlmacenesCombo = ""; // Limpiar filtro para mostrar todo
+		IsDropDownOpenAlmacenesLocation = true;
+	}
+	
+	[RelayCommand]
+	private void CerrarDropDownAlmacenesLocation()
+	{
+		IsDropDownOpenAlmacenesLocation = false;
+	}
+	
+	// Métodos para filtrado de ubicaciones (modo artículo)
+	private bool FiltraUbicaciones(object obj)
+	{
+		if (obj is not string ubicacion) return false;
+		if (string.IsNullOrEmpty(FiltroUbicaciones)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(ubicacion, FiltroUbicaciones, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+	}
+	
+	// Método para manejar cambios en el filtro de ubicaciones (modo artículo)
+	partial void OnFiltroUbicacionesChanged(string value)
+	{
+		UbicacionesView?.Refresh();
+	}
+	
+	// Comandos para controlar dropdown de ubicaciones (modo artículo)
+	[RelayCommand]
+	private void AbrirDropDownUbicaciones()
+	{
+		IsDropDownOpenUbicaciones = true;
+	}
+	
+	// Métodos para filtrado de ubicaciones (modo ubicación)
+	private bool FiltraUbicacionesUbicacion(object obj)
+	{
+		if (obj is not string ubicacion) return false;
+		if (string.IsNullOrEmpty(FiltroUbicacionesUbicacion)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(ubicacion, FiltroUbicacionesUbicacion, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+	}
+	
+	// Método para manejar cambios en el filtro de ubicaciones (modo ubicación)
+	partial void OnFiltroUbicacionesUbicacionChanged(string value)
+	{
+		UbicacionesUbicacionView?.Refresh();
+	}
+	
+	// Comandos para controlar dropdown de ubicaciones (modo ubicación)
+	[RelayCommand]
+	private void AbrirDropDownUbicacionesUbicacion()
+	{
+		IsDropDownOpenUbicacionesUbicacion = true;
+	}
+	
+	// Comandos para limpiar selección cuando se borra el texto
+	[RelayCommand]
+	private void LimpiarSeleccionAlmacenes()
+	{
+		AlmacenSeleccionadoCombo = null;
+		FiltroAlmacenesCombo = ""; // Limpiar también el filtro de texto
+	}
+	
+	[RelayCommand]
+	private void LimpiarSeleccionAlmacenesLocation()
+	{
+		AlmacenSeleccionadoCombo = null;
+		FiltroAlmacenesComboLocation = ""; // Limpiar también el filtro de texto
+	}
+	
+	[RelayCommand]
+	private void LimpiarSeleccionUbicaciones()
+	{
+		FiltroUbicacion = "";
+		FiltroUbicaciones = ""; // Limpiar también el filtro de texto
+	}
+	
+	[RelayCommand]
+	private void LimpiarSeleccionUbicacionesUbicacion()
+	{
+		FiltroUbicacion = "";
+		FiltroUbicacionesUbicacion = ""; // Limpiar también el filtro de texto
+	}
+}
 }
 
 

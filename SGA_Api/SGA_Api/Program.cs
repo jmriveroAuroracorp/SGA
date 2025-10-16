@@ -85,6 +85,7 @@ builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
 builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
 builder.Services.AddScoped<ICalidadService, CalidadService>();
 builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
+builder.Services.AddHostedService<SGA_Api.Services.ConteosAjustesBackgroundService>();
 
 // Configuración de SignalR
 builder.Services.AddSignalR();

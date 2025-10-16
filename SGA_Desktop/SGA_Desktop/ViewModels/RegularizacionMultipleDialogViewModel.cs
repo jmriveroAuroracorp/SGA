@@ -25,11 +25,33 @@ namespace SGA_Desktop.ViewModels
 	public ObservableCollection<StockDisponibleDto> LineasPendientes { get; } = new();
 	public ObservableCollection<AlmacenDto> AlmacenesDestino { get; } = new();
 	
-	// Vista filtrable para almacenes destino
+	// Colección separada para el ComboBox común (filtrable)
+	public ObservableCollection<AlmacenDto> AlmacenesDestinoComun { get; } = new();
+	
+	// Vista filtrable para almacén común
+	public ICollectionView AlmacenesDestinoView { get; private set; }
+	
+	[ObservableProperty]
+	private string filtroAlmacenesComun = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenAlmacenesComun = false;
+
+	// Vista filtrable para ubicaciones común
+	public ICollectionView UbicacionesDestinoComunView { get; private set; }
+	
+	[ObservableProperty]
+	private string filtroUbicacionesComun = "";
+	
+	[ObservableProperty]
+	private bool isDropDownOpenUbicacionesComun = false;
 
 		// NUEVAS PROPIEDADES DESTINO COMÚN
 		[ObservableProperty]
 		private AlmacenDto destinoComunAlmacen;
+
+		[ObservableProperty]
+		private string destinoComunAlmacenCodigo;
 
 		// Cambia la propiedad DestinoComunUbicacion a UbicacionDto
 		[ObservableProperty]
@@ -49,9 +71,35 @@ namespace SGA_Desktop.ViewModels
 	// NUEVO: Palets disponibles para el palet común
 	public ObservableCollection<PaletDto> PaletsComunDisponibles { get; } = new();
 
+	// 🔷 NUEVO: Combo de almacenes para filtrar (como en TraspasosStockViewModel)
+	public ObservableCollection<AlmacenDto> AlmacenesFiltro { get; } = new();
+	public ICollectionView AlmacenesFiltroView { get; private set; }
+	
+	[ObservableProperty]
+	private AlmacenDto almacenFiltroSeleccionado;
+	
+	[ObservableProperty]
+	private string filtroAlmacenesTexto = "";
+
+	// 🔷 NUEVO: Propiedad para controlar la visibilidad del combo de almacenes
+	[ObservableProperty]
+	private bool mostrarComboAlmacenes = false;
+
+	// 🔷 NUEVO: Almacenar todos los resultados de stock para filtrado local
+	private List<StockDisponibleDto> _todosLosResultadosStock = new();
+	
+	// 🔷 NUEVO: Control de estados de expansión para evitar que se cierren al filtrar
+	private Dictionary<string, bool> _estadosExpansion = new();
+
 	partial void OnDestinoComunAlmacenChanged(AlmacenDto value)
 	{
 		_ = CargarUbicacionesDestinoComunAsync();
+	}
+
+	partial void OnDestinoComunAlmacenCodigoChanged(string value)
+	{
+		// Buscar el almacén correspondiente al código
+		DestinoComunAlmacen = AlmacenesDestinoComun.FirstOrDefault(a => a.CodigoAlmacen == value);
 	}
 
 	partial void OnDestinoComunUbicacionChanged(UbicacionDto value)
@@ -78,57 +126,76 @@ namespace SGA_Desktop.ViewModels
 		// Fecha de entrada a la ventana (inicio de la regularización múltiple)
 		private readonly DateTime _fechaInicioDialogo = DateTime.Now;
 
-		public RegularizacionMultipleDialogViewModel(TraspasosService traspasosService, StockService stockService)
+	public RegularizacionMultipleDialogViewModel(TraspasosService traspasosService, StockService stockService)
+	{
+		_traspasosService = traspasosService;
+		_stockService = stockService;
+		
+		// Inicializar la vista filtrable de almacenes
+		AlmacenesFiltroView = CollectionViewSource.GetDefaultView(AlmacenesFiltro);
+		AlmacenesFiltroView.Filter = FiltraAlmacenesFiltro;
+	}
+
+	public async Task InitializeAsync()
+	{
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+		var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+		
+		// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+		var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
+		
+		var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, almacenesAutorizados);
+
+		// Poblar ambas colecciones con los mismos datos
+		AlmacenesDestino.Clear();
+		AlmacenesDestinoComun.Clear();
+		
+		foreach (var a in almacenes)
 		{
-			_traspasosService = traspasosService;
-			_stockService = stockService;
+			AlmacenesDestino.Add(a);          // Para ComboBoxes de líneas (sin filtrar)
+			AlmacenesDestinoComun.Add(a);     // Para ComboBox común (filtrable)
 		}
 
-		public async Task InitializeAsync()
-		{
-			var empresa = SessionManager.EmpresaSeleccionada!.Value;
-			var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
-			
-			// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
-			var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
-			
-			var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, almacenesAutorizados);
-
-			AlmacenesDestino.Clear();
-			foreach (var a in almacenes)
-				AlmacenesDestino.Add(a);
-
-			OnPropertyChanged(nameof(AlmacenesDestino));
-			
-		}
+		OnPropertyChanged(nameof(AlmacenesDestino));
+		OnPropertyChanged(nameof(AlmacenesDestinoComun));
+		
+		// Inicializar la vista filtrable SOLO para el ComboBox común
+		AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestinoComun);
+		AlmacenesDestinoView.Filter = FiltraAlmacenesComun;
+		OnPropertyChanged(nameof(AlmacenesDestinoView));
+	}
 
 		public async Task CargarUbicacionesDestinoAsync(StockDisponibleDto linea)
 		{
-			linea.UbicacionesDestino.Clear();
-			linea.UbicacionDestino = null;
-			
-			// Limpiar palets disponibles al cambiar ubicación
-			linea.PaletsDisponibles.Clear();
-			linea.PaletDestinoSeleccionado = null;
-			linea.MostrarSelectorPalets = false;
-
-			if (string.IsNullOrWhiteSpace(linea.AlmacenDestino)) return;
-
-			var lista = await new UbicacionesService().ObtenerUbicacionesAsync(
-				linea.AlmacenDestino,
-				SessionManager.EmpresaSeleccionada.Value
-			);
-
-			if (lista != null)
+			try
 			{
-				foreach (var u in lista)
-					linea.UbicacionesDestino.Add(u);
+				linea.UbicacionesDestino.Clear();
+				linea.UbicacionDestino = null;
+				
+				// Limpiar palets disponibles al cambiar ubicación
+				linea.PaletsDisponibles.Clear();
+				linea.PaletDestinoSeleccionado = null;
+				linea.MostrarSelectorPalets = false;
 
-				CollectionViewSource.GetDefaultView(linea.UbicacionesDestino)?.Refresh();
+				if (string.IsNullOrWhiteSpace(linea.AlmacenDestino)) return;
+
+				var lista = await new UbicacionesService().ObtenerUbicacionesAsync(
+					linea.AlmacenDestino,
+					SessionManager.EmpresaSeleccionada.Value
+				);
+
+				if (lista != null)
+				{
+					foreach (var u in lista)
+						linea.UbicacionesDestino.Add(u);
+
+					CollectionViewSource.GetDefaultView(linea.UbicacionesDestino)?.Refresh();
+				}
 			}
-			else
+			catch (Exception ex)
 			{
-				new WarningDialog("Aviso", "No se recibieron ubicaciones (lista es null)").ShowDialog();
+				// En caso de error, solo limpiar las ubicaciones
+				linea.UbicacionesDestino.Clear();
 			}
 		}
 		
@@ -237,49 +304,60 @@ namespace SGA_Desktop.ViewModels
 		partial void OnArticuloBuscadoChanged(string value) => BuscarStockCommand.NotifyCanExecuteChanged();
 		partial void OnArticuloDescripcionChanged(string value) => BuscarStockCommand.NotifyCanExecuteChanged();
 
-		[RelayCommand(CanExecute = nameof(CanBuscarStock))]
-		private async Task BuscarStockAsync()
+	[RelayCommand(CanExecute = nameof(CanBuscarStock))]
+	private async Task BuscarStockAsync()
+	{
+		try
 		{
-			try
+			var codigo = string.IsNullOrWhiteSpace(articuloBuscado) ? null : articuloBuscado;
+			var descripcion = string.IsNullOrWhiteSpace(articuloDescripcion) ? null : articuloDescripcion;
+
+			if (codigo == null && descripcion == null)
 			{
-				var codigo = string.IsNullOrWhiteSpace(articuloBuscado) ? null : articuloBuscado;
-				var descripcion = string.IsNullOrWhiteSpace(articuloDescripcion) ? null : articuloDescripcion;
-
-				if (codigo == null && descripcion == null)
-				{
-					new WarningDialog("Aviso", "Introduce al menos código de artículo o descripción para buscar.").ShowDialog();
-					return;
-				}
-
-				// Nuevo: usa el método que trae Reservado y Disponible
-				var resultados = await _stockService.ObtenerStockDisponibleAsync(codigo, descripcion);
-
-				// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
-				var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
-
-				resultados = resultados
-					.Where(x => x?.CodigoAlmacen != null && almacenesAutorizados.Contains(x.CodigoAlmacen))
-					.ToList();
-
-				var grupos = resultados
-					.GroupBy(s => new { s.CodigoArticulo, s.DescripcionArticulo })
-					.Select(g => new ArticuloConStockDto
-					{
-						CodigoArticulo = g.Key.CodigoArticulo,
-						DescripcionArticulo = g.Key.DescripcionArticulo,
-						Ubicaciones = new ObservableCollection<StockDisponibleDto>(g.ToList())
-					})
-					.ToList();
-
-				ArticulosConStock.Clear();
-				foreach (var art in grupos)
-					ArticulosConStock.Add(art);
+				// 🔷 NUEVO: Limpiar combo de almacenes cuando no hay artículo
+				AlmacenesFiltro.Clear();
+				AlmacenFiltroSeleccionado = null;
+				_todosLosResultadosStock.Clear();
+				MostrarComboAlmacenes = false;
+				new WarningDialog("Aviso", "Introduce al menos código de artículo o descripción para buscar.").ShowDialog();
+				return;
 			}
-			catch (Exception ex)
+
+			// Nuevo: usa el método que trae Reservado y Disponible
+			var resultados = await _stockService.ObtenerStockDisponibleAsync(codigo, descripcion);
+
+			// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
+			var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
+
+			resultados = resultados
+				.Where(x => x?.CodigoAlmacen != null && almacenesAutorizados.Contains(x.CodigoAlmacen))
+				.ToList();
+
+			if (resultados.Count == 0)
 			{
-				new WarningDialog("Error", $"Error al buscar stock: {ex.Message}").ShowDialog();
+				// 🔷 NUEVO: Limpiar combo cuando no hay stock
+				AlmacenesFiltro.Clear();
+				AlmacenFiltroSeleccionado = null;
+				_todosLosResultadosStock.Clear();
+				MostrarComboAlmacenes = false;
+				new WarningDialog("Aviso", "No hay stock para ese artículo.").ShowDialog();
+				return;
 			}
+
+			// 🔷 NUEVO: Guardar todos los resultados para filtrado local
+			_todosLosResultadosStock = new List<StockDisponibleDto>(resultados);
+
+			// 🔷 NUEVO: Cargar combo con los almacenes que realmente tienen stock del artículo
+			await CargarAlmacenesConStockAsync(resultados);
+
+			// 🔷 NUEVO: Aplicar filtrado por almacén si hay uno seleccionado
+			await FiltrarResultadosPorAlmacen();
 		}
+		catch (Exception ex)
+		{
+			new WarningDialog("Error", $"Error al buscar stock: {ex.Message}").ShowDialog();
+		}
+	}
 
 		private bool CanBuscarStock()
 			=> !string.IsNullOrWhiteSpace(articuloBuscado) || !string.IsNullOrWhiteSpace(articuloDescripcion);
@@ -352,29 +430,56 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		private async void AplicarDestinoComun()
 		{
-			// 1. Cambia almacén y espera a que se carguen ubicaciones
-			foreach (var dto in LineasPendientes)
+			if (!LineasPendientes.Any()) return;
+
+			// 1. Cambiar almacén para todas las líneas
+			if (DestinoComunAlmacen != null)
 			{
-				if (DestinoComunAlmacen != null)
+				foreach (var dto in LineasPendientes)
 				{
 					dto.AlmacenDestino = DestinoComunAlmacen.CodigoAlmacen;
-					await CargarUbicacionesDestinoAsync(dto);
 				}
 			}
 
-			// 2. Ahora asigna la ubicación común SOLO como string
+			// 2. Cargar ubicaciones solo para las líneas que lo necesiten (evitar duplicados)
+			var almacenesUnicos = LineasPendientes
+				.Where(dto => !string.IsNullOrEmpty(dto.AlmacenDestino))
+				.Select(dto => dto.AlmacenDestino)
+				.Distinct()
+				.ToList();
+
+			foreach (var almacenCodigo in almacenesUnicos)
+			{
+				var lineasDelAlmacen = LineasPendientes.Where(dto => dto.AlmacenDestino == almacenCodigo).ToList();
+				
+				// Cargar ubicaciones solo una vez por almacén
+				if (lineasDelAlmacen.Any())
+				{
+					await CargarUbicacionesDestinoAsync(lineasDelAlmacen.First());
+					
+					// Copiar las ubicaciones a las demás líneas del mismo almacén
+					var ubicaciones = lineasDelAlmacen.First().UbicacionesDestino.ToList();
+					foreach (var linea in lineasDelAlmacen.Skip(1))
+					{
+						linea.UbicacionesDestino.Clear();
+						foreach (var ubicacion in ubicaciones)
+						{
+							linea.UbicacionesDestino.Add(ubicacion);
+						}
+					}
+				}
+			}
+
+			// 3. Asignar ubicación común
 			if (DestinoComunUbicacion != null)
 			{
 				foreach (var dto in LineasPendientes)
 				{
 					dto.UbicacionDestino = DestinoComunUbicacion.Ubicacion;
 					
-					// NUEVO: Limpiar selección previa de palets antes de consultar nuevos
+					// Limpiar selección previa de palets
 					dto.PaletDestinoSeleccionado = null;
 					dto.PaletDestinoId = null;
-					
-					// NUEVO: Consultar palets disponibles después de asignar ubicación
-					await ConsultarPaletsDisponiblesAsync(dto);
 				}
 			}
 
@@ -674,32 +779,274 @@ namespace SGA_Desktop.ViewModels
 
 
 
-		//  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
-		private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
-		{
-			var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-			var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+	//  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
+	private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
+	{
+		var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+		var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
 
-			// Si el usuario tiene almacenes individuales, incluir también los del centro
-			if (almacenesIndividuales.Any())
+		// Si el usuario tiene almacenes individuales, incluir también los del centro
+		if (almacenesIndividuales.Any())
+		{
+			// Obtener almacenes del centro logístico de forma asíncrona
+			var almacenesCentro = await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+			
+			// Combinar almacenes individuales + almacenes del centro
+			var todosLosAlmacenes = new List<string>(almacenesIndividuales);
+			todosLosAlmacenes.AddRange(almacenesCentro);
+			
+			// Eliminar duplicados
+			return todosLosAlmacenes.Distinct().ToList();
+		}
+		else
+		{
+			// Si no tiene almacenes individuales, usar solo los del centro
+			return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+		}
+	}
+
+	// Métodos para filtrado de almacén común
+	private bool FiltraAlmacenesComun(object obj)
+	{
+		if (obj is not AlmacenDto almacen) return false;
+		if (string.IsNullOrEmpty(FiltroAlmacenesComun)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesComun, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+	}
+	
+	// Método para manejar cambios en el filtro de almacén común
+	partial void OnFiltroAlmacenesComunChanged(string value)
+	{
+		// Si el filtro está vacío, limpiar la selección para evitar autocompletado
+		if (string.IsNullOrEmpty(value))
+		{
+			DestinoComunAlmacen = null;
+		}
+		
+		// Refresh más simple, sin Dispatcher
+		AlmacenesDestinoView?.Refresh();
+	}
+	
+	// Comandos para controlar dropdown de almacén común
+	[RelayCommand]
+	private void AbrirDropDownAlmacenesComun()
+	{
+		// Limpiar filtro y selección al abrir dropdown para permitir escribir desde cero
+		FiltroAlmacenesComun = "";
+		DestinoComunAlmacen = null;
+		IsDropDownOpenAlmacenesComun = true;
+	}
+	
+	[RelayCommand]
+	private void CerrarDropDownAlmacenesComun()
+	{
+		IsDropDownOpenAlmacenesComun = false;
+	}
+
+	// Métodos para filtrado de ubicaciones común
+	private bool FiltraUbicacionesComun(object obj)
+	{
+		if (obj is not UbicacionDto ubicacion) return false;
+		if (string.IsNullOrEmpty(FiltroUbicacionesComun)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(ubicacion.Ubicacion, FiltroUbicacionesComun, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+	}
+	
+	// Método para manejar cambios en el filtro de ubicaciones común
+	partial void OnFiltroUbicacionesComunChanged(string value)
+	{
+		// Solo limpiar selección si el filtro está vacío Y no hay selección actual
+		if (string.IsNullOrEmpty(value) && DestinoComunUbicacion != null)
+		{
+			// Verificar si el texto del filtro coincide con la ubicación seleccionada
+			if (DestinoComunUbicacion.Ubicacion != value)
 			{
-				// Obtener almacenes del centro logístico de forma asíncrona
-				var almacenesCentro = await _stockService.ObtenerAlmacenesAsync(centroLogistico);
-				
-				// Combinar almacenes individuales + almacenes del centro
-				var todosLosAlmacenes = new List<string>(almacenesIndividuales);
-				todosLosAlmacenes.AddRange(almacenesCentro);
-				
-				// Eliminar duplicados
-				return todosLosAlmacenes.Distinct().ToList();
-			}
-			else
-			{
-				// Si no tiene almacenes individuales, usar solo los del centro
-				return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+				DestinoComunUbicacion = null;
 			}
 		}
-
-
+		
+		UbicacionesDestinoComunView?.Refresh();
 	}
+	
+	// Comandos para controlar dropdown de ubicaciones común
+	[RelayCommand]
+	private void AbrirDropDownUbicacionesComun()
+	{
+		IsDropDownOpenUbicacionesComun = true;
+	}
+	
+	[RelayCommand]
+	private void CerrarDropDownUbicacionesComun()
+	{
+		IsDropDownOpenUbicacionesComun = false;
+	}
+
+	// 🔷 NUEVO: Método para cargar almacenes basándose en el stock encontrado (igual que TraspasosStockViewModel)
+	private async Task CargarAlmacenesConStockAsync(List<StockDisponibleDto> stock)
+	{
+		try
+		{
+			// Obtener códigos únicos de almacenes del stock encontrado
+			var codigosAlmacenesStock = stock.Select(x => x.CodigoAlmacen).Distinct().ToList();
+			
+			if (!codigosAlmacenesStock.Any())
+			{
+				AlmacenesFiltro.Clear();
+				MostrarComboAlmacenes = false;
+				return;
+			}
+
+			// Obtener información completa de los almacenes
+			var empresa = SessionManager.EmpresaSeleccionada!.Value;
+			var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+			var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+			
+			if (!permisos.Any())
+			{
+				permisos = await _stockService.ObtenerAlmacenesAsync(centro);
+			}
+			
+			// Obtener todos los almacenes autorizados
+			var todosAlmacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+			
+			// Filtrar solo los almacenes que tienen stock del artículo
+			var almacenesConStock = todosAlmacenes
+				.Where(a => codigosAlmacenesStock.Contains(a.CodigoAlmacen))
+				.OrderBy(a => a.DescripcionCombo)
+				.ToList();
+			
+			// Limpiar y poblar el combo
+			AlmacenesFiltro.Clear();
+			foreach (var almacen in almacenesConStock)
+				AlmacenesFiltro.Add(almacen);
+				
+			// Limpiar selección previa si el almacén ya no está disponible
+			if (AlmacenFiltroSeleccionado != null && 
+				!almacenesConStock.Any(a => a.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen))
+			{
+				AlmacenFiltroSeleccionado = null;
+			}
+			
+			// 🔷 NUEVO: Mostrar combo solo si hay almacenes
+			MostrarComboAlmacenes = AlmacenesFiltro.Count > 0;
+				
+			OnPropertyChanged(nameof(AlmacenesFiltro));
+		}
+		catch (Exception ex)
+		{
+			// En caso de error, continuar sin filtro de almacenes
+			AlmacenesFiltro.Clear();
+			MostrarComboAlmacenes = false;
+		}
+	}
+
+	// 🔷 NUEVO: Método para filtrar almacenes en el combo
+	private bool FiltraAlmacenesFiltro(object obj)
+	{
+		if (obj is not AlmacenDto almacen) return false;
+		if (string.IsNullOrEmpty(FiltroAlmacenesTexto)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+	}
+
+	// 🔷 NUEVO: Método para manejar cambios en el filtro de almacenes
+	partial void OnFiltroAlmacenesTextoChanged(string value)
+	{
+		AlmacenesFiltroView?.Refresh();
+	}
+
+	// 🔷 NUEVO: Método para filtrar resultados por almacén sin hacer nueva búsqueda
+	private async Task FiltrarResultadosPorAlmacen()
+	{
+		// Guardar el estado de expansión antes de limpiar
+		GuardarEstadosExpansion();
+		
+		// Limpiar resultados actuales
+		ArticulosConStock.Clear();
+		
+		// Obtener stock filtrado
+		var stockFiltrado = _todosLosResultadosStock;
+		
+		// Aplicar filtro por almacén si hay uno seleccionado
+		if (AlmacenFiltroSeleccionado != null)
+		{
+			stockFiltrado = stockFiltrado.Where(x => x.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen).ToList();
+		}
+		
+		// Agrupar por artículo
+		var grupos = stockFiltrado.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
+								  .Select(g => new ArticuloConStockDto
+								  {
+									  CodigoArticulo = g.Key.CodigoArticulo,
+									  DescripcionArticulo = g.Key.DescripcionArticulo,
+									  Ubicaciones = new ObservableCollection<StockDisponibleDto>(
+										  g.OrderBy(x => x.CodigoAlmacen)
+											.ThenBy(x => x.Ubicacion)
+											.ToList())
+								  })
+								  .OrderBy(a => a.CodigoArticulo)
+								  .ToList();
+		
+		// Añadir grupos a la colección
+		foreach (var g in grupos)
+		{
+			// Pre-rellenar la cantidad con el valor disponible para cada ubicación
+			foreach (var ubicacion in g.Ubicaciones)
+			{
+				ubicacion.CantidadAMoverTexto = ubicacion.Disponible.ToString("F4");
+			}
+			ArticulosConStock.Add(g);
+		}
+		
+		// Restaurar el estado de expansión después de añadir los elementos
+		await RestaurarEstadosExpansion();
+	}
+
+	// 🔷 NUEVO: Método para manejar cambios en la selección del almacén
+	partial void OnAlmacenFiltroSeleccionadoChanged(AlmacenDto value)
+	{
+		// Actualizar el texto del filtro con la selección
+		if (value != null)
+		{
+			FiltroAlmacenesTexto = value.DescripcionCombo;
+		}
+		
+		// 🔷 CORREGIDO: Solo filtrar los resultados existentes, NO hacer otra búsqueda
+		_ = FiltrarResultadosPorAlmacen();
+	}
+
+	// 🔷 NUEVO: Método para guardar estados de expansión
+	private void GuardarEstadosExpansion()
+	{
+		_estadosExpansion.Clear();
+		foreach (var grupo in ArticulosConStock)
+		{
+			var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
+			_estadosExpansion[clave] = grupo.IsExpanded;
+		}
+	}
+
+	// 🔷 NUEVO: Método para restaurar estados de expansión
+	private async Task RestaurarEstadosExpansion()
+	{
+		// Pequeño delay para asegurar que la UI se actualice
+		await Task.Delay(50);
+		
+		foreach (var grupo in ArticulosConStock)
+		{
+			var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
+			if (_estadosExpansion.ContainsKey(clave))
+			{
+				grupo.IsExpanded = _estadosExpansion[clave];
+			}
+		}
+		
+		// Forzar la actualización de la UI
+		OnPropertyChanged(nameof(ArticulosConStock));
+	}
+
+}
 }

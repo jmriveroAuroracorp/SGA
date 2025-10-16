@@ -55,4 +55,14 @@ interface ConteosApiService {
     // Obtener resultados de conteo
     @GET("conteos/ordenes/{guidID}/resultados")
     suspend fun obtenerResultados(@Path("guidID") guidID: String): List<ResultadoConteoDto>
+    
+    // Obtener palets disponibles para una ubicación y artículo
+    @GET("conteos/palets-disponibles")
+    suspend fun obtenerPaletsDisponibles(
+        @Query("codigoAlmacen") codigoAlmacen: String,
+        @Query("ubicacion") ubicacion: String? = null,
+        @Query("codigoArticulo") codigoArticulo: String? = null,
+        @Query("lote") lote: String? = null,
+        @Query("fechaCaducidad") fechaCaducidad: String? = null
+    ): List<PaletDisponibleDto>
 }

@@ -19,6 +19,11 @@ namespace SGA_Api.Models.Conteos
         public Guid GuidID { get; set; } = Guid.NewGuid();
         public DateTime? FechaCaducidad { get; set; }
 
+        // Campos para información de palet
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
+        public string? CodigoGS1 { get; set; }
+
         // Navigation property
         public OrdenConteo Orden { get; set; } = null!;
 

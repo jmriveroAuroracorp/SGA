@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -46,7 +47,7 @@ namespace SGA_Desktop.ViewModels
         public IAsyncRelayCommand LoadPaletsCommand { get; }
         public IRelayCommand AbrirFiltrosCommand { get; }
         public IAsyncRelayCommand LoadLineasCommand { get; }
-        public IRelayCommand CrearPaletCommand { get; }
+        public IAsyncRelayCommand CrearPaletCommand { get; }
         public IRelayCommand AbrirPaletLineasCommand { get; }
         public IRelayCommand<PaletDto> SeleccionarPaletCommand { get; }
         public IRelayCommand CerrarContenidoCommand { get; }
@@ -73,7 +74,7 @@ namespace SGA_Desktop.ViewModels
         // Comandos de Paletización
         LoadPaletsCommand = new AsyncRelayCommand(LoadPaletsAsync);
         AbrirFiltrosCommand = new RelayCommand(OpenFiltros);
-        CrearPaletCommand = new RelayCommand(AbrirPaletCrearDialog);
+        CrearPaletCommand = new AsyncRelayCommand(AbrirPaletCrearDialog);
         LoadLineasCommand = new AsyncRelayCommand(LoadLineasPaletAsync);
         AbrirPaletLineasCommand = new RelayCommand(AbrirPaletLineas, PuedeAbrirPaletLineas);
         SeleccionarPaletCommand = new RelayCommand<PaletDto>(SeleccionarPalet);
@@ -117,28 +118,44 @@ namespace SGA_Desktop.ViewModels
 				var lista = await _paletService.ObtenerPaletsAsync(
 					codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value);
 				
-				// Obtener información de traspaso para palets cerrados
-				var paletsConTraspaso = await _traspasosService.ObtenerPaletsCerradosMoviblesAsync();
+				// Obtener información de traspaso para todos los palets (cerrados y abiertos)
+				var paletsConTraspaso = await _traspasosService.ObtenerPaletsConUbicacionAsync();
+				
+				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
+				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
 				
 				PaletsView.Clear();
 				foreach (var p in lista)
 				{
-					// Buscar información de traspaso si el palet está cerrado
-					if (p.Estado == "Cerrado")
+					// Buscar información de traspaso para cualquier palet (cerrado o abierto)
+					// Solo los palets recién creados no tendrán esta información
+					var paletConTraspaso = paletsConTraspaso.FirstOrDefault(pt => pt.Id == p.Id);
+					if (paletConTraspaso != null)
 					{
-						var paletConTraspaso = paletsConTraspaso.FirstOrDefault(pt => pt.Id == p.Id);
-						if (paletConTraspaso != null)
-						{
-							p.AlmacenOrigen = paletConTraspaso.AlmacenOrigen;
-							p.UbicacionOrigen = paletConTraspaso.UbicacionOrigen;
-							p.FechaUltimoTraspaso = paletConTraspaso.FechaUltimoTraspaso;
-							p.UsuarioUltimoTraspaso = paletConTraspaso.UsuarioUltimoTraspaso;
-						}
+						p.AlmacenOrigen = paletConTraspaso.AlmacenOrigen;
+						p.UbicacionOrigen = paletConTraspaso.UbicacionOrigen;
+						p.FechaUltimoTraspaso = paletConTraspaso.FechaUltimoTraspaso;
+						p.UsuarioUltimoTraspaso = paletConTraspaso.UsuarioUltimoTraspaso;
 					}
-					PaletsView.Add(p);
+					
+					// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
+					// (después de obtener la información de ubicación)
+					// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
+					bool puedeVerPalet = string.IsNullOrEmpty(p.AlmacenOrigen) || 
+										almacenesPermitidos.Contains(p.AlmacenOrigen);
+					
+					if (puedeVerPalet)
+					{
+						PaletsView.Add(p);
+					}
 				}
 				
-				Mensaje = $"Se cargaron {lista.Count} palets correctamente";
+				Debug.WriteLine($"Palets totales: {lista.Count}, Palets permitidos: {PaletsView.Count}");
+				
+				// Actualizar usuarios disponibles para los filtros
+				ActualizarUsuariosDisponibles(PaletsView.ToList());
+				
+				Mensaje = $"Se cargaron {PaletsView.Count} palets correctamente";
 				ErrorMessage = null;
 			}
 			catch (Exception ex)
@@ -159,6 +176,9 @@ namespace SGA_Desktop.ViewModels
 				var empresa = SessionManager.EmpresaSeleccionada!.Value;
 				var dlgVm = new PaletFilterDialogViewModel(_paletService);
 				await dlgVm.InitializeAsync();
+				
+				// Actualizar usuarios disponibles con los palets actuales
+				dlgVm.ActualizarUsuariosDisponibles(PaletsView.ToList());
 
 				var dlg = new PaletFilterDialog
 				{
@@ -182,13 +202,49 @@ namespace SGA_Desktop.ViewModels
 					fechaDesde: f.FechaDesde,
 					fechaHasta: f.FechaHasta,
 					usuarioApertura: f.UsuarioAperturaSeleccionado?.UsuarioId == 0 ? null : f.UsuarioAperturaSeleccionado?.UsuarioId,
-					usuarioCierre: f.UsuarioCierreSeleccionado?.UsuarioId == 0 ? null : f.UsuarioCierreSeleccionado?.UsuarioId);
+					usuarioCierre: f.UsuarioCierreSeleccionado?.UsuarioId == 0 ? null : f.UsuarioCierreSeleccionado?.UsuarioId,
+					almacen: f.Almacen);
 
+				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
+				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+
+				// Limpiar la lista actual
 				PaletsView.Clear();
-				foreach (var p in filtrados)
-					PaletsView.Add(p);
 
-				Mensaje = $"Se encontraron {filtrados.Count} palets con los filtros aplicados";
+				// Obtener información de ubicación para los palets filtrados
+				var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync();
+
+				// Crear un diccionario para búsqueda rápida de información de ubicación
+				var ubicacionPorPalet = paletsConUbicacion.ToDictionary(p => p.Id, p => p);
+
+				// Agregar los palets filtrados con su información de ubicación Y filtro de seguridad
+				foreach (var p in filtrados)
+				{
+					// Buscar información de ubicación si existe
+					if (ubicacionPorPalet.TryGetValue(p.Id, out var paletConUbicacion))
+					{
+						p.AlmacenOrigen = paletConUbicacion.AlmacenOrigen;
+						p.UbicacionOrigen = paletConUbicacion.UbicacionOrigen;
+						p.FechaUltimoTraspaso = paletConUbicacion.FechaUltimoTraspaso;
+						p.UsuarioUltimoTraspaso = paletConUbicacion.UsuarioUltimoTraspaso;
+					}
+					
+					// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
+					// (después de obtener la información de ubicación)
+					// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
+					bool puedeVerPalet = string.IsNullOrEmpty(p.AlmacenOrigen) || 
+										almacenesPermitidos.Contains(p.AlmacenOrigen);
+					
+					if (puedeVerPalet)
+					{
+						PaletsView.Add(p);
+					}
+				}
+
+				// Actualizar usuarios disponibles para los filtros
+				ActualizarUsuariosDisponibles(PaletsView.ToList());
+				
+				Mensaje = $"Se encontraron {PaletsView.Count} palets con los filtros aplicados";
 			}
 			catch (Exception ex)
 			{
@@ -197,7 +253,7 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
-		private async void AbrirPaletCrearDialog()
+		private async Task AbrirPaletCrearDialog()
 		{
 			try
 			{
@@ -209,7 +265,8 @@ namespace SGA_Desktop.ViewModels
 					dlg.Owner = owner;
 				if (dlg.ShowDialog() == true && dlgVm.CreatedPalet != null)
 				{
-					PaletsView.Add(dlgVm.CreatedPalet);
+					// Refrescar la lista completa para obtener el palet con toda la información actualizada
+					await LoadPaletsAsync();
 					Mensaje = $"Palet {dlgVm.CreatedPalet.Codigo} creado correctamente";
 				}
 			}
@@ -648,6 +705,38 @@ namespace SGA_Desktop.ViewModels
 			EliminarLineaSeleccionadaCommand.NotifyCanExecuteChanged();
 		}
 
+		public void ActualizarUsuariosDisponibles(IEnumerable<PaletDto> palets)
+		{
+			// Este método se llama desde el diálogo de filtros
+			// Los usuarios se actualizan en el PaletFilterDialogViewModel
+		}
+
+		// 🔒 MÉTODO DE SEGURIDAD: Obtener almacenes permitidos del usuario
+		private async Task<List<string>> ObtenerAlmacenesPermitidosAsync()
+		{
+			try
+			{
+				var empresa = SessionManager.EmpresaSeleccionada!.Value;
+				var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+				var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+				
+				if (!permisos.Any())
+				{
+					permisos = await _stockService.ObtenerAlmacenesAsync(centro);
+				}
+
+				var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+				
+				// Retornar solo los códigos de almacén permitidos
+				return almacenesAutorizados.Select(a => a.CodigoAlmacen).ToList();
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"Error obteniendo almacenes permitidos: {ex.Message}");
+				// En caso de error, retornar lista vacía para máxima seguridad
+				return new List<string>();
+			}
+		}
 
 	}
 }

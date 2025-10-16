@@ -57,9 +57,13 @@ class StockLogic(
             ═══════════════════════════════
         """.trimIndent())
 
+        // 🔷 IMPORTANTE: codigoUbicacion NO se limpia con clean() para preservar "" (sin ubicar)
+        // Si es "", debe enviarse como "", no como null
+        val ubicacionFinal = codigoUbicacion?.trim()?.uppercase()
+        
         ApiManager.stockApi.consultarStock(
             codigoEmpresa   = codigoEmpresa,
-            codigoUbicacion = codigoUbicacion.clean(),
+            codigoUbicacion = ubicacionFinal,
             codigoAlmacen   = codigoAlmacen.clean(),
             codigoArticulo  = codigoArticulo.clean(),
             codigoCentro    = codigoCentro.clean(),

@@ -85,7 +85,20 @@ object ConteosMapper {
             cantidadStock = dto.cantidadStock,
             cantidadTeorica = dto.cantidadTeorica,
             cantidadContada = null,
-            fechaCaducidad = dto.fechaCaducidad
+            fechaCaducidad = dto.fechaCaducidad,
+            paletId = dto.paletId,
+            codigoPalet = dto.codigoPalet,
+            codigoGS1 = dto.codigoGS1
+        )
+    }
+    
+    fun fromPaletDisponibleDto(dto: com.example.sga.data.dto.conteos.PaletDisponibleDto): PaletDisponible {
+        return PaletDisponible(
+            paletId = dto.paletId,
+            codigoPalet = dto.codigoPalet,
+            codigoGS1 = dto.codigoGS1,
+            cantidad = dto.cantidad,
+            estado = dto.estado
         )
     }
 }

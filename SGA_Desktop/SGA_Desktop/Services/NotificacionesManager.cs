@@ -17,8 +17,6 @@ namespace SGA_Desktop.Services
         private static ILogger<NotificacionesTraspasosService>? _logger;
         private static ApiService? _apiService;
         private static readonly object _lock = new object();
-        
-        private static readonly string _apiUrl = "http://localhost:5234"; // URL del Hub según especificaciones
 
         // Lista de notificaciones gestionada por el manager
         private static List<NotificacionDto> _notificaciones = new();
@@ -51,7 +49,7 @@ namespace SGA_Desktop.Services
                 _logger = logger;
                 if (_servicio == null)
                 {
-                    _servicio = new NotificacionesTraspasosService(_apiUrl, _logger);
+                    _servicio = new NotificacionesTraspasosService(ApiService.ServerBaseUrl, _logger);
                 }
                 if (_apiService == null)
                 {

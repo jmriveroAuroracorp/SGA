@@ -102,6 +102,16 @@ class ConteoViewModel : ViewModel() {
     private val _conteoCompletado = MutableStateFlow(false)
     val conteoCompletado: StateFlow<Boolean> = _conteoCompletado.asStateFlow()
 
+    // Estados para selección de palets
+    private val _paletsDisponibles = MutableStateFlow<List<PaletDisponible>>(emptyList())
+    val paletsDisponibles: StateFlow<List<PaletDisponible>> = _paletsDisponibles.asStateFlow()
+
+    private val _mostrarDialogoSeleccionPalet = MutableStateFlow(false)
+    val mostrarDialogoSeleccionPalet: StateFlow<Boolean> = _mostrarDialogoSeleccionPalet.asStateFlow()
+
+    private val _paletSeleccionado = MutableStateFlow<PaletDisponible?>(null)
+    val paletSeleccionado: StateFlow<PaletDisponible?> = _paletSeleccionado.asStateFlow()
+
 
     // Setters
     fun setOrdenes(lista: List<OrdenConteo>) {
@@ -205,6 +215,18 @@ class ConteoViewModel : ViewModel() {
         _conteoCompletado.value = completado
     }
 
+    fun setPaletsDisponibles(palets: List<PaletDisponible>) {
+        _paletsDisponibles.value = palets
+    }
+
+    fun setMostrarDialogoSeleccionPalet(mostrar: Boolean) {
+        _mostrarDialogoSeleccionPalet.value = mostrar
+    }
+
+    fun setPaletSeleccionado(palet: PaletDisponible?) {
+        _paletSeleccionado.value = palet
+    }
+
 
     // Limpiar estados
     fun limpiarFormulario() {
@@ -225,6 +247,9 @@ class ConteoViewModel : ViewModel() {
         _articuloParaConfirmar.value = null
         _mostrarDialogoSeleccionArticulo.value = false
         _articulosFiltrados.value = emptyList()
+        _mostrarDialogoSeleccionPalet.value = false
+        _paletsDisponibles.value = emptyList()
+        _paletSeleccionado.value = null
     }
 
     // Función para formatear fecha a dd/mm/yyyy HH:mm

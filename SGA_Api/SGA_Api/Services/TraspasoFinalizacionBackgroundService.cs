@@ -119,9 +119,12 @@ namespace SGA_Api.Services
 							if (!temp.EsHeredada)
 								existente.Cantidad += temp.Cantidad;  // DELTA (+/-)
 
-							if (existente.Cantidad <= 0m)
+							// Usar comparación más robusta para evitar problemas de precisión decimal
+							if (existente.Cantidad <= 0m || Math.Abs(existente.Cantidad) < 0.0001m)
 							{
 								dbContext.PaletLineas.Remove(existente);
+								logger.LogInformation("🗑️ Línea eliminada por cantidad <= 0: PaletId={PaletId}, Articulo={Articulo}, CantidadFinal={Cantidad}", 
+									existente.PaletId, existente.CodigoArticulo, existente.Cantidad);
 							}
 							else
 							{
@@ -158,6 +161,7 @@ namespace SGA_Api.Services
 						// No existe línea en la ubicación de la temporal
 						// IMPORTANTE: Solo crear nueva línea si temp.Cantidad es POSITIVO
 						// Si es NEGATIVO, significa que se intenta restar de una línea que no existe → error de datos
+						// Si es 0, no crear línea (no tiene sentido)
 						if (temp.Cantidad > 0m)
 						{
 							// Validar solo CodigoAlmacen (Ubicacion puede estar vacía = "sin ubicar")
@@ -198,6 +202,12 @@ namespace SGA_Api.Services
 							// Esto puede pasar cuando se mueve stock de un palet y no hay línea en destino
 							logger.LogWarning("⚠️ Línea temporal NEGATIVA {TempId} sin línea definitiva correspondiente. PaletId={PaletId}, Articulo={Articulo}, Cantidad={Cantidad}, Ubicacion={Almacen}-{Ubicacion}. Se ignora.", 
 								temp.Id, temp.PaletId, temp.CodigoArticulo, temp.Cantidad, temp.CodigoAlmacen, temp.Ubicacion);
+						}
+						else if (temp.Cantidad == 0m)
+						{
+							// Línea temporal con cantidad 0 - no tiene sentido procesarla
+							logger.LogInformation("ℹ️ Línea temporal con cantidad 0 ignorada: {TempId}, PaletId={PaletId}, Articulo={Articulo}", 
+								temp.Id, temp.PaletId, temp.CodigoArticulo);
 						}
 					}
 

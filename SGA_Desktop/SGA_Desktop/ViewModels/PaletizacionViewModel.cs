@@ -171,23 +171,25 @@ namespace SGA_Desktop.ViewModels
 		return PaletSeleccionado != null;
 	}
 
-		private async Task LoadLineasPaletAsync()
-		{
-			LineasPalet.Clear();
-			if (PaletSeleccionado is null) return;
+	private async Task LoadLineasPaletAsync()
+	{
+		LineasPalet.Clear();
+		if (PaletSeleccionado is null) return;
 
-			try
-			{
-				var lineas = await _paletService.ObtenerLineasAsync(PaletSeleccionado.Id);
-				foreach (var l in lineas)
-					LineasPalet.Add(l);
-				ErrorMessage = null;
-			}
-			catch (Exception ex)
-			{
-				ErrorMessage = ex.Message;
-			}
+		try
+		{
+			var lineas = await _paletService.ObtenerLineasAsync(PaletSeleccionado.Id);
+			// Filtrar líneas con cantidad > 0 para no mostrar líneas vacías
+			var lineasConStock = lineas.Where(l => l.Cantidad > 0).ToList();
+			foreach (var l in lineasConStock)
+				LineasPalet.Add(l);
+			ErrorMessage = null;
 		}
+		catch (Exception ex)
+		{
+			ErrorMessage = ex.Message;
+		}
+	}
 
 		private async void OpenFiltros()
 		{

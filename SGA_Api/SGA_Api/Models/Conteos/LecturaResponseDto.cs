@@ -15,6 +15,11 @@ namespace SGA_Api.Models.Conteos
         public DateTime Fecha { get; set; }
         public string? Comentario { get; set; }
         public DateTime? FechaCaducidad { get; set; }
+
+        // Campos para información de palet
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
+        public string? CodigoGS1 { get; set; }
         
         // Campos calculados
         public decimal? Diferencia => CantidadContada.HasValue && CantidadStock.HasValue 

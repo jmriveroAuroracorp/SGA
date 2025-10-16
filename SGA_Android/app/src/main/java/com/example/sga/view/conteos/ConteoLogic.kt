@@ -258,7 +258,10 @@ class ConteoLogic(
         cantidadContada: Double,
         usuarioCodigo: String,
         comentario: String?,
-        fechaCaducidad: String? = null
+        fechaCaducidad: String? = null,
+        paletId: String? = null,
+        codigoPalet: String? = null,
+        codigoGS1: String? = null
     ) {
         conteoViewModel.setCargando(true)
         conteoViewModel.limpiarMensajes()
@@ -286,7 +289,10 @@ class ConteoLogic(
             usuarioCodigo = usuarioCodigo,
             comentario = comentario,
             ordenGuid = ordenGuid,
-            fechaCaducidad = fechaCaducidad
+            fechaCaducidad = fechaCaducidad,
+            paletId = paletId,
+            codigoPalet = codigoPalet,
+            codigoGS1 = codigoGS1
         )
         
         scope.launch {
@@ -301,6 +307,9 @@ class ConteoLogic(
                 Log.d("ConteoLogic", "   - fechaCaducidad: '${lecturaDto.fechaCaducidad}'")
                 Log.d("ConteoLogic", "   - usuarioCodigo: '${lecturaDto.usuarioCodigo}'")
                 Log.d("ConteoLogic", "   - comentario: '${lecturaDto.comentario}'")
+                Log.d("ConteoLogic", "   - paletId: '${lecturaDto.paletId}'")
+                Log.d("ConteoLogic", "   - codigoPalet: '${lecturaDto.codigoPalet}'")
+                Log.d("ConteoLogic", "   - codigoGS1: '${lecturaDto.codigoGS1}'")
                 
                 val response = withContext(Dispatchers.IO) {
                     apiService.registrarLectura(ordenGuid, lecturaDto)
@@ -639,11 +648,50 @@ class ConteoLogic(
             return
         }
 
-        // 3) SSCC (palets) - para conteos no necesitamos procesar palets
+        // 3) SSCC (palets) - para conteos, verificar si estamos esperando un palet
         ssccRegex.find(code)?.let { m ->
             val gs1 = m.groupValues[1]
             Log.d("ConteoLogic", "📦 SSCC detectado: $gs1")
-            onError("Los códigos SSCC (palets) no son válidos para conteos")
+            
+            // Verificar si estamos en estado de esperar palet
+            val estadoActual = conteoViewModel.estadoEscaneo.value
+            if (estadoActual == EstadoEscaneoConteo.EsperandoPalet) {
+                // Buscar el palet por GS1 en la lista de disponibles
+                val paletsDisponibles = conteoViewModel.paletsDisponibles.value
+                val paletEncontrado = paletsDisponibles.find { it.codigoGS1 == gs1 }
+                
+                if (paletEncontrado != null) {
+                    // Palet válido, continuar con el conteo
+                    Log.d("ConteoLogic", "✅ Palet válido encontrado: ${paletEncontrado.codigoPalet}")
+                    
+                    // Buscar el artículo correspondiente a este palet
+                    val ubicacionEscaneada = conteoViewModel.ubicacionEscaneada.value
+                    val articuloEscaneado = conteoViewModel.articuloEscaneado.value
+                    
+                    if (ubicacionEscaneada != null && articuloEscaneado != null) {
+                        // Crear un artículo con la cantidad específica del palet seleccionado
+                        val articuloConCantidadPalet = articuloEscaneado.copy(
+                            cantidadStock = paletEncontrado.cantidad, // Cantidad específica del palet
+                            paletId = paletEncontrado.paletId,
+                            codigoPalet = paletEncontrado.codigoPalet,
+                            codigoGS1 = paletEncontrado.codigoGS1
+                        )
+                        
+                        // Actualizar el artículo escaneado con la información del palet
+                        conteoViewModel.setArticuloEscaneado(articuloConCantidadPalet)
+                    }
+                    
+                    conteoViewModel.setPaletSeleccionado(paletEncontrado)
+                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                    conteoViewModel.setMensaje("Palet ${paletEncontrado.codigoPalet} confirmado. Introduzca la cantidad.")
+                } else {
+                    // Palet no válido
+                    Log.e("ConteoLogic", "❌ Palet no válido: $gs1")
+                    onError("El palet con GS1 $gs1 no está disponible en esta ubicación para este artículo.")
+                }
+            } else {
+                onError("Los códigos SSCC (palets) no son válidos para conteos en este momento")
+            }
             return
         }
 
@@ -673,14 +721,76 @@ class ConteoLogic(
             } else {
                 // Buscar el artículo en las lecturas pendientes
                 val lecturasPendientes = conteoViewModel.lecturasPendientes.value
-                val articuloEncontrado = lecturasPendientes.find { lectura ->
+                val articulosEncontrados = lecturasPendientes.filter { lectura ->
                     lectura.codigoAlmacen == codAlm && 
                     lectura.codigoUbicacion == codUbi &&
                     lectura.codigoArticulo == codArt
                 }
                 
-                if (articuloEncontrado != null) {
-                    onArticuloDetectado(articuloEncontrado)
+                if (articulosEncontrados.isNotEmpty()) {
+                    // Verificar si hay múltiples palets para este artículo
+                    val paletsConInfo = articulosEncontrados.filter { it.paletId != null }
+                    val articulosSinPalet = articulosEncontrados.filter { it.paletId == null }
+                    
+                    when {
+                        // Caso 1: Solo hay un palet
+                        paletsConInfo.size == 1 -> {
+                            val articulo = paletsConInfo.first()
+                            Log.d("ConteoLogic", "✅ Un palet encontrado: ${articulo.codigoPalet}")
+                            
+                            // Crear un artículo con la cantidad específica del palet
+                            val articuloConCantidadPalet = articulo.copy(
+                                cantidadStock = articulo.cantidadStock ?: 0.0 // Usar la cantidad específica del palet
+                            )
+                            
+                            conteoViewModel.setPaletSeleccionado(PaletDisponible(
+                                paletId = articulo.paletId!!,
+                                codigoPalet = articulo.codigoPalet ?: "",
+                                codigoGS1 = articulo.codigoGS1 ?: "",
+                                cantidad = articulo.cantidadStock ?: 0.0, // Cantidad específica del palet
+                                estado = ""
+                            ))
+                            onArticuloDetectado(articuloConCantidadPalet)
+                        }
+                        
+                        // Caso 2: Múltiples palets
+                        paletsConInfo.size > 1 -> {
+                            Log.d("ConteoLogic", "📦 Múltiples palets encontrados: ${paletsConInfo.size}")
+                            val paletsDisponibles = paletsConInfo.map { lectura ->
+                                PaletDisponible(
+                                    paletId = lectura.paletId!!,
+                                    codigoPalet = lectura.codigoPalet ?: "",
+                                    codigoGS1 = lectura.codigoGS1 ?: "",
+                                    cantidad = lectura.cantidadStock ?: 0.0, // Cantidad específica de cada palet
+                                    estado = ""
+                                )
+                            }
+                            conteoViewModel.setPaletsDisponibles(paletsDisponibles)
+                            conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoPalet)
+                            conteoViewModel.setMensaje("Múltiples palets encontrados. Escanee la etiqueta GS1 del palet específico.")
+                        }
+                        
+                        // Caso 3: Sin palets (conteo normal)
+                        articulosSinPalet.isNotEmpty() -> {
+                            val articulo = articulosSinPalet.first()
+                            Log.d("ConteoLogic", "📦 Sin palets - conteo normal")
+                            onArticuloDetectado(articulo)
+                        }
+                        
+                        // Caso 4: No se encontró el artículo
+                        else -> {
+                            // Buscar si el artículo existe en otra ubicación
+                            val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
+                                lectura.codigoArticulo == codArt
+                            }
+                            
+                            if (articuloEnOtraUbicacion != null) {
+                                onError("El artículo $codArt está en la ubicación ${articuloEnOtraUbicacion.codigoAlmacen}-${articuloEnOtraUbicacion.codigoUbicacion}, no en $codAlm-$codUbi")
+                            } else {
+                                onError("El artículo $codArt no está en las lecturas pendientes de esta orden")
+                            }
+                        }
+                    }
                 } else {
                     // Buscar si el artículo existe en otra ubicación
                     val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
@@ -699,6 +809,46 @@ class ConteoLogic(
 
         // 5) Si no coincide con ningún patrón
         onError("Código no reconocido: $trimmed")
+    }
+
+    // Obtener palets disponibles para una ubicación y artículo
+    fun obtenerPaletsDisponibles(
+        codigoAlmacen: String,
+        ubicacion: String?,
+        codigoArticulo: String?,
+        lote: String? = null,
+        fechaCaducidad: String? = null,
+        onSuccess: (List<PaletDisponible>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        conteoViewModel.setCargando(true)
+        conteoViewModel.limpiarMensajes()
+
+        scope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    apiService.obtenerPaletsDisponibles(
+                        codigoAlmacen = codigoAlmacen,
+                        ubicacion = ubicacion,
+                        codigoArticulo = codigoArticulo,
+                        lote = lote,
+                        fechaCaducidad = fechaCaducidad
+                    )
+                }
+                
+                val palets = response.map { ConteosMapper.fromPaletDisponibleDto(it) }
+                conteoViewModel.setPaletsDisponibles(palets)
+                onSuccess(palets)
+                
+            } catch (e: Exception) {
+                Log.e("ConteoLogic", "Error al obtener palets disponibles", e)
+                val errorMsg = "Error al obtener palets disponibles: ${e.message}"
+                conteoViewModel.setError(errorMsg)
+                onError(errorMsg)
+            } finally {
+                conteoViewModel.setCargando(false)
+            }
+        }
     }
 
     // Procesar selección de artículo cuando hay múltiples candidatos

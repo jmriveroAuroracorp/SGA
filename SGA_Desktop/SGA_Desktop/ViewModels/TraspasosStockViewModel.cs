@@ -10,6 +10,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using SGA_Desktop.Dialog;
+using System.Windows.Data;
+using System.ComponentModel;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -30,6 +32,9 @@ namespace SGA_Desktop.ViewModels
         private readonly TraspasosService _traspasosService;
         private DateTime? _fechaUltimaBusqueda;
         private Dictionary<string, bool> _estadosExpansion = new();
+        
+        // 🔷 NUEVO: Almacenar todos los resultados de stock para filtrado local
+        private List<StockDisponibleDto> _todosLosResultadosStock = new();
 
         public TraspasosStockViewModel(StockService stockService, TraspasosService traspasosService)
         {
@@ -39,11 +44,31 @@ namespace SGA_Desktop.ViewModels
             UltimosTraspasos = new ObservableCollection<TraspasoArticuloDto>();
             AlmacenesDestino = new ObservableCollection<string>();
             UbicacionesDestino = new ObservableCollection<string>();
+            
+            // Inicializar la vista filtrable de almacenes
+            AlmacenesFiltroView = CollectionViewSource.GetDefaultView(AlmacenesFiltro);
+            AlmacenesFiltroView.Filter = FiltraAlmacenesFiltro;
+            
+            // NO cargar almacenes aquí - se cargarán cuando se busque un artículo
         }
 
         // Buscador de artículo
         [ObservableProperty]
         private string articuloBuscado;
+
+        // Combo de almacenes para filtrar
+        public ObservableCollection<AlmacenDto> AlmacenesFiltro { get; } = new();
+        public ICollectionView AlmacenesFiltroView { get; private set; }
+        
+        [ObservableProperty]
+        private AlmacenDto almacenFiltroSeleccionado;
+        
+        [ObservableProperty]
+        private string filtroAlmacenesTexto = "";
+
+        // 🔷 NUEVO: Propiedad para controlar la visibilidad del combo de almacenes
+        [ObservableProperty]
+        private bool mostrarComboAlmacenes = false;
 
         // Siempre usaremos los cards agrupados
         public ObservableCollection<ArticuloStockGroup> ArticulosConUbicaciones { get; } = new();
@@ -88,11 +113,18 @@ namespace SGA_Desktop.ViewModels
         {
             _fechaUltimaBusqueda = DateTime.Now;
             ArticulosConUbicaciones.Clear();
+            
+            // 🔷 NUEVO: Limpiar combo de almacenes cuando no hay artículo
             if (string.IsNullOrWhiteSpace(ArticuloBuscado))
             {
+                AlmacenesFiltro.Clear();
+                AlmacenFiltroSeleccionado = null;
+                _todosLosResultadosStock.Clear();
+                MostrarComboAlmacenes = false;
                 Feedback = "Introduce un código o descripción de artículo.";
                 return;
             }
+            
             try
             {
                 // Nuevo: buscar stock disponible con Reservado y Disponible
@@ -106,6 +138,11 @@ namespace SGA_Desktop.ViewModels
 
                 if (stock.Count == 0)
                 {
+                    // 🔷 NUEVO: Limpiar combo cuando no hay stock
+                    AlmacenesFiltro.Clear();
+                    AlmacenFiltroSeleccionado = null;
+                    _todosLosResultadosStock.Clear();
+                    MostrarComboAlmacenes = false;
                     Feedback = "No hay stock para ese artículo.";
                     return;
                 }
@@ -116,18 +153,15 @@ namespace SGA_Desktop.ViewModels
                 // Filtrar por almacenes autorizados
                 stock = stock.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
 
-                // Siempre agrupa por artículo
-                var grupos = stock.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
-                                  .Select(g => new ArticuloStockGroup
-                                  {
-                                      CodigoArticulo = g.Key.CodigoArticulo,
-                                      DescripcionArticulo = g.Key.DescripcionArticulo,
-                                      Ubicaciones = new ObservableCollection<StockDisponibleDto>(g.ToList())
-                                  })
-                                  .OrderBy(a => a.CodigoArticulo)
-                                  .ToList();
-                foreach (var g in grupos)
-                    ArticulosConUbicaciones.Add(g);
+                // 🔷 NUEVO: Guardar todos los resultados para filtrado local
+                _todosLosResultadosStock = new List<StockDisponibleDto>(stock);
+
+                // 🔷 NUEVO: Cargar combo con los almacenes que realmente tienen stock del artículo
+                await CargarAlmacenesConStockAsync(stock);
+
+                // 🔷 NUEVO: Aplicar filtrado por almacén si hay uno seleccionado
+                FiltrarResultadosPorAlmacen();
+                
                 Feedback = string.Empty;
             }
             catch (Exception ex)
@@ -319,5 +353,134 @@ namespace SGA_Desktop.ViewModels
             // Forzar la actualización de la UI
             OnPropertyChanged(nameof(ArticulosConUbicaciones));
         }
+
+        // 🔷 NUEVO: Método para cargar almacenes basándose en el stock encontrado
+        private async Task CargarAlmacenesConStockAsync(List<StockDisponibleDto> stock)
+        {
+            try
+            {
+                // Obtener códigos únicos de almacenes del stock encontrado
+                var codigosAlmacenesStock = stock.Select(x => x.CodigoAlmacen).Distinct().ToList();
+                
+                if (!codigosAlmacenesStock.Any())
+                {
+                    AlmacenesFiltro.Clear();
+                    MostrarComboAlmacenes = false;
+                    return;
+                }
+
+                // Obtener información completa de los almacenes
+                var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+                
+                if (!permisos.Any())
+                {
+                    permisos = await _stockService.ObtenerAlmacenesAsync(centro);
+                }
+                
+                // Obtener todos los almacenes autorizados
+                var todosAlmacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                
+                // Filtrar solo los almacenes que tienen stock del artículo
+                var almacenesConStock = todosAlmacenes
+                    .Where(a => codigosAlmacenesStock.Contains(a.CodigoAlmacen))
+                    .OrderBy(a => a.DescripcionCombo)
+                    .ToList();
+                
+                // Limpiar y poblar el combo
+                AlmacenesFiltro.Clear();
+                foreach (var almacen in almacenesConStock)
+                    AlmacenesFiltro.Add(almacen);
+                    
+                // Limpiar selección previa si el almacén ya no está disponible
+                if (AlmacenFiltroSeleccionado != null && 
+                    !almacenesConStock.Any(a => a.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen))
+                {
+                    AlmacenFiltroSeleccionado = null;
+                }
+                
+                // 🔷 NUEVO: Mostrar combo solo si hay almacenes
+                MostrarComboAlmacenes = AlmacenesFiltro.Count > 0;
+                    
+                OnPropertyChanged(nameof(AlmacenesFiltro));
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, continuar sin filtro de almacenes
+                AlmacenesFiltro.Clear();
+                MostrarComboAlmacenes = false;
+            }
+        }
+
+        // 🔷 NUEVO: Método para filtrar almacenes en el combo
+        private bool FiltraAlmacenesFiltro(object obj)
+        {
+            if (obj is not AlmacenDto almacen) return false;
+            if (string.IsNullOrEmpty(FiltroAlmacenesTexto)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        // 🔷 NUEVO: Método para manejar cambios en el filtro de almacenes
+        partial void OnFiltroAlmacenesTextoChanged(string value)
+        {
+            AlmacenesFiltroView?.Refresh();
+        }
+
+        // 🔷 NUEVO: Método para filtrar resultados por almacén sin hacer nueva búsqueda
+        private void FiltrarResultadosPorAlmacen()
+        {
+            // Guardar el estado de expansión antes de limpiar
+            GuardarEstadosExpansion();
+            
+            // Limpiar resultados actuales
+            ArticulosConUbicaciones.Clear();
+            
+            // Obtener stock filtrado
+            var stockFiltrado = _todosLosResultadosStock;
+            
+            // Aplicar filtro por almacén si hay uno seleccionado
+            if (AlmacenFiltroSeleccionado != null)
+            {
+                stockFiltrado = stockFiltrado.Where(x => x.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen).ToList();
+            }
+            
+            // Agrupar por artículo
+            var grupos = stockFiltrado.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
+                                      .Select(g => new ArticuloStockGroup
+                                      {
+                                          CodigoArticulo = g.Key.CodigoArticulo,
+                                          DescripcionArticulo = g.Key.DescripcionArticulo,
+                                          Ubicaciones = new ObservableCollection<StockDisponibleDto>(
+                                              g.OrderBy(x => x.CodigoAlmacen)
+                                                .ThenBy(x => x.Ubicacion)
+                                                .ToList())
+                                      })
+                                      .OrderBy(a => a.CodigoArticulo)
+                                      .ToList();
+            
+            // Añadir grupos a la colección
+            foreach (var g in grupos)
+                ArticulosConUbicaciones.Add(g);
+            
+            // Restaurar el estado de expansión después de añadir los elementos
+            RestaurarEstadosExpansion();
+        }
+
+        // 🔷 NUEVO: Método para manejar cambios en la selección del almacén
+        partial void OnAlmacenFiltroSeleccionadoChanged(AlmacenDto value)
+        {
+            // Actualizar el texto del filtro con la selección
+            if (value != null)
+            {
+                FiltroAlmacenesTexto = value.DescripcionCombo;
+            }
+            
+            // 🔷 CORREGIDO: Solo filtrar los resultados existentes, NO hacer otra búsqueda
+            FiltrarResultadosPorAlmacen();
+        }
+
 	}
 } 

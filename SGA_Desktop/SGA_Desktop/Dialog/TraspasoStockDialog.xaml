@@ -101,6 +101,9 @@
                         <i:EventTrigger EventName="SelectionChanged">
                             <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesCommand}"/>
                         </i:EventTrigger>
+                        <i:EventTrigger EventName="TextChanged">
+                            <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesDestinoCommand}"/>
+                        </i:EventTrigger>
                     </i:Interaction.Triggers>
                     <ComboBox.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -110,10 +113,33 @@
                 </ComboBox>
 
             <TextBlock Text="Ubicación destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-            <ComboBox ItemsSource="{Binding UbicacionesDestino}"
+            <ComboBox ItemsSource="{Binding UbicacionesDestinoView}"
                       SelectedItem="{Binding UbicacionDestinoSeleccionada, Mode=TwoWay}"
+                      Text="{Binding FiltroUbicacionesDestino, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                       DisplayMemberPath="UbicacionMostrada"
-                      Style="{StaticResource EstiloComboBox}" Margin="0,0,0,12"/>
+                      Style="{StaticResource EstiloComboBox}" 
+                      IsEditable="True"
+                      IsTextSearchEnabled="False"
+                      StaysOpenOnEdit="True"
+                      IsDropDownOpen="{Binding IsDropDownOpenUbicaciones}"
+                      Margin="0,0,0,12">
+                <i:Interaction.Triggers>
+                    <i:EventTrigger EventName="GotFocus">
+                        <i:InvokeCommandAction Command="{Binding AbrirDropDownUbicacionesCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="SelectionChanged">
+                        <i:InvokeCommandAction Command="{Binding CerrarDropDownUbicacionesCommand}"/>
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="TextChanged">
+                        <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUbicacionesDestinoCommand}"/>
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
+                <ComboBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ComboBox.ItemsPanel>
+            </ComboBox>
 
             <!-- NUEVO: Selector de palet (visible solo si hay múltiples palets) -->
             <TextBlock Text="Palet destino:" 
@@ -128,8 +154,11 @@
                       Visibility="{Binding MostrarSelectorPalets, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
             <TextBlock Text="Cantidad a traspasar:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-                <TextBox Text="{Binding CantidadATraspasarTexto, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{StaticResource EstiloCajaTexto}" Margin="0,0,0,12"/>
+                <TextBox Text="{Binding CantidadATraspasarTexto, UpdateSourceTrigger=LostFocus}"
+                         Style="{StaticResource EstiloCajaTexto}" 
+                         Margin="0,0,0,12"
+                         GotFocus="TextBox_GotFocus"
+                         PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"/>
 
                 <TextBlock Text="Comentarios:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBox Text="{Binding ComentariosTexto, UpdateSourceTrigger=PropertyChanged}"

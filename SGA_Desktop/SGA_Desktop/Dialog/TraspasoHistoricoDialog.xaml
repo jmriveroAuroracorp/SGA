@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
+        xmlns:converters="clr-namespace:SGA_Desktop.Converters"
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="Historial de Traspasos"
         Width="1400"
@@ -18,6 +19,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            
+            <!-- 🚀 Converters para optimización de rendimiento -->
+            <converters:TipoTraspasoToColorConverter x:Key="TipoTraspasoToColorConverter"/>
+            <converters:TipoTraspasoToTextConverter x:Key="TipoTraspasoToTextConverter"/>
+            <converters:EstadoToColorConverter x:Key="EstadoToColorConverter"/>
+            <converters:EstadoToTextConverter x:Key="EstadoToTextConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -76,18 +83,62 @@
                     <!-- Segunda fila de filtros -->
                     <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,10,10,0">
                         <TextBlock Text="Almacén origen:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
-                        <ComboBox ItemsSource="{Binding AlmacenesOrigen}"
+                        <ComboBox ItemsSource="{Binding AlmacenesOrigenView}"
                                   SelectedItem="{Binding AlmacenOrigenSeleccionado}"
+                                  Text="{Binding FiltroAlmacenesOrigen, UpdateSourceTrigger=PropertyChanged}"
                                   DisplayMemberPath="DescripcionCombo"
-                                  Style="{StaticResource EstiloComboBox}" Height="30"/>
+                                  Style="{StaticResource EstiloComboBox}" Height="30"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="False"
+                                  StaysOpenOnEdit="True"
+                                  IsDropDownOpen="{Binding IsDropDownOpenAlmacenesOrigen}">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="GotFocus">
+                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesOrigenCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="SelectionChanged">
+                                    <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesOrigenCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="TextChanged">
+                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesOrigenCommand}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                            <ComboBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel/>
+                                </ItemsPanelTemplate>
+                            </ComboBox.ItemsPanel>
+                        </ComboBox>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1" Grid.Column="1" Margin="5,10,5,0">
                         <TextBlock Text="Almacén destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
-                        <ComboBox ItemsSource="{Binding AlmacenesDestino}"
+                        <ComboBox ItemsSource="{Binding AlmacenesDestinoView}"
                                   SelectedItem="{Binding AlmacenDestinoSeleccionado}"
+                                  Text="{Binding FiltroAlmacenesDestino, UpdateSourceTrigger=PropertyChanged}"
                                   DisplayMemberPath="DescripcionCombo"
-                                  Style="{StaticResource EstiloComboBox}" Height="30"/>
+                                  Style="{StaticResource EstiloComboBox}" Height="30"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="False"
+                                  StaysOpenOnEdit="True"
+                                  IsDropDownOpen="{Binding IsDropDownOpenAlmacenesDestino}">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="GotFocus">
+                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesDestinoCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="SelectionChanged">
+                                    <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesDestinoCommand}"/>
+                                </i:EventTrigger>
+                                <i:EventTrigger EventName="TextChanged">
+                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesDestinoCommand}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                            <ComboBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel/>
+                                </ItemsPanelTemplate>
+                            </ComboBox.ItemsPanel>
+                        </ComboBox>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1" Grid.Column="2" Margin="5,10,5,0">
@@ -151,21 +202,49 @@
                                    FontSize="12"/>
                     </StackPanel>
                     
-                    <!-- Lista de traspasos -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="15,0,15,15">
-                        <StackPanel>
-                            <ItemsControl ItemsSource="{Binding Traspasos}">
-                                <ItemsControl.ItemTemplate>
+                    <!-- Lista de traspasos - OPTIMIZADO con ListBox virtualizado -->
+                    <ListBox Grid.Row="1" 
+                             ItemsSource="{Binding Traspasos}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             Margin="15,0,15,15"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Focusable="False">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="Margin" Value="0,0,0,8"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="IsSelected" Value="False"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="White"
                                                 CornerRadius="6" 
                                                 Padding="12" 
-                                                Margin="0,0,0,8" 
                                                 BorderThickness="1" 
                                                 BorderBrush="{StaticResource BrushIntermedio}"
                                                 Cursor="Hand">
+                                            <!-- 🚀 OPTIMIZACIÓN: Efecto simplificado para mejor rendimiento -->
                                             <Border.Effect>
-                                                <DropShadowEffect BlurRadius="6" ShadowDepth="3" Opacity="0.2"/>
+                                                <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.1"/>
                                             </Border.Effect>
                                             
                                             <!-- Layout compacto de dos filas -->
@@ -212,65 +291,29 @@
                                                                     FontWeight="Medium" MaxHeight="36" TextTrimming="CharacterEllipsis"/>
                                                      </StackPanel>
                                                     
-                                                    <!-- Tipo de Traspaso -->
+                                                    <!-- Tipo de Traspaso - OPTIMIZADO -->
                                                     <StackPanel Grid.Column="3" Margin="6,0,0,0">
                                                         <TextBlock Text="TIPO" FontSize="11" FontWeight="Bold" 
                                                                    Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
-                                                        <Border Background="#E3F2FD" BorderBrush="#2196F3" BorderThickness="1" 
-                                                                CornerRadius="3" Padding="5,3" HorizontalAlignment="Center">
-                                                            <TextBlock FontSize="10" FontWeight="Bold" 
-                                                                       HorizontalAlignment="Center">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Text" Value="{Binding TipoTraspaso}"/>
-                                                                        <Setter Property="Foreground" Value="#1976D2"/>
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding TipoTraspaso}" Value="ARTICULO">
-                                                                                <Setter Property="Text" Value="ARTÍCULO"/>
-                                                                                <Setter Property="Foreground" Value="#1976D2"/>
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding TipoTraspaso}" Value="PALET">
-                                                                                <Setter Property="Text" Value="PALET"/>
-                                                                                <Setter Property="Foreground" Value="#388E3C"/>
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
+                                                        <!-- 🚀 OPTIMIZACIÓN: Simplificado sin efectos pesados -->
+                                                        <Border CornerRadius="6" Padding="6,3" HorizontalAlignment="Center" 
+                                                                Background="{Binding TipoTraspaso, Converter={StaticResource TipoTraspasoToColorConverter}}">
+                                                            <TextBlock FontSize="9" FontWeight="Bold" 
+                                                                       HorizontalAlignment="Center" Foreground="White"
+                                                                       Text="{Binding TipoTraspaso, Converter={StaticResource TipoTraspasoToTextConverter}}"/>
                                                         </Border>
                                                     </StackPanel>
                                                     
-                                                    <!-- Estado -->
+                                                    <!-- Estado - OPTIMIZADO -->
                                                     <StackPanel Grid.Column="4" Margin="6,0,0,0">
                                                         <TextBlock Text="ESTADO" FontSize="11" FontWeight="Bold" 
                                                                    Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
-                                                        <Border Background="#E8F5E8" BorderBrush="#28A745" BorderThickness="1" 
-                                                                CornerRadius="3" Padding="12,4" HorizontalAlignment="Center">
-                                                            <TextBlock Text="{Binding CodigoEstado}" FontSize="10" FontWeight="Bold" 
-                                                                       Foreground="#198754" HorizontalAlignment="Center">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="COMPLETADO">
-                                                                                <Setter Property="Text" Value="COMP"/>
-                                                                                <Setter Property="Foreground" Value="#198754"/>
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="PENDIENTE">
-                                                                                <Setter Property="Text" Value="PEND"/>
-                                                                                <Setter Property="Foreground" Value="#FD7E14"/>
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="CANCELADO">
-                                                                                <Setter Property="Text" Value="CANC"/>
-                                                                                <Setter Property="Foreground" Value="#DC3545"/>
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding CodigoEstado}" Value="ERROR_ERP">
-                                                                                <Setter Property="Text" Value="ERROR"/>
-                                                                                <Setter Property="Foreground" Value="#DC3545"/>
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
+                                                        <!-- 🚀 OPTIMIZACIÓN: Simplificado sin efectos pesados -->
+                                                        <Border CornerRadius="6" Padding="6,3" HorizontalAlignment="Center" 
+                                                                Background="{Binding CodigoEstado, Converter={StaticResource EstadoToColorConverter}}">
+                                                            <TextBlock FontSize="9" FontWeight="Bold" 
+                                                                       HorizontalAlignment="Center" Foreground="White"
+                                                                       Text="{Binding CodigoEstado, Converter={StaticResource EstadoToTextConverter}}"/>
                                                         </Border>
                                                     </StackPanel>
                                                     
@@ -386,10 +429,8 @@
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </ScrollViewer>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </GroupBox>
 

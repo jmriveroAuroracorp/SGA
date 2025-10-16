@@ -258,7 +258,8 @@ namespace SGA_Desktop.ViewModels
 			{
 				var paletService = new Services.PaletService();
 				var lineas = await paletService.ObtenerLineasAsync(value.PaletId);
-				value.LineasPalet = lineas;
+				// Filtrar líneas con cantidad > 0 para no mostrar líneas vacías
+				value.LineasPalet = lineas.Where(l => l.Cantidad > 0).ToList();
 			}
 			else
 			{

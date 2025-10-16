@@ -475,5 +475,40 @@ namespace SGA_Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Obtiene todos los palets disponibles en una ubicación específica
+        /// </summary>
+        /// <param name="codigoAlmacen">Código del almacén</param>
+        /// <param name="ubicacion">Código de la ubicación</param>
+        /// <param name="codigoArticulo">Código del artículo</param>
+        /// <param name="lote">Lote/partida (opcional)</param>
+        /// <param name="fechaCaducidad">Fecha de caducidad (opcional)</param>
+        /// <returns>Lista de palets disponibles</returns>
+        [HttpGet("palets-disponibles")]
+        public async Task<IActionResult> ObtenerPaletsDisponibles(
+            [FromQuery] string codigoAlmacen,
+            [FromQuery] string ubicacion,
+            [FromQuery] string codigoArticulo,
+            [FromQuery] string? lote = null,
+            [FromQuery] DateTime? fechaCaducidad = null)
+        {
+            try
+            {
+                var palets = await _conteosService.ObtenerPaletsDisponiblesAsync(
+                    codigoAlmacen, 
+                    ubicacion, 
+                    codigoArticulo, 
+                    lote, 
+                    fechaCaducidad);
+                
+                return Ok(palets);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo palets disponibles para {Ubicacion}/{Articulo}", ubicacion, codigoArticulo);
+                return StatusCode(500, $"Error interno: {ex.Message}");
+            }
+        }
     }
 } 

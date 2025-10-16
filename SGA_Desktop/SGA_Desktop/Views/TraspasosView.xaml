@@ -363,12 +363,22 @@
                                             <Button Content="📦 Añadir"
                                                     Click="AbrirPaletLineas_Click"
                                                     Tag="{Binding}"
-                                                    Style="{StaticResource EstiloBotonSecundario}"
                                                     Width="70"
                                                     Height="30"
                                                     FontSize="10"
                                                     FontWeight="Medium"
-                                                    Margin="0,0,2,0"/>
+                                                    Margin="0,0,2,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
                                             <!-- Botón Cerrar (visible cuando estado = Abierto) -->
                                             <Button Content="🔒 Cerrar"
                                                     Click="CerrarPalet_Click"
@@ -379,7 +389,7 @@
                                                     FontWeight="Medium"
                                                     Margin="0,0,2,0">
                                                 <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
                                                         <Setter Property="Visibility" Value="Visible"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
@@ -421,7 +431,7 @@
                                                     FontWeight="Medium"
                                                     Margin="0,0,2,0">
                                                 <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
                                                         <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
@@ -502,44 +512,104 @@
                                        FontWeight="Bold" 
                                        FontSize="14" 
                                        Margin="0,0,0,10"/>
-                            <ListView ItemsSource="{Binding LineasPalet}"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                      MaxHeight="200">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="#F8F9FA" 
-                                                BorderBrush="#E0E0E0" 
-                                                BorderThickness="1" 
-                                                CornerRadius="4" 
-                                                Padding="10" 
-                                                Margin="0,0,0,5">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{Binding CodigoArticulo}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="12"/>
-                                                    <TextBlock Text="{Binding DescripcionArticulo}" 
-                                                               FontSize="11" 
-                                                               Foreground="#666"/>
-                                                    <TextBlock Text="{Binding Lote, StringFormat='Lote: {0}'}" 
-                                                               FontSize="10" 
-                                                               Foreground="#888"/>
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" 
-                                                           Text="{Binding Cantidad}" 
-                                                           FontSize="16" 
-                                                           FontWeight="Bold" 
-                                                           Foreground="{StaticResource BrushPrincipal}"
-                                                           VerticalAlignment="Center"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="200">
+                                <ItemsControl ItemsSource="{Binding LineasPalet}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="White" 
+                                                    BorderBrush="#B0B0B0" 
+                                                    BorderThickness="1" 
+                                                    CornerRadius="6" 
+                                                    Padding="12" 
+                                                    Margin="4"
+                                                    Width="300"
+                                                    MinHeight="120">
+                                                <Border.Effect>
+                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Black"/>
+                                                </Border.Effect>
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    
+                                                    <!-- Header con código del artículo -->
+                                                    <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                                        <TextBlock Text="{Binding CodigoArticulo}" 
+                                                                   FontWeight="Bold" 
+                                                                   FontSize="13"
+                                                                   Foreground="{StaticResource BrushPrincipal}"/>
+                                                        <TextBlock Text="{Binding DescripcionArticulo}" 
+                                                                   FontSize="11" 
+                                                                   Foreground="#666"
+                                                                   TextWrapping="Wrap"
+                                                                   MaxHeight="32"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                    
+                                                    <!-- Información del artículo -->
+                                                    <StackPanel Grid.Row="1">
+                                                        <Grid Margin="0,0,0,4">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            
+                                                            <TextBlock Grid.Column="0" Text="Almacén:" FontWeight="SemiBold" FontSize="10" Foreground="#888"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding CodigoAlmacen}" FontSize="10" Margin="4,0,15,0"/>
+                                                            
+                                                            <TextBlock Grid.Column="2" Text="Ubicación:" FontWeight="SemiBold" FontSize="10" Foreground="#888"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding Ubicacion}" FontSize="10" Margin="4,0,0,0"/>
+                                                        </Grid>
+                                                        
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            
+                                                            <TextBlock Grid.Column="0" Text="Lote:" FontWeight="SemiBold" FontSize="10" Foreground="#888"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Lote}" FontSize="10" Margin="4,0,15,0"/>
+                                                            
+                                                            <TextBlock Grid.Column="2" Text="Caducidad:" FontWeight="SemiBold" FontSize="10" Foreground="#888"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding FechaCaducidad, StringFormat='{}{0:dd/MM/yyyy}'}" FontSize="10" Margin="4,0,0,0"/>
+                                                        </Grid>
+                                                    </StackPanel>
+                                                    
+                                                    <!-- Cantidad -->
+                                                    <StackPanel Grid.Row="2" HorizontalAlignment="Center">
+                                                        <TextBlock Text="Cantidad:" 
+                                                                   FontSize="10" 
+                                                                   FontWeight="SemiBold" 
+                                                                   Foreground="#888"
+                                                                   HorizontalAlignment="Center"
+                                                                   Margin="0,0,0,4"/>
+                                                        <Border Background="{StaticResource BrushPrincipal}" 
+                                                                CornerRadius="4" 
+                                                                Padding="8,4">
+                                                            <TextBlock Text="{Binding Cantidad}" 
+                                                                       FontSize="14" 
+                                                                       FontWeight="Bold" 
+                                                                       Foreground="White"
+                                                                       HorizontalAlignment="Center"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                             
                         </StackPanel>
                     </Border>

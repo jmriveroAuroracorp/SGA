@@ -39,7 +39,8 @@ namespace SGA_Desktop.Services
 		DateTime? fechaHasta = null,
 		int? usuarioApertura = null,
 		int? usuarioCierre = null,
-		bool sinCierre = false
+		bool sinCierre = false,
+		string? almacen = null
 	)
 		{
 			var query = new List<string> { $"codigoEmpresa={codigoEmpresa}" };
@@ -54,6 +55,7 @@ namespace SGA_Desktop.Services
 			if (usuarioApertura.HasValue) query.Add($"usuarioApertura={usuarioApertura}");
 			if (usuarioCierre.HasValue) query.Add($"usuarioCierre={usuarioCierre}");
 			if (sinCierre) query.Add("sinCierre=true");
+			if (!string.IsNullOrWhiteSpace(almacen)) query.Add($"almacen={almacen}");
 
 			var uri = "palet/filtros?" + string.Join("&", query);
 			return await _httpClient.GetFromJsonAsync<List<PaletDto>>(uri)

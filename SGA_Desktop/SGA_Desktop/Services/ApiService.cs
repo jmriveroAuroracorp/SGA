@@ -10,13 +10,15 @@ public class ApiService
 {
 	protected readonly HttpClient _httpClient;
 
+	// URL base del servidor (sin /api/) para otros servicios como SignalR
+	//public static string ServerBaseUrl => "http://10.0.0.175:5234";
+	public static string ServerBaseUrl => "http://localhost:5234";
+
 	public ApiService()
 	{
 		_httpClient = new HttpClient
 		{
-			BaseAddress = new Uri("http://10.0.0.175:5234/api/")
-			//BaseAddress = new Uri("http://localhost:5234/api/")
-
+			BaseAddress = new Uri($"{ServerBaseUrl}/api/")
 		};
 		_httpClient.DefaultRequestHeaders.Accept
 				   .Add(new MediaTypeWithQualityHeaderValue("application/json"));
