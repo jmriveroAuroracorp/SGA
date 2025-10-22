@@ -430,39 +430,85 @@ public class PaletController : ControllerBase
 
 		try
 		{
-			// 🔷 Leer stock actual dentro de la transacción
-			var stock = await _auroraSgaContext.StockDisponible
-				.FirstOrDefaultAsync(s =>
-					s.CodigoEmpresa == dto.CodigoEmpresa &&
-					s.CodigoArticulo == dto.CodigoArticulo &&
-					s.CodigoAlmacen == dto.CodigoAlmacen &&
-					s.Ubicacion == dto.Ubicacion &&
-					s.Partida == dto.Lote);
+		// 🔷 Leer stock actual dentro de la transacción
+		var stock = await _auroraSgaContext.StockDisponible
+			.FirstOrDefaultAsync(s =>
+				s.CodigoEmpresa == dto.CodigoEmpresa &&
+				s.CodigoArticulo == dto.CodigoArticulo &&
+				s.CodigoAlmacen == dto.CodigoAlmacen &&
+				s.Ubicacion == dto.Ubicacion &&
+				s.Partida == dto.Lote);
 
-			if (stock == null)
-				return BadRequest("No se encontró stock para el artículo, almacén y ubicación especificados.");
+		if (stock == null)
+			return BadRequest("No se encontró stock para el artículo, almacén y ubicación especificados.");
 
-			if (dto.Cantidad > stock.Disponible)
-				return BadRequest($"No puedes reservar más de lo disponible: {stock.Disponible:N2} unidades.");
+		if (dto.Cantidad > stock.Disponible)
+			return BadRequest($"No puedes reservar más de lo disponible: {stock.Disponible:N2} unidades.");
 
-			// 🔷 Crear la línea temporal
-			var linea = new TempPaletLinea
+		// === US-002: SOLO crear línea negativa si Android especifica PaletIdOrigen ===
+		// Si el usuario NO especifica PaletIdOrigen, significa que quiere material SUELTO
+		var loteNormalizado = (dto.Lote ?? "").Trim();
+		PaletLinea? paletOrigen = null;
+		
+		// SOLO buscar palet origen si Android lo especifica explícitamente
+		if (dto.PaletIdOrigen.HasValue && dto.PaletIdOrigen.Value != Guid.Empty)
+		{
+			paletOrigen = await _auroraSgaContext.PaletLineas
+				.Include(pl => pl.Palet)
+				.Where(pl =>
+					pl.PaletId == dto.PaletIdOrigen.Value &&
+					pl.CodigoArticulo == dto.CodigoArticulo &&
+					pl.CodigoAlmacen.Trim().ToUpper() == dto.CodigoAlmacen.Trim().ToUpper() &&
+					pl.Ubicacion.Trim().ToUpper() == dto.Ubicacion.Trim().ToUpper() &&
+					(pl.Lote ?? "") == loteNormalizado &&
+					pl.Cantidad >= dto.Cantidad)
+				.FirstOrDefaultAsync();
+		}
+		
+		if (paletOrigen != null)
+		{
+			// Crear línea temporal NEGATIVA para el palet origen
+			// NO asignamos TraspasoId aquí - se asignará cuando se cierre el palet destino
+			var lineaNegativa = new TempPaletLinea
 			{
-				PaletId = palet.Id,
+				PaletId = paletOrigen.PaletId,
 				CodigoEmpresa = dto.CodigoEmpresa,
 				CodigoArticulo = dto.CodigoArticulo,
 				DescripcionArticulo = dto.DescripcionArticulo,
-				Cantidad = dto.Cantidad,
+				Cantidad = -dto.Cantidad, // CANTIDAD NEGATIVA
 				Lote = dto.Lote,
 				FechaCaducidad = dto.FechaCaducidad,
 				CodigoAlmacen = dto.CodigoAlmacen,
 				Ubicacion = dto.Ubicacion,
 				UsuarioId = dto.UsuarioId,
-				Observaciones = dto.Observaciones,
-				FechaAgregado = DateTime.Now
+				Observaciones = "Delta negativo por extracción de material del palet",
+				FechaAgregado = DateTime.Now,
+				Procesada = false,
+				EsHeredada = false,
+				TraspasoId = null // Sin TraspasoId - se asignará después
 			};
+			
+			_auroraSgaContext.TempPaletLineas.Add(lineaNegativa);
+		}
 
-			_auroraSgaContext.TempPaletLineas.Add(linea);
+		// 🔷 Crear la línea temporal POSITIVA para el palet nuevo
+		var linea = new TempPaletLinea
+		{
+			PaletId = palet.Id,
+			CodigoEmpresa = dto.CodigoEmpresa,
+			CodigoArticulo = dto.CodigoArticulo,
+			DescripcionArticulo = dto.DescripcionArticulo,
+			Cantidad = dto.Cantidad,
+			Lote = dto.Lote,
+			FechaCaducidad = dto.FechaCaducidad,
+			CodigoAlmacen = dto.CodigoAlmacen,
+			Ubicacion = dto.Ubicacion,
+			UsuarioId = dto.UsuarioId,
+			Observaciones = dto.Observaciones,
+			FechaAgregado = DateTime.Now
+		};
+
+		_auroraSgaContext.TempPaletLineas.Add(linea);
 
 			// 🔷 Registrar en log
 			_auroraSgaContext.LogPalet.Add(new LogPalet
@@ -591,35 +637,213 @@ public class PaletController : ControllerBase
 	[HttpDelete("lineas/{lineaId}")]
 	public async Task<IActionResult> EliminarLineaPalet(Guid lineaId, [FromQuery] int usuarioId)
 	{
-		var linea = await _auroraSgaContext.TempPaletLineas.FindAsync(lineaId);
-		if (linea == null)
-			return NotFound();
-
-		// Primero obtenemos el palet asociado
-		var palet = await _auroraSgaContext.Palets.FindAsync(linea.PaletId);
-		if (palet == null)
-			return NotFound("Palet no encontrado");
-
-		// Si está cerrado, no se puede eliminar la línea
-		if (palet.Estado == "Cerrado")
-			return BadRequest("No se pueden eliminar líneas de un palet cerrado.");
-
-		// Eliminamos la línea
-		_auroraSgaContext.TempPaletLineas.Remove(linea);
-
-		// Log de la eliminación
-		_auroraSgaContext.LogPalet.Add(new LogPalet
+		// 🟦 Iniciar transacción para garantizar consistencia
+		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync();
+		
+		try
 		{
-			PaletId = palet.Id,
-			Fecha = DateTime.Now,
-			IdUsuario = usuarioId,
-			Accion = "EliminarLinea",
-			Detalle = $"Línea eliminada: Artículo={linea.CodigoArticulo}, Cantidad={linea.Cantidad}, Ubicación={linea.Ubicacion}"
-		});
+			var linea = await _auroraSgaContext.TempPaletLineas.FindAsync(lineaId);
+			if (linea == null)
+			{
+				return NotFound();
+			}
 
-		await _auroraSgaContext.SaveChangesAsync();
+			// Primero obtenemos el palet asociado
+			var palet = await _auroraSgaContext.Palets.FindAsync(linea.PaletId);
+			if (palet == null)
+				return NotFound("Palet no encontrado");
 
-		return Ok(new { message = "Línea eliminada correctamente" });
+			// Si está cerrado, no se puede eliminar la línea
+			if (palet.Estado == "Cerrado")
+				return BadRequest("No se pueden eliminar líneas de un palet cerrado.");
+
+			// 🔷 FUNCIONALIDAD MEJORADA: Manejar tanto líneas POSITIVAS como NEGATIVAS
+			TempPaletLinea? lineaCorrespondiente = null;
+			if (linea.Cantidad > 0)
+			{
+				// Buscar línea NEGATIVA correspondiente para línea POSITIVA
+				// Ordenar por fecha para encontrar la más reciente que coincida
+				lineaCorrespondiente = await _auroraSgaContext.TempPaletLineas
+					.Where(l => 
+						l.CodigoArticulo == linea.CodigoArticulo &&
+						l.Lote == linea.Lote &&
+						l.CodigoAlmacen == linea.CodigoAlmacen &&
+						l.Cantidad == -linea.Cantidad && // Cantidad opuesta
+						l.Procesada == false &&
+						(l.TraspasoId == linea.TraspasoId || (l.TraspasoId == null && linea.TraspasoId == null)) && // Mismo traspaso o ambos null
+						l.Id != lineaId) // No la misma línea
+					.OrderByDescending(l => l.FechaAgregado) // Más reciente primero
+					.FirstOrDefaultAsync();
+			}
+			else if (linea.Cantidad < 0)
+			{
+				// Buscar línea POSITIVA correspondiente para línea NEGATIVA
+				// Ordenar por fecha para encontrar la más reciente que coincida
+				lineaCorrespondiente = await _auroraSgaContext.TempPaletLineas
+					.Where(l => 
+						l.CodigoArticulo == linea.CodigoArticulo &&
+						l.Lote == linea.Lote &&
+						l.CodigoAlmacen == linea.CodigoAlmacen &&
+						l.Cantidad == -linea.Cantidad && // Cantidad opuesta
+						l.Procesada == false &&
+						(l.TraspasoId == linea.TraspasoId || (l.TraspasoId == null && linea.TraspasoId == null)) && // Mismo traspaso o ambos null
+						l.Id != lineaId) // No la misma línea
+					.OrderByDescending(l => l.FechaAgregado) // Más reciente primero
+					.FirstOrDefaultAsync();
+			}
+					
+			if (lineaCorrespondiente != null)
+			{
+				// Obtener el palet correspondiente para el log
+				var paletCorrespondiente = await _auroraSgaContext.Palets.FindAsync(lineaCorrespondiente.PaletId);
+				
+				// Eliminar la línea correspondiente (esto mantiene el balance)
+				_auroraSgaContext.TempPaletLineas.Remove(lineaCorrespondiente);
+				
+				// Log de la eliminación en cascada
+				_auroraSgaContext.LogPalet.Add(new LogPalet
+				{
+					PaletId = lineaCorrespondiente.PaletId,
+					Fecha = DateTime.Now,
+					IdUsuario = usuarioId,
+					Accion = "EliminarLineaCorrespondiente",
+					Detalle = $"Eliminada línea correspondiente automáticamente. Artículo: {linea.CodigoArticulo}, Cantidad: {lineaCorrespondiente.Cantidad}, Palet: {paletCorrespondiente?.Codigo ?? "N/A"}"
+				});
+			}
+			else
+			{
+				// 🔷 CORREGIDO: Si NO hay línea correspondiente, buscar el palet origen y crear línea POSITIVA allí
+				// Esto devuelve el stock al palet origen en lugar de crear stock "suelto"
+				
+				// Buscar el palet origen basado en el traspaso
+					var traspaso = await _auroraSgaContext.Traspasos.FindAsync(linea.TraspasoId);
+					Guid paletOrigenId = Guid.Empty;
+					
+					if (traspaso != null && traspaso.PaletId != Guid.Empty)
+					{
+						paletOrigenId = traspaso.PaletId;
+					}
+					else
+					{
+						// Si no hay traspaso o palet origen, buscar palets con el mismo artículo en ubicación origen
+						var paletOrigen = await _auroraSgaContext.Palets
+							.Join(_auroraSgaContext.PaletLineas, p => p.Id, pl => pl.PaletId, (p, pl) => new { p, pl })
+							.Where(x => x.pl.CodigoArticulo == linea.CodigoArticulo && 
+										x.pl.Lote == linea.Lote &&
+										x.pl.CodigoAlmacen == linea.CodigoAlmacen &&
+										x.p.Estado == "Abierto")
+							.Select(x => x.p.Id)
+							.FirstOrDefaultAsync();
+						
+						if (paletOrigen != Guid.Empty)
+							paletOrigenId = paletOrigen;
+					}
+					
+					if (paletOrigenId != Guid.Empty)
+					{
+						// Crear línea compensatoria en el palet origen
+						// Para líneas POSITIVAS: devolver stock (cantidad positiva)
+						// Para líneas NEGATIVAS: compensar la eliminación (cantidad negativa)
+						var lineaCompensatoria = new TempPaletLinea
+						{
+							PaletId = paletOrigenId, // Palet origen
+							CodigoEmpresa = linea.CodigoEmpresa,
+							CodigoArticulo = linea.CodigoArticulo,
+							DescripcionArticulo = linea.DescripcionArticulo,
+							Cantidad = linea.Cantidad, // Mantener el mismo signo para compensar
+							Lote = linea.Lote,
+							FechaCaducidad = linea.FechaCaducidad,
+							CodigoAlmacen = linea.CodigoAlmacen,
+							Ubicacion = linea.Ubicacion,
+							UsuarioId = linea.UsuarioId,
+							Observaciones = linea.Cantidad > 0 
+								? "Devolución de stock al palet origen por cancelación de línea"
+								: "Compensación de eliminación de línea negativa",
+							FechaAgregado = DateTime.Now,
+							Procesada = false,
+							EsHeredada = false,
+							TraspasoId = linea.TraspasoId
+						};
+						
+						_auroraSgaContext.TempPaletLineas.Add(lineaCompensatoria);
+						
+						// Log de la línea compensatoria
+						_auroraSgaContext.LogPalet.Add(new LogPalet
+						{
+							PaletId = paletOrigenId,
+							Fecha = DateTime.Now,
+							IdUsuario = usuarioId,
+							Accion = "CompensarEliminacion",
+							Detalle = $"Línea compensatoria creada en palet origen por cancelación. Artículo: {linea.CodigoArticulo}, Cantidad: {lineaCompensatoria.Cantidad}"
+						});
+					}
+					else
+					{
+						// Si no se puede encontrar palet origen, crear línea compensatoria negativa en destino
+						// (comportamiento anterior como fallback)
+						var lineaCompensatoria = new TempPaletLinea
+						{
+							PaletId = linea.PaletId, // Mismo palet destino
+							CodigoEmpresa = linea.CodigoEmpresa,
+							CodigoArticulo = linea.CodigoArticulo,
+							DescripcionArticulo = linea.DescripcionArticulo,
+							Cantidad = -linea.Cantidad, // Cantidad negativa para compensar
+							Lote = linea.Lote,
+							FechaCaducidad = linea.FechaCaducidad,
+							CodigoAlmacen = linea.CodigoAlmacen,
+							Ubicacion = linea.Ubicacion,
+							UsuarioId = linea.UsuarioId,
+							Observaciones = "Línea compensatoria por eliminación (no se encontró palet origen)",
+							FechaAgregado = DateTime.Now,
+							Procesada = false,
+							EsHeredada = false,
+							TraspasoId = linea.TraspasoId
+						};
+						
+						_auroraSgaContext.TempPaletLineas.Add(lineaCompensatoria);
+						
+						// Log de la línea compensatoria
+						_auroraSgaContext.LogPalet.Add(new LogPalet
+						{
+							PaletId = linea.PaletId,
+							Fecha = DateTime.Now,
+							IdUsuario = usuarioId,
+							Accion = "CrearLineaCompensatoria",
+							Detalle = $"Creada línea compensatoria al eliminar línea sin palet origen identificado. Artículo: {linea.CodigoArticulo}, Cantidad: {lineaCompensatoria.Cantidad}"
+						});
+					}
+				}
+
+			// Eliminar la línea original
+			_auroraSgaContext.TempPaletLineas.Remove(linea);
+
+			// Log de la eliminación principal
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
+				PaletId = palet.Id,
+				Fecha = DateTime.Now,
+				IdUsuario = usuarioId,
+				Accion = "EliminarLinea",
+				Detalle = $"Línea eliminada: Artículo={linea.CodigoArticulo}, Cantidad={linea.Cantidad}, Ubicación={linea.Ubicacion}" +
+					(lineaCorrespondiente != null ? " (Incluye eliminación automática de línea correspondiente)" : "")
+			});
+
+			await _auroraSgaContext.SaveChangesAsync();
+			await transaction.CommitAsync();
+
+			var mensaje = lineaCorrespondiente != null 
+				? "Línea eliminada correctamente. Se eliminó automáticamente la línea correspondiente para mantener el balance."
+				: "Línea eliminada correctamente. Se creó una línea compensatoria para mantener la integridad del inventario.";
+
+			return Ok(new { message = mensaje });
+		}
+		catch (Exception ex)
+		{
+			// 🔷 Si falla algo, deshacer la transacción
+			await transaction.RollbackAsync();
+			_logger.LogError(ex, "Error al eliminar línea de palet. LineaId: {LineaId}, UsuarioId: {UsuarioId}", lineaId, usuarioId);
+			return StatusCode(500, $"Error al eliminar línea: {ex.Message}");
+		}
 	}
 
 	#endregion
@@ -1246,39 +1470,81 @@ public class PaletController : ControllerBase
 		if (!tieneLineas)
 			return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
 
-		// Copia todas las definitivas a temporales heredadas (como hace desktop)
-		var lineasDefinitivas = await _auroraSgaContext.PaletLineas
-			.Where(l => l.PaletId == id)
-			.ToListAsync();
-		foreach (var def in lineasDefinitivas)
+	// === LÓGICA MEJORADA: Detectar si estamos moviendo material de un palet existente ===
+	var lineasDefinitivas = await _auroraSgaContext.PaletLineas
+		.Where(l => l.PaletId == id)
+		.ToListAsync();
+	
+	// Obtener líneas temporales existentes (creadas por Android al escanear artículos)
+	var lineasTemporalesExistentes = await _auroraSgaContext.TempPaletLineas
+		.Where(l => l.PaletId == id && l.Procesada == false && l.EsHeredada == false)
+		.ToListAsync();
+	
+	foreach (var def in lineasDefinitivas)
+	{
+		// Buscar si hay una línea temporal para este mismo artículo/lote
+		var tempExistente = lineasTemporalesExistentes.FirstOrDefault(t => 
+			t.CodigoArticulo == def.CodigoArticulo && 
+			t.Lote == def.Lote);
+		
+		if (tempExistente != null)
 		{
-			// Solo copia si no existe ya una temporal no procesada para ese artículo/lote
-			var yaExiste = await _auroraSgaContext.TempPaletLineas
-				.AnyAsync(t => t.PaletId == id && t.CodigoArticulo == def.CodigoArticulo && t.Lote == def.Lote && t.Procesada == false);
-			if (!yaExiste)
+			// Si la cantidad temporal es MENOR que la definitiva, significa que estamos SACANDO material del palet
+			if (tempExistente.Cantidad < def.Cantidad)
 			{
-				var temp = new TempPaletLinea
+				var diferencia = def.Cantidad - tempExistente.Cantidad;
+				
+				// Crear línea temporal NEGATIVA para reducir el stock del palet origen
+				var tempNegativa = new TempPaletLinea
 				{
 					PaletId = def.PaletId,
 					CodigoEmpresa = def.CodigoEmpresa,
 					CodigoArticulo = def.CodigoArticulo,
 					DescripcionArticulo = def.DescripcionArticulo,
-					Cantidad = def.Cantidad,
+					Cantidad = -diferencia, // CANTIDAD NEGATIVA
 					UnidadMedida = def.UnidadMedida,
 					Lote = def.Lote,
 					FechaCaducidad = def.FechaCaducidad,
-					CodigoAlmacen = def.CodigoAlmacen,
-					Ubicacion = def.Ubicacion,
-					UsuarioId = def.UsuarioId,
+					CodigoAlmacen = def.CodigoAlmacen, // UBICACIÓN ORIGEN
+					Ubicacion = def.Ubicacion, // UBICACIÓN ORIGEN
+					UsuarioId = dto.UsuarioId,
 					FechaAgregado = DateTime.Now,
-					Observaciones = def.Observaciones,
+					Observaciones = "Delta negativo por movimiento parcial de palet",
 					Procesada = false,
-					EsHeredada = true // Marcar como heredada
+					EsHeredada = false,
+					TraspasoId = null // Se asignará después
 				};
-				_auroraSgaContext.TempPaletLineas.Add(temp);
+				_auroraSgaContext.TempPaletLineas.Add(tempNegativa);
+				_logger.LogInformation($"✅ Creada línea temporal NEGATIVA: Articulo={def.CodigoArticulo}, Cantidad={tempNegativa.Cantidad}, Ubicacion={def.CodigoAlmacen}-{def.Ubicacion}");
 			}
 		}
-		await _auroraSgaContext.SaveChangesAsync();
+		else
+		{
+			// No hay línea temporal para este artículo, copiar la definitiva como heredada
+			_logger.LogInformation($"ℹ️ DEBUG CerrarPaletMobility: No hay línea temporal, copiando definitiva como heredada");
+			
+			var temp = new TempPaletLinea
+			{
+				PaletId = def.PaletId,
+				CodigoEmpresa = def.CodigoEmpresa,
+				CodigoArticulo = def.CodigoArticulo,
+				DescripcionArticulo = def.DescripcionArticulo,
+				Cantidad = def.Cantidad,
+				UnidadMedida = def.UnidadMedida,
+				Lote = def.Lote,
+				FechaCaducidad = def.FechaCaducidad,
+				CodigoAlmacen = def.CodigoAlmacen,
+				Ubicacion = def.Ubicacion,
+				UsuarioId = def.UsuarioId,
+				FechaAgregado = DateTime.Now,
+				Observaciones = def.Observaciones,
+				Procesada = false,
+				EsHeredada = true // Marcar como heredada
+			};
+			_auroraSgaContext.TempPaletLineas.Add(temp);
+		}
+	}
+	await _auroraSgaContext.SaveChangesAsync();
 
 		// Recarga las líneas temporales después de guardar
 		var lineasTemporales = await _auroraSgaContext.TempPaletLineas
@@ -1301,36 +1567,58 @@ public class PaletController : ControllerBase
 			Detalle = $"Palet cerrado por usuario {dto.UsuarioId} desde Mobility"
 		});
 
-		var traspasosCreados = new List<Guid>();
-		foreach (var linea in lineasTemporales)
+	var traspasosCreados = new List<Guid>();
+	foreach (var linea in lineasTemporales)
+	{
+		var traspaso = new Traspaso
 		{
-			var traspaso = new Traspaso
-			{
-				Id = Guid.NewGuid(),
-				PaletId = palet.Id,
-				CodigoPalet = palet.Codigo,
-				TipoTraspaso = "PALET",
-				CodigoEstado = "PENDIENTE",
-				FechaInicio = DateTime.Now,
-				UsuarioInicioId = dto.UsuarioId,
-				AlmacenOrigen = linea.CodigoAlmacen,
-				CodigoEmpresa = linea.CodigoEmpresa,
-				CodigoArticulo = linea.CodigoArticulo,
-				UbicacionOrigen = linea.Ubicacion,
-				Cantidad = linea.Cantidad,
-				Partida = linea.Lote,
-				FechaCaducidad = linea.FechaCaducidad,
-				Comentario = dto.Comentario,
-				EsNotificado = false
-			};
-			_auroraSgaContext.Traspasos.Add(traspaso);
-			traspasosCreados.Add(traspaso.Id);
+			Id = Guid.NewGuid(),
+			PaletId = palet.Id,
+			CodigoPalet = palet.Codigo,
+			TipoTraspaso = "PALET",
+			CodigoEstado = "PENDIENTE",
+			FechaInicio = DateTime.Now,
+			UsuarioInicioId = dto.UsuarioId,
+			AlmacenOrigen = linea.CodigoAlmacen,
+			CodigoEmpresa = linea.CodigoEmpresa,
+			CodigoArticulo = linea.CodigoArticulo,
+			UbicacionOrigen = linea.Ubicacion,
+			Cantidad = linea.Cantidad,
+			Partida = linea.Lote,
+			FechaCaducidad = linea.FechaCaducidad,
+			Comentario = dto.Comentario,
+			EsNotificado = false
+		};
+		_auroraSgaContext.Traspasos.Add(traspaso);
+		traspasosCreados.Add(traspaso.Id);
 
-			// Asociar el TraspasoId a la línea temporal correspondiente
-			linea.TraspasoId = traspaso.Id;
-			_auroraSgaContext.TempPaletLineas.Update(linea);
+		// Asociar el TraspasoId a la línea temporal correspondiente (palet destino)
+		linea.TraspasoId = traspaso.Id;
+		_auroraSgaContext.TempPaletLineas.Update(linea);
+		
+		// === US-002: Buscar y asociar líneas temporales NEGATIVAS en otros palets ===
+		// Buscar líneas negativas que se crearon para este mismo artículo/lote/ubicación
+		var lineasNegativasRelacionadas = await _auroraSgaContext.TempPaletLineas
+			.Where(tpl => 
+				tpl.PaletId != id && // Diferente palet (el origen)
+				tpl.CodigoArticulo == linea.CodigoArticulo &&
+				tpl.Lote == linea.Lote &&
+				tpl.CodigoAlmacen == linea.CodigoAlmacen &&
+				tpl.Ubicacion == linea.Ubicacion &&
+				tpl.Procesada == false &&
+				tpl.TraspasoId == null && // Sin traspaso asignado aún
+				tpl.Cantidad < 0 && // Solo líneas NEGATIVAS
+				tpl.Observaciones == "Delta negativo por extracción de material del palet")
+			.ToListAsync();
+		
+		foreach (var lineaNegativa in lineasNegativasRelacionadas)
+		{
+			lineaNegativa.TraspasoId = traspaso.Id;
+			_auroraSgaContext.TempPaletLineas.Update(lineaNegativa);
+			_logger.LogInformation($"✅ Asignado TraspasoId={traspaso.Id} a línea NEGATIVA en palet origen: PaletId={lineaNegativa.PaletId}, Cantidad={lineaNegativa.Cantidad}");
 		}
-		await _auroraSgaContext.SaveChangesAsync();
+	}
+	await _auroraSgaContext.SaveChangesAsync();
 
 		return Ok(new
 		{
@@ -1343,6 +1631,7 @@ public class PaletController : ControllerBase
 	[HttpPost("{id}/completar-traspaso")]
 	public async Task<IActionResult> CompletarTraspaso(Guid id, [FromBody] CompletarTraspasoDto dto)
 	{
+		_logger.LogInformation($"🚨 DEBUG: EJECUTANDO CompletarTraspaso - TraspasoId={id}, UsuarioId={dto.UsuarioFinalizacionId}");
 		var traspaso = await _auroraSgaContext.Traspasos.FindAsync(id);
 		if (traspaso == null)
 			return NotFound("Traspaso no encontrado");
@@ -1356,6 +1645,12 @@ public class PaletController : ControllerBase
 		traspaso.FechaFinalizacion = DateTime.Now;
 		traspaso.UsuarioFinalizacionId = dto.UsuarioFinalizacionId;
 		traspaso.CodigoEstado = "PENDIENTE_ERP";
+
+		// === CORRECCIÓN: NO crear líneas temporales automáticamente ===
+		// Las líneas temporales deben crearse cuando se hace el traspaso real,
+		// no cuando se completa el traspaso. El CompletarTraspasoDto no tiene
+		// información sobre la cantidad específica que se está moviendo.
+		_logger.LogInformation($"ℹ️ CompletarTraspaso: Solo actualizando traspaso, NO creando líneas temporales. PaletId={traspaso.PaletId}, Articulo={traspaso.CodigoArticulo}");
 
 		_auroraSgaContext.Traspasos.Update(traspaso);
 		await _auroraSgaContext.SaveChangesAsync();
@@ -1439,6 +1734,7 @@ public class PaletController : ControllerBase
     // No hay palet
     return Ok(new { estado = "NINGUNO" });
 }
+
 	[HttpPost("{id}/marcar-vaciado")]
 	public async Task<IActionResult> MarcarVaciado(Guid id, [FromQuery] int usuarioId, [FromQuery] bool forzar = false)
 	{

@@ -150,7 +150,7 @@
                                                    Visibility="{Binding SeparadorVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                         
                                         <!-- Contador rojo -->
-                                        <StackPanel Orientation="Horizontal"
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,4,0"
                                                     Visibility="{Binding ContadorNotificacionesNegativas, Converter={StaticResource IntToVisibilityConverter}}">
                                             <TextBlock Text="⚠" 
                                                        Foreground="#F44336" 
@@ -160,6 +160,31 @@
                                                        VerticalAlignment="Center"/>
                                             <TextBlock Text="{Binding ContadorNotificacionesNegativas}" 
                                                        Foreground="#F44336" 
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       FontFamily="{StaticResource FuentePrincipal}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        
+                                        <!-- Separador -->
+                                        <TextBlock Text="•" 
+                                                   Foreground="#999" 
+                                                   FontSize="8" 
+                                                   Margin="0,0,4,0"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding ContadorNotificacionesInfo, Converter={StaticResource IntToVisibilityConverter}}"/>
+                                        
+                                        <!-- Contador azul (info) -->
+                                        <StackPanel Orientation="Horizontal"
+                                                    Visibility="{Binding ContadorNotificacionesInfo, Converter={StaticResource IntToVisibilityConverter}}">
+                                            <TextBlock Text="ℹ" 
+                                                       Foreground="#2196F3" 
+                                                       FontSize="8" 
+                                                       FontWeight="Bold"
+                                                       Margin="0,0,2,0"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding ContadorNotificacionesInfo}" 
+                                                       Foreground="#2196F3" 
                                                        FontSize="10"
                                                        FontWeight="Bold"
                                                        FontFamily="{StaticResource FuentePrincipal}"
@@ -259,8 +284,8 @@
                     <Button Content="Configuración de Operarios"
                     Command="{Binding IrAConfiguracionOperariosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}"/>
                     <Button Content="Salir"
                     Command="{Binding CerrarSesionCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

@@ -496,8 +496,6 @@ public class TraspasosController : ControllerBase
 	{
 		try
 		{
-			// Debug: Log para verificar los datos recibidos
-			_logger.LogInformation($"DEBUG: Recibido DTO - DescripcionArticulo: '{dto.DescripcionArticulo}', CodigoEmpresa: {dto.CodigoEmpresa}");
 			// Validaciones mínimas
 			if (string.IsNullOrWhiteSpace(dto.CodigoArticulo))
 				return BadRequest("Debe indicar el código de artículo.");
@@ -526,33 +524,33 @@ public class TraspasosController : ControllerBase
 			Guid? paletIdOrigen = null;
 			string codigoPaletOrigen = null;
 			
-			var loteDto = dto.Partida?.Trim() ?? "";
+		var loteDto = dto.Partida?.Trim() ?? "";
+		
+		// Primero: calcular cuánto stock hay paletizado en esta ubicación
+		var stockPaletizado = await _context.PaletLineas
+			.Where(pl =>
+				pl.CodigoArticulo == dto.CodigoArticulo &&
+				pl.CodigoAlmacen.Trim().ToUpper() == dto.AlmacenOrigen.Trim().ToUpper() &&
+				pl.Ubicacion.Trim().ToUpper() == dto.UbicacionOrigen.Trim().ToUpper() &&
+				(pl.Lote ?? "") == loteDto)
+			.SumAsync(pl => pl.Cantidad);
+		
+		// Segundo: comparar con el stock total disponible
+		var stockTotal = stock.Disponible; // Ya lo tenemos de la validación anterior
 			
-			// Primero: calcular cuánto stock hay paletizado en esta ubicación
-			var stockPaletizado = await _context.PaletLineas
-				.Where(pl =>
+		// SOLO si TODO el stock está paletizado, entonces validar el palet cerrado
+		// Si hay stock suelto (stockTotal > stockPaletizado), permitir el traspaso sin validar palets
+		if (stockPaletizado > 0 && stockPaletizado >= stockTotal)
+		{
+			// El stock está completamente paletizado, buscar el palet específico
+			var lineaPalet = await _context.PaletLineas
+				.FirstOrDefaultAsync(pl =>
 					pl.CodigoArticulo == dto.CodigoArticulo &&
 					pl.CodigoAlmacen.Trim().ToUpper() == dto.AlmacenOrigen.Trim().ToUpper() &&
 					pl.Ubicacion.Trim().ToUpper() == dto.UbicacionOrigen.Trim().ToUpper() &&
-					(pl.Lote ?? "") == loteDto)
-				.SumAsync(pl => pl.Cantidad);
-			
-			// Segundo: comparar con el stock total disponible
-			var stockTotal = stock.Disponible; // Ya lo tenemos de la validación anterior
-			
-			// SOLO si TODO el stock está paletizado, entonces validar el palet cerrado
-			// Si hay stock suelto (stockTotal > stockPaletizado), permitir el traspaso sin validar palets
-			if (stockPaletizado > 0 && stockPaletizado >= stockTotal)
-			{
-				// El stock está completamente paletizado, buscar el palet específico
-				var lineaPalet = await _context.PaletLineas
-					.FirstOrDefaultAsync(pl =>
-						pl.CodigoArticulo == dto.CodigoArticulo &&
-						pl.CodigoAlmacen.Trim().ToUpper() == dto.AlmacenOrigen.Trim().ToUpper() &&
-						pl.Ubicacion.Trim().ToUpper() == dto.UbicacionOrigen.Trim().ToUpper() &&
-						(pl.Lote ?? "") == loteDto);
+					(pl.Lote ?? "") == loteDto);
 
-				if (lineaPalet != null)
+			if (lineaPalet != null)
 				{
 					paletIdOrigen = lineaPalet.PaletId;
 					var palet = await _context.Palets.FindAsync(lineaPalet.PaletId);
@@ -589,77 +587,6 @@ public class TraspasosController : ControllerBase
 			}
 			// Si stockPaletizado < stockTotal, significa que hay stock suelto disponible
 			// En ese caso, NO asociamos paletIdOrigen y permitimos el traspaso libremente
-				////// RESTAR la cantidad traspasada de la línea de palet
-				////lineaPalet.Cantidad -= dto.Cantidad ?? 0;
-				////            if (lineaPalet.Cantidad <= 0)
-				////            {
-				////                _context.PaletLineas.Remove(lineaPalet);
-				////            }
-				////            else
-				////            {
-				////                _context.PaletLineas.Update(lineaPalet);
-				////            }
-				////            await _context.SaveChangesAsync();
-				//// --- RESTAR EN ORIGEN SIN MOVER SU UBICACIÓN ---
-				//var idLinea = lineaPalet.Id;
-				//var nuevaCant = lineaPalet.Cantidad - (dto.Cantidad ?? 0m);
-
-				//// Soltar del contexto
-				//_context.Entry(lineaPalet).State = EntityState.Detached;
-
-				//if (nuevaCant <= 0)
-				//{
-				//	_context.PaletLineas.Remove(new PaletLinea { Id = idLinea });
-				//}
-				//else
-				//{
-				//	var stub = new PaletLinea { Id = idLinea, Cantidad = nuevaCant };
-
-				//	_context.PaletLineas.Attach(stub);
-				//	var entry = _context.Entry(stub);
-				//	entry.Property(x => x.Cantidad).IsModified = true;
-				//	entry.Property(x => x.CodigoAlmacen).IsModified = false;
-				//	entry.Property(x => x.Ubicacion).IsModified = false;
-				//}
-
-				//await _context.SaveChangesAsync();
-
-				//// 🔸 DESPUÉS DE RESTAR: si el palet de ORIGEN se queda vacío → marcar VACÍADO
-				//if (paletIdOrigen.HasValue)
-				//{
-				//	var quedanLineas = await _context.PaletLineas
-				//		.AnyAsync(pl => pl.PaletId == paletIdOrigen.Value);
-
-				//	if (!quedanLineas)
-				//	{
-				//		var paletOrigen = await _context.Palets.FindAsync(paletIdOrigen.Value);
-				//		if (paletOrigen != null && !string.Equals(paletOrigen.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
-				//		{
-				//			paletOrigen.Estado = "Vaciado";
-
-				//			// Si añadiste estos campos, rellénalos; si no, puedes omitirlos o reutilizar FechaCierre/UsuarioCierreId
-				//			paletOrigen.FechaVaciado = DateTime.Now;       // <-- si existe
-				//			paletOrigen.UsuarioVaciadoId = dto.UsuarioId;  // <-- si existe
-
-				//			// (opcional) también cerrarlo
-				//			paletOrigen.FechaCierre = DateTime.Now;
-				//			paletOrigen.UsuarioCierreId = dto.UsuarioId;
-
-				//			_context.Palets.Update(paletOrigen);
-
-				//			_context.LogPalet.Add(new LogPalet
-				//			{
-				//				PaletId = paletOrigen.Id,
-				//				Fecha = DateTime.Now,
-				//				IdUsuario = dto.UsuarioId,
-				//				Accion = "Vaciado",
-				//				Detalle = "Palet sin líneas tras traspaso; marcado como Vaciado."
-				//			});
-
-				//			await _context.SaveChangesAsync();
-				//		}
-				//	}
-				//}
 
 		// Determinar palet destino: manual (especificado por usuario) o automático (búsqueda)
 			Guid? paletIdDestino = null;
@@ -804,34 +731,44 @@ public class TraspasosController : ControllerBase
 			_context.Traspasos.Add(traspaso);
 			await _context.SaveChangesAsync();
 
-			// --- TEMPORAL NEGATIVA (ORIGEN) ---
-			if (paletIdOrigen.HasValue)   // solo si el stock que sacas estaba paletizado
+		// === US-002: Crear línea temporal NEGATIVA para palet origen si existe ===
+		_logger.LogInformation($"🔍 DEBUG CrearTraspasoArticulo: paletIdOrigen.HasValue={paletIdOrigen.HasValue}, paletIdOrigen={paletIdOrigen}");
+		_logger.LogInformation($"🔍 DEBUG CrearTraspasoArticulo: Cantidad={dto.Cantidad}, AlmacenOrigen={dto.AlmacenOrigen}, UbicacionOrigen={dto.UbicacionOrigen}");
+		
+		if (paletIdOrigen.HasValue)
+		{
+			_logger.LogInformation($"✅ DEBUG CrearTraspasoArticulo: ENTRANDO en bloque para crear línea temporal NEGATIVA");
+			
+			var tempLineaOrigen = new TempPaletLinea
 			{
-				var tempOrigen = new TempPaletLinea
-				{
-					PaletId = paletIdOrigen.Value,
-					CodigoEmpresa = dto.CodigoEmpresa,
-					CodigoArticulo = dto.CodigoArticulo,
-					DescripcionArticulo = dto.DescripcionArticulo,
-					Cantidad = -(dto.Cantidad ?? 0m),      // << DELTA NEGATIVO
-					UnidadMedida = dto.UnidadMedida,
-					Lote = dto.Partida,
-					FechaCaducidad = dto.FechaCaducidad,
-					CodigoAlmacen = dto.AlmacenOrigen,
-					Ubicacion = dto.UbicacionOrigen,
-					UsuarioId = dto.UsuarioId,
-					FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
-					Observaciones = "Delta origen (traspaso de artículo)",
-					Procesada = false,
-					EsHeredada = false,
-					TraspasoId = traspaso.Id
-				};
+				PaletId = paletIdOrigen.Value,
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoArticulo = dto.CodigoArticulo,
+				DescripcionArticulo = dto.DescripcionArticulo,
+				Cantidad = -(dto.Cantidad ?? 0), // CANTIDAD NEGATIVA para reducir stock
+				UnidadMedida = dto.UnidadMedida,
+				Lote = dto.Partida,
+				FechaCaducidad = dto.FechaCaducidad,
+				CodigoAlmacen = dto.AlmacenOrigen, // UBICACIÓN ORIGEN
+				Ubicacion = dto.UbicacionOrigen,   // UBICACIÓN ORIGEN
+				UsuarioId = dto.UsuarioId,
+				FechaAgregado = DateTime.Now,
+				Observaciones = "Delta negativo origen (traspaso de artículo)",
+				Procesada = false,
+				TraspasoId = traspaso.Id, // Asociar al mismo traspaso
+				EsHeredada = false
+			};
+			_context.TempPaletLineas.Add(tempLineaOrigen);
+			_logger.LogInformation($"✅ Creada línea temporal NEGATIVA para palet origen: PaletId={paletIdOrigen.Value}, Cantidad={tempLineaOrigen.Cantidad}, Articulo={dto.CodigoArticulo}, Ubicacion={dto.AlmacenOrigen}-{dto.UbicacionOrigen}");
+			await _context.SaveChangesAsync(); // GUARDAR INMEDIATAMENTE la línea negativa
+			_logger.LogInformation($"✅ GUARDADA línea temporal NEGATIVA en base de datos");
+		}
+		else
+		{
+			_logger.LogWarning($"⚠️ DEBUG CrearTraspasoArticulo: NO se detectó palet origen, NO se creará línea temporal NEGATIVA");
+		}
 
-				_context.TempPaletLineas.Add(tempOrigen);
-				await _context.SaveChangesAsync();
-			}
-
-			// Si hay palet destino, agregar línea temporal y consolidar en PaletLineas
+			// Si hay palet destino, agregar línea temporal POSITIVA
 			if (paletIdDestino != null)
 			{
 				var tempLinea = new TempPaletLinea
@@ -840,7 +777,7 @@ public class TraspasosController : ControllerBase
 					CodigoEmpresa = dto.CodigoEmpresa,
 					CodigoArticulo = dto.CodigoArticulo,
 					DescripcionArticulo = dto.DescripcionArticulo,
-					Cantidad = dto.Cantidad ?? 0,
+					Cantidad = dto.Cantidad ?? 0, // CANTIDAD POSITIVA para agregar stock
 					UnidadMedida = dto.UnidadMedida,
 					Lote = dto.Partida,
 					FechaCaducidad = dto.FechaCaducidad,
@@ -848,9 +785,10 @@ public class TraspasosController : ControllerBase
 					Ubicacion = dto.UbicacionDestino,
 					UsuarioId = dto.UsuarioId,
 					FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
-					Observaciones = "", // Comentario vacío
+					Observaciones = "Delta positivo destino (traspaso de artículo)",
 					Procesada = false,
-					TraspasoId = traspaso.Id // Asociar el Guid del traspaso
+					TraspasoId = traspaso.Id, // Asociar el Guid del traspaso
+					EsHeredada = false
 				};
 				_context.TempPaletLineas.Add(tempLinea);
 				await _context.SaveChangesAsync();
@@ -1303,12 +1241,16 @@ public class TraspasosController : ControllerBase
 	[HttpPost("mover-palet")]
 	public async Task<IActionResult> MoverPalet([FromBody] MoverPaletDto dto)
 	{
-		// 1. Validar que el palet existe y está cerrado
-		var palet = await _context.Palets.FindAsync(dto.PaletId);
-		if (palet == null)
-			return NotFound("Palet no encontrado.");
-		if (!string.Equals(palet.Estado, "CERRADO", StringComparison.OrdinalIgnoreCase))
-			return BadRequest("El palet debe estar cerrado para poder moverlo.");
+		try
+		{
+			_logger.LogInformation($"🚨 DEBUG: EJECUTANDO MoverPalet - PaletId={dto.PaletId}, AlmacenDestino={dto.AlmacenDestino}, UbicacionDestino={dto.UbicacionDestino}, CodigoEstado={dto.CodigoEstado}");
+			
+			// 1. Validar que el palet existe y está cerrado
+			var palet = await _context.Palets.FindAsync(dto.PaletId);
+			if (palet == null)
+				return NotFound("Palet no encontrado.");
+			if (!string.Equals(palet.Estado, "CERRADO", StringComparison.OrdinalIgnoreCase))
+				return BadRequest("El palet debe estar cerrado para poder moverlo.");
 
 		// NUEVA VALIDACIÓN: Impedir mover si hay traspasos pendientes
 		var traspasoPendiente = await _context.Traspasos.AnyAsync(
@@ -1380,32 +1322,83 @@ public class TraspasosController : ControllerBase
 
 
 
-			// Crear la línea temporal asociada al traspaso
-			var tempLinea = new TempPaletLinea
+			// === CORRECCIÓN: SOLO crear líneas temporales si se finaliza (Fase 2) ===
+			if (!esFinalizado)
+			{
+				_logger.LogInformation($"⏸️ MoverPalet Fase 1 (PENDIENTE) - NO se crean líneas temporales. PaletId={dto.PaletId}");
+				continue; // Saltar la creación de líneas, solo crear el traspaso
+			}
+			
+			// === Crear línea temporal NEGATIVA para origen ===
+			// Para mover palet completo, la ubicación origen es la destino del último traspaso
+			var almacenOrigen = !string.IsNullOrWhiteSpace(ultimoTraspaso.AlmacenDestino) 
+				? ultimoTraspaso.AlmacenDestino 
+				: (!string.IsNullOrWhiteSpace(linea.CodigoAlmacen) ? linea.CodigoAlmacen : "PR");
+				
+			var ubicacionOrigen = !string.IsNullOrWhiteSpace(ultimoTraspaso.UbicacionDestino) 
+				? ultimoTraspaso.UbicacionDestino 
+				: (!string.IsNullOrWhiteSpace(linea.Ubicacion) ? linea.Ubicacion : "");
+			
+			// Validar que tenemos valores válidos
+			if (string.IsNullOrWhiteSpace(almacenOrigen))
+			{
+				_logger.LogError($"❌ AlmacenOrigen es NULL para PaletId={dto.PaletId}, no se pueden crear líneas temporales");
+				return BadRequest("No se pudo determinar el almacén origen del palet");
+			}
+			
+			var tempLineaOrigen = new TempPaletLinea
 			{
 				PaletId = dto.PaletId,
 				CodigoEmpresa = dto.CodigoEmpresa,
 				CodigoArticulo = linea.CodigoArticulo,
 				DescripcionArticulo = linea.DescripcionArticulo,
-				Cantidad = linea.Cantidad,
+				Cantidad = -linea.Cantidad, // CANTIDAD NEGATIVA para reducir stock origen
 				UnidadMedida = linea.UnidadMedida,
 				Lote = linea.Lote,
 				FechaCaducidad = linea.FechaCaducidad,
-				CodigoAlmacen = ultimoTraspaso.AlmacenDestino,
-				Ubicacion = ultimoTraspaso.UbicacionDestino ?? "",
+				CodigoAlmacen = almacenOrigen, // UBICACIÓN ORIGEN (con fallback)
+				Ubicacion = ubicacionOrigen, // UBICACIÓN ORIGEN (con fallback)
 				UsuarioId = dto.UsuarioId,
-				FechaAgregado = DateTime.Now, // Siempre usar la hora del servidor/API
-				Observaciones = linea.Observaciones,
+				FechaAgregado = DateTime.Now,
+				Observaciones = "Delta negativo origen (movimiento de palet)",
 				Procesada = false,
 				TraspasoId = traspasoArticulo.Id,
-				EsHeredada = true // Marcar como heredada
+				EsHeredada = true
 			};
-			_context.TempPaletLineas.Add(tempLinea);
+			_context.TempPaletLineas.Add(tempLineaOrigen);
+
+			// === Crear línea temporal POSITIVA para destino ===
+			var tempLineaDestino = new TempPaletLinea
+			{
+				PaletId = dto.PaletId,
+				CodigoEmpresa = dto.CodigoEmpresa,
+				CodigoArticulo = linea.CodigoArticulo,
+				DescripcionArticulo = linea.DescripcionArticulo,
+				Cantidad = linea.Cantidad, // CANTIDAD POSITIVA para agregar stock destino
+				UnidadMedida = linea.UnidadMedida,
+				Lote = linea.Lote,
+				FechaCaducidad = linea.FechaCaducidad,
+				CodigoAlmacen = dto.AlmacenDestino, // UBICACIÓN DESTINO
+				Ubicacion = dto.UbicacionDestino, // UBICACIÓN DESTINO
+				UsuarioId = dto.UsuarioId,
+				FechaAgregado = DateTime.Now,
+				Observaciones = "Delta positivo destino (movimiento de palet)",
+				Procesada = false,
+				TraspasoId = traspasoArticulo.Id,
+				EsHeredada = true
+			};
+			_context.TempPaletLineas.Add(tempLineaDestino);
 		}
 
-		await _context.SaveChangesAsync();
+			await _context.SaveChangesAsync();
 
-		return Ok(new { message = esFinalizado ? "Traspasos de palet creados y finalizados correctamente" : "Traspasos de palet creados correctamente", traspasosIds = traspasosCreados });
+			return Ok(new { message = esFinalizado ? "Traspasos de palet creados y finalizados correctamente" : "Traspasos de palet creados correctamente", traspasosIds = traspasosCreados });
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, $"❌ ERROR en MoverPalet: PaletId={dto.PaletId}, UbicacionDestino={dto.UbicacionDestino}");
+			return StatusCode(500, $"Error al mover el palet: {ex.Message}");
+		}
 	}
 
 	/// <summary>

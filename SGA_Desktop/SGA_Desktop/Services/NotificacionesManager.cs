@@ -107,16 +107,26 @@ namespace SGA_Desktop.Services
 
         public static async Task DesconectarAsync()
         {
-            if (_servicio != null)
+            try
             {
-                await _servicio.DesconectarAsync();
-                await ((IAsyncDisposable)_servicio).DisposeAsync();
-                _servicio = null;
+                if (_servicio != null)
+                {
+                    await _servicio.DesconectarAsync();
+                    await ((IAsyncDisposable)_servicio).DisposeAsync();
+                    _servicio = null;
+                }
             }
-            
-            _notificaciones.Clear();
-            ContadorPendientes = 0;
-            _inicializado = false;
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error al desconectar NotificacionesManager: {ex.Message}");
+                // No lanzar excepción durante el cierre
+            }
+            finally
+            {
+                _notificaciones.Clear();
+                ContadorPendientes = 0;
+                _inicializado = false;
+            }
         }
 
         /// <summary>

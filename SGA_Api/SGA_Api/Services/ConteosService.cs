@@ -4,6 +4,7 @@ using SGA_Api.Models.Conteos;
 using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Stock;
 using SGA_Api.Models.Almacen;
+using SGA_Api.Models.Palet;
 
 namespace SGA_Api.Services
 {
@@ -1150,7 +1151,7 @@ namespace SGA_Api.Services
 
                     await _context.SaveChangesAsync();
 
-                    // Si la acción es AJUSTE, crear registro en InventarioAjustes
+                    // Si la acción es AJUSTE, crear registro en InventarioAjustes (funcionalidad básica)
                     if (accion == "AJUSTE")
                     {
                         var inventarioAjuste = new InventarioAjustes
@@ -1174,23 +1175,37 @@ namespace SGA_Api.Services
                         };
 
                         _context.InventarioAjustes.Add(inventarioAjuste);
-                        await _context.SaveChangesAsync();
                         
                         _logger.LogInformation("InventarioAjustes creado para resultado {ResultadoGuid} con diferencia {Diferencia}", resultado.GuidID, diferencia);
 
-                        // COMENTADO: La actualización de líneas de palet se hace ahora en el BackgroundService
-                        // para evitar duplicaciones. El BackgroundService procesará los ajustes cuando
-                        // cambien a estado "COMPLETADO"
-                        // if (resultado.PaletId.HasValue && resultado.PaletId != Guid.Empty)
-                        // {
-                        //     await ActualizarLineasPaletAsync(
-                        //         resultado.PaletId.Value,
-                        //         resultado.CodigoUbicacion,
-                        //         resultado.CodigoArticulo,
-                        //         resultado.LotePartida,
-                        //         resultado.FechaCaducidad,
-                        //         diferencia);
-                        // }
+                        // ADICIONAL: Si hay palets en la ubicación, crear TempPaletLinea para consolidación unificada
+                        if (resultado.PaletId.HasValue)
+                        {
+                            var tempPaletLinea = new TempPaletLinea
+                            {
+                                Id = Guid.NewGuid(),
+                                PaletId = resultado.PaletId.Value,
+                                CodigoEmpresa = (short)orden.CodigoEmpresa,
+                                CodigoArticulo = resultado.CodigoArticulo,
+                                DescripcionArticulo = resultado.DescripcionArticulo,
+                                Cantidad = resultado.Diferencia, // DELTA (+/-)
+                                UnidadMedida = "UN", // Unidad por defecto
+                                Lote = resultado.LotePartida,
+                                FechaCaducidad = resultado.FechaCaducidad,
+                                CodigoAlmacen = resultado.CodigoAlmacen,
+                                Ubicacion = resultado.CodigoUbicacion,
+                                UsuarioId = int.Parse(resultado.UsuarioCodigo),
+                                FechaAgregado = DateTime.Now,
+                                Observaciones = $"Ajuste de conteo - Orden: {orden.Titulo}",
+                                TraspasoId = null, // No es un traspaso
+                                Procesada = false,
+                                EsHeredada = false
+                            };
+                            _context.TempPaletLineas.Add(tempPaletLinea);
+                            
+                            _logger.LogInformation("✅ Creada TempPaletLinea adicional para consolidación de palet: PaletId={PaletId}, Diferencia={Diferencia}, Articulo={Articulo}", 
+                                resultado.PaletId, resultado.Diferencia, resultado.CodigoArticulo);
+                        }
                     }
                 }
 

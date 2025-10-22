@@ -87,6 +87,11 @@ namespace SGA_Desktop.Models
         public bool EsNegativa => Tipo == "error" || Tipo == "warning";
 
         /// <summary>
+        /// Indica si la notificación es de un traspaso
+        /// </summary>
+        public bool EsTraspaso => !string.IsNullOrEmpty(TipoTraspaso);
+
+        /// <summary>
         /// Obtiene la información de cantidad formateada
         /// </summary>
         public string CantidadFormateada => Cantidad.HasValue ? $"{Cantidad.Value:N2} {Unidad ?? "UD"}" : "";

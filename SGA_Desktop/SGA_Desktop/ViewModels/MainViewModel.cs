@@ -65,6 +65,9 @@ namespace SGA_Desktop.ViewModels
 		private int contadorNotificacionesNegativas = 0;
 
 		[ObservableProperty]
+		private int contadorNotificacionesInfo = 0;
+
+		[ObservableProperty]
 		private bool tieneNotificaciones = false;
 
 		[ObservableProperty]
@@ -189,6 +192,17 @@ namespace SGA_Desktop.ViewModels
 			}
 			
 			// Si el usuario confirma, mantener el flag en true
+			
+			// Desconectar SignalR antes de proceder con el logout
+			try
+			{
+				await NotificacionesManager.DesconectarAsync();
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"Error al desconectar SignalR durante cierre de sesión: {ex.Message}");
+				// No bloquear el cierre por errores de SignalR
+			}
 
 			var logoutTask = Task.Run(async () =>
 			{
@@ -269,6 +283,7 @@ namespace SGA_Desktop.ViewModels
 				var notificaciones = NotificacionesManager.ObtenerNotificacionesPendientes();
 				ContadorNotificacionesPositivas = notificaciones.Count(n => n.EsPositiva);
 				ContadorNotificacionesNegativas = notificaciones.Count(n => n.EsNegativa);
+				ContadorNotificacionesInfo = notificaciones.Count(n => n.Tipo == "info");
 				
 				// Calcular propiedades para la UI
 				TieneNotificaciones = ContadorNotificaciones > 0;
@@ -311,12 +326,13 @@ namespace SGA_Desktop.ViewModels
 			var notificaciones = NotificacionesManager.ObtenerNotificacionesPendientes();
 			ContadorNotificacionesPositivas = notificaciones.Count(n => n.EsPositiva);
 			ContadorNotificacionesNegativas = notificaciones.Count(n => n.EsNegativa);
+			ContadorNotificacionesInfo = notificaciones.Count(n => n.Tipo == "info");
 			
 			// Calcular propiedades para la UI
 			TieneNotificaciones = nuevoContador > 0;
 			SeparadorVisible = ContadorNotificacionesPositivas > 0 && ContadorNotificacionesNegativas > 0;
 			
-			System.Diagnostics.Debug.WriteLine($"🔔 Contador total: {nuevoContador}, Positivas: {ContadorNotificacionesPositivas}, Negativas: {ContadorNotificacionesNegativas}");
+			System.Diagnostics.Debug.WriteLine($"🔔 Contador total: {nuevoContador}, Positivas: {ContadorNotificacionesPositivas}, Negativas: {ContadorNotificacionesNegativas}, Info: {ContadorNotificacionesInfo}");
 		}
 
 		/// <summary>

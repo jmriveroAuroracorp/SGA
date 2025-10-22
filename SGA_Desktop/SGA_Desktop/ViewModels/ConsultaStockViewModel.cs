@@ -421,10 +421,9 @@ namespace SGA_Desktop.ViewModels
 						"Debes introducir un código o descripción para buscar.",
 						"\uE814"
 					);
-					var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-							 ?? Application.Current.MainWindow;
-					if (owner != null && owner != advertencia)
-						advertencia.Owner = owner;
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+				advertencia.Owner = Application.Current.MainWindow;
 					advertencia.ShowDialog();
 					return;
 				}
@@ -587,10 +586,9 @@ namespace SGA_Desktop.ViewModels
 					"No hay datos para exportar.",
 					"\uE814" // ícono de advertencia
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-						 ?? Application.Current.MainWindow;
-				if (owner != null && owner != advertencia)
-					advertencia.Owner = owner;
+				// Solo establecer Owner si la ventana principal está disponible
+				if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+					advertencia.Owner = Application.Current.MainWindow;
 				advertencia.ShowDialog();
 				return;
 			}
@@ -601,10 +599,9 @@ namespace SGA_Desktop.ViewModels
 				$"Se van a exportar {listaActiva.Count} registros.\n¿Deseas continuar?",
 				"\uE11B"    // ícono de pregunta
 			);
-			var owner2 = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-					 ?? Application.Current.MainWindow;
-			if (owner2 != null && owner2 != confirm)
-				confirm.Owner = owner2;
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+				confirm.Owner = Application.Current.MainWindow;
 			if (confirm.ShowDialog() != true)
 				return;
 
@@ -661,10 +658,9 @@ namespace SGA_Desktop.ViewModels
 				$"Datos exportados correctamente a:\n{dlg.FileName}",
 				"\uE946" // ícono de información
 			);
-			var owner3 = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-					 ?? Application.Current.MainWindow;
-			if (owner3 != null && owner3 != info)
-				info.Owner = owner3;
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+				info.Owner = Application.Current.MainWindow;
 			info.ShowDialog();
 		}
 
@@ -704,10 +700,14 @@ namespace SGA_Desktop.ViewModels
 
 			var dlg = new ConfirmarImpresionDialog
 			{
-				DataContext = dlgVm,
-				Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-						?? Application.Current.MainWindow
+				DataContext = dlgVm
 			};
+			
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+			{
+				dlg.Owner = Application.Current.MainWindow;
+			}
 
 		if (dlg.ShowDialog() != true) return;
 
@@ -754,12 +754,17 @@ namespace SGA_Desktop.ViewModels
 			});
 
 			// Confirmar impresión
-			var confirmacion = new ConfirmationDialog(
+			var confirmacion = new WarningDialog(
 				"Impresión registrada",
 				$"La etiqueta se ha encolado correctamente.\n\nAlérgenos guardados: {(string.IsNullOrEmpty(dto.Alergenos) ? "Ninguno" : dto.Alergenos)}",
 				"\uE73E" // icono de check
-			)
-			{ Owner = Application.Current.MainWindow };
+			);
+			
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+			{
+				confirmacion.Owner = Application.Current.MainWindow;
+			}
 			confirmacion.ShowDialog();
 		}
 		catch (Exception ex)

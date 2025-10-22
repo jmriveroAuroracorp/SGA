@@ -8,15 +8,17 @@ namespace SGA_Api.Controllers
     /// Controlador para gestionar conteos rotativos
     /// </summary>
     [ApiController]
-    [Route("api/conteos")]
+    [Route("api/[controller]")]
     public class ConteosController : ControllerBase
     {
         private readonly IConteosService _conteosService;
+        private readonly INotificacionesConteosService _notificacionesConteosService;
         private readonly ILogger<ConteosController> _logger;
 
-        public ConteosController(IConteosService conteosService, ILogger<ConteosController> logger)
+        public ConteosController(IConteosService conteosService, INotificacionesConteosService notificacionesConteosService, ILogger<ConteosController> logger)
         {
             _conteosService = conteosService;
+            _notificacionesConteosService = notificacionesConteosService;
             _logger = logger;
         }
 
@@ -33,6 +35,21 @@ namespace SGA_Api.Controllers
             try
             {
                 var orden = await _conteosService.CrearOrdenAsync(dto);
+                
+                // Notificar a supervisores y administradores sobre la nueva orden
+                await _notificacionesConteosService.NotificarOrdenCreadaAsync(
+                    orden.GuidID, 
+                    orden.Titulo, 
+                    orden.CreadoPorCodigo, 
+                    orden.SupervisorCodigo,
+                    orden.CodigoAlmacen,
+                    orden.Alcance,
+                    orden.CodigoOperario,
+                    orden.CodigoUbicacion,
+                    orden.CodigoArticulo,
+                    orden.Prioridad
+                );
+                
                 return CreatedAtAction(nameof(ObtenerOrden), new { guid = orden.GuidID }, orden);
             }
             catch (Exception ex)
@@ -204,6 +221,14 @@ namespace SGA_Api.Controllers
                 }
 
                 var orden = await _conteosService.IniciarOrdenAsync(guid, codigoOperario);
+                
+                // Notificar a supervisores y administradores sobre el inicio de la orden
+                await _notificacionesConteosService.NotificarOrdenIniciadaAsync(
+                    guid, 
+                    codigoOperario, 
+                    orden.SupervisorCodigo
+                );
+                
                 return Ok(orden);
             }
             catch (InvalidOperationException ex)
@@ -243,6 +268,14 @@ namespace SGA_Api.Controllers
             try
             {
                 var orden = await _conteosService.AsignarOperarioAsync(guid, dto);
+                
+                // Notificar a supervisores y administradores sobre la asignación
+                await _notificacionesConteosService.NotificarOperarioAsignadoAsync(
+                    guid, 
+                    dto.CodigoOperario, 
+                    dto.SupervisorCodigo
+                );
+                
                 return Ok(orden);
             }
             catch (InvalidOperationException ex)
@@ -282,6 +315,16 @@ namespace SGA_Api.Controllers
             try
             {
                 var lectura = await _conteosService.CrearLecturaAsync(guid, dto);
+                
+                // Notificar a supervisores y administradores sobre la nueva lectura
+                await _notificacionesConteosService.NotificarLecturaCreadaAsync(
+                    guid, 
+                    dto.UsuarioCodigo, 
+                    dto.CodigoArticulo, 
+                    dto.CantidadContada ?? 0,
+                    null // TODO: Obtener supervisor de la orden si es necesario
+                );
+                
                 return CreatedAtAction(nameof(ObtenerOrden), new { guid = guid }, lectura);
             }
             catch (InvalidOperationException ex)
@@ -320,6 +363,14 @@ namespace SGA_Api.Controllers
             try
             {
                 var resultado = await _conteosService.CerrarOrdenAsync(guid);
+                
+                // Notificar a supervisores y administradores sobre el cierre de la orden
+                await _notificacionesConteosService.NotificarOrdenCerradaAsync(
+                    guid, 
+                    null, // TODO: Obtener supervisor de la orden si es necesario
+                    resultado.ResultadosCreados
+                );
+                
                 return Ok(resultado);
             }
             catch (InvalidOperationException ex)
@@ -413,6 +464,14 @@ namespace SGA_Api.Controllers
             try
             {
                 var resultado = await _conteosService.ActualizarAprobadorAsync(resultadoGuid, dto);
+                
+                // Notificar a supervisores y administradores sobre la actualización del aprobador
+                await _notificacionesConteosService.NotificarAprobadorActualizadoAsync(
+                    resultadoGuid, 
+                    dto.AprobadoPorCodigo, 
+                    null // TODO: Obtener supervisor del resultado si es necesario
+                );
+                
                 return Ok(resultado);
             }
             catch (InvalidOperationException ex)
@@ -452,6 +511,15 @@ namespace SGA_Api.Controllers
             try
             {
                 var nuevaOrden = await _conteosService.ReasignarLineaAsync(resultadoGuid, dto);
+                
+                // Notificar a supervisores y administradores sobre la reasignación
+                await _notificacionesConteosService.NotificarLineaReasignadaAsync(
+                    nuevaOrden.GuidID, 
+                    "N/A", // No tenemos código de artículo en ReasignarLineaDto
+                    dto.CodigoOperario, 
+                    dto.SupervisorCodigo
+                );
+                
                 return CreatedAtAction(nameof(ObtenerOrden), new { guid = nuevaOrden.GuidID }, nuevaOrden);
             }
             catch (InvalidOperationException ex)
@@ -508,6 +576,42 @@ namespace SGA_Api.Controllers
             {
                 _logger.LogError(ex, "Error obteniendo palets disponibles para {Ubicacion}/{Articulo}", ubicacion, codigoArticulo);
                 return StatusCode(500, $"Error interno: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Endpoint de prueba para verificar notificaciones
+        /// </summary>
+        [HttpPost("test-notificacion")]
+        [ProducesResponseType(200)]
+        public async Task<IActionResult> TestNotificacion()
+        {
+            try
+            {
+                _logger.LogInformation("🧪 INICIANDO TEST DE NOTIFICACIÓN");
+                
+                // Crear una notificación de prueba
+            await _notificacionesConteosService.NotificarOrdenCreadaAsync(
+                Guid.NewGuid(),
+                "TEST - Orden de Conteo",
+                "UsuarioTest",
+                "SupervisorTest",
+                "ALM001",
+                "UBICACION",
+                "OPER123",
+                "UBI-A-01",
+                "ART456",
+                2 // Prioridad Alta
+            );
+                
+                _logger.LogInformation("✅ TEST DE NOTIFICACIÓN COMPLETADO");
+                
+                return Ok(new { mensaje = "Notificación de prueba enviada", timestamp = DateTime.UtcNow });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ ERROR EN TEST DE NOTIFICACIÓN");
+                return StatusCode(500, new { error = ex.Message });
             }
         }
     }

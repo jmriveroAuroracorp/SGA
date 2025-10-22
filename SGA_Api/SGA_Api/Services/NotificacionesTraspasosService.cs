@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using SGA_Api.Hubs;
+using SGA_Api.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace SGA_Api.Services
 {
@@ -11,11 +13,13 @@ namespace SGA_Api.Services
     {
         private readonly IHubContext<NotificacionesTraspasosHub> _hubContext;
         private readonly ILogger<NotificacionesTraspasosService> _logger;
+        private readonly AuroraSgaDbContext _context;
 
-        public NotificacionesTraspasosService(IHubContext<NotificacionesTraspasosHub> hubContext, ILogger<NotificacionesTraspasosService> logger)
+        public NotificacionesTraspasosService(IHubContext<NotificacionesTraspasosHub> hubContext, ILogger<NotificacionesTraspasosService> logger, AuroraSgaDbContext context)
         {
             _hubContext = hubContext;
             _logger = logger;
+            _context = context;
         }
 
         /// <summary>
@@ -93,6 +97,93 @@ namespace SGA_Api.Services
             
             await _hubContext.Clients.Group($"Usuario_{usuarioId}")
                 .SendAsync("NotificacionUsuario", notificacion);
+        }
+
+        /// <summary>
+        /// Envía una notificación a todos los usuarios con un rol específico
+        /// </summary>
+        public async Task NotificarRolAsync(string rolNombre, string titulo, string mensaje, string tipoNotificacion = "info")
+        {
+            _logger.LogInformation("🔔 ENVIANDO NOTIFICACIÓN A ROL: {RolNombre} - {Titulo}", rolNombre, titulo);
+            
+            var notificacion = new
+            {
+                TipoNotificacion = "Rol",
+                RolDestino = rolNombre,
+                Titulo = titulo,
+                Mensaje = mensaje,
+                TipoPopup = tipoNotificacion,
+                Timestamp = DateTime.UtcNow
+            };
+
+            try
+            {
+                await _hubContext.Clients.Group($"Rol_{rolNombre}")
+                    .SendAsync("NotificacionRol", notificacion);
+                
+                _logger.LogInformation("✅ NOTIFICACIÓN ENVIADA EXITOSAMENTE a grupo Rol_{RolNombre}", rolNombre);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ ERROR AL ENVIAR NOTIFICACIÓN a grupo Rol_{RolNombre}", rolNombre);
+            }
+        }
+
+        /// <summary>
+        /// Envía una notificación a usuarios con roles de nivel jerárquico igual o superior
+        /// </summary>
+        public async Task NotificarNivelJerarquicoAsync(int nivelMinimo, string titulo, string mensaje, string tipoNotificacion = "info")
+        {
+            _logger.LogDebug("Enviando notificación a nivel jerárquico {NivelMinimo}+: {Titulo}", nivelMinimo, titulo);
+            
+            var notificacion = new
+            {
+                TipoNotificacion = "NivelJerarquico",
+                NivelMinimo = nivelMinimo,
+                Titulo = titulo,
+                Mensaje = mensaje,
+                TipoPopup = tipoNotificacion,
+                Timestamp = DateTime.UtcNow
+            };
+
+            // Enviar a todos los grupos de roles con nivel >= nivelMinimo
+            var roles = new[] { "OPERARIO", "SUPERVISOR", "ADMIN" };
+            var niveles = new[] { 10, 20, 30 };
+            
+            for (int i = 0; i < roles.Length; i++)
+            {
+                if (niveles[i] >= nivelMinimo)
+                {
+                    await _hubContext.Clients.Group($"Rol_{roles[i]}")
+                        .SendAsync("NotificacionNivelJerarquico", notificacion);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Envía una notificación específica para conteos a supervisores y administradores
+        /// </summary>
+        public async Task NotificarEventoConteoAsync(string tipoEvento, Guid ordenId, string titulo, string mensaje, object? datosAdicionales = null)
+        {
+            _logger.LogDebug("Enviando notificación de evento de conteo {TipoEvento} para orden {OrdenId}: {Titulo}", tipoEvento, ordenId, titulo);
+            
+            var notificacion = new
+            {
+                TipoNotificacion = "EventoConteo",
+                TipoEvento = tipoEvento,
+                OrdenId = ordenId,
+                Titulo = titulo,
+                Mensaje = mensaje,
+                DatosAdicionales = datosAdicionales,
+                Timestamp = DateTime.UtcNow
+            };
+
+            // Enviar a supervisores y administradores
+            await _hubContext.Clients.Group("Rol_SUPERVISOR")
+                .SendAsync("NotificacionEventoConteo", notificacion);
+                
+            await _hubContext.Clients.Group("Rol_ADMIN")
+                .SendAsync("NotificacionEventoConteo", notificacion);
         }
     }
 }

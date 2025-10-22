@@ -208,7 +208,6 @@ fun ConteoProcesoScreen(
                              estadoEscaneo = estadoEscaneo,
                              ubicacionEscaneada = ubicacionEscaneada,
                              articuloEscaneado = articuloEscaneado,
-                             paletSeleccionado = paletSeleccionado,
                              modoLecturaManual = modoLecturaManual
                          )
                      }
@@ -510,21 +509,7 @@ fun ConteoProcesoScreen(
                          )
                      }
                      
-                     // Mostrar información del palet si está seleccionado
-                     paletSeleccionado?.let { palet ->
-                         InfoRow(
-                             icon = Icons.Default.Inventory2,
-                             label = "Palet",
-                             value = palet.codigoPalet
-                         )
-                         InfoRow(
-                             icon = Icons.Default.QrCode,
-                             label = "GS1",
-                             value = palet.codigoGS1
-                         )
-                     }
-                     
-                                           // Input de cantidad
+                                            // Input de cantidad
                       OutlinedTextField(
                           value = cantidadInput,
                           onValueChange = { cantidadInput = it },
@@ -751,7 +736,6 @@ fun EstadoEscaneoCard(
     estadoEscaneo: EstadoEscaneoConteo,
     ubicacionEscaneada: String?,
     articuloEscaneado: LecturaPendiente?,
-    paletSeleccionado: PaletDisponible?,
     modoLecturaManual: Boolean = false
 ) {
     Card(
@@ -860,19 +844,6 @@ fun EstadoEscaneoCard(
                         articuloEscaneado?.let { articulo ->
                             Text(
                                 text = "Artículo: ${articulo.codigoArticulo}",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        paletSeleccionado?.let { palet ->
-                            Text(
-                                text = "Palet: ${palet.codigoPalet}",
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "GS1: ${palet.codigoGS1}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall
                             )

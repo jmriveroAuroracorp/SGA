@@ -29,10 +29,16 @@ namespace SGA_Desktop.ViewModels
         private int contadorNotificacionesNegativas;
         
         [ObservableProperty]
+        private int contadorNotificacionesInfo;
+        
+        [ObservableProperty]
         private bool tieneNotificaciones;
         
         [ObservableProperty]
         private bool separadorVisible;
+        
+        [ObservableProperty]
+        private bool separadorInfoVisible;
         
         [ObservableProperty]
         private bool estaCargando;
@@ -97,10 +103,14 @@ namespace SGA_Desktop.ViewModels
             ContadorTotal = Notificaciones.Count;
             ContadorNotificacionesPositivas = Notificaciones.Count(n => n.EsPositiva);
             ContadorNotificacionesNegativas = Notificaciones.Count(n => n.EsNegativa);
+            ContadorNotificacionesInfo = Notificaciones.Count(n => n.Tipo == "info");
             TieneNotificaciones = ContadorTotal > 0;
             
             // Mostrar separador solo cuando hay ambos tipos de notificaciones
             SeparadorVisible = ContadorNotificacionesPositivas > 0 && ContadorNotificacionesNegativas > 0;
+            
+            // Mostrar separador de info cuando hay notificaciones negativas e info
+            SeparadorInfoVisible = ContadorNotificacionesNegativas > 0 && ContadorNotificacionesInfo > 0;
         }
         
         /// <summary>

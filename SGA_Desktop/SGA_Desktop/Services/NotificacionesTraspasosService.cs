@@ -87,6 +87,8 @@ namespace SGA_Desktop.Services
 
                 // Configurar eventos
                 _connection.On<object>("NotificacionUsuario", OnNotificacionRecibida);
+                _connection.On<object>("NotificacionRol", OnNotificacionRecibida);
+                _connection.On<object>("NotificacionNivelJerarquico", OnNotificacionRecibida);
                 
                 _connection.Closed += OnConexionCerrada;
                 _connection.Reconnecting += OnReconectando;
@@ -99,6 +101,9 @@ namespace SGA_Desktop.Services
 
                 // Unirse al grupo del usuario
                 await UnirseAGrupoUsuarioAsync(usuarioId);
+                
+                // Unirse automáticamente a grupos de rol (el servidor lo hace automáticamente)
+                // pero podemos agregar lógica adicional aquí si es necesario
                 
                 EstadoConexionCambiado?.Invoke(this, "Conectado");
             }
@@ -131,11 +136,28 @@ namespace SGA_Desktop.Services
                     var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
                     if (usuarioId > 0)
                     {
-                        await SalirDeGrupoUsuarioAsync(usuarioId);
+                        try
+                        {
+                            await SalirDeGrupoUsuarioAsync(usuarioId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error al salir del grupo de usuario durante desconexión");
+                        }
                     }
                     
-                    await _connection.DisposeAsync();
-                    _connection = null;
+                    try
+                    {
+                        await _connection.DisposeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error al dispose de la conexión SignalR");
+                    }
+                    finally
+                    {
+                        _connection = null;
+                    }
                     
                     _logger?.LogInformation("✅ Desconectado de SignalR Hub");
                     EstadoConexionCambiado?.Invoke(this, "Desconectado");
@@ -144,7 +166,11 @@ namespace SGA_Desktop.Services
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Error al desconectar de SignalR Hub");
-                ErrorConexion?.Invoke(this, ex);
+                // No invocar ErrorConexion durante el cierre para evitar excepciones adicionales
+                if (!SessionManager.IsClosing)
+                {
+                    ErrorConexion?.Invoke(this, ex);
+                }
             }
         }
 
@@ -238,7 +264,11 @@ namespace SGA_Desktop.Services
             if (exception != null)
             {
                 _logger?.LogWarning("Conexión SignalR cerrada con error: {Error}", exception.Message);
-                ErrorConexion?.Invoke(this, exception);
+                // Solo invocar ErrorConexion si la aplicación no se está cerrando
+                if (!SessionManager.IsClosing)
+                {
+                    ErrorConexion?.Invoke(this, exception);
+                }
             }
             else
             {
@@ -247,13 +277,14 @@ namespace SGA_Desktop.Services
 
             EstadoConexionCambiado?.Invoke(this, "Desconectado");
 
-            // Intentar reconectar automáticamente si es necesario
-            if (_debeReconectar && !_estaConectando)
+            // Intentar reconectar automáticamente solo si la aplicación no se está cerrando
+            if (_debeReconectar && !_estaConectando && !SessionManager.IsClosing)
             {
                 _logger?.LogInformation("Intentando reconectar en 5 segundos...");
                 await Task.Delay(5000);
                 
-                if (_debeReconectar)
+                // Verificar nuevamente si la aplicación se está cerrando antes de reconectar
+                if (_debeReconectar && !SessionManager.IsClosing)
                 {
                     await ConectarAsync();
                 }
@@ -265,15 +296,27 @@ namespace SGA_Desktop.Services
         /// </summary>
         private async Task OnReconectando(Exception? exception)
         {
+            // No intentar reconectar si la aplicación se está cerrando
+            if (SessionManager.IsClosing)
+            {
+                _logger?.LogInformation("Aplicación cerrándose, cancelando reconexión SignalR");
+                return;
+            }
+
             _logger?.LogWarning("Reconectando a SignalR Hub: {Error}", exception?.Message);
             EstadoConexionCambiado?.Invoke(this, "Reconectando...");
             
             // Volver a unirse al grupo del usuario después de reconectar
             await Task.Delay(1000); // Pequeño delay para asegurar la reconexión
-            var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
-            if (usuarioId > 0)
+            
+            // Verificar nuevamente si la aplicación se está cerrando antes de unirse al grupo
+            if (!SessionManager.IsClosing)
             {
-                await UnirseAGrupoUsuarioAsync(usuarioId);
+                var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
+                if (usuarioId > 0)
+                {
+                    await UnirseAGrupoUsuarioAsync(usuarioId);
+                }
             }
         }
 
@@ -282,14 +325,24 @@ namespace SGA_Desktop.Services
         /// </summary>
         private async Task OnReconectado(string? connectionId)
         {
+            // No procesar reconexión si la aplicación se está cerrando
+            if (SessionManager.IsClosing)
+            {
+                _logger?.LogInformation("Aplicación cerrándose, cancelando procesamiento de reconexión SignalR");
+                return;
+            }
+
             _logger?.LogInformation("✅ Reconectado exitosamente a SignalR Hub. ConnectionId: {ConnectionId}", connectionId);
             EstadoConexionCambiado?.Invoke(this, "Reconectado");
             
-            // Volver a unirse al grupo del usuario
-            var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
-            if (usuarioId > 0)
+            // Volver a unirse al grupo del usuario solo si la aplicación no se está cerrando
+            if (!SessionManager.IsClosing)
             {
-                await UnirseAGrupoUsuarioAsync(usuarioId);
+                var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
+                if (usuarioId > 0)
+                {
+                    await UnirseAGrupoUsuarioAsync(usuarioId);
+                }
             }
         }
 

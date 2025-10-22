@@ -353,7 +353,7 @@ namespace SGA_Api.Controllers.Stock
 								pl.Ubicacion == item.Ubicacion &&
 								pl.Lote == item.Partida)
 					.Include(pl => pl.Palet)
-					.Where(pl => pl.Palet.Estado == "Abierto" || pl.Palet.Estado == "Cerrado")
+					.Where(pl => pl.Palet.Estado.ToUpper() == "ABIERTO" || pl.Palet.Estado.ToUpper() == "CERRADO")
 					.Select(pl => new
 					{
 						PaletId = pl.PaletId,
@@ -627,7 +627,7 @@ namespace SGA_Api.Controllers.Stock
                         pl.Ubicacion == item.Ubicacion &&
                         pl.Lote == item.Partida)
             .Include(pl => pl.Palet)
-            .Where(pl => pl.Palet.Estado == "Abierto" || pl.Palet.Estado == "Cerrado")
+            .Where(pl => pl.Palet.Estado.ToUpper() == "ABIERTO" || pl.Palet.Estado.ToUpper() == "CERRADO")
             .Select(pl => new
             {
                 PaletId = pl.PaletId,
@@ -863,7 +863,7 @@ namespace SGA_Api.Controllers.Stock
 		l.Lote == s.Partida &&
 		l.Ubicacion == s.Ubicacion &&
 		l.CodigoAlmacen == s.CodigoAlmacen &&   // 👈 Filtro de almacén
-		(l.Palet.Estado == "Abierto" || l.Palet.Estado == "Cerrado"))
+		(l.Palet.Estado.ToUpper() == "ABIERTO" || l.Palet.Estado.ToUpper() == "CERRADO"))
 	.Select(l => new PaletDetalleDto
 	{
 		PaletId = l.PaletId,

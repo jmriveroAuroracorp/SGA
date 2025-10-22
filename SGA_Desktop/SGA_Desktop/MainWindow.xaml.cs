@@ -70,10 +70,21 @@ namespace SGA_Desktop
 		}
 	}
 
-	private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+	private async void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
 	{
 		// Marcar que la aplicación se está cerrando cuando se cierre la ventana principal
 		SessionManager.IsClosing = true;
+		
+		// Desconectar SignalR antes de cerrar la aplicación
+		try
+		{
+			await NotificacionesManager.DesconectarAsync();
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"Error al desconectar SignalR durante cierre: {ex.Message}");
+			// No bloquear el cierre por errores de SignalR
+		}
 	}
 
 	/// <summary>

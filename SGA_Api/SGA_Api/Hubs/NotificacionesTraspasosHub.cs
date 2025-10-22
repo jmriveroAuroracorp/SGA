@@ -60,6 +60,26 @@ namespace SGA_Api.Hubs
         }
 
         /// <summary>
+        /// Método para unirse a un grupo de rol específico
+        /// </summary>
+        /// <param name="rolNombre">Nombre del rol (OPERARIO, SUPERVISOR, ADMIN)</param>
+        public async Task UnirseAGrupoRol(string rolNombre)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"Rol_{rolNombre}");
+            _logger.LogDebug("Cliente {ConnectionId} se unió al grupo Rol_{RolNombre}", Context.ConnectionId, rolNombre);
+        }
+
+        /// <summary>
+        /// Método para salir de un grupo de rol específico
+        /// </summary>
+        /// <param name="rolNombre">Nombre del rol (OPERARIO, SUPERVISOR, ADMIN)</param>
+        public async Task SalirDeGrupoRol(string rolNombre)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"Rol_{rolNombre}");
+            _logger.LogDebug("Cliente {ConnectionId} salió del grupo Rol_{RolNombre}", Context.ConnectionId, rolNombre);
+        }
+
+        /// <summary>
         /// Se ejecuta cuando un cliente se conecta
         /// </summary>
         public override async Task OnConnectedAsync()
@@ -74,8 +94,70 @@ namespace SGA_Api.Hubs
                 return;
             }
 
+            // Unirse automáticamente a grupos de rol basado en el token
+            await UnirseAGruposDeRolAsync();
+
             _logger.LogDebug("Cliente {ConnectionId} conectado exitosamente", Context.ConnectionId);
             await base.OnConnectedAsync();
+        }
+
+        /// <summary>
+        /// Se une automáticamente a los grupos de rol del usuario
+        /// </summary>
+        private async Task UnirseAGruposDeRolAsync()
+        {
+            try
+            {
+                var httpContext = Context.GetHttpContext();
+                if (httpContext == null) return;
+
+                var authHeader = httpContext.Request.Headers["Authorization"].FirstOrDefault();
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                    return;
+
+                var token = authHeader.Substring("Bearer ".Length).Trim();
+                
+                // Obtener el rol del usuario desde el token
+                var dispositivo = await _context.Dispositivos
+                    .FirstOrDefaultAsync(d => d.SessionToken == token && d.Activo == -1);
+
+                if (dispositivo?.IdUsuario != null)
+                {
+                    // Obtener el rol del usuario desde la tabla roles_sga
+                    var usuario = await _context.Usuarios
+                        .Where(u => u.IdUsuario == dispositivo.IdUsuario)
+                        .Select(u => new { u.IdRol })
+                        .FirstOrDefaultAsync();
+
+                    if (usuario?.IdRol != null)
+                    {
+                        // Obtener el nombre del rol desde roles_sga
+                        var rol = await _context.RolesSga
+                            .Where(r => r.IdRol == usuario.IdRol)
+                            .Select(r => r.NombreRol)
+                            .FirstOrDefaultAsync();
+
+                        if (!string.IsNullOrEmpty(rol))
+                        {
+                            // Mapear el nombre del rol de la BD a nombres estándar para SignalR
+                            string rolSignalR = rol switch
+                            {
+                                "Administrador" => "ADMIN",
+                                "Supervisor" => "SUPERVISOR", 
+                                "Operario" => "OPERARIO",
+                                _ => rol.ToUpper() // Por defecto, convertir a mayúsculas
+                            };
+                            
+                            await Groups.AddToGroupAsync(Context.ConnectionId, $"Rol_{rolSignalR}");
+                            _logger.LogDebug("Cliente {ConnectionId} se unió automáticamente al grupo Rol_{RolSignalR} (RolBD: {RolBD}, IdRol: {IdRol})", Context.ConnectionId, rolSignalR, rol, usuario.IdRol);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al unirse a grupos de rol para cliente {ConnectionId}", Context.ConnectionId);
+            }
         }
 
         /// <summary>

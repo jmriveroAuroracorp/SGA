@@ -14,6 +14,7 @@ using SGA_Api.Models.OrdenTraspaso;
 using SGA_Api.Models.Notificaciones;
 using SGA_Api.Models;
 using SGA_Api.Models.Login;
+using SGA_Api.Models.RolesSga;
 
 namespace SGA_Api.Data
 {
@@ -65,6 +66,9 @@ namespace SGA_Api.Data
 		public DbSet<NotificacionDestinatario> NotificacionesDestinatarios { get; set; }
 		public DbSet<NotificacionLectura> NotificacionesLecturas { get; set; }
 
+		// Entidades de Roles
+		public DbSet<RolSgaTable> RolesSga { get; set; }
+
 		// Configuraciones predefinidas
 		public DbSet<ConfiguracionPredefinida> ConfiguracionesPredefinidas { get; set; }
 		public DbSet<ConfiguracionPredefinidaPermiso> ConfiguracionesPredefinidasPermisos { get; set; }
@@ -74,6 +78,7 @@ namespace SGA_Api.Data
 
 		// Entidades de Calidad
 		public DbSet<BloqueoCalidad> BloqueosCalidad { get; set; }
+
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -277,6 +282,7 @@ namespace SGA_Api.Data
 				.ToView("vStockDisponible")
 				.HasNoKey();
 
+
 			modelBuilder.Entity<TempPaletLinea>(eb =>
 			{
 				eb.Property(e => e.Cantidad)
@@ -302,7 +308,7 @@ namespace SGA_Api.Data
                 ent.Property(t => t.UbicacionOrigen).HasColumnName("UbicacionOrigen");
                 ent.Property(t => t.CodigoPalet).HasColumnName("CodigoPalet");
                 ent.Property(t => t.CodigoArticulo).HasColumnName("CodigoArticulo");
-                ent.Property(t => t.Cantidad).HasColumnName("Cantidad");
+                ent.Property(t => t.Cantidad).HasColumnName("Cantidad").HasColumnType("decimal(18,4)");
                 ent.Property(t => t.TipoTraspaso).HasColumnName("TipoTraspaso");
                 ent.Property(t => t.FechaCaducidad).HasColumnName("FechaCaducidad");
                 ent.Property(t => t.Partida).HasColumnName("Partida");
@@ -636,6 +642,20 @@ namespace SGA_Api.Data
                 entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion");
                 entity.Property(e => e.FechaModificacion).HasColumnName("FechaModificacion");
             });
+
+			// Configuración para RolesSga
+			modelBuilder.Entity<RolSgaTable>(entity =>
+			{
+				entity.ToTable("roles_sga");
+				entity.HasKey(e => e.IdRol);
+				
+				entity.Property(e => e.IdRol).HasColumnName("IdRol");
+				entity.Property(e => e.CodigoRol).HasColumnName("CodigoRol").HasMaxLength(50);
+				entity.Property(e => e.NombreRol).HasColumnName("NombreRol").HasMaxLength(100);
+				entity.Property(e => e.NivelJerarquico).HasColumnName("NivelJerarquico");
+			});
+
+
 
         }
     }

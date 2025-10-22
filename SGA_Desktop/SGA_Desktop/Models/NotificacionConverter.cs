@@ -14,14 +14,29 @@ namespace SGA_Desktop.Models
         /// </summary>
         public static NotificacionDto ConvertirADesktopDto(this NotificacionApiDto apiDto)
         {
-            // Determinar el tipo basado en el estado actual
-            var tipo = apiDto.EstadoActual switch
+            // Determinar el tipo basado en el TipoNotificacion (para conteos) o EstadoActual (para traspasos)
+            var tipo = apiDto.TipoNotificacion switch
             {
-                "COMPLETADO" => "success",
-                "ERROR_ERP" => "error", 
-                "PENDIENTE_ERP" => "warning",
-                "PENDIENTE" => "info",
-                _ => "info"
+                "ORDEN_CREADA" => "info",
+                "ORDEN_COMPLETADA" => "success", 
+                "ORDEN_CERRADA" => "success",
+                "OPERARIO_ASIGNADO" => "info",
+                "ORDEN_INICIADA" => "info",
+                "LECTURA_CREADA" => "info",
+                "APROBADOR_ACTUALIZADO" => "info",
+                "LINEA_REASIGNADA" => "warning",
+                "CONTEO_SUPERVISION" => "warning",
+                "ORDEN_CANCELADA" => "error",
+                "EVENTO_CRITICO" => "error",
+                // Para traspasos (compatibilidad)
+                _ => apiDto.EstadoActual switch
+                {
+                    "COMPLETADO" => "success",
+                    "ERROR_ERP" => "error", 
+                    "PENDIENTE_ERP" => "warning",
+                    "PENDIENTE" => "info",
+                    _ => "info"
+                }
             };
 
             return new NotificacionDto

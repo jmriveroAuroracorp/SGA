@@ -3,21 +3,24 @@ using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Notificaciones;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace SGA_Api.Services
 {
 	public class TraspasoFinalizacionBackgroundService : BackgroundService
 	{
 		private readonly IServiceProvider _serviceProvider;
-		private readonly TimeSpan _intervalo = TimeSpan.FromMilliseconds(500); // Se ejecuta cada 0.5 segundos para detectar cambios muy r�pidos
+		private readonly TimeSpan _intervalo = TimeSpan.FromSeconds(5); // Se ejecuta cada 0.5 segundos para detectar cambios muy r�pidos
 		private bool _enEjecucion = false;
+		private readonly bool _soloProcesarPendientes;
 		
 		// Diccionario para almacenar estados anteriores de traspasos (para detectar cambios)
 		private readonly Dictionary<Guid, string> _estadosAnterioresTraspasos = new();
 
-		public TraspasoFinalizacionBackgroundService(IServiceProvider serviceProvider)
+		public TraspasoFinalizacionBackgroundService(IServiceProvider serviceProvider, IConfiguration configuration)
 		{
 			_serviceProvider = serviceProvider;
+			_soloProcesarPendientes = configuration.GetValue<bool>("BackgroundService:SoloProcesarPendientes", true);
 		}
 
 		protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,10 +47,19 @@ namespace SGA_Api.Services
 
 						// 2. CONSOLIDACI�N DE PALETS - Solo para traspasos que afectan palets
 						// Obtener todos los paletId con l�neas temporales
-						var paletIdsConTempLineas = await dbContext.TempPaletLineas
-							.Select(l => l.PaletId)
-							.Distinct()
-							.ToListAsync();
+					var query = dbContext.TempPaletLineas.AsQueryable();
+					
+					// Filtro configurable: solo procesar líneas pendientes si está habilitado
+					if (_soloProcesarPendientes)
+					{
+						query = query.Where(l => l.Procesada == false);
+					}
+					// Si _soloProcesarPendientes = false, se procesan TODAS las líneas (pendientes y procesadas)
+					
+					var paletIdsConTempLineas = await query
+						.Select(l => l.PaletId)
+						.Distinct()
+						.ToListAsync();
 
 					foreach (var paletId in paletIdsConTempLineas)
 					{
@@ -55,9 +67,17 @@ namespace SGA_Api.Services
 						using var transaction = await dbContext.Database.BeginTransactionAsync();
 						try
 						{
-							// 1) Todas las temporales pendientes de este palet (en orden)
-							var tempsPendientes = await dbContext.TempPaletLineas
-								.Where(l => l.PaletId == paletId && l.Procesada == false)
+							// 1) Líneas temporales de este palet (según configuración)
+							var queryTemps = dbContext.TempPaletLineas
+								.Where(l => l.PaletId == paletId);
+							
+							// Aplicar el mismo filtro de configuración
+							if (_soloProcesarPendientes)
+							{
+								queryTemps = queryTemps.Where(l => l.Procesada == false);
+							}
+							
+							var tempsPendientes = await queryTemps
 								.OrderBy(l => l.FechaAgregado)
 								.ToListAsync();
 
@@ -94,25 +114,25 @@ namespace SGA_Api.Services
 
 								if (!esCompletado) continue;
 
-							// 3) Busca la línea definitiva (misma clave)
-							// Normalizar valores para comparación
-							var tempCodigoAlmacen = (temp.CodigoAlmacen ?? "").Trim().ToUpper();
-							var tempUbicacion = (temp.Ubicacion ?? "").Trim().ToUpper();
-							var tempLote = (temp.Lote ?? "").Trim();
-							
-							var lineasCandidatas = await dbContext.PaletLineas
-								.Where(l => l.PaletId == temp.PaletId && 
-											l.CodigoArticulo == temp.CodigoArticulo)
-								.ToListAsync();
-							
-							var existente = lineasCandidatas
-								.Where(l => 
-									(l.Lote ?? "").Trim() == tempLote &&
-									l.FechaCaducidad == temp.FechaCaducidad &&
-									(l.CodigoAlmacen ?? "").Trim().ToUpper() == tempCodigoAlmacen &&
-									(l.Ubicacion ?? "").Trim().ToUpper() == tempUbicacion
-								)
-								.FirstOrDefault();
+						// 3) Busca la línea definitiva (misma clave)
+						// Normalizar valores para comparación
+						var tempCodigoAlmacen = (temp.CodigoAlmacen ?? "").Trim().ToUpper();
+						var tempUbicacion = (temp.Ubicacion ?? "").Trim().ToUpper();
+						var tempLote = (temp.Lote ?? "").Trim();
+						
+						var lineasCandidatas = await dbContext.PaletLineas
+							.Where(l => l.PaletId == temp.PaletId && 
+										l.CodigoArticulo == temp.CodigoArticulo)
+							.ToListAsync();
+						
+						var existente = lineasCandidatas
+							.Where(l => 
+								(l.Lote ?? "").Trim() == tempLote &&
+								l.FechaCaducidad == temp.FechaCaducidad &&
+								(l.CodigoAlmacen ?? "").Trim().ToUpper() == tempCodigoAlmacen &&
+								(l.Ubicacion ?? "").Trim().ToUpper() == tempUbicacion
+							)
+							.FirstOrDefault();
 
 						if (existente != null)
 						{
@@ -225,8 +245,10 @@ namespace SGA_Api.Services
 
 							foreach (var t in traspasosMoverPalet)
 							{
+								// CORREGIDO: Mover TODAS las líneas del palet, no solo las del traspaso actual
+								// Esto asegura que líneas más antiguas también se muevan a la nueva ubicación
 								var lineasDelTraspaso = await dbContext.PaletLineas
-									.Where(l => l.PaletId == paletId && l.TraspasoId == t.Id)
+									.Where(l => l.PaletId == paletId)
 									.ToListAsync();
 
 								foreach (var linea in lineasDelTraspaso)
@@ -287,6 +309,79 @@ namespace SGA_Api.Services
 									});
 								}
 							}
+						}
+
+						// 6) CONSOLIDACIÓN INTELIGENTE - Solo si hay líneas duplicadas
+						// Verificar si hay duplicadas antes de procesar
+						var tieneDuplicadas = await dbContext.PaletLineas
+							.Where(l => l.PaletId == paletId)
+							.GroupBy(l => new { 
+								l.CodigoArticulo, 
+								Lote = l.Lote ?? "", 
+								FechaCaducidad = l.FechaCaducidad 
+							})
+							.AnyAsync(g => g.Count() > 1);
+						
+						if (tieneDuplicadas)
+						{
+							logger.LogInformation("🔍 Palet {PaletId} tiene líneas duplicadas, ejecutando consolidación inteligente", paletId);
+							
+							// Obtener líneas del palet para consolidar
+							var lineasDelPalet = await dbContext.PaletLineas
+								.Where(l => l.PaletId == paletId)
+								.ToListAsync();
+							
+							// Agrupar en memoria para evitar problemas de traducción de EF
+							var lineasDuplicadas = lineasDelPalet
+								.GroupBy(l => new { 
+									l.CodigoArticulo, 
+									Lote = l.Lote ?? "", 
+									FechaCaducidad = l.FechaCaducidad 
+								})
+								.Where(g => g.Count() > 1)
+								.ToList();
+
+						foreach (var grupo in lineasDuplicadas)
+						{
+							var lineas = grupo.ToList();
+							var lineaPrincipal = lineas.First();
+							
+							// Sumar todas las cantidades
+							var cantidadTotal = lineas.Sum(l => l.Cantidad);
+							
+							// Actualizar la línea principal con la cantidad total
+							lineaPrincipal.Cantidad = cantidadTotal;
+							
+							// Usar la información más reciente (última línea por fecha)
+							var ultimaLinea = lineas.OrderByDescending(l => l.FechaAgregado).First();
+							lineaPrincipal.UsuarioId = ultimaLinea.UsuarioId;
+							lineaPrincipal.TraspasoId = ultimaLinea.TraspasoId;
+							lineaPrincipal.CodigoAlmacen = ultimaLinea.CodigoAlmacen;
+							lineaPrincipal.Ubicacion = ultimaLinea.Ubicacion;
+							
+							// Mantener la descripción más completa
+							if (string.IsNullOrWhiteSpace(lineaPrincipal.DescripcionArticulo) && 
+								!string.IsNullOrWhiteSpace(ultimaLinea.DescripcionArticulo))
+							{
+								lineaPrincipal.DescripcionArticulo = ultimaLinea.DescripcionArticulo;
+							}
+							
+							// Eliminar las líneas duplicadas
+							foreach (var duplicada in lineas.Skip(1))
+							{
+								dbContext.PaletLineas.Remove(duplicada);
+							}
+							
+							// Actualizar la línea principal
+							dbContext.PaletLineas.Update(lineaPrincipal);
+							
+							logger.LogInformation("🔄 Líneas consolidadas: {CantidadLineas} líneas del artículo {CodigoArticulo} (lote: {Lote}) → cantidad total: {CantidadTotal}", 
+								lineas.Count, grupo.Key.CodigoArticulo, grupo.Key.Lote, cantidadTotal);
+						}
+						}
+						else
+						{
+							logger.LogDebug("ℹ️ Palet {PaletId} no tiene líneas duplicadas, omitiendo consolidación", paletId);
 						}
 
 						// Guardar todos los cambios de este palet en una sola operación

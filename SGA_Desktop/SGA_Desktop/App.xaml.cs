@@ -25,11 +25,19 @@ namespace SGA_Desktop
 
 			AppDomain.CurrentDomain.UnhandledException += (s, e) =>
 			{
-				MessageBox.Show(e.ExceptionObject.ToString(), "Error global");
+				// No mostrar MessageBox si la aplicación se está cerrando
+				if (!Helpers.SessionManager.IsClosing)
+				{
+					MessageBox.Show(e.ExceptionObject.ToString(), "Error global");
+				}
 			};
 			this.DispatcherUnhandledException += (s, e) =>
 			{
-				MessageBox.Show(e.Exception.ToString(), "Error de UI");
+				// No mostrar MessageBox si la aplicación se está cerrando
+				if (!Helpers.SessionManager.IsClosing)
+				{
+					MessageBox.Show(e.Exception.ToString(), "Error de UI");
+				}
 				e.Handled = true;
 			};
 
@@ -87,39 +95,29 @@ namespace SGA_Desktop
 			{
 				if (!string.IsNullOrWhiteSpace(Helpers.SessionManager.Token))
 				{
-					// Ejecutar logout en background sin bloquear
-					_ = Task.Run(async () =>
+					// Ejecutar logout directamente, no en background
+					using var http = new HttpClient();
+					http.Timeout = TimeSpan.FromSeconds(3);
+					http.DefaultRequestHeaders.Authorization =
+						new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Helpers.SessionManager.Token);
+
+					var evento = new
 					{
-						try
-						{
-							using var http = new HttpClient();
-							http.Timeout = TimeSpan.FromSeconds(2);
-							http.DefaultRequestHeaders.Authorization =
-								new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Helpers.SessionManager.Token);
+						fecha = DateTime.Now,
+						idUsuario = Helpers.SessionManager.UsuarioActual?.operario ?? 0,
+						tipo = "LOGOUT",
+						origen = "Sistema",
+						descripcion = "Sesión Cerrada por Suspensión/Bloqueo",
+						detalle = "La aplicación se cerró automáticamente por suspensión del PC o bloqueo de sesión",
+						idDispositivo = Environment.MachineName
+					};
 
-							var evento = new
-							{
-								fecha = DateTime.Now,
-								idUsuario = Helpers.SessionManager.UsuarioActual?.operario ?? 0,
-								tipo = "LOGOUT",
-								origen = "Sistema",
-								descripcion = "Sesión Cerrada por Suspensión/Bloqueo",
-								detalle = "La aplicación se cerró automáticamente por suspensión del PC o bloqueo de sesión",
-								idDispositivo = Environment.MachineName
-							};
+					var json = Newtonsoft.Json.JsonConvert.SerializeObject(evento);
+					var content = new StringContent(json, Encoding.UTF8, "application/json");
+					await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
 
-							var json = Newtonsoft.Json.JsonConvert.SerializeObject(evento);
-							var content = new StringContent(json, Encoding.UTF8, "application/json");
-							await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
-
-							// NO desactivar dispositivo durante suspensión para evitar conflictos con HttpClient
-							// El dispositivo se desactivará automáticamente por timeout en el servidor
-						}
-						catch
-						{
-							// Ignora errores, no bloquea el cierre
-						}
-					});
+					// NO desactivar dispositivo durante suspensión para evitar conflictos con HttpClient
+					// El dispositivo se desactivará automáticamente por timeout en el servidor
 				}
 			}
 			catch
