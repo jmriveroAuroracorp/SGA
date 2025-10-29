@@ -22,6 +22,7 @@ public class StockDisponibleDto : INotifyPropertyChanged
 
 	public string CodigoArticulo { get; set; }
 	public string DescripcionArticulo { get; set; }
+	public string CodigoAlternativo { get; set; } = string.Empty;
 	public short CodigoEmpresa { get; set; }
 
 	public bool TieneError { get; set; }
@@ -103,6 +104,11 @@ public class StockDisponibleDto : INotifyPropertyChanged
     public bool EstaPaletizado => EsStockPaletizado;
     
     //  NUEVAS PROPIEDADES PARA SELECCIÓN DE PALET EN DESTINO
+    
+    // 🔷 NUEVAS PROPIEDADES para compatibilidad con ConsultaStockView
+    public List<PaletDetalleDto> Palets { get; set; } = new();
+    public decimal? TotalArticuloGlobal { get; set; }
+    public decimal? TotalArticuloAlmacen { get; set; }
     public ObservableCollection<PaletDto> PaletsDisponibles { get; set; } = new();
     
     private PaletDto? _paletDestinoSeleccionado;
@@ -137,4 +143,9 @@ public class StockDisponibleDto : INotifyPropertyChanged
             OnPropertyChanged();
         }
     }
+    
+    // 🔷 NUEVO: Indicador de bloqueo por calidad
+    public bool IsBloqueadoCalidad { get; set; }
+    public string? MotivoBloqueoCalidad { get; set; }
+    public DateTime? FechaBloqueoCalidad { get; set; }
 }

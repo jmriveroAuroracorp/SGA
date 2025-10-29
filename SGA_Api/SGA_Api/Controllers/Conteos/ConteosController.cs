@@ -396,6 +396,34 @@ namespace SGA_Api.Controllers
         }
 
         /// <summary>
+        /// Obtener las lecturas registradas de una orden
+        /// </summary>
+        /// <param name="guid">Guid de la orden</param>
+        /// <param name="codigoOperario">Código del operario (opcional)</param>
+        /// <returns>Lista de lecturas registradas</returns>
+        [HttpGet("ordenes/{guid:guid}/lecturas-registradas")]
+        [ProducesResponseType(typeof(IEnumerable<LecturaResponseDto>), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> ObtenerLecturasRegistradas(Guid guid, [FromQuery] string? codigoOperario = null)
+        {
+            try
+            {
+                var lecturas = await _conteosService.ObtenerLecturasRegistradasAsync(guid, codigoOperario);
+                return Ok(lecturas);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener lecturas registradas para orden {Guid}: {Message}", guid, ex.Message);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = $"Ocurrió un error al obtener las lecturas registradas: {ex.Message}",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
         /// Obtener las lecturas pendientes de una orden
         /// </summary>
         /// <param name="guid">Guid de la orden</param>

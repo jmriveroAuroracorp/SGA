@@ -25,8 +25,6 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private short codigoEmpresa;
         [ObservableProperty] private string codigoArticulo = string.Empty;
         [ObservableProperty] private string lotePartida = string.Empty;
-        [ObservableProperty] private string? codigoAlmacen;
-        [ObservableProperty] private string? codigoUbicacion;
         #endregion
 
         #region Propiedades de Resultados
@@ -46,7 +44,6 @@ namespace SGA_Desktop.ViewModels
         #region Propiedades de Filtros de Bloqueos
         [ObservableProperty] private string filtroCodigoArticulo = string.Empty;
         [ObservableProperty] private string filtroLotePartida = string.Empty;
-        [ObservableProperty] private string filtroAlmacen = string.Empty;
         #endregion
 
         #region Propiedades de Pestañas
@@ -78,9 +75,7 @@ namespace SGA_Desktop.ViewModels
                 {
                     CodigoEmpresa = CodigoEmpresa,
                     CodigoArticulo = CodigoArticulo,
-                    Partida = LotePartida,
-                    CodigoAlmacen = CodigoAlmacen,
-                    CodigoUbicacion = CodigoUbicacion
+                    Partida = LotePartida
                 };
 
                 var resultado = await calidadService.BuscarStockAsync(filtros);
@@ -278,7 +273,6 @@ namespace SGA_Desktop.ViewModels
         {
             FiltroCodigoArticulo = string.Empty;
             FiltroLotePartida = string.Empty;
-            FiltroAlmacen = string.Empty;
             AplicarFiltrosBloqueos();
         }
 
@@ -299,11 +293,6 @@ namespace SGA_Desktop.ViewModels
                 if (!string.IsNullOrWhiteSpace(FiltroLotePartida))
                 {
                     cumpleFiltros &= bloqueo.LotePartida.Contains(FiltroLotePartida, StringComparison.OrdinalIgnoreCase);
-                }
-
-                if (!string.IsNullOrWhiteSpace(FiltroAlmacen))
-                {
-                    cumpleFiltros &= bloqueo.Almacen.Contains(FiltroAlmacen, StringComparison.OrdinalIgnoreCase);
                 }
 
                 if (cumpleFiltros)
@@ -368,8 +357,6 @@ namespace SGA_Desktop.ViewModels
         {
             CodigoArticulo = string.Empty;
             LotePartida = string.Empty;
-            CodigoAlmacen = null;
-            CodigoUbicacion = null;
             StockDisponible.Clear();
             StockSeleccionado = null;
             MensajeEstado = "Búsqueda limpiada";

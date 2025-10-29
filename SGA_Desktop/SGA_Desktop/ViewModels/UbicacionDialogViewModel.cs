@@ -47,7 +47,7 @@ namespace SGA_Desktop.ViewModels
 		{
 			OnPropertyChanged(nameof(CanEditCodigo));
 		}
-		public bool CanEditCodigo => _isNew && !string.IsNullOrEmpty(CodigoUbicacion);
+		public bool CanEditCodigo => !_isNew || !string.IsNullOrEmpty(CodigoUbicacion);
 
 		[ObservableProperty]
 		private string? descripcionUbicacion;
@@ -55,7 +55,7 @@ namespace SGA_Desktop.ViewModels
 		{
 			OnPropertyChanged(nameof(CanEditDescripcion));
 		}
-		public bool CanEditDescripcion => _isNew && !string.IsNullOrEmpty(DescripcionUbicacion);
+		public bool CanEditDescripcion => true; // Permitir editar descripción siempre
 
 		[ObservableProperty] private int? temperaturaMin;
 		[ObservableProperty] private int? temperaturaMax;
@@ -131,7 +131,7 @@ namespace SGA_Desktop.ViewModels
 			_ = LoadTiposPaletAsync();
 		}
 
-		private bool CanSave() => !string.IsNullOrWhiteSpace(CodigoUbicacion);
+		private bool CanSave() => true; // Permitir guardar siempre, incluyendo ubicaciones "SIN UBICAR" con código vacío
 
 		private async Task SaveAsync()
 		{

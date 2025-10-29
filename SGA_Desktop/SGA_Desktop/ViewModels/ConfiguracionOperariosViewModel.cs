@@ -85,7 +85,7 @@ namespace SGA_Desktop.ViewModels
         private bool cargandoEmpleados = false;
 
         [ObservableProperty]
-        private string mensajeEmpleados = "Cargando empleados disponibles...";
+        private string mensajeEmpleados = "Introduce al menos 3 caracteres para buscar empleados disponibles.";
 
         // Vista filtrable para empleados
         private readonly ICollectionView _empleadosView;
@@ -116,8 +116,7 @@ namespace SGA_Desktop.ViewModels
             // Cargar configuraciones predefinidas al inicializar
             _ = CargarConfiguracionesPredefinidasAsync();
             
-            // Cargar empleados disponibles al inicializar (para la pestaña Alta SGA)
-            _ = CargarEmpleadosDisponiblesAsync();
+            // Los empleados disponibles se cargarán solo cuando el usuario busque (mínimo 3 caracteres)
         }
 
         public ConfiguracionOperariosViewModel() : this(new OperariosConfiguracionService())
@@ -425,10 +424,23 @@ namespace SGA_Desktop.ViewModels
 
         partial void OnFiltroEmpleadoChanged(string value)
         {
-            // Solo filtrar si hay 3 o más caracteres para reducir carga
-            if (string.IsNullOrEmpty(value) || value.Length >= 3)
+            // Solo buscar empleados si hay 3 o más caracteres
+            if (string.IsNullOrEmpty(value))
             {
-                _empleadosView?.Refresh();
+                // Limpiar lista si no hay filtro
+                EmpleadosDisponibles.Clear();
+                MensajeEmpleados = "Introduce al menos 3 caracteres para buscar empleados disponibles.";
+            }
+            else if (value.Length >= 3)
+            {
+                // Buscar empleados cuando hay 3 o más caracteres
+                _ = BuscarEmpleadosAsync(value);
+            }
+            else
+            {
+                // Mostrar mensaje de búsqueda mínima
+                EmpleadosDisponibles.Clear();
+                MensajeEmpleados = "Introduce al menos 3 caracteres para buscar empleados disponibles.";
             }
         }
 
@@ -461,14 +473,15 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
-        private async Task CambiarAAltaSga()
+        private void CambiarAAltaSga()
         {
             MostrandoOperarios = false;
             MostrandoConfiguraciones = false;
             MostrandoAltaSga = true;
             
-            // Cargar empleados disponibles cuando se cambie a esta pestaña
-            await CargarEmpleadosDisponiblesAsync();
+            // Limpiar lista de empleados y mostrar mensaje de búsqueda
+            EmpleadosDisponibles.Clear();
+            MensajeEmpleados = "Introduce al menos 3 caracteres para buscar empleados disponibles.";
         }
         #endregion
 
@@ -754,6 +767,54 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 await MostrarMensajeAsync($"Error al dar de alta empleados: {ex.Message}");
+            }
+        }
+
+        private async Task BuscarEmpleadosAsync(string filtro)
+        {
+            try
+            {
+                CargandoEmpleados = true;
+                MensajeEmpleados = "Buscando empleados...";
+                
+                var empleados = await _empleadosService.ObtenerEmpleadosDisponiblesAsync();
+
+                if (empleados != null)
+                {
+                    EmpleadosDisponibles.Clear();
+                    
+                    // Filtrar empleados que coincidan con el filtro
+                    var empleadosFiltrados = empleados.Where(e => 
+                        !string.IsNullOrEmpty(e.Nombre) && 
+                        NormalizarTexto(e.Nombre).Contains(NormalizarTexto(filtro), StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+                    
+                    foreach (var empleado in empleadosFiltrados)
+                    {
+                        EmpleadosDisponibles.Add(empleado);
+                    }
+
+                    if (empleadosFiltrados.Any())
+                    {
+                        MensajeEmpleados = $"Se encontraron {empleadosFiltrados.Count} empleados disponibles para dar de alta.";
+                    }
+                    else
+                    {
+                        MensajeEmpleados = "No se encontraron empleados que coincidan con la búsqueda.";
+                    }
+                }
+                else
+                {
+                    MensajeEmpleados = "Error al buscar empleados disponibles.";
+                }
+            }
+            catch (Exception ex)
+            {
+                MensajeEmpleados = $"Error: {ex.Message}";
+            }
+            finally
+            {
+                CargandoEmpleados = false;
             }
         }
 

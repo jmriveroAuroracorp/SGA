@@ -15,11 +15,11 @@ namespace SGA_Desktop.ViewModels
 {
 	public partial class LoginViewModel : ObservableObject
 	{
-		[ObservableProperty]
-		private string usuario;
+	[ObservableProperty]
+	private string usuario = string.Empty;
 
-		[ObservableProperty]
-		private string contraseña;
+	[ObservableProperty]
+	private string contraseña = string.Empty;
 
 		[ObservableProperty]
 		private string idDispositivo;
@@ -46,7 +46,8 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
-			string idDispositivo = Environment.MachineName;
+			// 🔧 Crear ID único de dispositivo: {MachineName}_{Usuario}
+			string idDispositivo = $"{Environment.MachineName}_{operario}";
 			string tipo;
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 				tipo = "Windows";

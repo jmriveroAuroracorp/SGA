@@ -7,6 +7,7 @@ namespace SGA_Api.Models.Traspasos
         public int UsuarioId { get; set; }
 
 		public bool? ConfirmarAgregarAPalet { get; set; }
+		public bool? DejarSuelto { get; set; }
 		public Guid? PaletIdConfirmado { get; set; }
 	}
 } 

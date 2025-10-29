@@ -10,7 +10,7 @@ using System.Net.Http;
 
 namespace SGA_Desktop.Services
 {
-	
+
 	public class TraspasosService : ApiService
 	{
 		public TraspasosService() : base() { }
@@ -72,7 +72,7 @@ namespace SGA_Desktop.Services
 				return new List<TraspasoDto>();
 
 			var text = await resp.Content.ReadAsStringAsync();
-			return JsonSerializer.Deserialize<List<TraspasoDto>>(text, 
+			return JsonSerializer.Deserialize<List<TraspasoDto>>(text,
 				new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new List<TraspasoDto>();
 		}
 
@@ -105,7 +105,7 @@ namespace SGA_Desktop.Services
 				query.Add($"fechaDesde={fechaInicioDesde:yyyy-MM-dd}");
 			if (fechaInicioHasta.HasValue)
 				query.Add($"fechaHasta={fechaInicioHasta:yyyy-MM-dd}"); // API ahora maneja el fin de día automáticamente
-			
+
 			// 🚀 Agregar límite para optimizar rendimiento
 			query.Add($"limite={limite}");
 
@@ -201,34 +201,70 @@ namespace SGA_Desktop.Services
 		public Task<string> ConsultarEstadoPaletOrigenAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
 			=> ConsultarEstadoPaletAsync(codigoEmpresa, codigoAlmacen, ubicacion);
 
-	// NUEVO: reabrir palet
-	public async Task<bool> ReabrirPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
-	{
-		var payload = new { codigoEmpresa, codigoAlmacen, ubicacion };
-		var resp = await _httpClient.PostAsJsonAsync("palet/reabrir", payload); // ajusta ruta si hace falta
-		return resp.IsSuccessStatusCode;
-	}
+		// NUEVO: reabrir palet
+		public async Task<bool> ReabrirPaletAsync(int codigoEmpresa, string codigoAlmacen, string ubicacion)
+		{
+			var payload = new { codigoEmpresa, codigoAlmacen, ubicacion };
+			var resp = await _httpClient.PostAsJsonAsync("palet/reabrir", payload); // ajusta ruta si hace falta
+			return resp.IsSuccessStatusCode;
+		}
 
-	// NUEVO: Consultar palets disponibles en una ubicación (precheck)
-	public async Task<PrecheckFinalizarArticuloResponse> PrecheckFinalizarArticuloAsync(
-		int codigoEmpresa, 
-		string almacenDestino, 
-		string? ubicacionDestino = null)
-	{
-		var url = $"traspasos/articulo/precheck-finalizar?codigoEmpresa={codigoEmpresa}&almacenDestino={almacenDestino}";
-		if (!string.IsNullOrWhiteSpace(ubicacionDestino))
-			url += $"&ubicacionDestino={ubicacionDestino}";
+		// NUEVO: Consultar palets disponibles en una ubicación (precheck)
+		public async Task<PrecheckFinalizarArticuloResponse> PrecheckFinalizarArticuloAsync(
+			int codigoEmpresa,
+			string almacenDestino,
+			string? ubicacionDestino = null)
+		{
+			var url = $"traspasos/articulo/precheck-finalizar?codigoEmpresa={codigoEmpresa}&almacenDestino={almacenDestino}";
+			if (!string.IsNullOrWhiteSpace(ubicacionDestino))
+				url += $"&ubicacionDestino={ubicacionDestino}";
 
-		var resp = await _httpClient.GetAsync(url);
-		if (!resp.IsSuccessStatusCode)
-			return new PrecheckFinalizarArticuloResponse { Existe = false };
+			var resp = await _httpClient.GetAsync(url);
+			if (!resp.IsSuccessStatusCode)
+				return new PrecheckFinalizarArticuloResponse { Existe = false };
 
-		var text = await resp.Content.ReadAsStringAsync();
-		return JsonSerializer.Deserialize<PrecheckFinalizarArticuloResponse>(text,
-			new JsonSerializerOptions(JsonSerializerDefaults.Web)) 
-			?? new PrecheckFinalizarArticuloResponse { Existe = false };
-	}
+			var text = await resp.Content.ReadAsStringAsync();
+			return JsonSerializer.Deserialize<PrecheckFinalizarArticuloResponse>(text,
+				new JsonSerializerOptions(JsonSerializerDefaults.Web))
+				?? new PrecheckFinalizarArticuloResponse { Existe = false };
+		}
+		/// <summary>
+		/// 🔷 NUEVO: Validar traspaso de artículo individual
+		/// </summary>
+		/// <param name="request">Datos del traspaso a validar</param>
+		/// <returns>Resultado de la validación</returns>
+		public async Task<ValidacionTraspasoResult> ValidarTraspasoArticuloAsync(ValidacionTraspasoRequest request)
+		{
+			try
+			{
+				System.Diagnostics.Debug.WriteLine($"🔍 Llamando API validación - Artículo: {request.CodigoArticulo}, Ubicación: '{request.UbicacionDestino}', Empresa: {request.CodigoEmpresa}");
+				
+				var response = await _httpClient.PostAsJsonAsync("traspasos/validar-articulo", request);
 
+				System.Diagnostics.Debug.WriteLine($"🔍 Respuesta API - Status: {response.StatusCode}, Success: {response.IsSuccessStatusCode}");
+
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					System.Diagnostics.Debug.WriteLine($"🔍 JSON respuesta: {json}");
+					
+					var resultado = JsonSerializer.Deserialize<ValidacionTraspasoResult>(json);
+					return resultado ?? new ValidacionTraspasoResult { EsValido = true };
+				}
+				else
+				{
+					System.Diagnostics.Debug.WriteLine($"🔍 Error API - Status: {response.StatusCode}");
+					// En caso de error de API, permitir traspaso para no bloquear operaciones
+					return new ValidacionTraspasoResult { EsValido = true };
+				}
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"Error validando traspaso: {ex.Message}");
+				// En caso de error, permitir traspaso para no bloquear operaciones
+				return new ValidacionTraspasoResult { EsValido = true };
+			}
+		}
 
 
 	}
@@ -237,7 +273,7 @@ namespace SGA_Desktop.Services
 	{
 		public bool Success { get; set; }
 		public string? ErrorMessage { get; set; }
-		public string? PaletInfo { get; set; } 
+		public string? PaletInfo { get; set; }
 	}
 
 	public class PaletMovibleDto
@@ -250,5 +286,6 @@ namespace SGA_Desktop.Services
 		public DateTime? FechaUltimoTraspaso { get; set; }
 		public int? UsuarioUltimoTraspaso { get; set; }
 	}
+
 
 }

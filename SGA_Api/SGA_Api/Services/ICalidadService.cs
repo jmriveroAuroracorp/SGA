@@ -66,5 +66,13 @@ namespace SGA_Api.Services
         /// <param name="soloBloqueados">Si true, solo muestra bloqueos activos</param>
         /// <returns>Lista de bloqueos</returns>
         Task<List<BloqueoCalidadDto>> ObtenerBloqueosAsync(short codigoEmpresa, bool? soloBloqueados = null);
+
+        /// <summary>
+        /// 🔷 NUEVO: Obtiene información de bloqueos de calidad para una lista de artículos
+        /// </summary>
+        /// <param name="codigoEmpresa">Código de empresa</param>
+        /// <param name="codigosArticulos">Lista de códigos de artículos</param>
+        /// <returns>Diccionario con información de bloqueos por artículo</returns>
+        Task<Dictionary<string, object>> ObtenerBloqueosPorArticulosAsync(short codigoEmpresa, List<string> codigosArticulos);
     }
 }

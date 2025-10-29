@@ -14,10 +14,10 @@ namespace SGA_Api.Services
         Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto);
         Task<CerrarOrdenResponseDto> CerrarOrdenAsync(Guid guid);
         Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasPendientesAsync(Guid ordenGuid, string? codigoOperario = null);
+        Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasRegistradasAsync(Guid ordenGuid, string? codigoOperario = null);
         Task<IEnumerable<ResultadoConteoDetalladoDto>> ObtenerResultadosConteoAsync(string? accion = null);
         Task<ResultadoConteoDetalladoDto> ActualizarAprobadorAsync(Guid resultadoGuid, ActualizarAprobadorDto dto);
         Task<OrdenDto> ReasignarLineaAsync(Guid resultadoGuid, ReasignarLineaDto dto);
         Task<List<PaletDisponibleInfo>> ObtenerPaletsDisponiblesAsync(string codigoAlmacen, string? ubicacion, string? codigoArticulo, string? lote, DateTime? fechaCaducidad);
-        Task ProcesarAjustesCompletadosAsync();
     }
 } 

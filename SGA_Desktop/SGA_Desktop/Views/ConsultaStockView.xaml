@@ -244,51 +244,23 @@
         </Grid>
 
 
-        <!-- FILA 2: artículo destacado / combo -->
-        <StackPanel Grid.Row="2"
-            Orientation="Vertical"
-            Margin="20,0,20,10"
-            Visibility="{Binding IsArticleMode, Converter={StaticResource BoolToVis}}">
-
-            <!-- 1) Artículo destacado (solo en búsquedas por código) -->
-            <TextBlock Text="{Binding ArticuloMostrado}"
-               FontFamily="{StaticResource FuentePrincipal}"
-               FontSize="28"
-               FontWeight="Bold"
-               Foreground="{StaticResource BrushPrincipal}"
-               Visibility="{Binding ListViewVisibility}" />
-
-            <!-- 2) Combo para elegir artículo (solo en búsquedas por descripción) -->
-            <StackPanel Orientation="Horizontal"
-                Margin="0,8,0,0"
-                Visibility="{Binding ArticulosUnicosVisibility}">
-                <TextBlock Text="Selecciona artículo"
-                   FontWeight="Bold"
-                   VerticalAlignment="Center"
-                   Margin="0,0,8,0"/>
-                <ComboBox Width="300"
-                  Style="{StaticResource EstiloComboBox}"
-                  ItemsSource="{Binding ArticulosUnicos}"
-                  SelectedItem="{Binding ArticuloSeleccionado, Mode=TwoWay}"
-                  DisplayMemberPath="Display"
-                  IsEditable="False"/>
-            </StackPanel>
-        </StackPanel>
 
 
-        <!-- RESULTADOS: MODO POR ARTÍCULO -->
+        <!-- RESULTADOS: MODO POR ARTÍCULO CON EXPANDERS -->
         <ListView Grid.Row="3"
-          ItemsSource="{Binding StockFiltrado}"
-          SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
+                  ItemsSource="{Binding ArticulosConUbicaciones}"
           Visibility="{Binding ListViewVisibility}"
           SelectionMode="Single"
-          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.CanContentScroll="False"
+                  Padding="0,0,0,20"
+                  Margin="0,0,0,0">
 
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Margin" Value="0,0,0,10"/>
+                    <Setter Property="Margin" Value="0,0,0,5"/>
                     <Setter Property="Background" Value="Transparent"/>
                     <Setter Property="Foreground" Value="Black"/>
                     <Setter Property="ContextMenu">
@@ -323,13 +295,94 @@ CommandParameter="{Binding FechaCaducidad}"/>
                     BorderThickness="2"
                     BorderBrush="{StaticResource BrushPrincipal}"
                     Background="White"
-                    Margin="0,0,0,10">
+                    Margin="0,0,0,5">
 
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="White"/>
                                 <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                 <Style.Triggers>
+                                    <!-- 🔷 NUEVO: Bloqueo por calidad -->
+                                    <DataTrigger Binding="{Binding IsBloqueadoCalidad}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#FF6B6B"/>
+                                        <Setter Property="BorderThickness" Value="4"/>
+                                    </DataTrigger>
+                                    <!-- Hover -->
+                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                                        <Setter Property="Background" Value="#E6F0FA"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+
+                        <!-- 👇 Expander con header del artículo -->
+                        <Expander IsExpanded="{Binding IsExpanded}"
+                                  Margin="8,4">
+                            <Expander.Header>
+                                <TextBlock Text="{Binding HeaderArticulo}"
+                                           FontWeight="Bold"
+                                           FontSize="16"
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </Expander.Header>
+                            <ListView ItemsSource="{Binding Ubicaciones}" 
+                                      SelectedItem="{Binding Data.ArticuloSeleccionadoParaImprimir, Source={StaticResource VmProxy}, Mode=TwoWay}"
+                                      SelectionMode="Single"
+                                      Margin="8,4,8,8"
+                                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                      ScrollViewer.CanContentScroll="False">
+                                      
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Margin" Value="0,0,0,5"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="Black"/>
+                                        <Setter Property="ContextMenu">
+                                            <Setter.Value>
+                                                <ContextMenu Style="{StaticResource EstiloContextMenu}">
+                                                    <MenuItem Header="Copiar código"
+                                          Style="{StaticResource EstiloMenuItem}"
+                                          Command="{Binding Data.CopiarCodigoCommand, Source={StaticResource VmProxy}}"
+                                          CommandParameter="{Binding CodigoArticulo}" />
+                                                    <MenuItem Header="Copiar descripción"
+                                      Style="{StaticResource EstiloMenuItem}"
+                                      Command="{Binding Data.CopiarDescripcionCommand, Source={StaticResource VmProxy}}"
+                                      CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
+                                                    <MenuItem Header="Copiar lote"
+                                      Style="{StaticResource EstiloMenuItem}"
+                                      Command="{Binding Data.CopiarLoteCommand, Source={StaticResource VmProxy}}"
+                                      CommandParameter="{Binding Partida, TargetNullValue=''}"/>
+                                                    <MenuItem Header="Copiar fecha caducidad"
+                                      Style="{StaticResource EstiloMenuItem}"
+                                      Command="{Binding Data.CopiarFechaCaducidadCommand, Source={StaticResource VmProxy}}"
+                                      CommandParameter="{Binding FechaCaducidad}"/>
+                                                </ContextMenu>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <!-- 👇 Copia EXACTA de la estructura del modo ubicación -->
+                                        <Border x:Name="CardBorder"
+                                        CornerRadius="6"
+                                        BorderThickness="2"
+                                        BorderBrush="{StaticResource BrushPrincipal}"
+                                        Background="White"
+                                        Margin="0,0,0,5">
+
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="White"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                <Style.Triggers>
+                                    <!-- 🔷 NUEVO: Bloqueo por calidad -->
+                                    <DataTrigger Binding="{Binding IsBloqueadoCalidad}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#FF6B6B"/>
+                                        <Setter Property="BorderThickness" Value="4"/>
+                                    </DataTrigger>
                                     <!-- Hover -->
                                     <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
                                         <Setter Property="Background" Value="#E6F0FA"/>
@@ -343,9 +396,10 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             </Style>
                         </Border.Style>
 
-                        <!-- 👇 Contenido -->
+                                            <!-- 👇 Tu contenido -->
                         <Grid Margin="8,4">
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
@@ -354,8 +408,34 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 <ColumnDefinition Width="220"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- FILA 1: Código, Descripción, Almacén, Ubicación, Lote, Caducidad -->
+                            <!-- FILA 1: Código, Descripción, Almacén, Ubicación -->
                             <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
+                                <!-- 🔷 NUEVO: Indicador de bloqueo por calidad -->
+                                <Border Background="#FF6B6B" 
+                                        CornerRadius="3" 
+                                        Padding="4,2" 
+                                        Margin="0,0,8,0"
+                                        Visibility="{Binding IsBloqueadoCalidad, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Border.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel>
+                                                <TextBlock Text="Artículo bloqueado por calidad" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding MotivoBloqueoCalidad}" 
+                                                           Visibility="{Binding MotivoBloqueoCalidad, Converter={StaticResource NullOrEmptyToVisibility}}"/>
+                                                <TextBlock Text="{Binding FechaBloqueoCalidad, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                                                           Visibility="{Binding FechaBloqueoCalidad, Converter={StaticResource NullOrEmptyToVisibility}}"/>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Border.ToolTip>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🔒" FontSize="12" Margin="0,0,2,0"/>
+                                        <TextBlock Text="BLOQUEADO CALIDAD" 
+                                                   FontSize="10" 
+                                                   FontWeight="Bold" 
+                                                   Foreground="White"/>
+                                    </StackPanel>
+                                </Border>
+                                
                                 <TextBlock Text="{Binding CodigoArticulo}"
                                    FontWeight="Bold"
                                    FontSize="18"
@@ -368,15 +448,19 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding CodigoAlmacen}" Margin="2,0,12,0"/>
                                 <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                <TextBlock Text="{Binding Ubicacion}" Margin="2,0,12,0"/>
+                                <TextBlock Text="{Binding Ubicacion}" Margin="2,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- FILA 2: Lote, Caducidad -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
                                 <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
                                 <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,0,0"/>
                             </StackPanel>
 
-                            <!-- FILA 2: Palets inline/expander + Totales -->
-                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical" Margin="0,4,0,0">
+                            <!-- FILA 3: Palets inline/expander + Totales -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Vertical" Margin="0,4,0,0">
                                 <!-- Inline si solo hay un palet -->
                                 <ItemsControl ItemsSource="{Binding Palets}"
                                       Visibility="{Binding Palets, Converter={StaticResource PaletsCountToVisibility}, ConverterParameter=One}">
@@ -481,7 +565,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             </StackPanel>
 
                             <!-- A LA DERECHA: Disponible destacado -->
-                            <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                            <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
                             Background="#F0F6FF"
                             CornerRadius="6"
                             Padding="12,4"
@@ -493,13 +577,18 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                        Foreground="{StaticResource BrushPrincipal}" 
                                        FontSize="15"
                                        Margin="0,0,4,0"/>
-                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}"  
+                                                        <TextBlock Text="{Binding Disponible, StringFormat=F4}"  
                                        FontWeight="Bold" 
                                        FontSize="22"
-                                       Foreground="{Binding UnidadSaldo, Converter={StaticResource NegativeValueColorConverter}}"/>
+                                                           Foreground="{Binding Disponible, Converter={StaticResource NegativeValueColorConverter}}"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Expander>
                     </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
@@ -512,14 +601,17 @@ CommandParameter="{Binding FechaCaducidad}"/>
           SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
           Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
           SelectionMode="Single"
-          ScrollViewer.VerticalScrollBarVisibility="Auto">
+          ScrollViewer.VerticalScrollBarVisibility="Auto"
+          ScrollViewer.CanContentScroll="False"
+          Padding="0,0,0,20"
+          Margin="0,0,0,0">
 
             <!-- Contenedor de ítems -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Margin" Value="0,0,0,10"/>
+                    <Setter Property="Margin" Value="0,0,0,5"/>
                     <Setter Property="Background" Value="Transparent"/>
                     <Setter Property="Foreground" Value="Black"/>
                     <Setter Property="ContextMenu">
@@ -556,13 +648,18 @@ CommandParameter="{Binding FechaCaducidad}"/>
                     BorderThickness="2"
                     BorderBrush="{StaticResource BrushPrincipal}"
                     Background="White"
-                    Margin="0,0,0,10">
+                    Margin="0,0,0,5">
 
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="White"/>
                                 <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                 <Style.Triggers>
+                                    <!-- 🔷 NUEVO: Bloqueo por calidad -->
+                                    <DataTrigger Binding="{Binding IsBloqueadoCalidad}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#FF6B6B"/>
+                                        <Setter Property="BorderThickness" Value="4"/>
+                                    </DataTrigger>
                                     <!-- Hover -->
                                     <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
                                         <Setter Property="Background" Value="#E6F0FA"/>
@@ -581,14 +678,41 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="220"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- FILA 1: Código, Descripción, Almacén, Ubicación, Lote, Caducidad -->
+                            <!-- FILA 1: Código, Descripción, Almacén, Ubicación -->
                             <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
+                                <!-- 🔷 NUEVO: Indicador de bloqueo por calidad -->
+                                <Border Background="#FF6B6B" 
+                                        CornerRadius="3" 
+                                        Padding="4,2" 
+                                        Margin="0,0,8,0"
+                                        Visibility="{Binding IsBloqueadoCalidad, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Border.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel>
+                                                <TextBlock Text="Artículo bloqueado por calidad" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding MotivoBloqueoCalidad}" 
+                                                           Visibility="{Binding MotivoBloqueoCalidad, Converter={StaticResource NullOrEmptyToVisibility}}"/>
+                                                <TextBlock Text="{Binding FechaBloqueoCalidad, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                                                           Visibility="{Binding FechaBloqueoCalidad, Converter={StaticResource NullOrEmptyToVisibility}}"/>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Border.ToolTip>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🔒" FontSize="12" Margin="0,0,2,0"/>
+                                        <TextBlock Text="BLOQUEADO CALIDAD" 
+                                                   FontSize="10" 
+                                                   FontWeight="Bold" 
+                                                   Foreground="White"/>
+                                    </StackPanel>
+                                </Border>
+                                
                                 <TextBlock Text="{Binding CodigoArticulo}"
                                    FontWeight="Bold"
                                    FontSize="18"
@@ -601,15 +725,19 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding CodigoAlmacen}" Margin="2,0,12,0"/>
                                 <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                <TextBlock Text="{Binding Ubicacion}" Margin="2,0,12,0"/>
+                                <TextBlock Text="{Binding Ubicacion}" Margin="2,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- FILA 2: Lote, Caducidad -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
                                 <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
                                 <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,0,0"/>
                             </StackPanel>
 
-                            <!-- FILA 2: Palets inline/expander + Totales -->
-                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Vertical" Margin="0,4,0,0">
+                            <!-- FILA 3: Palets inline/expander + Totales -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Vertical" Margin="0,4,0,0">
                                 <!-- Inline si solo hay un palet -->
                                 <ItemsControl ItemsSource="{Binding Palets}"
                                       Visibility="{Binding Palets, Converter={StaticResource PaletsCountToVisibility}, ConverterParameter=One}">
@@ -714,7 +842,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             </StackPanel>
 
                             <!-- A LA DERECHA: Disponible destacado -->
-                            <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                            <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
                             Background="#F0F6FF"
                             CornerRadius="6"
                             Padding="12,4"

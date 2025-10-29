@@ -33,6 +33,9 @@ namespace SGA_Api.Controllers.Login
             // 🔐 Generar nuevo token
             var nuevoToken = Guid.NewGuid().ToString();
 
+            // 🔧 El IdDispositivo ya viene con el formato correcto desde el cliente
+            var idDispositivoUnico = login.IdDispositivo;
+
             // 🔁 Desactivar todos los dispositivos activos de este usuario
             var dispositivosPrevios = await _auroraSgaContext.Dispositivos
                 .Where(d => d.IdUsuario == operario.Id && d.Activo == -1)
@@ -46,7 +49,7 @@ namespace SGA_Api.Controllers.Login
 
             // ✅ Activar el nuevo dispositivo
             var dispositivoActual = await _auroraSgaContext.Dispositivos
-                .FirstOrDefaultAsync(d => d.Id == login.IdDispositivo);
+                .FirstOrDefaultAsync(d => d.Id == idDispositivoUnico);
 
             if (dispositivoActual != null)
             {
@@ -58,7 +61,7 @@ namespace SGA_Api.Controllers.Login
             {
                 dispositivoActual = new Models.Registro.Dispositivo
                 {
-                    Id = login.IdDispositivo,
+                    Id = idDispositivoUnico,
                     Tipo = login.TipoDispositivo, // "Android", // o lo que corresponda
                     Activo = -1,
                     IdUsuario = operario.Id,

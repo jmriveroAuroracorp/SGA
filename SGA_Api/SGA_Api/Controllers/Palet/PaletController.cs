@@ -82,7 +82,8 @@ public class PaletController : ControllerBase
 		[FromQuery] int? usuarioApertura = null,
 		[FromQuery] int? usuarioCierre = null,
 		[FromQuery] bool sinCierre = false,
-		[FromQuery] string? almacen = null)
+		[FromQuery] string? almacen = null,
+		[FromQuery] int limite = 50)
 	{
 		var nombreDict = await _auroraSgaContext.vUsuariosConNombre
 			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
@@ -133,7 +134,7 @@ public class PaletController : ControllerBase
 			q = q.Where(p => paletIdsEnAlmacen.Contains(p.Id));
 		}
 
-		var lista = await q.OrderBy(p => p.Codigo)
+		var lista = await q
 			.Select(p => new PaletDto
 			{
 				CodigoEmpresa = p.CodigoEmpresa,
@@ -157,6 +158,12 @@ public class PaletController : ControllerBase
 			})
 			.ToListAsync();
 
+		// 🔷 NUEVO: Consultar bloqueos de calidad para palets
+		await ConsultarBloqueosCalidadPaletsAsync(lista, codigoEmpresa);
+
+		// 🔷 NUEVO: Consultar información de última actividad para palets
+		await ConsultarUltimaActividadPaletsAsync(lista, nombreDict);
+
 		foreach (var palet in lista)
 		{
 			if (palet.UsuarioAperturaId.HasValue && nombreDict.TryGetValue(palet.UsuarioAperturaId.Value, out var nombreA))
@@ -166,7 +173,181 @@ public class PaletController : ControllerBase
 				palet.UsuarioCierreNombre = nombreC;
 		}
 
-		return Ok(lista);
+		// 🔷 NUEVO: Ordenar por fecha de última actividad (más reciente primero)
+		var resultado = lista
+			.OrderByDescending(p => p.FechaUltimaActividad ?? p.FechaApertura) // Si no hay última actividad, usar fecha de apertura
+			.ThenByDescending(p => p.FechaApertura) // Segundo criterio: fecha de apertura
+			.ToList();
+
+		// 🔷 LÓGICA MEJORADA: Solo aplicar límite si NO hay filtros aplicados
+		bool hayFiltrosAplicados = !string.IsNullOrWhiteSpace(codigo) ||
+								   !string.IsNullOrWhiteSpace(estado) ||
+								   !string.IsNullOrWhiteSpace(tipoPaletCodigo) ||
+								   fechaApertura.HasValue ||
+								   fechaCierre.HasValue ||
+								   fechaDesde.HasValue ||
+								   fechaHasta.HasValue ||
+								   usuarioApertura.HasValue ||
+								   usuarioCierre.HasValue ||
+								   sinCierre ||
+								   !string.IsNullOrWhiteSpace(almacen);
+
+		// Si hay filtros aplicados, devolver todos los resultados filtrados
+		// Si no hay filtros, aplicar el límite por defecto
+		if (!hayFiltrosAplicados)
+		{
+			resultado = resultado.Take(limite).ToList();
+		}
+
+		return Ok(resultado);
+	}
+
+	// 🔷 NUEVO: Consultar bloqueos de calidad para palets (OPTIMIZADO)
+	private async Task ConsultarBloqueosCalidadPaletsAsync(List<PaletDto> palets, short codigoEmpresa)
+	{
+		try
+		{
+			if (!palets.Any())
+				return;
+
+			// 🚀 OPTIMIZACIÓN: Una sola consulta para obtener todas las líneas de todos los palets
+			var paletIds = palets.Select(p => p.Id).ToList();
+			var todasLasLineas = await _auroraSgaContext.PaletLineas
+				.Where(pl => paletIds.Contains(pl.PaletId))
+				.Select(pl => new { pl.PaletId, pl.CodigoArticulo })
+				.ToListAsync();
+
+			// Agrupar por palet
+			var lineasPorPalet = todasLasLineas
+				.GroupBy(l => l.PaletId)
+				.ToDictionary(g => g.Key, g => g.Select(x => x.CodigoArticulo).Distinct().ToList());
+
+			// Obtener todos los artículos únicos
+			var codigosArticulos = todasLasLineas
+				.Select(l => l.CodigoArticulo)
+				.Distinct()
+				.Where(c => !string.IsNullOrEmpty(c))
+				.ToList();
+
+			if (!codigosArticulos.Any())
+				return;
+
+			// 🚀 OPTIMIZACIÓN: Una sola consulta para todos los bloqueos
+			var bloqueosActivos = await _auroraSgaContext.BloqueosCalidad
+				.Where(b => b.CodigoEmpresa == codigoEmpresa && 
+						   codigosArticulos.Contains(b.CodigoArticulo) &&
+						   b.Bloqueado)
+				.GroupBy(b => b.CodigoArticulo)
+				.Select(g => new
+				{
+					CodigoArticulo = g.Key,
+					BloqueoMasReciente = g.OrderByDescending(b => b.FechaBloqueo).First()
+				})
+				.ToListAsync();
+
+			var bloqueosDict = bloqueosActivos.ToDictionary(
+				b => b.CodigoArticulo, 
+				b => b.BloqueoMasReciente);
+
+			// Aplicar información de bloqueos a cada palet
+			foreach (var palet in palets)
+			{
+				var lineas = lineasPorPalet.GetValueOrDefault(palet.Id, new List<string>());
+				var articulosBloqueados = lineas
+					.Where(codigo => !string.IsNullOrEmpty(codigo) && bloqueosDict.ContainsKey(codigo))
+					.ToHashSet();
+
+				// Actualizar propiedades del palet
+				palet.TieneArticulosBloqueadosCalidad = articulosBloqueados.Any();
+				palet.CantidadArticulosBloqueados = articulosBloqueados.Count;
+				
+				if (palet.TieneArticulosBloqueadosCalidad)
+				{
+					// Obtener información del bloqueo más reciente
+					var bloqueoMasReciente = articulosBloqueados
+						.Select(codigo => bloqueosDict.GetValueOrDefault(codigo))
+						.Where(b => b != null)
+						.OrderByDescending(b => b.FechaBloqueo)
+						.FirstOrDefault();
+						
+					if (bloqueoMasReciente != null)
+					{
+						palet.MotivoBloqueoCalidad = bloqueoMasReciente.ComentarioBloqueo;
+						palet.FechaBloqueoCalidad = bloqueoMasReciente.FechaBloqueo;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error consultando bloqueos de calidad para palets");
+			// No lanzar excepción para no interrumpir la carga de palets
+		}
+	}
+
+	// 🔷 NUEVO: Consultar información de última actividad para palets
+	private async Task ConsultarUltimaActividadPaletsAsync(List<PaletDto> palets, Dictionary<int, string> nombreDict)
+	{
+		try
+		{
+			if (!palets.Any())
+				return;
+
+			var paletIds = palets.Select(p => p.Id).ToList();
+
+			// Obtener traspasos completados para estos palets
+			var traspasosCompletados = await _auroraSgaContext.Traspasos
+				.Where(t => paletIds.Contains(t.PaletId) && 
+						   t.TipoTraspaso == "PALET" && 
+						   t.CodigoEstado == "COMPLETADO")
+				.OrderByDescending(t => t.FechaFinalizacion)
+				.ToListAsync();
+
+			// Agrupar por palet y obtener el más reciente
+			var ultimoTraspasoPorPalet = traspasosCompletados
+				.GroupBy(t => t.PaletId)
+				.ToDictionary(g => g.Key, g => g.First());
+
+			foreach (var palet in palets)
+			{
+				// Determinar la última actividad con lógica mejorada
+				var actividades = new List<(string tipo, DateTime fecha, int? usuarioId, string descripcion)>();
+
+				// Actividad de apertura
+				actividades.Add(("APERTURA", palet.FechaApertura, palet.UsuarioAperturaId, 
+					$"Palet abierto por {nombreDict.GetValueOrDefault(palet.UsuarioAperturaId ?? 0, "Usuario desconocido")}"));
+
+				// 🔷 LÓGICA MEJORADA: Si existe traspaso, siempre tiene prioridad sobre cierre
+				if (ultimoTraspasoPorPalet.TryGetValue(palet.Id, out var ultimoTraspaso))
+				{
+					// Si hay traspaso, esa es la última actividad (cerrar + ubicar = traspaso)
+					actividades.Add(("TRASPASO", ultimoTraspaso.FechaFinalizacion ?? DateTime.MinValue, ultimoTraspaso.UsuarioFinalizacionId,
+						$"Traspasado a {ultimoTraspaso.AlmacenDestino} - {ultimoTraspaso.UbicacionDestino} por {nombreDict.GetValueOrDefault(ultimoTraspaso.UsuarioFinalizacionId ?? 0, "Usuario desconocido")}"));
+				}
+				else if (palet.FechaCierre.HasValue)
+				{
+					// Solo mostrar cierre si NO hay traspaso (palet cerrado pero no ubicado)
+					actividades.Add(("CIERRE", palet.FechaCierre.Value, palet.UsuarioCierreId,
+						$"Palet cerrado por {nombreDict.GetValueOrDefault(palet.UsuarioCierreId ?? 0, "Usuario desconocido")}"));
+				}
+
+				// Obtener la actividad más reciente
+				if (actividades.Any())
+				{
+					var ultimaActividad = actividades.OrderByDescending(a => a.fecha).First();
+					palet.TipoUltimaActividad = ultimaActividad.tipo;
+					palet.FechaUltimaActividad = ultimaActividad.fecha;
+					palet.UsuarioUltimaActividadId = ultimaActividad.usuarioId;
+					palet.UsuarioUltimaActividadNombre = nombreDict.GetValueOrDefault(ultimaActividad.usuarioId ?? 0, "Usuario desconocido");
+					palet.DescripcionUltimaActividad = ultimaActividad.descripcion;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error consultando última actividad para palets");
+			// No lanzar excepción para no interrumpir la carga de palets
+		}
 	}
 	#endregion
 
@@ -505,7 +686,10 @@ public class PaletController : ControllerBase
 			Ubicacion = dto.Ubicacion,
 			UsuarioId = dto.UsuarioId,
 			Observaciones = dto.Observaciones,
-			FechaAgregado = DateTime.Now
+			FechaAgregado = DateTime.Now,
+			Procesada = false,
+			EsHeredada = false,
+			TraspasoId = null
 		};
 
 		_auroraSgaContext.TempPaletLineas.Add(linea);
@@ -591,24 +775,20 @@ public class PaletController : ControllerBase
 			})
 			.ToListAsync();
 
-		// Unir y agrupar solo duplicados exactos sumando cantidades
+		// Unir y agrupar consolidando cantidades (SOLO VISUAL - BD mantiene líneas individuales para trazabilidad)
+		// Agrupa por {Artículo, Lote, Fecha} sin ubicación para mostrar total consolidado al usuario
 		var lineas = definitivas.Concat(temporales)
 			.GroupBy(l => new
 			{
 				l.CodigoArticulo,
 				l.Lote,
-				l.Ubicacion,
-				l.CodigoAlmacen,
-				l.UnidadMedida,
 				l.FechaCaducidad,
-				l.Observaciones,
-				l.DescripcionArticulo,
-				l.UsuarioId,
-				l.FechaAgregado
+				l.DescripcionArticulo
 			})
 			.Select(g =>
 			{
 				var first = g.First();
+				var ultimaLinea = g.OrderByDescending(x => x.FechaAgregado).First();
 				return new LineaPaletDto
 				{
 					Id = first.Id,
@@ -616,20 +796,73 @@ public class PaletController : ControllerBase
 					CodigoEmpresa = first.CodigoEmpresa,
 					CodigoArticulo = first.CodigoArticulo,
 					DescripcionArticulo = first.DescripcionArticulo,
-					Cantidad = g.Sum(x => x.Cantidad),
+					Cantidad = g.Sum(x => x.Cantidad), // Suma TODAS las cantidades (múltiples orígenes)
 					UnidadMedida = first.UnidadMedida,
 					Lote = first.Lote,
 					FechaCaducidad = first.FechaCaducidad,
-					CodigoAlmacen = first.CodigoAlmacen,
-					Ubicacion = first.Ubicacion,
-					UsuarioId = first.UsuarioId,
-					FechaAgregado = first.FechaAgregado,
-					Observaciones = first.Observaciones
+					CodigoAlmacen = ultimaLinea.CodigoAlmacen, // Ubicación de la línea más reciente
+					Ubicacion = ultimaLinea.Ubicacion,
+					UsuarioId = ultimaLinea.UsuarioId,
+					FechaAgregado = ultimaLinea.FechaAgregado,
+					Observaciones = ultimaLinea.Observaciones
 				};
-			})
-			.ToList();
+		})
+		.ToList();
+
+		// 🔷 NUEVO: Consultar bloqueos de calidad para las líneas
+		await ConsultarBloqueosCalidadLineasAsync(lineas);
 
 		return Ok(lineas);
+	}
+
+	// 🔷 NUEVO: Consultar bloqueos de calidad para líneas de palet
+	private async Task ConsultarBloqueosCalidadLineasAsync(List<LineaPaletDto> lineas)
+	{
+		try
+		{
+			if (!lineas.Any())
+				return;
+
+			// Obtener códigos de artículos únicos
+			var codigosArticulos = lineas.Select(l => l.CodigoArticulo).Distinct().ToList();
+
+			// Consultar bloqueos activos
+			var bloqueosActivos = await _auroraSgaContext.BloqueosCalidad
+				.Where(b => codigosArticulos.Contains(b.CodigoArticulo) && b.Bloqueado)
+				.GroupBy(b => b.CodigoArticulo)
+				.Select(g => new
+				{
+					CodigoArticulo = g.Key,
+					BloqueoMasReciente = g.OrderByDescending(b => b.FechaBloqueo).First()
+				})
+				.ToListAsync();
+
+			var bloqueosDict = bloqueosActivos.ToDictionary(
+				b => b.CodigoArticulo, 
+				b => b.BloqueoMasReciente);
+
+			// Aplicar información de bloqueos a cada línea
+			foreach (var linea in lineas)
+			{
+				if (bloqueosDict.TryGetValue(linea.CodigoArticulo, out var bloqueo))
+				{
+					linea.IsBloqueadoCalidad = true;
+					linea.MotivoBloqueoCalidad = bloqueo.ComentarioBloqueo;
+					linea.FechaBloqueoCalidad = bloqueo.FechaBloqueo;
+				}
+				else
+				{
+					linea.IsBloqueadoCalidad = false;
+					linea.MotivoBloqueoCalidad = null;
+					linea.FechaBloqueoCalidad = null;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error consultando bloqueos de calidad para líneas de palet");
+			// No lanzar excepción para no interrumpir la carga de líneas
+		}
 	}
 	#endregion
 
@@ -712,10 +945,13 @@ public class PaletController : ControllerBase
 			}
 			else
 			{
-				// 🔷 CORREGIDO: Si NO hay línea correspondiente, buscar el palet origen y crear línea POSITIVA allí
-				// Esto devuelve el stock al palet origen en lugar de crear stock "suelto"
+				// 🔷 FIX: Solo crear líneas compensatorias si hay un traspaso asociado (movimiento entre palets)
+				// Para líneas normales (sin traspaso), solo eliminar sin crear compensaciones
 				
-				// Buscar el palet origen basado en el traspaso
+				if (linea.TraspasoId.HasValue)
+				{
+					// Solo crear compensación si hay traspaso (movimiento entre palets)
+					// Buscar el palet origen basado en el traspaso
 					var traspaso = await _auroraSgaContext.Traspasos.FindAsync(linea.TraspasoId);
 					Guid paletOrigenId = Guid.Empty;
 					
@@ -813,6 +1049,20 @@ public class PaletController : ControllerBase
 						});
 					}
 				}
+				else
+				{
+					// Para líneas normales (sin traspaso), solo eliminar sin crear compensaciones
+					// Esto evita el bug de crear líneas negativas innecesarias
+					_auroraSgaContext.LogPalet.Add(new LogPalet
+					{
+						PaletId = linea.PaletId,
+						Fecha = DateTime.Now,
+						IdUsuario = usuarioId,
+						Accion = "EliminarLineaNormal",
+						Detalle = $"Línea normal eliminada sin compensación (sin traspaso asociado). Artículo: {linea.CodigoArticulo}, Cantidad: {linea.Cantidad}"
+					});
+				}
+			}
 
 			// Eliminar la línea original
 			_auroraSgaContext.TempPaletLineas.Remove(linea);
@@ -1803,5 +2053,68 @@ public class PaletController : ControllerBase
 
 	//	return detalle;
 	//}
+
+	#region POST: Forzar vaciado de palet
+	[HttpPost("{id}/forzar-vaciado")]
+	public async Task<IActionResult> ForzarVaciadoPalet(Guid id, [FromBody] ForzarVaciadoPaletDto dto)
+	{
+		using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync();
+		try
+		{
+			// Buscar el palet
+			var palet = await _auroraSgaContext.Palets.FindAsync(id);
+			if (palet == null)
+				return NotFound("Palet no encontrado");
+
+			// Verificar que el palet no esté ya vaciado
+			if (string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
+				return BadRequest("El palet ya está vaciado");
+
+			// Actualizar el estado del palet
+			palet.Estado = "Vaciado";
+			palet.FechaVaciado = DateTime.Now;
+			palet.UsuarioVaciadoId = dto.UsuarioId;
+			
+			// Si no tiene fecha de cierre, establecerla
+			if (palet.FechaCierre == null)
+			{
+				palet.FechaCierre = DateTime.Now;
+				palet.UsuarioCierreId = dto.UsuarioId;
+			}
+
+
+			_auroraSgaContext.Palets.Update(palet);
+
+			// Registrar en el log
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
+				PaletId = palet.Id,
+				Fecha = DateTime.Now,
+				IdUsuario = dto.UsuarioId,
+				Accion = "ForzarVaciado",
+				Detalle = $"Palet vaciado forzadamente por usuario {dto.UsuarioId}"
+			});
+
+			await _auroraSgaContext.SaveChangesAsync();
+			await transaction.CommitAsync();
+
+			return Ok(new
+			{
+				message = $"Palet {palet.Codigo} vaciado correctamente",
+				paletId = palet.Id,
+				codigoPalet = palet.Codigo,
+				estado = palet.Estado,
+				fechaVaciado = palet.FechaVaciado,
+				usuarioVaciado = palet.UsuarioVaciadoId
+			});
+		}
+		catch (Exception ex)
+		{
+			await transaction.RollbackAsync();
+			_logger.LogError(ex, "Error al forzar vaciado del palet {PaletId}", id);
+			return StatusCode(500, $"Error al vaciar el palet: {ex.Message}");
+		}
+	}
+	#endregion
 
 }

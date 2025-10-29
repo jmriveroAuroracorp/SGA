@@ -195,6 +195,14 @@ namespace SGA_Desktop.ViewModels
                 Feedback = $"Cantidad a mover no válida. Disponible real: {StockSeleccionado.Disponible}";
                 return;
             }
+
+            // 🔷 OPTIMIZADO: Solo validar si el artículo está bloqueado por calidad
+            var validacion = await ValidarTraspasoAsync();
+            if (!validacion)
+            {
+                return; // La validación ya mostró el mensaje de error
+            }
+
             var resultado = await _traspasosService.CrearTraspasoArticuloAsync(new CrearTraspasoArticuloDto
             {
                 AlmacenOrigen = StockSeleccionado.CodigoAlmacen,
@@ -467,6 +475,45 @@ namespace SGA_Desktop.ViewModels
             
             // Restaurar el estado de expansión después de añadir los elementos
             RestaurarEstadosExpansion();
+        }
+
+        // 🔷 OPTIMIZADO: Validar traspaso solo cuando sea necesario
+        private async Task<bool> ValidarTraspasoAsync()
+        {
+            try
+            {
+                if (StockSeleccionado == null || string.IsNullOrWhiteSpace(UbicacionDestino))
+                    return true; // No validar si no hay datos suficientes
+
+                // 🔷 OPTIMIZACIÓN: Solo validar si el artículo está bloqueado por calidad
+                // Primero verificar localmente si hay bloqueo de calidad
+                if (StockSeleccionado.IsBloqueadoCalidad)
+                {
+                    var request = new ValidacionTraspasoRequest
+                    {
+                        CodigoArticulo = StockSeleccionado.CodigoArticulo,
+                        AlmacenDestino = AlmacenDestino,
+                        UbicacionDestino = UbicacionDestino,
+                        CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+                    };
+
+                    var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);
+                    
+                    if (!resultado.EsValido)
+                    {
+                        Feedback = $"❌ {resultado.MotivoBloqueo}";
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error validando traspaso: {ex.Message}");
+                // En caso de error, permitir traspaso para no bloquear operaciones
+                return true;
+            }
         }
 
         // 🔷 NUEVO: Método para manejar cambios en la selección del almacén

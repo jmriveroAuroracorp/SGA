@@ -723,6 +723,16 @@ namespace SGA_Desktop.ViewModels
 					continue;
 				}
 
+				// 🔷 NUEVO: Validar traspaso antes de ejecutarlo
+				var validacion = await ValidarTraspasoAsync(dto);
+				if (!validacion.EsValido)
+				{
+					dto.TieneError = true;
+					dto.ErrorMessage = validacion.MotivoBloqueo;
+					todoOk = false;
+					continue;
+				}
+
 
 				var crearDto = new CrearTraspasoArticuloDto
 				{
@@ -1046,6 +1056,35 @@ namespace SGA_Desktop.ViewModels
 		
 		// Forzar la actualización de la UI
 		OnPropertyChanged(nameof(ArticulosConStock));
+	}
+
+	// 🔷 NUEVO: Validar traspaso antes de ejecutarlo
+	private async Task<ValidacionTraspasoResult> ValidarTraspasoAsync(StockDisponibleDto dto)
+	{
+		try
+		{
+			// 🔷 CORREGIDO: "SIN UBICAR" (cadena vacía) SÍ debe ser validada
+			// Solo saltarse la validación si realmente no hay ubicación destino seleccionada
+			if (dto.UbicacionDestino == null)
+				return ValidacionTraspasoResult.Valido(); // No validar si no hay ubicación destino
+
+			var request = new ValidacionTraspasoRequest
+			{
+				CodigoArticulo = dto.CodigoArticulo,
+				AlmacenDestino = dto.AlmacenDestino,
+				UbicacionDestino = dto.UbicacionDestino,
+				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+			};
+
+			var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);
+			return resultado;
+		}
+		catch (Exception ex)
+		{
+			System.Diagnostics.Debug.WriteLine($"Error validando traspaso: {ex.Message}");
+			// En caso de error, permitir traspaso para no bloquear operaciones
+			return ValidacionTraspasoResult.Valido();
+		}
 	}
 
 }

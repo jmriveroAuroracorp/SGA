@@ -175,7 +175,15 @@ namespace SGA_Desktop.Services
 			var response = await _httpClient.GetAsync(url);
 			response.EnsureSuccessStatusCode();
 
-			return await response.Content.ReadFromJsonAsync<List<StockDisponibleDto>>() ?? new();
+			var resultado = await response.Content.ReadFromJsonAsync<List<StockDisponibleDto>>() ?? new();
+			
+			// 🔷 NUEVO: Inicializar CantidadAMoverTexto con el valor máximo disponible
+			foreach (var stock in resultado)
+			{
+				stock.CantidadAMoverTexto = stock.Disponible.ToString("F4");
+			}
+			
+			return resultado;
 		}
 
 

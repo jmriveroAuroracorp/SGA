@@ -5,7 +5,7 @@
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="Traspaso de Stock"
         Width="600"
-        Height="540"
+        Height="650"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -46,7 +46,35 @@
             <!-- Columna izquierda: Origen -->
             <StackPanel Grid.Row="0" Grid.Column="0" Grid.RowSpan="6" Margin="0,0,20,0">
                 <TextBlock Text="Código artículo:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-                <TextBlock Text="{Binding CodigoArticulo}" Margin="0,0,0,12"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="{Binding CodigoArticulo}"/>
+                    
+                    <!-- 🔷 NUEVO: Indicador de bloqueo por calidad -->
+                    <Border Background="#FF6B6B" 
+                            CornerRadius="3" 
+                            Padding="4,2" 
+                            Margin="8,0,0,0"
+                            Visibility="{Binding IsBloqueadoCalidad, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border.ToolTip>
+                            <ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="Artículo bloqueado por calidad" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding MotivoBloqueoCalidad}" 
+                                               Visibility="{Binding MotivoBloqueoCalidad, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding FechaBloqueoCalidad, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                                               Visibility="{Binding FechaBloqueoCalidad, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                </StackPanel>
+                            </ToolTip>
+                        </Border.ToolTip>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔒" FontSize="10" Margin="0,0,2,0"/>
+                            <TextBlock Text="BLOQUEADO" 
+                                       FontSize="8" 
+                                       FontWeight="Bold" 
+                                       Foreground="White"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
 
                 <TextBlock Text="Artículo:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBlock Text="{Binding ArticuloDescripcion}" Margin="0,0,0,12"/>
@@ -152,6 +180,46 @@
                       Style="{StaticResource EstiloComboBox}" 
                       Margin="0,0,0,12"
                       Visibility="{Binding MostrarSelectorPalets, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+            <!-- NUEVO: Opciones de paletización (visible solo si hay palets en destino) -->
+            <Border Background="#F8F9FA" 
+                    CornerRadius="6" 
+                    Padding="12" 
+                    Margin="0,0,0,12"
+                    Visibility="{Binding MostrarOpcionesPalet, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding MensajeOpcionesPalet}" 
+                               FontWeight="Bold" 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               Margin="0,0,0,12"
+                               TextWrapping="Wrap"/>
+                    
+                    <StackPanel Orientation="Vertical">
+                        <!-- Opción 1: Paletizar -->
+                        <RadioButton Content="📦 Agregar al palet existente" 
+                                     IsChecked="{Binding OpcionPaletizarSeleccionada, Mode=TwoWay}"
+                                     Command="{Binding SeleccionarOpcionPaletizarCommand}"
+                                     FontWeight="Bold"
+                                     Foreground="{StaticResource BrushPrincipal}"
+                                     Margin="0,0,0,8"/>
+                        
+                        <!-- Opción 2: Dejar suelto -->
+                        <RadioButton Content="🧱 Dejar material suelto en la ubicación" 
+                                     IsChecked="{Binding OpcionDejarSueltoSeleccionada, Mode=TwoWay}"
+                                     Command="{Binding SeleccionarOpcionDejarSueltoCommand}"
+                                     FontWeight="Bold"
+                                     Foreground="#28A745"
+                                     Margin="0,0,0,8"/>
+                        
+                        <!-- Opción 3: Cancelar -->
+                        <RadioButton Content="❌ Cancelar y buscar otra ubicación" 
+                                     IsChecked="{Binding OpcionCancelarSeleccionada, Mode=TwoWay}"
+                                     Command="{Binding SeleccionarOpcionCancelarCommand}"
+                                     FontWeight="Bold"
+                                     Foreground="#DC3545"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <TextBlock Text="Cantidad a traspasar:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
                 <TextBox Text="{Binding CantidadATraspasarTexto, UpdateSourceTrigger=LostFocus}"

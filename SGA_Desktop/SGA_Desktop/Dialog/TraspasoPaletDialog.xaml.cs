@@ -36,5 +36,17 @@ namespace SGA_Desktop.Dialog
 		{
 			this.Close();
 		}
+
+		private void ComboBox_PreviewKeyDown(object sender, KeyEventArgs e)
+		{
+			if (sender is ComboBox comboBox)
+			{
+				// Abrir el dropdown cuando se empiece a escribir
+				if (!comboBox.IsDropDownOpen)
+				{
+					comboBox.IsDropDownOpen = true;
+				}
+			}
+		}
 	}
 }

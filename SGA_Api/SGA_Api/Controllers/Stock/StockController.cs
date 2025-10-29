@@ -614,6 +614,38 @@ namespace SGA_Api.Controllers.Stock
 
     var datos = await q.ToListAsync();
     
+    // 🔷 NUEVO: Consultar bloqueos de calidad para todos los artículos
+    var codigosArticulosBloqueos = datos.Select(d => d.CodigoArticulo).Distinct().ToList();
+    var bloqueosCalidad = new Dictionary<string, object>();
+    
+    if (codigosArticulosBloqueos.Any())
+    {
+        // Consultar bloqueos activos
+        var bloqueosActivos = await _auroraSgaContext.BloqueosCalidad
+            .Where(b => b.CodigoEmpresa == codigoEmpresa && 
+                       codigosArticulosBloqueos.Contains(b.CodigoArticulo) &&
+                       b.Bloqueado)
+            .GroupBy(b => b.CodigoArticulo)
+            .Select(g => new
+            {
+                CodigoArticulo = g.Key,
+                BloqueoMasReciente = g.OrderByDescending(b => b.FechaBloqueo).First()
+            })
+            .ToListAsync();
+
+        foreach (var bloqueo in bloqueosActivos)
+        {
+            bloqueosCalidad[bloqueo.CodigoArticulo] = new
+            {
+                isBloqueado = true,
+                motivoBloqueo = bloqueo.BloqueoMasReciente.ComentarioBloqueo,
+                fechaBloqueo = bloqueo.BloqueoMasReciente.FechaBloqueo,
+                usuarioBloqueo = bloqueo.BloqueoMasReciente.UsuarioBloqueoId.ToString(),
+                idBloqueo = bloqueo.BloqueoMasReciente.Id
+            };
+        }
+    }
+    
     // 🔷 NUEVA LÓGICA: Crear opciones separadas para stock suelto y paletizado
     var resultado = new List<object>();
     
@@ -642,6 +674,7 @@ namespace SGA_Api.Controllers.Stock
         // 🔷 Opción 1: Stock suelto (si hay)
         if (stockSuelto > 0)
         {
+            var bloqueoInfo = bloqueosCalidad.GetValueOrDefault(item.CodigoArticulo);
             resultado.Add(new
             {
                 // Campos originales
@@ -659,13 +692,19 @@ namespace SGA_Api.Controllers.Stock
                 TipoStock = "Suelto",
                 PaletId = (Guid?)null,
                 CodigoPalet = (string?)null,
-                EstadoPalet = (string?)null
+                EstadoPalet = (string?)null,
+                
+                // 🔷 NUEVO: Información de bloqueo por calidad
+                IsBloqueadoCalidad = bloqueoInfo != null,
+                MotivoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("motivoBloqueo")?.GetValue(bloqueoInfo)?.ToString(),
+                FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?
             });
         }
 
         // 🔷 Opción 2: Stock paletizado (por cada palet)
         foreach (var palet in stockPaletizado)
         {
+            var bloqueoInfo = bloqueosCalidad.GetValueOrDefault(item.CodigoArticulo);
             resultado.Add(new
             {
                 // Campos originales
@@ -683,7 +722,12 @@ namespace SGA_Api.Controllers.Stock
                 TipoStock = "Paletizado",
                 PaletId = palet.PaletId,
                 CodigoPalet = palet.CodigoPalet,
-                EstadoPalet = palet.EstadoPalet
+                EstadoPalet = palet.EstadoPalet,
+                
+                // 🔷 NUEVO: Información de bloqueo por calidad
+                IsBloqueadoCalidad = bloqueoInfo != null,
+                MotivoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("motivoBloqueo")?.GetValue(bloqueoInfo)?.ToString(),
+                FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?
             });
         }
     }

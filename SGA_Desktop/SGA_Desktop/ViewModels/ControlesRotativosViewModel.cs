@@ -54,6 +54,10 @@ namespace SGA_Desktop.ViewModels
             
             OperariosDisponiblesView = CollectionViewSource.GetDefaultView(OperariosDisponibles);
             OperariosDisponiblesView.Filter = FiltraOperarioDisponibles;
+            
+            // Inicializar vista para autocompletado de almacenes
+            AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
+            AlmacenesComboView.Filter = FiltraAlmacenes;
 
             EstadosCombo = new ObservableCollection<string>
             {
@@ -90,6 +94,9 @@ namespace SGA_Desktop.ViewModels
         // Propiedades para autocompletado de operarios
         public ICollectionView OperariosComboView { get; private set; }
         public ICollectionView OperariosDisponiblesView { get; private set; }
+        
+        // Propiedades para autocompletado de almacenes
+        public ICollectionView AlmacenesComboView { get; private set; }
 
         [ObservableProperty]
         private AlmacenDto? almacenSeleccionadoCombo;
@@ -177,6 +184,13 @@ namespace SGA_Desktop.ViewModels
         
         [ObservableProperty]
         private bool isDropDownOpenDisponibles = false;
+        
+        // Propiedades para filtrado de almacenes
+        [ObservableProperty]
+        private string filtroAlmacenesTexto = "";
+        
+        [ObservableProperty]
+        private bool isDropDownOpenAlmacenes = false;
 
         public ICollectionView OrdenesConteoView { get; }
         #endregion
@@ -248,11 +262,13 @@ namespace SGA_Desktop.ViewModels
             if (OperariosCombo?.Any() == true)
             {
                 OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
+                FiltroOperariosCombo = ""; // Limpiar el filtro de texto
             }
             
             if (AlmacenesCombo?.Any() == true)
             {
                 AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+                FiltroAlmacenesTexto = ""; // Limpiar el filtro de texto
             }
             
             // Establecer las fechas al día de hoy en lugar de null
@@ -287,7 +303,7 @@ namespace SGA_Desktop.ViewModels
                 // Crear diccionario para mapear códigos a nombres de operarios
                 var operariosDict = OperariosDisponibles
                     .Where(op => op.Operario > 0) // Excluir "Sin asignar"
-                    .ToDictionary(op => op.Operario.ToString(), op => op.NombreCompleto);
+                    .ToDictionary(op => op.Operario.ToString(), op => op.NombreOperario ?? "");
 
                 OrdenesConteo.Clear();
                 foreach (var orden in ordenes)
@@ -297,6 +313,13 @@ namespace SGA_Desktop.ViewModels
                         operariosDict.TryGetValue(orden.CodigoOperario, out var nombreOperario))
                     {
                         orden.NombreOperario = nombreOperario;
+                    }
+                    
+                    // Mapear nombre del creador si existe
+                    if (!string.IsNullOrEmpty(orden.CreadoPorCodigo) && 
+                        operariosDict.TryGetValue(orden.CreadoPorCodigo, out var nombreCreador))
+                    {
+                        orden.NombreCreador = nombreCreador;
                     }
                     
                     OrdenesConteo.Add(orden);
@@ -326,30 +349,28 @@ namespace SGA_Desktop.ViewModels
         {
             if (orden == null) return;
 
-            var mensaje = $"ORDEN DE CONTEO\n\n" +
-                         $"Título: {orden.Titulo}\n" +
-                         $"GUID: {orden.GuidID}\n" +
-                         $"Estado: {orden.EstadoFormateado}\n" +
-                         $"Alcance: {orden.AlcanceFormateado}\n" +
-                         $"Prioridad: {orden.PrioridadTexto}\n\n" +
-                         $"INFORMACIÓN DE EMPRESA Y ALMACÉN\n" +
-                         $"Empresa: {orden.CodigoEmpresa}\n" +
-                         $"Almacén: {orden.CodigoAlmacen ?? "N/A"}\n" +
-                         $"Ubicación: {orden.CodigoUbicacion ?? "N/A"}\n" +
-                         $"Artículo: {orden.CodigoArticulo ?? "N/A"}\n\n" +
-                         $"ASIGNACIÓN Y FECHAS\n" +
-                         $"Operario: {orden.CodigoOperario ?? "Sin asignar"}\n" +
-                         $"Creado por: {orden.CreadoPorCodigo}\n" +
-                         $"Fecha Plan: {orden.FechaPlan?.ToString("dd/MM/yyyy") ?? "N/A"}\n" +
-                         $"Fecha Creación: {orden.FechaCreacion:dd/MM/yyyy HH:mm}\n" +
-                         $"Fecha Asignación: {orden.FechaAsignacion?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}\n" +
-                         $"Fecha Inicio: {orden.FechaInicio?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}\n" +
-                         $"Fecha Cierre: {orden.FechaCierre?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}\n\n" +
-                         $"COMENTARIOS\n" +
-                         $"{(string.IsNullOrEmpty(orden.Comentario) ? "Sin comentarios" : orden.Comentario)}";
+            try
+            {
+                // Crear y mostrar el nuevo diálogo personalizado
+                var dialog = new VerOrdenConteoDialog(orden);
+                
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                
+                if (mainWindow != null && mainWindow != dialog)
+                    dialog.Owner = mainWindow;
 
-            var dialog = new WarningDialog("Ver Orden de Conteo", mensaje, "\uE946"); // Ícono de información
-            ShowCenteredDialog(dialog);
+                // Mostrar el diálogo
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al mostrar el diálogo: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
         }
 
         [RelayCommand]
@@ -840,6 +861,15 @@ namespace SGA_Desktop.ViewModels
                 .IndexOf(operario.NombreOperario, FiltroOperariosDisponibles, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
         }
         
+        private bool FiltraAlmacenes(object obj)
+        {
+            if (obj is not AlmacenDto almacen) return false;
+            if (string.IsNullOrEmpty(FiltroAlmacenesTexto)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+        
         // Métodos para manejar cambios en filtros
         partial void OnFiltroOperariosComboChanged(string value)
         {
@@ -849,6 +879,11 @@ namespace SGA_Desktop.ViewModels
         partial void OnFiltroOperariosDisponiblesChanged(string value)
         {
             OperariosDisponiblesView?.Refresh();
+        }
+        
+        partial void OnFiltroAlmacenesTextoChanged(string value)
+        {
+            AlmacenesComboView?.Refresh();
         }
         
         // Comandos para controlar dropdown
@@ -878,6 +913,20 @@ namespace SGA_Desktop.ViewModels
         private void CerrarDropDownDisponibles()
         {
             IsDropDownOpenDisponibles = false;
+        }
+        
+        [RelayCommand]
+        private void AbrirDropDownAlmacenes()
+        {
+            // Limpiar el filtro para permitir escribir desde cero
+            FiltroAlmacenesTexto = "";
+            IsDropDownOpenAlmacenes = true;
+        }
+        
+        [RelayCommand]
+        private void CerrarDropDownAlmacenes()
+        {
+            IsDropDownOpenAlmacenes = false;
         }
 
         partial void OnIsCargandoChanged(bool value)

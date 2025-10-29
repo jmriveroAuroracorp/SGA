@@ -16,6 +16,12 @@ namespace SGA_Desktop.Models
         public string UsuarioCodigo { get; set; } = string.Empty;
         public DateTime Fecha { get; set; }
         public string? Comentario { get; set; }
+        public DateTime? FechaCaducidad { get; set; }
+        
+        // Campos para información de palet
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
+        public string? CodigoGS1 { get; set; }
         
         // Campos calculados
         public decimal? Diferencia => CantidadContada.HasValue && CantidadStock.HasValue 
@@ -43,5 +49,18 @@ namespace SGA_Desktop.Models
                 return Diferencia.Value > 0 ? $"+{Diferencia.Value}" : Diferencia.Value.ToString();
             }
         }
+
+        public string PaletDisplay
+        {
+            get
+            {
+                if (!PaletId.HasValue) return "Sin palet";
+                if (!string.IsNullOrEmpty(CodigoPalet)) return CodigoPalet;
+                if (!string.IsNullOrEmpty(CodigoGS1)) return $"GS1: {CodigoGS1}";
+                return $"ID: {PaletId}";
+            }
+        }
+
+        public bool TienePalet => PaletId.HasValue;
     }
 } 

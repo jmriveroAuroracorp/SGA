@@ -18,6 +18,7 @@
 		public string? Observaciones { get; set; }
 		public bool Procesada { get; set; } = false;
 		public Guid? TraspasoId { get; set; }
+		public Guid? ConteoId { get; set; }
 		public bool EsHeredada { get; set; } = false;
 
 		//navegacion

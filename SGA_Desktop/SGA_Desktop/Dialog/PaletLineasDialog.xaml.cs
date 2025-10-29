@@ -23,5 +23,24 @@ namespace SGA_Desktop.Dialog
 		{
 			InitializeComponent();
 		}
+
+		// 🔷 NUEVO: Métodos para mejorar la experiencia de usuario en TextBox
+		private void TextBox_GotFocus(object sender, RoutedEventArgs e)
+		{
+			if (sender is TextBox textBox)
+			{
+				textBox.SelectAll();
+			}
+		}
+
+		private void TextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+		{
+			if (sender is TextBox textBox && !textBox.IsKeyboardFocusWithin)
+			{
+				textBox.Focus();
+				textBox.SelectAll();
+				e.Handled = true;
+			}
+		}
 	}
 }

@@ -94,8 +94,8 @@ builder.Services.AddScoped<INotificacionesConteosService, NotificacionesConteosS
 builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
 builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
 builder.Services.AddScoped<ICalidadService, CalidadService>();
+builder.Services.AddScoped<IValidacionTraspasoService, ValidacionTraspasoService>();
 //builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
-//builder.Services.AddHostedService<SGA_Api.Services.ConteosAjustesBackgroundService>();
 
 // Configuración de SignalR
 builder.Services.AddSignalR();
@@ -107,7 +107,7 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod(); 
     });
 });
 var app = builder.Build();

@@ -337,6 +337,93 @@ namespace SGA_Api.Controllers.Calidad
         }
 
         /// <summary>
+        /// 🔷 NUEVO: Consulta bloqueos de calidad por lista de artículos
+        /// </summary>
+        /// <param name="request">Lista de códigos de artículos</param>
+        /// <returns>Diccionario con información de bloqueos</returns>
+        [HttpPost("bloqueos-por-articulos")]
+        [ProducesResponseType(typeof(Dictionary<string, object>), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 500)]
+        public async Task<IActionResult> ObtenerBloqueosPorArticulos([FromBody] BloqueosPorArticulosRequest request)
+        {
+            try
+            {
+                // 1. Validar parámetros
+                if (request.CodigoEmpresa <= 0)
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Parámetro inválido",
+                        Detail = "Código de empresa es obligatorio",
+                        Status = 400
+                    });
+
+                if (request.CodigosArticulos == null || !request.CodigosArticulos.Any())
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Parámetro inválido",
+                        Detail = "Lista de códigos de artículos es obligatoria",
+                        Status = 400
+                    });
+
+                // 2. Obtener usuario desde token
+                var usuarioId = await UsuarioHelper.ObtenerUsuarioDesdeTokenAsync(HttpContext, _auroraSgaContext);
+                if (!usuarioId.HasValue)
+                {
+                    return Unauthorized(new ProblemDetails
+                    {
+                        Title = "No autorizado",
+                        Detail = "Token de sesión inválido",
+                        Status = 401
+                    });
+                }
+
+                // 3. Verificar permiso 16 (Calidad)
+                if (!await _calidadService.VerificarPermisoCalidadAsync(usuarioId.Value))
+                {
+                    return Unauthorized(new ProblemDetails
+                    {
+                        Title = "Sin permisos",
+                        Detail = "No tiene permisos para acceder a Calidad",
+                        Status = 403
+                    });
+                }
+
+                // 4. Verificar que el usuario tiene acceso a la empresa
+                if (!await _calidadService.VerificarAccesoEmpresaAsync(usuarioId.Value, request.CodigoEmpresa))
+                {
+                    return Unauthorized(new ProblemDetails
+                    {
+                        Title = "Sin acceso",
+                        Detail = "No tiene acceso a esta empresa",
+                        Status = 403
+                    });
+                }
+
+                // 5. Consultar bloqueos
+                var bloqueos = await _calidadService.ObtenerBloqueosPorArticulosAsync(
+                    request.CodigoEmpresa, request.CodigosArticulos);
+
+                _logger.LogInformation("Consulta de bloqueos por artículos ejecutada para usuario {UsuarioId}, empresa {CodigoEmpresa}. Artículos: {Count}",
+                    usuarioId.Value, request.CodigoEmpresa, request.CodigosArticulos.Count);
+
+                return Ok(bloqueos);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en consulta de bloqueos por artículos para empresa {CodigoEmpresa}",
+                    request.CodigoEmpresa);
+
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al consultar los bloqueos",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
         /// Endpoint de prueba SIN autenticación
         /// </summary>
         [HttpGet("test-stock")]

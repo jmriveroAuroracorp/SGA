@@ -311,11 +311,29 @@ namespace SGA_Desktop.ViewModels
                 // Filtro por operario seleccionado
                 if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Aplicando filtro de operario: {OperarioSeleccionado.Operario}");
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] OperarioSeleccionado.Operario tipo: {OperarioSeleccionado.Operario.GetType()}");
+                    
+                    // Log de los usuarios que tienen los traspasos antes del filtro
+                    var usuariosEnTraspasos = traspasosFiltradosFinal.Select(t => t.UsuarioInicioId).Distinct().Take(10).ToList();
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Usuarios en traspasos (primeros 10): {string.Join(", ", usuariosEnTraspasos)}");
+                    
+                    // Log de tipos de datos para debugging
+                    if (traspasosFiltradosFinal.Any())
+                    {
+                        var primerTraspaso = traspasosFiltradosFinal.First();
+                        System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Primer traspaso UsuarioInicioId: {primerTraspaso.UsuarioInicioId} (tipo: {primerTraspaso.UsuarioInicioId.GetType()})");
+                    }
+                    
                     traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
                         t.UsuarioInicioId == OperarioSeleccionado.Operario
                     ).ToList();
                     
-                    System.Diagnostics.Debug.WriteLine($"Después del filtro de operario: {traspasosFiltradosFinal.Count} traspasos");
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Después del filtro de operario: {traspasosFiltradosFinal.Count} traspasos");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] No se aplica filtro de operario (OperarioSeleccionado: {OperarioSeleccionado?.Operario})");
                 }
 
                 // Resolver nombres de operarios

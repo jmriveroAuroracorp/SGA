@@ -22,6 +22,11 @@ namespace SGA_Desktop.Models
 		public int UsuarioId { get; set; }
 		public DateTime FechaAgregado { get; set; }
 		public string? Observaciones { get; set; }
+
+		// 🔷 NUEVO: Indicadores de bloqueo por calidad
+		public bool IsBloqueadoCalidad { get; set; }
+		public string? MotivoBloqueoCalidad { get; set; }
+		public DateTime? FechaBloqueoCalidad { get; set; }
 	}
 
 }

@@ -564,7 +564,7 @@ namespace SGA_Desktop.ViewModels
 			{
 				var dto = new LogImpresionDto
 				{
-					Usuario = SessionManager.Operario.ToString(),
+					Usuario = SessionManager.NombreOperario,
 					Dispositivo = Environment.MachineName,
 					IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
 					EtiquetaImpresa = 0,

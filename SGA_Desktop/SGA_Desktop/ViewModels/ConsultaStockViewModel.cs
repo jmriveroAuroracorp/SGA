@@ -35,6 +35,7 @@ namespace SGA_Desktop.ViewModels
 		private bool _busquedaPorDescripcion;
 		private AlmacenDto? almacenArticuloPorDefecto;
 		private AlmacenDto? almacenUbicacionPorDefecto;
+		private Dictionary<string, bool> _estadosExpansion = new();
 
 		#endregion
 
@@ -62,6 +63,9 @@ namespace SGA_Desktop.ViewModels
 			// ② Inicializa ambas colecciones
 			ResultadosStock = new ObservableCollection<StockDto>();
 			ResultadosStockPorUbicacion = new ObservableCollection<StockDto>();
+			
+			// 🔷 NUEVO: Inicializar colección de artículos agrupados
+			ArticulosConUbicaciones = new ObservableCollection<ArticuloStockGroup>();
 
 			ResultadosStockPorUbicacionView = CollectionViewSource.GetDefaultView(ResultadosStockPorUbicacion);
 			ResultadosStockPorUbicacionView.Filter = FiltroStock;
@@ -86,6 +90,9 @@ namespace SGA_Desktop.ViewModels
 	public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
 	public ObservableCollection<StockDto> StockFiltrado { get; } = new();
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
+	
+	// 🔷 NUEVO: Colección para artículos agrupados con expanders
+	public ObservableCollection<ArticuloStockGroup> ArticulosConUbicaciones { get; } = new();
 	
 	// Vista filtrable para almacenes combo
 	public ICollectionView AlmacenesComboView { get; private set; }
@@ -112,10 +119,10 @@ namespace SGA_Desktop.ViewModels
 		private string articuloMostrado;
 
 		[ObservableProperty]
-		private bool isArticleMode;
+		private bool isArticleMode = true;
 
 		[ObservableProperty]
-		private bool isLocationMode;
+		private bool isLocationMode = false;
 
 		[ObservableProperty]
 		private string filtroDescripcion;
@@ -136,7 +143,7 @@ namespace SGA_Desktop.ViewModels
 		private bool filtrarUbicacionesConStock = true;
 
 	[ObservableProperty]
-	private StockDto? articuloSeleccionadoParaImprimir;
+	private object? articuloSeleccionadoParaImprimir;
 	
 	// Propiedades para filtrado de almacenes (modo artículo)
 	[ObservableProperty]
@@ -246,9 +253,11 @@ namespace SGA_Desktop.ViewModels
 
 		/// <summary>
 		/// Determina si el botón de imprimir etiqueta debe estar habilitado
+		/// Solo se activa cuando se selecciona un card interno (ubicación específica), no el card padre
 		/// </summary>
 		public bool CanImprimirEtiqueta =>
-			ArticuloSeleccionadoParaImprimir != null;
+			ArticuloSeleccionadoParaImprimir != null &&
+			(ArticuloSeleccionadoParaImprimir is StockDto || ArticuloSeleccionadoParaImprimir is StockDisponibleDto);
 		
 		
 		#endregion
@@ -364,8 +373,16 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(ListViewVisibility));
 		}
 
-		partial void OnArticuloSeleccionadoParaImprimirChanged(StockDto? oldValue, StockDto? newValue)
+		partial void OnArticuloSeleccionadoParaImprimirChanged(object? oldValue, object? newValue)
 		{
+			// 🔷 NUEVO: Solo permitir selección de items internos (ubicaciones específicas)
+			// Si se selecciona un ArticuloStockGroup (card padre), limpiar la selección
+			if (newValue != null && newValue is ArticuloStockGroup)
+			{
+				ArticuloSeleccionadoParaImprimir = null;
+				return;
+			}
+			
 			OnPropertyChanged(nameof(CanImprimirEtiqueta));
 		}
 
@@ -399,6 +416,7 @@ namespace SGA_Desktop.ViewModels
 			ResultadosStock.Clear();
 			ResultadosStockPorUbicacion.Clear();
 			StockFiltrado.Clear();
+			ArticulosConUbicaciones.Clear();
 			ArticuloMostrado = string.Empty;
 			
 			// Notificar cambios
@@ -431,6 +449,7 @@ namespace SGA_Desktop.ViewModels
 				// Limpiar estados previos
 				ArticulosUnicos.Clear();
 				StockFiltrado.Clear();
+				ArticulosConUbicaciones.Clear();
 				ArticuloMostrado = string.Empty;
 				_busquedaPorDescripcion = false;
 				OnPropertyChanged(nameof(ArticuloMostrado));
@@ -472,35 +491,65 @@ namespace SGA_Desktop.ViewModels
 				foreach (var s in lista)
 					ResultadosStock.Add(s);
 
-				// 5) Agrupar en artículos únicos
-				var grupos = lista
+				// 5) 🔷 NUEVA LÓGICA: Consultar bloqueos de calidad
+				var codigosArticulos = lista.Select(s => s.CodigoArticulo).Distinct().ToList();
+				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
+					SessionManager.EmpresaSeleccionada!.Value, 
+					codigosArticulos);
+
+				// 6) 🔷 NUEVA LÓGICA: Agrupar en artículos con expanders (como TraspasosStockViewModel)
+				// Convertir StockDto a StockDisponibleDto para compatibilidad
+				var stockDisponible = lista.Select(s => 
+				{
+					var bloqueo = bloqueosCalidad.GetValueOrDefault(s.CodigoArticulo);
+					return new StockDisponibleDto
+					{
+						CodigoArticulo = s.CodigoArticulo,
+						DescripcionArticulo = s.DescripcionArticulo,
+						CodigoAlternativo = s.CodigoAlternativo,
+						CodigoAlmacen = s.CodigoAlmacen,
+						Ubicacion = s.Ubicacion,
+						Partida = s.Partida,
+						FechaCaducidad = s.FechaCaducidad,
+						Disponible = s.UnidadSaldo,
+						Reservado = 0, // No tenemos esta información en StockDto
+						UnidadSaldo = s.UnidadSaldo,
+						// 🔷 NUEVAS PROPIEDADES para compatibilidad
+						Palets = s.Palets ?? new List<PaletDetalleDto>(),
+						TotalArticuloGlobal = s.TotalArticuloGlobal,
+						TotalArticuloAlmacen = s.TotalArticuloAlmacen,
+						// 🔷 NUEVO: Información de bloqueo por calidad
+						IsBloqueadoCalidad = bloqueo?.IsBloqueado ?? false,
+						MotivoBloqueoCalidad = bloqueo?.MotivoBloqueo,
+						FechaBloqueoCalidad = bloqueo?.FechaBloqueo
+					};
+				}).ToList();
+				
+				var grupos = stockDisponible
 					.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
-					.Select(g => new ArticuloResumenDto
+					.Select(g => new ArticuloStockGroup
 					{
 						CodigoArticulo = g.Key.CodigoArticulo,
-						DescripcionArticulo = g.Key.DescripcionArticulo
+						DescripcionArticulo = g.Key.DescripcionArticulo,
+						Ubicaciones = new ObservableCollection<StockDisponibleDto>(
+							g.OrderBy(x => x.CodigoAlmacen)
+							  .ThenBy(x => x.Ubicacion)
+							  .ToList()),
+						// 🔷 NUEVO: Expandir automáticamente cuando se busca por código
+						IsExpanded = !_busquedaPorDescripcion
 					})
 					.OrderBy(a => a.CodigoArticulo)
 					.ToList();
 
-				// 6) Si no venimos de descripción o solo hay un artículo único,
-				//    mostramos detalle directo; si no, llenamos el combo
-				if (!_busquedaPorDescripcion || grupos.Count == 1)
-				{
-					// Mostrar directamente partidas/ubicaciones
-					ArticuloMostrado = grupos.FirstOrDefault()?.DescripcionArticulo ?? string.Empty;
+				// 6) 🔷 NUEVO: Siempre mostrar con expanders (como TraspasosStockViewModel)
+				ArticulosConUbicaciones.Clear();
+				foreach (var grupo in grupos)
+					ArticulosConUbicaciones.Add(grupo);
 
-					StockFiltrado.Clear();
-					foreach (var s in lista)
-						StockFiltrado.Add(s);
-				}
-				else
-				{
-					// Mostrar lista de artículos únicos en el ComboBox
-					ArticulosUnicos.Clear();
-					foreach (var art in grupos)
-						ArticulosUnicos.Add(art);
-				}
+				// 7) 🔷 NUEVO: También llenar StockFiltrado para compatibilidad
+				StockFiltrado.Clear();
+				foreach (var s in lista)
+					StockFiltrado.Add(s);
 
 				// 7) Actualizar visibilidades
 				OnPropertyChanged(nameof(ArticuloMostrado));
@@ -557,6 +606,24 @@ namespace SGA_Desktop.ViewModels
 					ubicacionParam
 				);
 
+
+				// 🔷 NUEVO: Consultar bloqueos de calidad para modo ubicación
+				var codigosArticulos = lista.Select(s => s.CodigoArticulo).Distinct().ToList();
+				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
+					SessionManager.EmpresaSeleccionada!.Value, 
+					codigosArticulos);
+
+				// Aplicar información de bloqueos a los resultados
+				foreach (var stock in lista)
+				{
+					var bloqueo = bloqueosCalidad.GetValueOrDefault(stock.CodigoArticulo);
+					if (bloqueo != null)
+					{
+						stock.IsBloqueadoCalidad = bloqueo.IsBloqueado;
+						stock.MotivoBloqueoCalidad = bloqueo.MotivoBloqueo;
+						stock.FechaBloqueoCalidad = bloqueo.FechaBloqueo;
+					}
+				}
 
 				// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
 				LlenarResultados(lista, filterByPermissions: true);
@@ -714,10 +781,47 @@ namespace SGA_Desktop.ViewModels
 		// ya está guardado en BD y en SessionManager por el propio diálogo
 		var seleccionada = dlgVm.ImpresoraSeleccionada;
 		
+		// Extraer propiedades según el tipo de objeto seleccionado
+		string codigoArticulo;
+		string descripcionArticulo;
+		string? codigoAlternativo;
+		DateTime? fechaCaducidad;
+		string? partida;
+
+		if (ArticuloSeleccionadoParaImprimir is StockDto stockDto)
+		{
+			// Modo ubicación: StockDto directo
+			codigoArticulo = stockDto.CodigoArticulo;
+			descripcionArticulo = stockDto.DescripcionArticulo ?? string.Empty;
+			codigoAlternativo = stockDto.CodigoAlternativo;
+			fechaCaducidad = stockDto.FechaCaducidad;
+			partida = stockDto.Partida;
+		}
+		else if (ArticuloSeleccionadoParaImprimir is StockDisponibleDto stockDisponible)
+		{
+			// Modo artículo: StockDisponibleDto directo (ubicación específica seleccionada)
+			codigoArticulo = stockDisponible.CodigoArticulo;
+			descripcionArticulo = stockDisponible.DescripcionArticulo ?? string.Empty;
+			codigoAlternativo = stockDisponible.CodigoAlternativo;
+			fechaCaducidad = stockDisponible.FechaCaducidad;
+			partida = stockDisponible.Partida;
+		}
+		else
+		{
+			var error = new WarningDialog(
+				"Error de impresión",
+				"Tipo de objeto no válido para la impresión.",
+				"\uE814"
+			)
+			{ Owner = Application.Current.MainWindow };
+			error.ShowDialog();
+			return;
+		}
+
 		// Obtener alérgenos del artículo
 		var alergenos = await _stockService.ObtenerAlergenosArticuloAsync(
 			SessionManager.EmpresaSeleccionada!.Value,
-			ArticuloSeleccionadoParaImprimir.CodigoArticulo);
+			codigoArticulo);
 
 		// Construir el DTO para impresión
 		var dto = new LogImpresionDto
@@ -727,11 +831,11 @@ namespace SGA_Desktop.ViewModels
 			IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
 			EtiquetaImpresa = 0,
 			Copias = dlgVm.NumeroCopias,
-			CodigoArticulo = ArticuloSeleccionadoParaImprimir.CodigoArticulo,
-			DescripcionArticulo = ArticuloSeleccionadoParaImprimir.DescripcionArticulo ?? string.Empty,
-			CodigoAlternativo = ArticuloSeleccionadoParaImprimir.CodigoAlternativo,
-			FechaCaducidad = ArticuloSeleccionadoParaImprimir.FechaCaducidad,
-			Partida = ArticuloSeleccionadoParaImprimir.Partida,
+			CodigoArticulo = codigoArticulo,
+			DescripcionArticulo = descripcionArticulo,
+			CodigoAlternativo = codigoAlternativo,
+			FechaCaducidad = fechaCaducidad,
+			Partida = partida,
 			Alergenos = alergenos,
 			PathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\MMPP_MES.nlbl",
 			TipoEtiqueta = 1, // Etiqueta de stock
@@ -806,6 +910,9 @@ namespace SGA_Desktop.ViewModels
 		{
 			try
 			{
+				// Guardar el estado de expansión antes de refrescar
+				GuardarEstadosExpansion();
+				
 				// Ejecutar la búsqueda actual según el modo activo
 				if (IsArticleMode)
 				{
@@ -815,6 +922,11 @@ namespace SGA_Desktop.ViewModels
 				{
 					await BuscarPorUbicacionAsync();
 				}
+				
+				// Pequeño delay para asegurar que la UI se actualice
+				await Task.Delay(50);
+				// Restaurar el estado de expansión después de refrescar
+				RestaurarEstadosExpansion();
 			}
 			catch (Exception ex)
 			{
@@ -1216,6 +1328,32 @@ namespace SGA_Desktop.ViewModels
 	{
 		FiltroUbicacion = "";
 		FiltroUbicacionesUbicacion = ""; // Limpiar también el filtro de texto
+	}
+	
+	// 🔷 NUEVO: Métodos para manejar estados de expansión (como TraspasosStockViewModel)
+	private void GuardarEstadosExpansion()
+	{
+		_estadosExpansion.Clear();
+		foreach (var grupo in ArticulosConUbicaciones)
+		{
+			var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
+			_estadosExpansion[clave] = grupo.IsExpanded;
+		}
+	}
+
+	private void RestaurarEstadosExpansion()
+	{
+		foreach (var grupo in ArticulosConUbicaciones)
+		{
+			var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
+			if (_estadosExpansion.ContainsKey(clave))
+			{
+				grupo.IsExpanded = _estadosExpansion[clave];
+			}
+		}
+		
+		// Forzar la actualización de la UI
+		OnPropertyChanged(nameof(ArticulosConUbicaciones));
 	}
 }
 }

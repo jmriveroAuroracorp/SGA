@@ -59,11 +59,6 @@ namespace SGA_Desktop.Models
 
 		public List<PaletDetalleDto> Palets { get; set; } = new();
 
-		// 🔹 nueva propiedad
-		//public decimal TotalArticuloGlobal { get; set; }
-
-		//public decimal TotalArticuloAlmacen { get; set; }
-
 		public event PropertyChangedEventHandler? PropertyChanged;
 
 		protected void OnPropertyChanged([CallerMemberName] string? name = null)
@@ -82,6 +77,16 @@ namespace SGA_Desktop.Models
 			get => _totalArticuloAlmacen;
 			set { _totalArticuloAlmacen = value; OnPropertyChanged(); }
 		}
+
+		// 🔷 NUEVO: Indicador de bloqueo por calidad
+		[JsonPropertyName("isBloqueadoCalidad")]
+		public bool IsBloqueadoCalidad { get; set; }
+
+		[JsonPropertyName("motivoBloqueoCalidad")]
+		public string? MotivoBloqueoCalidad { get; set; }
+
+		[JsonPropertyName("fechaBloqueoCalidad")]
+		public DateTime? FechaBloqueoCalidad { get; set; }
 
 	}
 }

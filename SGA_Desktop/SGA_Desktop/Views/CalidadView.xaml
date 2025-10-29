@@ -57,8 +57,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
@@ -71,7 +69,8 @@
                                    Margin="0,0,0,8"/>
                     <TextBox Text="{Binding CodigoArticulo}" 
                                  Style="{StaticResource EstiloCajaTexto}"
-                                 Height="35"/>
+                                 Height="35"
+                                 KeyDown="TextBox_KeyDown"/>
                 </StackPanel>
                 
                     <StackPanel Grid.Column="1" Margin="20,0">
@@ -83,34 +82,11 @@
                                    Margin="0,0,0,8"/>
                     <TextBox Text="{Binding LotePartida}" 
                                  Style="{StaticResource EstiloCajaTexto}"
-                                 Height="35"/>
+                                 Height="35"
+                                 KeyDown="TextBox_KeyDown"/>
                 </StackPanel>
                 
-                    <StackPanel Grid.Column="2" Margin="20,0">
-                    <TextBlock Text="Almacén (Opcional)" 
-                               FontFamily="{StaticResource FuentePrincipal}"
-                                   FontSize="13"
-                               FontWeight="Bold"
-                                   Foreground="{StaticResource BrushPrincipal}"
-                                   Margin="0,0,0,8"/>
-                    <TextBox Text="{Binding CodigoAlmacen}" 
-                                 Style="{StaticResource EstiloCajaTexto}"
-                                 Height="35"/>
-                </StackPanel>
-                
-                    <StackPanel Grid.Column="3" Margin="20,0">
-                    <TextBlock Text="Ubicación (Opcional)" 
-                               FontFamily="{StaticResource FuentePrincipal}"
-                                   FontSize="13"
-                               FontWeight="Bold"
-                                   Foreground="{StaticResource BrushPrincipal}"
-                                   Margin="0,0,0,8"/>
-                    <TextBox Text="{Binding CodigoUbicacion}" 
-                                 Style="{StaticResource EstiloCajaTexto}"
-                                 Height="35"/>
-                </StackPanel>
-                
-                    <StackPanel Grid.Column="4" Margin="25,0" VerticalAlignment="Bottom">
+                    <StackPanel Grid.Column="2" Margin="25,0" VerticalAlignment="Bottom">
                         <Button Content="🔍 Buscar Stock" 
                             Command="{Binding BuscarStockCommand}"
                             Style="{StaticResource EstiloBotonPrincipal}"
@@ -225,105 +201,52 @@
                                         </Style>
                                     </Border.Style>
 
-                                    <Grid Margin="12,10">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
+                                    <Grid Margin="15,15">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- Header con código y descripción -->
-                                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                        <!-- Información consolidada en una fila -->
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Código del artículo -->
                                             <Border Background="{StaticResource BrushPrincipal}" 
-                                                    CornerRadius="4" 
-                                                    Padding="8,4" 
-                                                    Margin="0,0,12,0">
-                                            <TextBlock Text="{Binding CodigoArticulo}"
-                                                       FontWeight="Bold"
-                                                           FontSize="14"
+                                                    CornerRadius="6" 
+                                                    Padding="12,8" 
+                                                    Margin="0,0,15,0">
+                                                <TextBlock Text="{Binding CodigoArticulo}"
+                                                           FontWeight="Bold"
+                                                           FontSize="16"
                                                            Foreground="White"/>
                                             </Border>
+                                            
+                                            <!-- Descripción del artículo -->
                                             <TextBlock Text="{Binding DescripcionArticulo}"
-                                                       FontSize="13"
+                                                       FontSize="14"
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource BrushPrincipal}"
                                                        VerticalAlignment="Center"
-                                                       MaxWidth="280"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-
-                                        <!-- Información de ubicación y lote -->
-                                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8" 
-                                                    ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                                       MaxWidth="250"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="0,0,15,0"/>
+                                            
+                                            <!-- Lote -->
                                             <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3" 
-                                                    Margin="0,0,8,0">
+                                                    CornerRadius="5" 
+                                                    Padding="10,6" 
+                                                    Margin="0,0,15,0">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏢" FontSize="11" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Almacen}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3" 
-                                                    Margin="0,0,8,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📍" FontSize="11" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Ubicacion}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3" 
-                                                    Margin="0,0,8,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏷️" FontSize="11" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="🏷️" FontSize="14" Margin="0,0,6,0"/>
                                                     <TextBlock Text="{Binding LotePartida}" 
                                                                FontWeight="Bold" 
-                                                               FontSize="11"
+                                                               FontSize="13"
                                                                Foreground="{StaticResource BrushPrincipal}"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📅" FontSize="11" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-
-                                        <!-- Información de cantidad y estado -->
-                                        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
-                                            <Border Background="#F0F6FF" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3" 
-                                                    Margin="0,0,8,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📦" FontSize="11" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding CantidadDisponible, StringFormat=F4}" 
-                                                       FontWeight="Bold" 
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border CornerRadius="3" 
-                                                    Padding="6,3">
+                                            
+                                            <!-- Estado -->
+                                            <Border CornerRadius="5" 
+                                                    Padding="10,6">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Background" Value="#FFE6E6"/>
@@ -334,17 +257,14 @@
                                                             <DataTrigger Binding="{Binding Estado}" Value="Bloqueado">
                                                                 <Setter Property="Background" Value="#FFE6E6"/>
                                                             </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="Collapsed">
-                                                                <Setter Property="Background" Value="#FFF4E6"/>
-                                                            </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="⚡" FontSize="11" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="⚡" FontSize="14" Margin="0,0,6,0"/>
                                                     <TextBlock Text="{Binding Estado}" 
                                                                FontWeight="Bold" 
-                                                               FontSize="11">
+                                                               FontSize="13">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
                                                                 <Setter Property="Foreground" Value="#CC0000"/>
@@ -355,19 +275,16 @@
                                                                     <DataTrigger Binding="{Binding Estado}" Value="Bloqueado">
                                                                         <Setter Property="Foreground" Value="#CC0000"/>
                                                                     </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Estado}" Value="Collapsed">
-                                                                        <Setter Property="Foreground" Value="#CC6600"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
 
                                         <!-- Cantidad destacada a la derecha -->
-                                        <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
+                                        <Border Grid.Column="1"
                                                 Background="{StaticResource BrushSecundario1}"
                                                 CornerRadius="6"
                                                 Padding="12,8"
@@ -438,7 +355,8 @@
                                          AcceptsReturn="True"
                                              Style="{StaticResource EstiloCajaTexto}"
                                              FontSize="13"
-                                             Padding="10"/>
+                                             Padding="10"
+                                             KeyDown="ComentarioTextBox_KeyDown"/>
                                     <TextBlock Text="💡 Especifica el motivo del bloqueo para control de calidad"
                                                FontFamily="{StaticResource FuentePrincipal}"
                                                FontSize="10"
@@ -508,7 +426,6 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -523,7 +440,8 @@
                                                Margin="0,0,0,5"/>
                                     <TextBox Text="{Binding FiltroCodigoArticulo, UpdateSourceTrigger=PropertyChanged}" 
                                              Style="{StaticResource EstiloCajaTexto}"
-                                             Height="35"/>
+                                             Height="35"
+                                             KeyDown="FiltroTextBox_KeyDown"/>
                                 </StackPanel>
 
                                 <!-- Lote/Partida -->
@@ -535,23 +453,12 @@
                                                Margin="0,0,0,5"/>
                                     <TextBox Text="{Binding FiltroLotePartida, UpdateSourceTrigger=PropertyChanged}" 
                                              Style="{StaticResource EstiloCajaTexto}"
-                                             Height="35"/>
-                                </StackPanel>
-
-                                <!-- Almacén -->
-                                <StackPanel Grid.Column="2" Margin="0,0,15,0">
-                                    <TextBlock Text="Almacén (Opcional)" 
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="12"
-                                               Foreground="{StaticResource BrushGrisOscuro}"
-                                               Margin="0,0,0,5"/>
-                                    <TextBox Text="{Binding FiltroAlmacen, UpdateSourceTrigger=PropertyChanged}" 
-                                             Style="{StaticResource EstiloCajaTexto}"
-                                             Height="35"/>
+                                             Height="35"
+                                             KeyDown="FiltroTextBox_KeyDown"/>
                                 </StackPanel>
 
                                 <!-- Checkbox Solo Bloqueados -->
-                                <StackPanel Grid.Column="3" Margin="0,20,15,0" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="2" Margin="0,20,15,0" VerticalAlignment="Center">
                                     <CheckBox Content="Solo Bloqueados" 
                                               IsChecked="{Binding MostrarSoloBloqueados}" 
                                               FontFamily="{StaticResource FuentePrincipal}"
@@ -560,7 +467,7 @@
                                 </StackPanel>
 
                                 <!-- Botones -->
-                                <StackPanel Grid.Column="4" VerticalAlignment="Bottom" Margin="0,0,10,0">
+                                <StackPanel Grid.Column="3" VerticalAlignment="Bottom" Margin="0,0,10,0">
                                     <Button Content="🔍 Filtrar" 
                                             Command="{Binding FiltrarBloqueosCommand}" 
                                             Style="{StaticResource EstiloBotonPrincipal}"
@@ -575,7 +482,7 @@
                                 </StackPanel>
 
                                 <!-- Botón Actualizar -->
-                                <StackPanel Grid.Column="5" VerticalAlignment="Bottom">
+                                <StackPanel Grid.Column="4" VerticalAlignment="Bottom">
                                     <Button Content="🔄 Actualizar" 
                                             Command="{Binding CargarBloqueosCommand}" 
                                             Style="{StaticResource EstiloBotonPrincipal}"
@@ -631,107 +538,79 @@
                                         </Style>
                                     </Border.Style>
 
-                                    <Grid Margin="10,8">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
+                                    <Grid Margin="15,15">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- Header con código y descripción -->
-                                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6">
+                                        <!-- Información consolidada en una fila -->
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Código del artículo -->
                                             <Border Background="{StaticResource BrushPrincipal}" 
-                                                    CornerRadius="3" 
-                                                    Padding="6,3" 
-                                                    Margin="0,0,8,0">
-                                            <TextBlock Text="{Binding CodigoArticulo}"
-                                                       FontWeight="Bold"
-                                                           FontSize="13"
+                                                    CornerRadius="6" 
+                                                    Padding="12,8" 
+                                                    Margin="0,0,15,0">
+                                                <TextBlock Text="{Binding CodigoArticulo}"
+                                                           FontWeight="Bold"
+                                                           FontSize="16"
                                                            Foreground="White"/>
                                             </Border>
+                                            
+                                            <!-- Descripción del artículo -->
                                             <TextBlock Text="{Binding DescripcionArticulo}"
-                                                       FontSize="12"
+                                                       FontSize="14"
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource BrushPrincipal}"
                                                        VerticalAlignment="Center"
-                                                       MaxWidth="250"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-
-                                        <!-- Información de ubicación -->
-                                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6"
-                                                    ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                                       MaxWidth="200"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="0,0,15,0"/>
+                                            
+                                            <!-- Lote -->
                                             <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="5,2" 
-                                                    Margin="0,0,6,0">
+                                                    CornerRadius="5" 
+                                                    Padding="10,6" 
+                                                    Margin="0,0,15,0">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏷️" FontSize="10" Margin="0,0,3,0"/>
+                                                    <TextBlock Text="🏷️" FontSize="14" Margin="0,0,6,0"/>
                                                     <TextBlock Text="{Binding LotePartida}" 
                                                                FontWeight="Bold" 
-                                                               FontSize="10"
+                                                               FontSize="13"
                                                                Foreground="{StaticResource BrushPrincipal}"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="5,2" 
-                                                    Margin="0,0,6,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏢" FontSize="10" Margin="0,0,3,0"/>
-                                                    <TextBlock Text="{Binding Almacen}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="10"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="3" 
-                                                    Padding="5,2">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📍" FontSize="10" Margin="0,0,3,0"/>
-                                                    <TextBlock Text="{Binding Ubicacion}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="10"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-
-                                        <!-- Información de bloqueo -->
-                                        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,0">
+                                            
+                                            <!-- Usuario que bloqueó -->
                                             <Border Background="#F0F6FF" 
-                                                    CornerRadius="4" 
-                                                    Padding="8,4" 
-                                                    Margin="0,0,10,0">
+                                                    CornerRadius="5" 
+                                                    Padding="10,6" 
+                                                    Margin="0,0,15,0">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="👤" FontSize="13" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="👤" FontSize="14" Margin="0,0,6,0"/>
                                                     <TextBlock Text="{Binding UsuarioBloqueo, Converter={StaticResource OperarioIdANombreConverter}}" 
                                                                FontWeight="Bold" 
                                                                FontSize="13"
                                                                Foreground="{StaticResource BrushPrincipal}"/>
                                                 </StackPanel>
                                             </Border>
+                                            
+                                            <!-- Fecha de bloqueo -->
                                             <Border Background="#F0F6FF" 
-                                                    CornerRadius="4" 
-                                                    Padding="8,4">
+                                                    CornerRadius="5" 
+                                                    Padding="10,6">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🕐" FontSize="13" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="🕐" FontSize="14" Margin="0,0,6,0"/>
                                                     <TextBlock Text="{Binding FechaBloqueo, StringFormat=dd/MM/yyyy HH:mm}" 
-                                                       FontWeight="Bold" 
+                                                               FontWeight="Bold" 
                                                                FontSize="13"
                                                                Foreground="{StaticResource BrushPrincipal}"/>
-                                        </StackPanel>
+                                                </StackPanel>
                                             </Border>
                                         </StackPanel>
 
-
                                         <!-- Estado destacado a la derecha -->
-                                        <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
+                                        <Border Grid.Column="1"
                                                 CornerRadius="6"
                                                 Padding="10,6"
                                                 HorizontalAlignment="Right"
@@ -821,7 +700,8 @@
                                          AcceptsReturn="True"
                                              Style="{StaticResource EstiloCajaTexto}"
                                              FontSize="13"
-                                             Padding="10"/>
+                                             Padding="10"
+                                             KeyDown="DesbloquearTextBox_KeyDown"/>
                                     <TextBlock Text="💡 Explica por qué se libera este stock del control de calidad"
                                                FontFamily="{StaticResource FuentePrincipal}"
                                                FontSize="10"

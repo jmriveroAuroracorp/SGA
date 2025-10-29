@@ -225,7 +225,7 @@ namespace SGA_Desktop.ViewModels
 							origen = "MainWindow",
 							descripcion = "Sesión Cerrada",
 							detalle = $"El usuario cerró sesión.",
-							idDispositivo = Environment.MachineName
+							idDispositivo = $"{Environment.MachineName}_{SessionManager.UsuarioActual?.operario ?? 0}"
 						};
 
 						var json = Newtonsoft.Json.JsonConvert.SerializeObject(evento);

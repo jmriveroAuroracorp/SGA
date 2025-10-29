@@ -193,13 +193,23 @@
                                    Margin="0,2,0,0"/>
                                         </StackPanel>
 
-                                        <!-- Tipo de ubicación -->
-                                        <TextBlock Text="{Binding TipoUbicacionDescripcion}"
-                               DockPanel.Dock="Left"
-                               VerticalAlignment="Center"
-                               FontFamily="{StaticResource FuentePrincipal}"
-                               FontStyle="Italic"
-                               Margin="10,0,0,0"/>
+                                        <!-- Tipo de ubicación como badge (solo si tiene valor) -->
+                                        <Border DockPanel.Dock="Left"
+                                        Background="#E3F2FD"
+                                        BorderBrush="#2196F3"
+                                        BorderThickness="1"
+                                        CornerRadius="12"
+                                        Padding="8,4"
+                                        Margin="10,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding TipoUbicacionDescripcion, Converter={StaticResource StringToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding TipoUbicacionDescripcion}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1976D2"
+                                               HorizontalAlignment="Center"/>
+                                        </Border>
                                     </DockPanel>
                                 </Expander.Header>
 

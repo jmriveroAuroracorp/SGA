@@ -151,7 +151,7 @@ $"Posición: {ubicacion.Posicion}";
 		{
 			var dto = new LogImpresionDto
 			{
-				Usuario = SessionManager.Operario.ToString(),
+				Usuario = SessionManager.NombreOperario,
 				Dispositivo = System.Environment.MachineName,
 				IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
 				EtiquetaImpresa = 0,
@@ -307,7 +307,7 @@ $"Posición: {ubicacion.Posicion}";
 			{
 				var dto = new LogImpresionDto
 				{
-					Usuario = SessionManager.Operario.ToString(),
+					Usuario = SessionManager.NombreOperario,
 					Dispositivo = Environment.MachineName,
 					IdImpresora = dlgVm.ImpresoraSeleccionada?.Id ?? 0,
 					EtiquetaImpresa = 0,

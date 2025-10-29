@@ -262,7 +262,15 @@ namespace SGA_Desktop.Services
 						TipoStock = jObject["tipoStock"]?.ToString() ?? "Suelto",
 						PaletId = jObject["paletId"]?.ToObject<Guid?>(),
 						CodigoPalet = jObject["codigoPalet"]?.ToString(),
-						EstadoPalet = jObject["estadoPalet"]?.ToString()
+						EstadoPalet = jObject["estadoPalet"]?.ToString(),
+						
+						// 🔷 NUEVO: Información de bloqueo por calidad
+						IsBloqueadoCalidad = jObject["isBloqueadoCalidad"]?.ToObject<bool>() ?? false,
+						MotivoBloqueoCalidad = jObject["motivoBloqueoCalidad"]?.ToString(),
+						FechaBloqueoCalidad = jObject["fechaBloqueoCalidad"]?.ToObject<DateTime?>(),
+						
+						// 🔷 NUEVO: Inicializar CantidadAMoverTexto con el valor máximo disponible
+						CantidadAMoverTexto = (jObject["disponible"]?.ToObject<decimal>() ?? 0).ToString("F4")
 					};
 					resultado.Add(stock);
 				}
@@ -301,6 +309,42 @@ namespace SGA_Desktop.Services
 			{
 				System.Diagnostics.Debug.WriteLine($"Error obteniendo precio medio: {ex.Message}");
 				return 0m;
+			}
+		}
+
+		/// <summary>
+		/// 🔷 NUEVO: Consulta bloqueos de calidad para una lista de artículos
+		/// </summary>
+		public async Task<Dictionary<string, BloqueoCalidadInfo>> ObtenerBloqueosCalidadAsync(
+			int codigoEmpresa, 
+			List<string> codigosArticulos)
+		{
+			if (codigosArticulos == null || !codigosArticulos.Any())
+				return new Dictionary<string, BloqueoCalidadInfo>();
+
+			try
+			{
+				var request = new
+				{
+					codigoEmpresa = codigoEmpresa,
+					codigosArticulos = codigosArticulos
+				};
+
+				var response = await _httpClient.PostAsJsonAsync("Calidad/bloqueos-por-articulos", request);
+				
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					var bloqueos = JsonConvert.DeserializeObject<Dictionary<string, BloqueoCalidadInfo>>(json);
+					return bloqueos ?? new Dictionary<string, BloqueoCalidadInfo>();
+				}
+				
+				return new Dictionary<string, BloqueoCalidadInfo>();
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"Error obteniendo bloqueos de calidad: {ex.Message}");
+				return new Dictionary<string, BloqueoCalidadInfo>();
 			}
 		}
 	}

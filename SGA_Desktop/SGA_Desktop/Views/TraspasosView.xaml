@@ -25,6 +25,7 @@
             <helpers:EstaCerradoConverter x:Key="EstaCerradoConverter"/>
             <helpers:EstadoColorConverter x:Key="EstadoColorConverter"/>
             <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <helpers:UbicacionConverter x:Key="UbicacionConverter"/>
         </ResourceDictionary>
     </Page.Resources>
 
@@ -127,7 +128,7 @@
                             <DataTemplate>
                                 <Border Style="{StaticResource EstiloTarjeta}"
                                         Width="380"
-                                        Height="320"
+                                        Height="380"
                                         Margin="8"
                                         Cursor="Hand">
                                     <Grid MouseLeftButtonDown="PaletCard_MouseLeftButtonDown" Tag="{Binding}">
@@ -159,6 +160,38 @@
                                                                FontSize="14"
                                                                VerticalAlignment="Center"/>
                                                 </StackPanel>
+                                                
+                                                <!-- 🔷 NUEVO: Badge de bloqueo por calidad -->
+                                                <Border Background="#FF6B6B" 
+                                                        CornerRadius="3" 
+                                                        Padding="6,3" 
+                                                        Margin="0,4,0,0"
+                                                        HorizontalAlignment="Left"
+                                                        Visibility="{Binding TieneArticulosBloqueadosCalidad, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Border.ToolTip>
+                                                        <ToolTip>
+                                                            <StackPanel>
+                                                                <TextBlock Text="Palet contiene artículos bloqueados por calidad" FontWeight="Bold"/>
+                                                                <TextBlock Text="{Binding CantidadArticulosBloqueados, StringFormat='Artículos bloqueados: {0}'}" 
+                                                                           Margin="0,2,0,0"
+                                                                           FontWeight="Bold"/>
+                                                                <TextBlock Text="{Binding MotivoBloqueoCalidad}" 
+                                                                           Visibility="{Binding MotivoBloqueoCalidad, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                           Margin="0,2,0,0"/>
+                                                                <TextBlock Text="{Binding FechaBloqueoCalidad, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                                                                           Visibility="{Binding FechaBloqueoCalidad, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                           Margin="0,2,0,0"/>
+                                                            </StackPanel>
+                                                        </ToolTip>
+                                                    </Border.ToolTip>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="🔒" FontSize="12" Margin="0,0,4,0"/>
+                                                        <TextBlock Text="{Binding CantidadArticulosBloqueados, StringFormat='BLOQUEADO CALIDAD ({0})'}" 
+                                                                   FontSize="10" 
+                                                                   FontWeight="Bold" 
+                                                                   Foreground="White"/>
+                                                    </StackPanel>
+                                                </Border>
                                             </StackPanel>
 
                                             <!-- Indicador de estado -->
@@ -324,7 +357,7 @@
                                                            FontSize="11"
                                                            Foreground="#7F8C8D"
                                                            Margin="10,0,0,0"/>
-                                                <TextBlock Grid.Column="3" Text="{Binding UbicacionOrigen}"
+                                                <TextBlock Grid.Column="3" Text="{Binding UbicacionOrigen, Converter={StaticResource UbicacionConverter}}"
                                                            FontWeight="Bold"
                                                            FontSize="11"
                                                            Foreground="#34495E"/>
@@ -347,6 +380,92 @@
                                                            FontSize="11"
                                                            Foreground="#34495E"/>
                                             </Grid>
+
+                                            <!-- 🔷 NUEVO: Información de última actividad -->
+                                            <Border Margin="0,8,0,0"
+                                                    Padding="8"
+                                                    CornerRadius="6"
+                                                    Background="#F8F9FA"
+                                                    BorderBrush="{Binding TipoUltimaActividad, Converter={StaticResource EstadoColorConverter}}"
+                                                    BorderThickness="2"
+                                                    Visibility="{Binding TipoUltimaActividad, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <!-- Tipo de actividad con icono -->
+                                                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Grid.Column="0" Text="🔄 Última actividad: "
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="11"
+                                                                   Foreground="#7F8C8D"/>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                            <!-- Icono según tipo de actividad -->
+                                                            <TextBlock FontSize="12" Margin="0,0,4,0">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Text" Value="📦"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding TipoUltimaActividad}" Value="CIERRE">
+                                                                                <Setter Property="Text" Value="🔒"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding TipoUltimaActividad}" Value="TRASPASO">
+                                                                                <Setter Property="Text" Value="🚚"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            <Border Background="{Binding TipoUltimaActividad, Converter={StaticResource EstadoColorConverter}}"
+                                                                    CornerRadius="3"
+                                                                    Padding="6,2"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding TipoUltimaActividad}"
+                                                                           FontWeight="Bold"
+                                                                           FontSize="10"
+                                                                           Foreground="White"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <!-- Fecha y usuario de última actividad -->
+                                                    <Grid Grid.Row="1">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Grid.Column="0" Text="📅 Fecha: "
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="10"
+                                                                   Foreground="#7F8C8D"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding FechaUltimaActividad, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="10"
+                                                                   Foreground="#34495E"/>
+
+                                                        <TextBlock Grid.Column="2" Text="👤 Usuario: "
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="10"
+                                                                   Foreground="#7F8C8D"
+                                                                   Margin="10,0,0,0"/>
+                                                        <TextBlock Grid.Column="3" Text="{Binding UsuarioUltimaActividadNombre}"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="10"
+                                                                   Foreground="#34495E"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
                                         </StackPanel>
 
                                         <!-- Botones de acción -->
@@ -529,6 +648,19 @@
                                                     Margin="4"
                                                     Width="300"
                                                     MinHeight="120">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="BorderBrush" Value="#B0B0B0"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
+                                                        <Style.Triggers>
+                                                            <!-- 🔷 NUEVO: Bloqueo por calidad -->
+                                                            <DataTrigger Binding="{Binding IsBloqueadoCalidad}" Value="True">
+                                                                <Setter Property="BorderBrush" Value="#FF6B6B"/>
+                                                                <Setter Property="BorderThickness" Value="3"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <Border.Effect>
                                                     <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Black"/>
                                                 </Border.Effect>
@@ -541,10 +673,39 @@
                                                     
                                                     <!-- Header con código del artículo -->
                                                     <StackPanel Grid.Row="0" Margin="0,0,0,8">
-                                                        <TextBlock Text="{Binding CodigoArticulo}" 
-                                                                   FontWeight="Bold" 
-                                                                   FontSize="13"
-                                                                   Foreground="{StaticResource BrushPrincipal}"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding CodigoArticulo}" 
+                                                                       FontWeight="Bold" 
+                                                                       FontSize="13"
+                                                                       Foreground="{StaticResource BrushPrincipal}"/>
+                                                            
+                                                            <!-- 🔷 NUEVO: Indicador de bloqueo por calidad -->
+                                                            <Border Background="#FF6B6B" 
+                                                                    CornerRadius="3" 
+                                                                    Padding="4,2" 
+                                                                    Margin="8,0,0,0"
+                                                                    Visibility="{Binding IsBloqueadoCalidad, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <Border.ToolTip>
+                                                                    <ToolTip>
+                                                                        <StackPanel>
+                                                                            <TextBlock Text="Artículo bloqueado por calidad" FontWeight="Bold"/>
+                                                                            <TextBlock Text="{Binding MotivoBloqueoCalidad}" 
+                                                                                       Visibility="{Binding MotivoBloqueoCalidad, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                            <TextBlock Text="{Binding FechaBloqueoCalidad, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                                                                                       Visibility="{Binding FechaBloqueoCalidad, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                        </StackPanel>
+                                                                    </ToolTip>
+                                                                </Border.ToolTip>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="🔒" FontSize="10" Margin="0,0,2,0"/>
+                                                                    <TextBlock Text="BLOQUEADO" 
+                                                                               FontSize="8" 
+                                                                               FontWeight="Bold" 
+                                                                               Foreground="White"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        
                                                         <TextBlock Text="{Binding DescripcionArticulo}" 
                                                                    FontSize="11" 
                                                                    Foreground="#666"

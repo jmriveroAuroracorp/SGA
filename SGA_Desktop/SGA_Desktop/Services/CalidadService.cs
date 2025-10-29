@@ -27,12 +27,6 @@ namespace SGA_Desktop.Services
                 queryParams.Add($"codigoEmpresa={filtros.CodigoEmpresa}");
                 queryParams.Add($"codigoArticulo={Uri.EscapeDataString(filtros.CodigoArticulo)}");
                 queryParams.Add($"partida={Uri.EscapeDataString(filtros.Partida)}");
-                
-                if (!string.IsNullOrEmpty(filtros.CodigoAlmacen))
-                    queryParams.Add($"codigoAlmacen={Uri.EscapeDataString(filtros.CodigoAlmacen)}");
-                
-                if (!string.IsNullOrEmpty(filtros.CodigoUbicacion))
-                    queryParams.Add($"codigoUbicacion={Uri.EscapeDataString(filtros.CodigoUbicacion)}");
 
                 var url = $"Calidad/buscar-stock?{string.Join("&", queryParams)}";
                 System.Diagnostics.Debug.WriteLine($"🔍 URL completa: {_httpClient.BaseAddress}{url}");

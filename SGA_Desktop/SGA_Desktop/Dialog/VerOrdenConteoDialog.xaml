@@ -1,0 +1,514 @@
+<Window x:Class="SGA_Desktop.Dialog.VerOrdenConteoDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        Title="Ver Orden de Conteo" 
+        Height="800" 
+        Width="1200"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+    
+    <Window.Resources>
+        <!-- Converters -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <helpers:IntToVisibilityConverter x:Key="IntToVisibilityConverter"/>
+        <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+        
+        <Style x:Key="InfoCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E1E5E9"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        
+        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        
+        <Style x:Key="InfoLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#666"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="MinWidth" Value="120"/>
+        </Style>
+        
+        <Style x:Key="InfoValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#333"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        
+        <Style x:Key="StatusBadgeStyle" TargetType="Border">
+            <Setter Property="Background" Value="#F8F9FA"/>
+            <Setter Property="BorderBrush" Value="#DEE2E6"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+    </Window.Resources>
+    
+    <!-- Marco redondeado con fondo y bordes -->
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}" 
+                    CornerRadius="6,6,0,0">
+                <Grid>
+                    <TextBlock Text="📋 VER ORDEN DE CONTEO" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                    <!-- Botón cerrar -->
+                    <Button Content="✕" 
+                            Width="30" 
+                            Height="30"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0"
+                            Background="Transparent"
+                            Foreground="White"
+                            BorderThickness="0"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Click="CerrarButton_Click"
+                            Cursor="Hand"/>
+                </Grid>
+            </Border>
+            
+            <!-- Contenido -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20">
+                <StackPanel>
+                
+                <!-- Información General -->
+                <Border Style="{StaticResource InfoCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="📊 Información General" Style="{StaticResource SectionTitleStyle}"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Estado:" Style="{StaticResource InfoLabelStyle}"/>
+                                <Border Style="{StaticResource StatusBadgeStyle}">
+                                    <TextBlock Text="{Binding EstadoFormateado}" 
+                                               FontWeight="Bold" 
+                                               FontSize="12"
+                                               Foreground="{Binding EstadoColor}"/>
+                                </Border>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Alcance:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding AlcanceFormateado}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Prioridad:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding PrioridadTexto}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="GUID:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding GuidID}" Style="{StaticResource InfoValueStyle}" FontFamily="Consolas"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Información de Empresa y Almacén -->
+                <Border Style="{StaticResource InfoCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="🏢 Empresa y Almacén" Style="{StaticResource SectionTitleStyle}"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Empresa:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding CodigoEmpresa}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Almacén:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding CodigoAlmacen}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Ubicación:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding CodigoUbicacion}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Artículo:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding CodigoArticulo}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Asignación y Fechas -->
+                <Border Style="{StaticResource InfoCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="👥 Asignación y Fechas" Style="{StaticResource SectionTitleStyle}"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Operario:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding OperarioDisplay}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Creado por:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding CreadoPorDisplay}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Fecha Plan:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding FechaPlan, StringFormat=dd/MM/yyyy}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Fecha Creación:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding FechaCreacion, StringFormat=dd/MM/yyyy HH:mm}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Fecha Asignación:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding FechaAsignacion, StringFormat=dd/MM/yyyy HH:mm}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Fecha Inicio:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding FechaInicio, StringFormat=dd/MM/yyyy HH:mm}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal">
+                                <TextBlock Text="Fecha Cierre:" Style="{StaticResource InfoLabelStyle}"/>
+                                <TextBlock Text="{Binding FechaCierre, StringFormat=dd/MM/yyyy HH:mm}" Style="{StaticResource InfoValueStyle}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Comentarios -->
+                <Border Style="{StaticResource InfoCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="💬 Comentarios" Style="{StaticResource SectionTitleStyle}"/>
+                        <Border Background="#F8F9FA"
+                                BorderBrush="#E1E5E9"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="12">
+                            <TextBlock Text="{Binding ComentarioDisplay}" 
+                                       Style="{StaticResource InfoValueStyle}"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Líneas de Conteo -->
+                <Border Style="{StaticResource InfoCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="📋 Líneas de Conteo" Style="{StaticResource SectionTitleStyle}"/>
+                        
+                        <Border Background="#F8F9FA"
+                                BorderBrush="#E1E5E9"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="8">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          Height="300">
+                                <StackPanel>
+                                    <!-- Header de columnas -->
+                                    <Border Background="{StaticResource BrushSecundario}" 
+                                            BorderBrush="{StaticResource BrushIntermedio}" 
+                                            BorderThickness="0,0,0,1"
+                                            Padding="12,8"
+                                            Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="80"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="120"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <TextBlock Grid.Column="0" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
+                                            <TextBlock Grid.Column="1" Text="Descripción" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
+                                            <TextBlock Grid.Column="2" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="Lote" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="4" Text="Palet" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="5" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="Contado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="7" Text="Diferencia" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="8" Text="Estado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Lista de líneas o mensaje cuando no hay líneas -->
+                                    <Grid>
+                                        <!-- Lista de líneas -->
+                                        <ItemsControl ItemsSource="{Binding LineasConteo}" 
+                                                      Visibility="{Binding TieneLineas, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="White"
+                                                            CornerRadius="6" 
+                                                            Padding="8,6" 
+                                                            Margin="0,0,0,4" 
+                                                            BorderThickness="1" 
+                                                            BorderBrush="{StaticResource BrushIntermedio}">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.1"/>
+                                                        </Border.Effect>
+                                                        
+                                                        <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="120"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="100"/>
+                                                            <ColumnDefinition Width="80"/>
+                                                            <ColumnDefinition Width="120"/>
+                                                            <ColumnDefinition Width="100"/>
+                                                            <ColumnDefinition Width="100"/>
+                                                            <ColumnDefinition Width="100"/>
+                                                            <ColumnDefinition Width="120"/>
+                                                        </Grid.ColumnDefinitions>
+                                                            
+                                                            <!-- Ubicación -->
+                                                            <TextBlock Grid.Column="0" 
+                                                                       Text="{Binding CodigoUbicacion}" 
+                                                                       FontWeight="Bold" 
+                                                                       FontSize="13" 
+                                                                       Foreground="{StaticResource BrushPrincipal}"
+                                                                       VerticalAlignment="Center"/>
+                                                            
+                                                        <!-- Descripción -->
+                                                        <TextBlock Grid.Column="1" 
+                                                                   Text="{Binding DescripcionArticulo}" 
+                                                                   FontSize="12" 
+                                                                   Foreground="Black"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="8,0"/>
+                                                            
+                                                            <!-- Artículo -->
+                                                            <TextBlock Grid.Column="2" 
+                                                                       Text="{Binding CodigoArticulo}" 
+                                                                       FontSize="12" 
+                                                                       Foreground="Black"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center"/>
+                                                            
+                                                            <!-- Lote -->
+                                                            <TextBlock Grid.Column="3" 
+                                                                       Text="{Binding LotePartida}" 
+                                                                       FontSize="12" 
+                                                                       Foreground="Black"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center"/>
+                                                            
+                                                            <!-- Palet -->
+                                                            <TextBlock Grid.Column="4" 
+                                                                       Text="{Binding PaletDisplay}" 
+                                                                       FontSize="12" 
+                                                                       FontWeight="Bold"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding TienePalet}" Value="True">
+                                                                                <Setter Property="Foreground" Value="DarkBlue"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding TienePalet}" Value="False">
+                                                                                <Setter Property="Foreground" Value="Gray"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            
+                                                            <!-- Stock -->
+                                                            <TextBlock Grid.Column="5" 
+                                                                       Text="{Binding CantidadStock, StringFormat=F2}" 
+                                                                       FontSize="12" 
+                                                                       FontWeight="Bold"
+                                                                       Foreground="Green"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center"/>
+                                                            
+                                                            <!-- Contado -->
+                                                            <TextBlock Grid.Column="6" 
+                                                                       Text="{Binding CantidadContada, StringFormat=F2}" 
+                                                                       FontSize="12" 
+                                                                       FontWeight="Bold"
+                                                                       Foreground="Blue"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center"/>
+                                                            
+                                                            <!-- Diferencia -->
+                                                            <TextBlock Grid.Column="7" 
+                                                                       Text="{Binding DiferenciaFormateada}" 
+                                                                       FontSize="12" 
+                                                                       FontWeight="Bold"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding TieneDiferencia}" Value="True">
+                                                                                <Setter Property="Foreground" Value="Red"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding TieneDiferencia}" Value="False">
+                                                                                <Setter Property="Foreground" Value="Green"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            
+                                                            <!-- Estado -->
+                                                            <TextBlock Grid.Column="8" 
+                                                                       Text="{Binding EstadoTexto}" 
+                                                                       FontSize="12" 
+                                                                       FontWeight="Bold"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding EstadoTexto}" Value="Pendiente">
+                                                                                <Setter Property="Foreground" Value="Orange"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding EstadoTexto}" Value="Correcto">
+                                                                                <Setter Property="Foreground" Value="Green"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding EstadoTexto}" Value="Exceso">
+                                                                                <Setter Property="Foreground" Value="Red"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding EstadoTexto}" Value="Faltante">
+                                                                                <Setter Property="Foreground" Value="Red"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <!-- Mensaje cuando no hay líneas -->
+                                        <Border Background="#F8F9FA"
+                                                BorderBrush="#E1E5E9"
+                                                BorderThickness="1"
+                                                CornerRadius="6"
+                                                Padding="40"
+                                                Visibility="{Binding TieneLineas, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="📋" 
+                                                           FontSize="48" 
+                                                           HorizontalAlignment="Center"
+                                                           Margin="0,0,0,16"/>
+                                                <TextBlock Text="No hay lecturas registradas" 
+                                                           FontSize="16" 
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource BrushSecundario}"
+                                                           HorizontalAlignment="Center"
+                                                           Margin="0,0,0,8"/>
+                                                <TextBlock Text="El operario aún no ha realizado ninguna lectura de conteo desde el dispositivo móvil." 
+                                                           FontSize="12" 
+                                                           Foreground="#666"
+                                                           HorizontalAlignment="Center"
+                                                           TextWrapping="Wrap"
+                                                           MaxWidth="300"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                </Border>
+                
+            </StackPanel>
+        </ScrollViewer>
+        
+            <!-- Botón Cerrar -->
+            <StackPanel Grid.Row="2" 
+                        Orientation="Horizontal" 
+                        HorizontalAlignment="Right" 
+                        VerticalAlignment="Center"
+                        Margin="20,0,20,0">
+                <Button Content="Cerrar" 
+                        Width="100" 
+                        Height="35" 
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Click="CerrarButton_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

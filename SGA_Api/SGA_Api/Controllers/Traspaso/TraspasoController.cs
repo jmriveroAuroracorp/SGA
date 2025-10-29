@@ -19,11 +19,16 @@ public class TraspasosController : ControllerBase
 {
 	private readonly AuroraSgaDbContext _context;
 	private readonly ILogger<TraspasosController> _logger;
+	private readonly IValidacionTraspasoService _validacionService;
 
-	public TraspasosController(AuroraSgaDbContext context, ILogger<TraspasosController> logger)
+	public TraspasosController(
+		AuroraSgaDbContext context, 
+		ILogger<TraspasosController> logger,
+		IValidacionTraspasoService validacionService)
 	{
 		_context = context;
 		_logger = logger;
+		_validacionService = validacionService;
 	}
 
 	/// <summary>
@@ -1017,7 +1022,7 @@ public class TraspasosController : ControllerBase
 	else
 	{
 		// Búsqueda automática: buscar palets que ACTUALMENTE tienen líneas en esa ubicación
-		var paletEnDestino = await (
+		var paletsEnDestino = await (
 			from l in _context.PaletLineas.AsNoTracking()
 			join p in _context.Palets.AsNoTracking() on l.PaletId equals p.Id
 			where p.CodigoEmpresa == traspaso.CodigoEmpresa
@@ -1027,9 +1032,24 @@ public class TraspasosController : ControllerBase
 			   && l.Cantidad > 0
 			group l by l.PaletId into g
 			select g.Key
-		).FirstOrDefaultAsync();
+		).ToListAsync();
 		
-		paletDestinoIdPre = paletEnDestino != Guid.Empty ? paletEnDestino : null;
+		// Si hay múltiples palets, devolver error para que el usuario elija
+		if (paletsEnDestino.Count > 1)
+		{
+			return StatusCode(StatusCodes.Status409Conflict, new
+			{
+				message = $"Hay {paletsEnDestino.Count} palets en {almDestino}-{ubiDestino}. Debe especificar cuál usar.",
+				requiereConfirmacion = true,
+				paletDetectado = true,
+				cantidadPalets = paletsEnDestino.Count,
+				palets = paletsEnDestino.Select(p => new { paletId = p }).ToList(),
+				almacen = almDestino,
+				ubicacion = ubiDestino
+			});
+		}
+		
+		paletDestinoIdPre = paletsEnDestino.FirstOrDefault();
 	}
 
 		bool hayPaletEnDestino = paletDestinoIdPre.HasValue && paletDestinoIdPre.Value != Guid.Empty;
@@ -1038,7 +1058,7 @@ public class TraspasosController : ControllerBase
 			var paletPre = await _context.Palets.AsNoTracking()
 							.FirstOrDefaultAsync(p => p.Id == paletDestinoIdPre.Value);
 
-			if (paletPre != null && dto.ConfirmarAgregarAPalet != true)
+			if (paletPre != null && dto.ConfirmarAgregarAPalet != true && dto.DejarSuelto != true)
 			{
 				bool cerrado = string.Equals(paletPre.Estado ?? "", "CERRADO", StringComparison.OrdinalIgnoreCase);
 				string estadoTxt = cerrado ? "CERRADO" : "ABIERTO";
@@ -1046,14 +1066,32 @@ public class TraspasosController : ControllerBase
 				return StatusCode(StatusCodes.Status409Conflict, new
 				{
 					message = $"Hay un palet {estadoTxt} en {almDestino}-{ubiDestino} (Código: {paletPre.Codigo}). " +
-							  $"Si confirmas, el artículo pasará a estar paletizado en ese palet" + (cerrado ? " (y se reabrirá)." : "."),
+							  $"Elige una opción:",
 					requiereConfirmacion = true,
 					paletDetectado = true,
 					paletCerrado = cerrado,
 					paletId = paletPre.Id,
 					codigoPalet = paletPre.Codigo,
 					almacen = almDestino,
-					ubicacion = ubiDestino
+					ubicacion = ubiDestino,
+					opciones = new[]
+					{
+						new { 
+							tipo = "paletizar", 
+							descripcion = $"Agregar al palet {paletPre.Codigo}" + (cerrado ? " (se reabrirá)" : ""),
+							accion = "ConfirmarAgregarAPalet"
+						},
+						new { 
+							tipo = "suelto", 
+							descripcion = "Dejar material suelto en la ubicación (sin paletizar)",
+							accion = "DejarSuelto"
+						},
+						new { 
+							tipo = "cancelar", 
+							descripcion = "Cancelar y buscar otra ubicación",
+							accion = "Cancelar"
+						}
+					}
 				});
 			}
 		}
@@ -1072,9 +1110,14 @@ public class TraspasosController : ControllerBase
 		// Antes tenías un bloque con "Buscar si hay un PALET físico..." que repetía la query.
 		// Usa directamente el id ya calculado en el pre-check:
 
-		Guid? paletDestinoId = paletDestinoIdPre;   // ← reutilizado
-
+		Guid? paletDestinoId = null;
 		string paletInfo;
+
+		// Solo paletizar si el usuario confirmó explícitamente
+		if (dto.ConfirmarAgregarAPalet == true && paletDestinoIdPre.HasValue && paletDestinoIdPre.Value != Guid.Empty)
+		{
+			paletDestinoId = paletDestinoIdPre.Value;
+		}
 
 		if (paletDestinoId.HasValue && paletDestinoId.Value != Guid.Empty)
 		{
@@ -1143,6 +1186,10 @@ public class TraspasosController : ControllerBase
 			{
 				paletInfo = "Se detectó un palet por traza de traspasos, pero no existe el registro del palet. El artículo queda sin asociar a palet.";
 			}
+		}
+		else if (dto.DejarSuelto == true)
+		{
+			paletInfo = "El artículo se ha dejado suelto en la ubicación (sin paletizar).";
 		}
 		else
 		{
@@ -1309,85 +1356,20 @@ public class TraspasosController : ControllerBase
 				CodigoEmpresa = dto.CodigoEmpresa,
 				CodigoArticulo = linea.CodigoArticulo,
 				Cantidad = linea.Cantidad,
-				Partida = linea.Lote,
-				FechaCaducidad = linea.FechaCaducidad,
-				Comentario = dto.Comentario, // Comentarios del usuario para el palet
-				EsNotificado = esFinalizado ? true : false // Marcar como notificado si es finalizado
-			};
-			_context.Traspasos.Add(traspasoArticulo);
+			Partida = linea.Lote,
+			FechaCaducidad = linea.FechaCaducidad,
+			Comentario = dto.Comentario, // Comentarios del usuario para el palet
+			EsNotificado = false // SIEMPRE false para que el BackgroundService lo procese
+		};
+		_context.Traspasos.Add(traspasoArticulo);
 			traspasosCreados.Add(traspasoArticulo.Id);
 
-			// Log temporal para depuración
-			_logger.LogInformation($"DEBUG: Traspaso creado - ID: {traspasoArticulo.Id}, Estado: {traspasoArticulo.CodigoEstado}, FechaFinalizacion: {traspasoArticulo.FechaFinalizacion}, esFinalizado: {esFinalizado}");
+		// Log temporal para depuración
+		_logger.LogInformation($"DEBUG: Traspaso creado - ID: {traspasoArticulo.Id}, Estado: {traspasoArticulo.CodigoEstado}");
 
-
-
-			// === CORRECCIÓN: SOLO crear líneas temporales si se finaliza (Fase 2) ===
-			if (!esFinalizado)
-			{
-				_logger.LogInformation($"⏸️ MoverPalet Fase 1 (PENDIENTE) - NO se crean líneas temporales. PaletId={dto.PaletId}");
-				continue; // Saltar la creación de líneas, solo crear el traspaso
-			}
-			
-			// === Crear línea temporal NEGATIVA para origen ===
-			// Para mover palet completo, la ubicación origen es la destino del último traspaso
-			var almacenOrigen = !string.IsNullOrWhiteSpace(ultimoTraspaso.AlmacenDestino) 
-				? ultimoTraspaso.AlmacenDestino 
-				: (!string.IsNullOrWhiteSpace(linea.CodigoAlmacen) ? linea.CodigoAlmacen : "PR");
-				
-			var ubicacionOrigen = !string.IsNullOrWhiteSpace(ultimoTraspaso.UbicacionDestino) 
-				? ultimoTraspaso.UbicacionDestino 
-				: (!string.IsNullOrWhiteSpace(linea.Ubicacion) ? linea.Ubicacion : "");
-			
-			// Validar que tenemos valores válidos
-			if (string.IsNullOrWhiteSpace(almacenOrigen))
-			{
-				_logger.LogError($"❌ AlmacenOrigen es NULL para PaletId={dto.PaletId}, no se pueden crear líneas temporales");
-				return BadRequest("No se pudo determinar el almacén origen del palet");
-			}
-			
-			var tempLineaOrigen = new TempPaletLinea
-			{
-				PaletId = dto.PaletId,
-				CodigoEmpresa = dto.CodigoEmpresa,
-				CodigoArticulo = linea.CodigoArticulo,
-				DescripcionArticulo = linea.DescripcionArticulo,
-				Cantidad = -linea.Cantidad, // CANTIDAD NEGATIVA para reducir stock origen
-				UnidadMedida = linea.UnidadMedida,
-				Lote = linea.Lote,
-				FechaCaducidad = linea.FechaCaducidad,
-				CodigoAlmacen = almacenOrigen, // UBICACIÓN ORIGEN (con fallback)
-				Ubicacion = ubicacionOrigen, // UBICACIÓN ORIGEN (con fallback)
-				UsuarioId = dto.UsuarioId,
-				FechaAgregado = DateTime.Now,
-				Observaciones = "Delta negativo origen (movimiento de palet)",
-				Procesada = false,
-				TraspasoId = traspasoArticulo.Id,
-				EsHeredada = true
-			};
-			_context.TempPaletLineas.Add(tempLineaOrigen);
-
-			// === Crear línea temporal POSITIVA para destino ===
-			var tempLineaDestino = new TempPaletLinea
-			{
-				PaletId = dto.PaletId,
-				CodigoEmpresa = dto.CodigoEmpresa,
-				CodigoArticulo = linea.CodigoArticulo,
-				DescripcionArticulo = linea.DescripcionArticulo,
-				Cantidad = linea.Cantidad, // CANTIDAD POSITIVA para agregar stock destino
-				UnidadMedida = linea.UnidadMedida,
-				Lote = linea.Lote,
-				FechaCaducidad = linea.FechaCaducidad,
-				CodigoAlmacen = dto.AlmacenDestino, // UBICACIÓN DESTINO
-				Ubicacion = dto.UbicacionDestino, // UBICACIÓN DESTINO
-				UsuarioId = dto.UsuarioId,
-				FechaAgregado = DateTime.Now,
-				Observaciones = "Delta positivo destino (movimiento de palet)",
-				Procesada = false,
-				TraspasoId = traspasoArticulo.Id,
-				EsHeredada = true
-			};
-			_context.TempPaletLineas.Add(tempLineaDestino);
+		// === NO CREAR TEMPORALES para movimiento de palet completo ===
+		// El BackgroundService moverá las líneas definitivas existentes cambiando su ubicación
+		// Las temporales solo se usan para agregar/quitar artículos individuales, NO para mover el palet completo
 		}
 
 			await _context.SaveChangesAsync();
@@ -1825,5 +1807,63 @@ public class TraspasosController : ControllerBase
 			return NotFound("No hay traspasos pendientes para este usuario.");
 
 		return Ok(traspasos);
+	}
+
+	/// <summary>
+	/// 🔷 NUEVO: Validar traspaso de artículo individual
+	/// </summary>
+	/// <param name="request">Datos del traspaso a validar</param>
+	/// <returns>Resultado de la validación</returns>
+	[HttpGet("test")]
+	public IActionResult Test()
+	{
+		_logger.LogInformation("🔍 Test endpoint llamado");
+		return Ok("Test endpoint funcionando");
+	}
+
+	[HttpPost("validar-articulo")]
+	[ProducesResponseType(typeof(ValidacionTraspasoResult), 200)]
+	[ProducesResponseType(typeof(ProblemDetails), 400)]
+	[ProducesResponseType(typeof(ProblemDetails), 500)]
+	public async Task<IActionResult> ValidarTraspasoArticulo([FromBody] ValidacionTraspasoRequest request)
+	{
+		try
+		{
+			_logger.LogInformation("🔍 ValidarTraspasoArticulo recibido - Artículo: {CodigoArticulo}, Almacén: '{AlmacenDestino}', Ubicación: '{UbicacionDestino}', Empresa: {CodigoEmpresa}", 
+				request.CodigoArticulo, request.AlmacenDestino, request.UbicacionDestino, request.CodigoEmpresa);
+
+			if (string.IsNullOrWhiteSpace(request.CodigoArticulo))
+			{
+				_logger.LogWarning("❌ Código de artículo vacío");
+				return BadRequest("Código de artículo es requerido");
+			}
+
+			// 🔷 CORREGIDO: Permitir ubicación vacía (SIN UBICAR)
+			// if (string.IsNullOrWhiteSpace(request.UbicacionDestino))
+			//     return BadRequest("Ubicación destino es requerida");
+
+			_logger.LogInformation("🔍 Llamando ValidacionTraspasoService...");
+			var resultado = await _validacionService.ValidarTraspasoArticuloAsync(
+				request.CodigoArticulo,
+				request.AlmacenDestino,
+				request.UbicacionDestino,
+				request.CodigoEmpresa);
+
+			_logger.LogInformation("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}", 
+				resultado.EsValido, resultado.MotivoBloqueo);
+
+			return Ok(resultado);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error validando traspaso de artículo {CodigoArticulo} a {AlmacenDestino}-{UbicacionDestino}", 
+				request.CodigoArticulo, request.AlmacenDestino, request.UbicacionDestino);
+			
+			return StatusCode(500, new ProblemDetails
+			{
+				Title = "Error interno del servidor",
+				Detail = "Error validando traspaso de artículo"
+			});
+		}
 	}
 }

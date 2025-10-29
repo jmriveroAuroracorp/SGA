@@ -24,5 +24,15 @@ namespace SGA_Desktop.Models
 		/// Opcional: ID del palet destino seleccionado manualmente por el usuario
 		/// </summary>
 		public Guid? PaletIdDestino { get; set; }
+
+		/// <summary>
+		/// Si true, confirma agregar el artículo al palet existente
+		/// </summary>
+		public bool? ConfirmarAgregarAPalet { get; set; }
+
+		/// <summary>
+		/// Si true, deja el material suelto en la ubicación (sin paletizar)
+		/// </summary>
+		public bool? DejarSuelto { get; set; }
 	}
 } 

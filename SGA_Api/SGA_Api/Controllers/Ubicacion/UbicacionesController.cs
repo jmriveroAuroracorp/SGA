@@ -436,6 +436,104 @@ namespace SGA_Api.Controllers.Ubicacion
 			return NoContent();
 		}
 
+		/// <summary>
+		/// PUT api/ubicaciones/sin-ubicar
+		/// Endpoint alternativo para actualizar ubicaciones "SIN UBICAR" (código vacío)
+		/// </summary>
+		[HttpPut("sin-ubicar")]
+		public async Task<IActionResult> ActualizarUbicacionSinUbicar(
+			[FromBody] CrearUbicacionDetalladaDto dto)
+		{
+			// 1. Validaciones básicas
+			if (dto == null)
+				return BadRequest("El cuerpo de la solicitud no puede ser vacío.");
+
+			if (string.IsNullOrEmpty(dto.CodigoAlmacen))
+				return BadRequest("El código de almacén es obligatorio.");
+
+			// 2. Buscar la entidad Ubicacion con código vacío
+			var entidad = await _auroraSgaContext.Ubicaciones
+				.FirstOrDefaultAsync(u =>
+					u.CodigoEmpresa == dto.CodigoEmpresa &&
+					u.CodigoAlmacen == dto.CodigoAlmacen &&
+					u.CodigoUbicacion == ""); // Código vacío para ubicaciones "SIN UBICAR"
+			
+			if (entidad == null)
+				return NotFound("No se encontró la ubicación 'SIN UBICAR'.");
+
+			// 3. Actualizar campos físicos
+			entidad.DescripcionUbicacion = dto.DescripcionUbicacion;
+			entidad.Pasillo = dto.Pasillo;
+			entidad.Estanteria = dto.Estanteria;
+			entidad.Altura = dto.Altura;
+			entidad.Posicion = dto.Posicion;
+			entidad.Orden = dto.Orden;
+			entidad.Peso = dto.Peso;
+			entidad.Alto = dto.Alto;
+			entidad.DimensionX = dto.DimensionX;
+			entidad.DimensionY = dto.DimensionY;
+			entidad.DimensionZ = dto.DimensionZ;
+			entidad.Angulo = dto.Angulo;
+
+			// 4. Actualizar o crear configuración
+			var cfg = await _auroraSgaContext.Ubicaciones_Configuracion
+				.FirstOrDefaultAsync(c =>
+					c.CodigoEmpresa == dto.CodigoEmpresa &&
+					c.CodigoAlmacen == dto.CodigoAlmacen &&
+					c.Ubicacion == ""); // Código vacío
+			
+			if (cfg != null)
+			{
+				// Actualizar configuración existente
+				cfg.TemperaturaMin = dto.TemperaturaMin;
+				cfg.TemperaturaMax = dto.TemperaturaMax;
+				cfg.TipoPaletPermitido = dto.TipoPaletPermitido;
+				cfg.Habilitada = dto.Habilitada;
+				cfg.TipoUbicacionId = dto.TipoUbicacionId;
+			}
+			else
+			{
+				// Crear nueva configuración si no existe
+				cfg = new UbicacionesConfiguracion
+				{
+					CodigoEmpresa = dto.CodigoEmpresa,
+					CodigoAlmacen = dto.CodigoAlmacen,
+					Ubicacion = "", // Código vacío
+					TemperaturaMin = dto.TemperaturaMin,
+					TemperaturaMax = dto.TemperaturaMax,
+					TipoPaletPermitido = dto.TipoPaletPermitido,
+					Habilitada = dto.Habilitada,
+					TipoUbicacionId = dto.TipoUbicacionId
+				};
+				_auroraSgaContext.Ubicaciones_Configuracion.Add(cfg);
+			}
+
+			// 5. Reemplazar alérgenos permitidos
+			var existentes = _auroraSgaContext.Ubicaciones_AlergenosPermitidos
+				.Where(a =>
+					a.CodigoEmpresa == dto.CodigoEmpresa &&
+					a.CodigoAlmacen == dto.CodigoAlmacen &&
+					a.Ubicacion == ""); // Código vacío
+			_auroraSgaContext.Ubicaciones_AlergenosPermitidos.RemoveRange(existentes);
+
+			if (dto.AlergenosPermitidos != null)
+			{
+				foreach (var codAler in dto.AlergenosPermitidos)
+				{
+					_auroraSgaContext.Ubicaciones_AlergenosPermitidos.Add(new UbicacionesAlergenosPermitidos
+					{
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Ubicacion = "", // Código vacío
+						VCodigoAlergeno = codAler
+					});
+				}
+			}
+
+			// 6. Guardar cambios
+			await _auroraSgaContext.SaveChangesAsync();
+			return NoContent();
+		}
 
 		/// <summary>
 		/// POST api/ubicaciones/masivo

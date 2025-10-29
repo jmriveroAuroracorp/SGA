@@ -239,7 +239,7 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 
 		var dto = new LogImpresionDto
 		{
-			Usuario = SessionManager.Operario.ToString(),
+			Usuario = SessionManager.NombreOperario,
 			Dispositivo = Environment.MachineName,
 			IdImpresora = ImpresoraSeleccionada?.Id, 
 			EtiquetaImpresa = 0,

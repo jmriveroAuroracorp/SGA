@@ -119,19 +119,58 @@
                                         <ItemsControl ItemsSource="{Binding Ubicaciones}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Style="{StaticResource EstiloTarjeta}"
-                                                            BorderBrush="{StaticResource BrushPrincipal}"
+                                                    <Border BorderBrush="{StaticResource BrushPrincipal}"
                                                             BorderThickness="2"
                                                             Background="White"
                                                             CornerRadius="8"
                                                             Padding="10"
                                                             Margin="0,0,0,10">
+                                                        
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="White"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                                                <Style.Triggers>
+                                                                    <!-- 🔷 NUEVO: Bloqueo por calidad -->
+                                                                    <DataTrigger Binding="{Binding IsBloqueadoCalidad}" Value="True">
+                                                                        <Setter Property="BorderBrush" Value="#FF6B6B"/>
+                                                                        <Setter Property="BorderThickness" Value="4"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
                                                         <Grid>
                                                             <Grid.RowDefinitions>
                                                                 <RowDefinition/>
                                                                 <RowDefinition/>
                                                             </Grid.RowDefinitions>
                                                             <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,5">
+                                                                <!-- 🔷 NUEVO: Indicador de bloqueo por calidad -->
+                                                                <Border Background="#FF6B6B" 
+                                                                        CornerRadius="3" 
+                                                                        Padding="4,2" 
+                                                                        Margin="0,0,8,0"
+                                                                        Visibility="{Binding IsBloqueadoCalidad, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                                    <Border.ToolTip>
+                                                                        <ToolTip>
+                                                                            <StackPanel>
+                                                                                <TextBlock Text="Artículo bloqueado por calidad" FontWeight="Bold"/>
+                                                                                <TextBlock Text="{Binding MotivoBloqueoCalidad}" 
+                                                                                           Visibility="{Binding MotivoBloqueoCalidad, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                                                <TextBlock Text="{Binding FechaBloqueoCalidad, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                                                                                           Visibility="{Binding FechaBloqueoCalidad, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                                            </StackPanel>
+                                                                        </ToolTip>
+                                                                    </Border.ToolTip>
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <TextBlock Text="🔒" FontSize="12" Margin="0,0,2,0"/>
+                                                                        <TextBlock Text="BLOQUEADO CALIDAD" 
+                                                                                   FontSize="10" 
+                                                                                   FontWeight="Bold" 
+                                                                                   Foreground="White"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                                
                                                                 <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                                                 <TextBlock Text="{Binding CodigoAlmacen}" Margin="5,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                 <TextBlock Text=" | " FontWeight="Bold" Margin="5,0"/>
@@ -301,7 +340,23 @@
                     <ItemsControl ItemsSource="{Binding LineasPendientes}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource EstiloTarjeta}" BorderBrush="{StaticResource BrushPrincipal}" BorderThickness="2" Background="White" Margin="0,0,0,10">
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource EstiloTarjeta}">
+                                            <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Setter Property="Background" Value="White"/>
+                                            <Setter Property="Margin" Value="0,0,0,10"/>
+                                            <Style.Triggers>
+                                                <!-- 🔷 NUEVO: Marcar líneas con error con color de fondo del badge de calidad -->
+                                                <DataTrigger Binding="{Binding TieneError}" Value="True">
+                                                    <Setter Property="Background" Value="#FFE6E6"/>
+                                                    <Setter Property="BorderBrush" Value="#FF6B6B"/>
+                                                    <Setter Property="BorderThickness" Value="3"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <Grid Margin="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>

@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
@@ -28,10 +30,21 @@ namespace SGA_Desktop.ViewModels
         public ObservableCollection<UbicacionDto> UbicacionesDestino { get; } = new();
         [ObservableProperty] private UbicacionDto? ubicacionDestinoSeleccionada;
 
+        // 🔷 NUEVO: Propiedades para búsqueda inteligente
+        [ObservableProperty] private string filtroAlmacenes = "";
+        [ObservableProperty] private bool isDropDownOpenAlmacenes = false;
+        [ObservableProperty] private string filtroUbicaciones = "";
+        [ObservableProperty] private bool isDropDownOpenUbicaciones = false;
+
+        // Vistas filtrables
+        public ICollectionView AlmacenesDestinoView { get; private set; } = null!;
+        public ICollectionView UbicacionesDestinoView { get; private set; } = null!;
+
         // Comandos
         public IRelayCommand BuscarPaletCommand { get; }
         public IRelayCommand<PaletMovibleDto> SeleccionarPaletCommand { get; }
         public IRelayCommand MoverPaletCommand { get; }
+
 
         public bool PuedeMoverPalet => PaletSeleccionado != null && AlmacenDestinoSeleccionado != null && UbicacionDestinoSeleccionada != null;
 
@@ -50,6 +63,7 @@ namespace SGA_Desktop.ViewModels
             SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
             MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
 
+
             _ = CargarAlmacenesDestinoAsync();
         }
 
@@ -61,6 +75,7 @@ namespace SGA_Desktop.ViewModels
             BuscarPaletCommand = new RelayCommand(BuscarPalets);
             SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
             MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
+
 
             // Precargar el palet seleccionado con datos básicos
             PaletSeleccionado = new PaletMovibleDto
@@ -114,6 +129,11 @@ namespace SGA_Desktop.ViewModels
             foreach (var a in almacenes)
                 AlmacenesDestino.Add(a);
             AlmacenDestinoSeleccionado = AlmacenesDestino.FirstOrDefault();
+
+            // 🔷 NUEVO: Inicializar vista filtrable para almacenes
+            AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
+            AlmacenesDestinoView.Filter = FiltraAlmacenes;
+            OnPropertyChanged(nameof(AlmacenesDestinoView));
         }
 
         partial void OnPaletSeleccionadoChanged(PaletMovibleDto? value)
@@ -152,6 +172,11 @@ namespace SGA_Desktop.ViewModels
                         CodigoAlmacen = u.CodigoAlmacen,
                         Ubicacion = u.Ubicacion
                     });
+
+                // 🔷 NUEVO: Inicializar vista filtrable para ubicaciones
+                UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
+                UbicacionesDestinoView.Filter = FiltraUbicaciones;
+                OnPropertyChanged(nameof(UbicacionesDestinoView));
             }
             catch
             {
@@ -185,6 +210,15 @@ namespace SGA_Desktop.ViewModels
         {
             if (PaletSeleccionado == null || AlmacenDestinoSeleccionado == null || UbicacionDestinoSeleccionada == null)
                 return;
+
+            // 🔷 NUEVO: Validar traspaso de palet antes de ejecutarlo
+            var validacion = await ValidarTraspasoPaletAsync();
+            if (!validacion.EsValido)
+            {
+                System.Windows.MessageBox.Show($"❌ {validacion.MotivoBloqueo}", "Traspaso Bloqueado", 
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                return;
+            }
 
             try
             {
@@ -229,6 +263,144 @@ namespace SGA_Desktop.ViewModels
                 .OfType<System.Windows.Window>()
                 .FirstOrDefault(w => w.DataContext == this);
             win?.Close();
+        }
+
+        // 🔷 NUEVO: Validar traspaso de palet antes de ejecutarlo
+        private async Task<ValidacionTraspasoResult> ValidarTraspasoPaletAsync()
+        {
+            try
+            {
+                if (PaletSeleccionado == null || UbicacionDestinoSeleccionada == null)
+                    return ValidacionTraspasoResult.Valido();
+
+                // 1. Obtener las líneas del palet (artículos que contiene)
+                var lineasPalet = await _paletService.ObtenerLineasAsync(PaletSeleccionado.Id);
+                
+                if (!lineasPalet.Any())
+                    return ValidacionTraspasoResult.Valido(); // Palet vacío, no hay problema
+
+                // 2. Obtener códigos de artículos únicos del palet
+                var codigosArticulos = lineasPalet
+                    .Select(l => l.CodigoArticulo)
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .Distinct()
+                    .ToList();
+
+                if (!codigosArticulos.Any())
+                    return ValidacionTraspasoResult.Valido();
+
+                // 3. Consultar bloqueos de calidad para los artículos del palet
+                var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
+                    SessionManager.EmpresaSeleccionada!.Value, 
+                    codigosArticulos);
+
+                // 4. Verificar si algún artículo del palet está bloqueado por calidad
+                var articulosBloqueados = codigosArticulos
+                    .Where(codigo => bloqueosCalidad.ContainsKey(codigo) && 
+                                   bloqueosCalidad[codigo].IsBloqueado)
+                    .ToList();
+
+                if (!articulosBloqueados.Any())
+                    return ValidacionTraspasoResult.Valido(); // No hay artículos bloqueados
+
+                // 5. Validar cada artículo bloqueado individualmente
+                var ubicacionDestino = UbicacionDestinoSeleccionada.Ubicacion;
+                foreach (var codigoArticulo in articulosBloqueados)
+                {
+                    var request = new ValidacionTraspasoRequest
+                    {
+                        CodigoArticulo = codigoArticulo,
+                        AlmacenDestino = AlmacenDestinoSeleccionado?.CodigoAlmacen ?? "",
+                        UbicacionDestino = ubicacionDestino,
+                        CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+                    };
+
+                    var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);
+                    
+                    if (!resultado.EsValido)
+                    {
+                        return ValidacionTraspasoResult.Bloqueado(
+                            $"No se puede traspasar el palet. {resultado.MotivoBloqueo}");
+                    }
+                }
+
+                return ValidacionTraspasoResult.Valido();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error validando traspaso de palet: {ex.Message}");
+                // En caso de error, permitir traspaso para no bloquear operaciones
+                return ValidacionTraspasoResult.Valido();
+            }
+        }
+
+        // 🔷 NUEVO: Métodos para búsqueda inteligente de almacenes
+        private bool FiltraAlmacenes(object obj)
+        {
+            if (obj is not AlmacenDto almacen) return false;
+            if (string.IsNullOrEmpty(FiltroAlmacenes)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenes, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        partial void OnFiltroAlmacenesChanged(string value)
+        {
+            AlmacenesDestinoView?.Refresh();
+        }
+
+        [RelayCommand]
+        private void AbrirDropDownAlmacenes()
+        {
+            FiltroAlmacenes = ""; // Limpiar filtro para mostrar todo
+            IsDropDownOpenAlmacenes = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownAlmacenes()
+        {
+            IsDropDownOpenAlmacenes = false;
+        }
+
+        [RelayCommand]
+        private void LimpiarSeleccionAlmacenes()
+        {
+            AlmacenDestinoSeleccionado = null;
+            FiltroAlmacenes = ""; // Limpiar también el filtro de texto
+        }
+
+        // 🔷 NUEVO: Métodos para búsqueda inteligente de ubicaciones
+        private bool FiltraUbicaciones(object obj)
+        {
+            if (obj is not UbicacionDto ubicacion) return false;
+            if (string.IsNullOrEmpty(FiltroUbicaciones)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(ubicacion.Ubicacion, FiltroUbicaciones, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        partial void OnFiltroUbicacionesChanged(string value)
+        {
+            UbicacionesDestinoView?.Refresh();
+        }
+
+        [RelayCommand]
+        private void AbrirDropDownUbicaciones()
+        {
+            IsDropDownOpenUbicaciones = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownUbicaciones()
+        {
+            IsDropDownOpenUbicaciones = false;
+        }
+
+        [RelayCommand]
+        private void LimpiarSeleccionUbicaciones()
+        {
+            UbicacionDestinoSeleccionada = null;
+            FiltroUbicaciones = ""; // Limpiar también el filtro de texto
         }
     }
 } 

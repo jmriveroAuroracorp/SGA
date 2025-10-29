@@ -226,6 +226,37 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
+        /// Obtener las líneas de conteo registradas (lecturas definitivas) de una orden específica
+        /// </summary>
+        public async Task<List<LecturaResponseDto>> ObtenerLineasConteoAsync(Guid ordenGuid, string? codigoOperario = null)
+        {
+            try
+            {
+                var url = $"conteos/ordenes/{ordenGuid}/lecturas-registradas";
+                if (!string.IsNullOrEmpty(codigoOperario))
+                {
+                    url += $"?codigoOperario={Uri.EscapeDataString(codigoOperario)}";
+                }
+
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var lineas = JsonConvert.DeserializeObject<List<LecturaResponseDto>>(responseContent);
+                
+                return lineas ?? new List<LecturaResponseDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener líneas de conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Obtener todos los resultados de conteo con filtro opcional
         /// </summary>
         public async Task<List<ResultadoConteoDetalladoDto>> ObtenerResultadosConteoAsync(string? accion = null)

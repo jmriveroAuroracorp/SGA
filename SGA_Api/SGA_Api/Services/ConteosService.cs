@@ -1075,6 +1075,22 @@ namespace SGA_Api.Services
                     dto.LotePartida, 
                     dto.FechaCaducidad);
 
+                // Si no se proporcionó PaletId en el DTO, intentar detectarlo automáticamente
+                Guid? paletIdDetectado = dto.PaletId;
+                string? codigoPaletDetectado = dto.CodigoPalet;
+                string? codigoGS1Detectado = dto.CodigoGS1;
+                
+                if (!paletIdDetectado.HasValue && materialPaletizado != null)
+                {
+                    // UN SOLO PALET: Detectar automáticamente
+                    paletIdDetectado = materialPaletizado.PaletId;
+                    codigoPaletDetectado = materialPaletizado.CodigoPalet;
+                    codigoGS1Detectado = materialPaletizado.CodigoGS1;
+                    
+                    _logger.LogInformation("🔍 Palet detectado automáticamente: {CodigoPalet} (ID: {PaletId}) en ubicación {Ubicacion}", 
+                        codigoPaletDetectado, paletIdDetectado, dto.CodigoUbicacion);
+                }
+
                 // Crear SIEMPRE una lectura nueva (no actualizar "pendientes")
                 var lectura = new LecturaConteo
                 {
@@ -1090,10 +1106,10 @@ namespace SGA_Api.Services
                     Comentario = dto.Comentario,
                     Fecha = DateTime.Now,
                     FechaCaducidad = dto.FechaCaducidad,
-                    // Información de palet del DTO (seleccionado por el usuario)
-                    PaletId = dto.PaletId,
-                    CodigoPalet = dto.CodigoPalet,
-                    CodigoGS1 = dto.CodigoGS1
+                    // Información de palet (detectado automáticamente si no se proporcionó)
+                    PaletId = paletIdDetectado,
+                    CodigoPalet = codigoPaletDetectado,
+                    CodigoGS1 = codigoGS1Detectado
                 };
                 _context.LecturasConteo.Add(lectura);
                 await _context.SaveChangesAsync();
@@ -1142,7 +1158,7 @@ namespace SGA_Api.Services
                             FechaEvaluacion = DateTime.Now,
                             AjusteAplicado = false,
                             FechaCaducidad = lectura.FechaCaducidad,
-                            // Información de palet si existe
+                            // Información de palet (detectado automáticamente si no se proporcionó)
                             PaletId = lectura.PaletId,
                             CodigoPalet = lectura.CodigoPalet,
                             CodigoGS1 = lectura.CodigoGS1
@@ -1198,6 +1214,7 @@ namespace SGA_Api.Services
                                 FechaAgregado = DateTime.Now,
                                 Observaciones = $"Ajuste de conteo - Orden: {orden.Titulo}",
                                 TraspasoId = null, // No es un traspaso
+                                ConteoId = resultado.OrdenGuid, // ID del conteo
                                 Procesada = false,
                                 EsHeredada = false
                             };
@@ -1382,6 +1399,46 @@ namespace SGA_Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en ObtenerResultadosConteoAsync: {Message}", ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<LecturaResponseDto>> ObtenerLecturasRegistradasAsync(Guid ordenGuid, string? codigoOperario = null)
+        {
+            try
+            {
+                _logger.LogInformation("Obteniendo lecturas registradas para orden {OrdenGuid} con operario {Operario}", ordenGuid, codigoOperario);
+                
+                // Obtener la orden
+                var orden = await _context.OrdenesConteo
+                    .FirstOrDefaultAsync(o => o.GuidID == ordenGuid);
+                
+                if (orden == null)
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {ordenGuid}");
+
+                // Obtener las lecturas registradas de la tabla LecturaConteo
+                var query = _context.LecturasConteo
+                    .Where(l => l.OrdenGuid == ordenGuid);
+
+                // Aplicar filtro por operario si se especifica
+                if (!string.IsNullOrEmpty(codigoOperario))
+                {
+                    query = query.Where(l => l.UsuarioCodigo == codigoOperario);
+                }
+
+                var lecturas = await query
+                    .OrderBy(l => l.CodigoUbicacion)
+                    .ThenBy(l => l.CodigoArticulo)
+                    .ThenBy(l => l.LotePartida)
+                    .ToListAsync();
+
+                _logger.LogInformation("Se encontraron {Count} lecturas registradas para orden {OrdenGuid}", lecturas.Count, ordenGuid);
+
+                return lecturas.Select(MapToLecturaResponseDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ObtenerLecturasRegistradasAsync: {Message}", ex.Message);
                 throw;
             }
         }
@@ -1975,76 +2032,6 @@ namespace SGA_Api.Services
             }
         }
 
-        /// <summary>
-        /// Actualiza las líneas de palet cuando hay una diferencia en el conteo
-        /// </summary>
-        private async Task ActualizarLineasPaletAsync(
-            Guid paletId, 
-            string? ubicacion, 
-            string? codigoArticulo, 
-            string? lote, 
-            DateTime? fechaCaducidad, 
-            decimal diferencia)
-        {
-            try
-            {
-                _logger.LogInformation("Actualizando líneas de palet {PaletId} con diferencia {Diferencia} para ubicación {Ubicacion}, artículo {Articulo}", 
-                    paletId, diferencia, ubicacion, codigoArticulo);
-
-                // Buscar SOLO las líneas del palet específico (más restrictivo)
-                var lineasPalet = await _context.PaletLineas
-                    .Where(pl => pl.PaletId == paletId &&
-                               pl.Ubicacion == ubicacion &&
-                               pl.CodigoArticulo == codigoArticulo &&
-                               (string.IsNullOrEmpty(lote) || pl.Lote == lote) &&
-                               (fechaCaducidad == null || pl.FechaCaducidad == fechaCaducidad))
-                    .ToListAsync();
-
-                if (!lineasPalet.Any())
-                {
-                    _logger.LogWarning("No se encontraron líneas de palet {PaletId} para ubicación {Ubicacion}, artículo {Articulo}", 
-                        paletId, ubicacion, codigoArticulo);
-                    return;
-                }
-
-                _logger.LogInformation("Encontradas {Count} líneas de palet {PaletId} para actualizar", lineasPalet.Count, paletId);
-
-                foreach (var linea in lineasPalet)
-                {
-                    var cantidadOriginal = linea.Cantidad;
-                    
-                    // Calcular la cantidad contada: cantidad original + diferencia
-                    // La diferencia es: cantidadContada - cantidadOriginal
-                    // Por tanto: cantidadContada = cantidadOriginal + diferencia
-                    var cantidadContada = cantidadOriginal + diferencia;
-                    
-                    _logger.LogInformation($"🔧 ACTUALIZANDO LÍNEA {linea.Id}: Original={cantidadOriginal}, Diferencia={diferencia}, Nueva={cantidadContada}");
-                    
-                    if (cantidadContada <= 0)
-                    {
-                        // Si la cantidad contada es 0 o negativa, mantener en 0 para trazabilidad
-                        linea.Cantidad = 0;
-                        _logger.LogInformation("Línea de palet {LineaId} ajustada a 0 (era {CantidadOriginal}, cantidad contada {CantidadContada})", 
-                            linea.Id, cantidadOriginal, cantidadContada);
-                    }
-                    else
-                    {
-                        // Establecer la cantidad contada
-                        linea.Cantidad = cantidadContada;
-                        _logger.LogInformation("Línea de palet {LineaId} sincronizada de {CantidadOriginal} a {CantidadContada} (cantidad contada)", 
-                            linea.Id, cantidadOriginal, cantidadContada);
-                    }
-                }
-
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("Actualizadas {Count} líneas de palet {PaletId}", lineasPalet.Count, paletId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error actualizando líneas de palet {PaletId} con diferencia {Diferencia}", paletId, diferencia);
-                throw;
-            }
-        }
 
         /// <summary>
         /// Obtiene todos los palets disponibles en una ubicación específica (método público)
@@ -2125,69 +2112,6 @@ namespace SGA_Api.Services
             }
         }
 
-        /// <summary>
-        /// Procesa los ajustes de inventario que han sido marcados como completados
-        /// y actualiza las líneas de palet correspondientes
-        /// </summary>
-        public async Task ProcesarAjustesCompletadosAsync()
-        {
-            // Buscar ajustes que están en COMPLETADO, tienen información de palet y NO han sido procesados
-            var ajustesCompletados = await _context.InventarioAjustes
-                .Where(a => a.Estado == "COMPLETADO" && 
-                           a.PaletId != null && 
-                           a.CodigoGS1 != null &&
-                           !a.ProcesadoPalet) // Solo los que no han sido procesados
-                .OrderBy(a => a.Fecha) // Procesar en orden cronológico
-                .ToListAsync();
-
-            if (!ajustesCompletados.Any())
-            {
-                _logger.LogDebug("No hay ajustes completados pendientes de procesar");
-                return; // No hay nada que procesar
-            }
-
-            _logger.LogInformation($"🔍 PROCESANDO {ajustesCompletados.Count} ajustes completados:");
-            foreach (var ajuste in ajustesCompletados)
-            {
-                _logger.LogInformation($"  - Ajuste {ajuste.IdAjuste}: PaletId={ajuste.PaletId}, Diferencia={ajuste.Diferencia}, ProcesadoPalet={ajuste.ProcesadoPalet}");
-            }
-
-            // Procesar cada ajuste individualmente para evitar conflictos
-            foreach (var ajuste in ajustesCompletados)
-            {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
-                {
-                    _logger.LogInformation($"Procesando ajuste {ajuste.IdAjuste} para palet {ajuste.PaletId} (diferencia: {ajuste.Diferencia})");
-                    
-                    // Actualizar las líneas de palet
-                    await ActualizarLineasPaletAsync(
-                        ajuste.PaletId.Value,
-                        ajuste.CodigoUbicacion,
-                        ajuste.CodigoArticulo,
-                        ajuste.Partida,
-                        ajuste.FechaCaducidad,
-                        ajuste.Diferencia);
-
-                    // Marcar como procesado usando el campo de control
-                    ajuste.ProcesadoPalet = true;
-                    
-                    // Guardar cambios para este ajuste específico
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    
-                    _logger.LogInformation($"Ajuste {ajuste.IdAjuste} procesado exitosamente");
-                }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-                    _logger.LogError(ex, "Error procesando ajuste {AjusteId} para palet {PaletId}", 
-                        ajuste.IdAjuste, ajuste.PaletId);
-                }
-            }
-
-            _logger.LogInformation($"Procesamiento de ajustes completado");
-        }
 
     }
 

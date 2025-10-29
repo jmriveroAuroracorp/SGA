@@ -117,13 +117,31 @@ namespace SGA_Desktop.ViewModels
     [ObservableProperty]
     private bool mostrarSelectorPalets = false;
 
+    // NUEVO: Propiedades para opciones de paletización
+    [ObservableProperty]
+    private bool mostrarOpcionesPalet = false;
+
+    [ObservableProperty]
+    private string mensajeOpcionesPalet = "";
+
+    [ObservableProperty]
+    private bool opcionPaletizarSeleccionada = false;
+
+    [ObservableProperty]
+    private bool opcionDejarSueltoSeleccionada = false;
+
+    [ObservableProperty]
+    private bool opcionCancelarSeleccionada = false;
+
     private readonly UbicacionesService _ubicacionesService = new UbicacionesService();
 
     private async Task CargarUbicacionesDestinoAsync()
     {
         UbicacionesDestino.Clear();
         if (AlmacenDestinoSeleccionado == null) return;
-        var lista = await _ubicacionesService.ObtenerUbicacionesAsync(
+        
+        // Usar el nuevo método que obtiene ubicaciones desde AuroraSga
+        var lista = await _ubicacionesService.ObtenerUbicacionesAuroraAsync(
             AlmacenDestinoSeleccionado.CodigoAlmacen,
             SessionManager.EmpresaSeleccionada.Value
         );
@@ -149,6 +167,8 @@ namespace SGA_Desktop.ViewModels
         PaletsDisponibles.Clear();
         PaletDestinoSeleccionado = null;
         MostrarSelectorPalets = false;
+        MostrarOpcionesPalet = false;
+        ResetearOpcionesPalet();
 
         // Validar que tengamos almacén y ubicación destino
         if (AlmacenDestinoSeleccionado == null || UbicacionDestinoSeleccionada == null)
@@ -178,17 +198,19 @@ namespace SGA_Desktop.ViewModels
                     });
                 }
 
+                // NUEVO: Mostrar opciones de paletización
+                MostrarOpcionesPalet = true;
+                var primerPalet = PaletsDisponibles.First();
+                var estadoTxt = primerPalet.Cerrado ? "CERRADO" : "ABIERTO";
+                
                 if (resultado.CantidadPalets == 1)
                 {
-                    // Solo hay 1 palet → seleccionarlo automáticamente
-                    PaletDestinoSeleccionado = PaletsDisponibles.First();
-                    MostrarSelectorPalets = false; // No mostrar el selector
+                    MensajeOpcionesPalet = $"Hay un palet {estadoTxt} en {AlmacenDestinoSeleccionado.CodigoAlmacen}-{UbicacionDestinoSeleccionada.Ubicacion} (Código: {primerPalet.CodigoPalet}). Elige una opción:";
                 }
                 else
                 {
-                    // Hay múltiples palets → mostrar selector para que el usuario elija
-                    MostrarSelectorPalets = true;
-                    // No seleccionar ninguno por defecto para forzar la selección manual
+                    MensajeOpcionesPalet = $"Hay {resultado.CantidadPalets} palets en {AlmacenDestinoSeleccionado.CodigoAlmacen}-{UbicacionDestinoSeleccionada.Ubicacion}. Elige una opción:";
+                    MostrarSelectorPalets = true; // Mostrar selector para múltiples palets
                 }
             }
         }
@@ -199,10 +221,23 @@ namespace SGA_Desktop.ViewModels
         }
     }
 
+    // NUEVO: Resetear opciones de paletización
+    private void ResetearOpcionesPalet()
+    {
+        OpcionPaletizarSeleccionada = false;
+        OpcionDejarSueltoSeleccionada = false;
+        OpcionCancelarSeleccionada = false;
+    }
+
         public string CodigoArticulo { get; set; }
         public string UbicacionOrigen => _stockSeleccionado.Ubicacion;
         public decimal Reservado => _stockSeleccionado.Reservado;
         public decimal Disponible => _stockSeleccionado.Disponible;
+
+        // 🔷 NUEVO: Propiedades de bloqueo por calidad
+        public bool IsBloqueadoCalidad => _stockSeleccionado.IsBloqueadoCalidad;
+        public string? MotivoBloqueoCalidad => _stockSeleccionado.MotivoBloqueoCalidad;
+        public DateTime? FechaBloqueoCalidad => _stockSeleccionado.FechaBloqueoCalidad;
 
         // Eliminar las propiedades y la inicialización manual de los comandos
         // Comandos generados automáticamente por [RelayCommand]
@@ -295,6 +330,13 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
+			// 🔷 NUEVO: Validar traspaso antes de ejecutarlo
+			var validacion = await ValidarTraspasoAsync();
+			if (!validacion)
+			{
+				return; // La validación ya mostró el mensaje de error
+			}
+
 			var empresa = SessionManager.EmpresaSeleccionada.Value;
 
 			// --- ORIGEN ---
@@ -332,8 +374,32 @@ namespace SGA_Desktop.ViewModels
 
 			// --- DESTINO ---
 			var ubicacionDestino = UbicacionDestinoSeleccionada?.Ubicacion ?? "";
-			if (!string.IsNullOrWhiteSpace(ubicacionDestino))
+			
+			// NUEVO: Si hay opciones de paletización, validar la selección
+			if (MostrarOpcionesPalet)
 			{
+				if (OpcionCancelarSeleccionada)
+				{
+					Feedback = "Operación cancelada por el usuario.";
+					return;
+				}
+
+				if (!OpcionPaletizarSeleccionada && !OpcionDejarSueltoSeleccionada)
+				{
+					Feedback = "Debes seleccionar una opción para el palet en destino.";
+					return;
+				}
+
+				// Si seleccionó paletizar pero no hay palet seleccionado (múltiples palets)
+				if (OpcionPaletizarSeleccionada && PaletDestinoSeleccionado == null && PaletsDisponibles.Count > 1)
+				{
+					Feedback = "Debes seleccionar un palet específico para paletizar.";
+					return;
+				}
+			}
+			else if (!string.IsNullOrWhiteSpace(ubicacionDestino))
+			{
+				// Lógica original para cuando no hay opciones de paletización
 				var estadoDestino = await _traspasoService.ConsultarEstadoPaletDestinoAsync(
 					empresa,
 					AlmacenDestinoSeleccionado.CodigoAlmacen,
@@ -352,7 +418,6 @@ namespace SGA_Desktop.ViewModels
 						Feedback = "Operación cancelada: palet destino cerrado.";
 						return;
 					}
-					// No llamamos a nada: el backend ya reabre destino automáticamente.
 				}
 				else if (string.Equals(estadoDestino, "Abierto", StringComparison.OrdinalIgnoreCase))
 				{
@@ -392,7 +457,11 @@ namespace SGA_Desktop.ViewModels
 			ReabrirSiCerradoOrigen = reabrirOrigen,
 
 			// 🔹 NUEVO: Enviar el palet destino seleccionado manualmente (si existe)
-			PaletIdDestino = PaletDestinoSeleccionado?.PaletId
+			PaletIdDestino = OpcionPaletizarSeleccionada ? PaletDestinoSeleccionado?.PaletId : null,
+
+			// 🔹 NUEVO: Opciones de paletización
+			ConfirmarAgregarAPalet = OpcionPaletizarSeleccionada ? true : (bool?)null,
+			DejarSuelto = OpcionDejarSueltoSeleccionada ? true : (bool?)null
 		};
 
 			var resultado = await _traspasoService.CrearTraspasoArticuloAsync(dto);
@@ -423,7 +492,16 @@ namespace SGA_Desktop.ViewModels
             if (!decimal.TryParse(texto, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var cantidad))
                 return false;
 
-            return cantidad > 0 && cantidad <= CantidadDisponible;
+            if (cantidad <= 0 || cantidad > CantidadDisponible)
+                return false;
+
+            // NUEVO: Si hay opciones de paletización, debe seleccionar una
+            if (MostrarOpcionesPalet)
+            {
+                return OpcionPaletizarSeleccionada || OpcionDejarSueltoSeleccionada;
+            }
+
+            return true;
         }
 
         [RelayCommand]
@@ -485,6 +563,12 @@ namespace SGA_Desktop.ViewModels
         IsDropDownOpenAlmacenes = false;
     }
 
+    [RelayCommand]
+    private void LimpiarSeleccionAlmacenesDestino()
+    {
+        AlmacenDestinoSeleccionado = null;
+    }
+
     // Métodos para filtrado de ubicaciones destino
     private bool FiltraUbicacionesDestino(object obj)
     {
@@ -515,6 +599,88 @@ namespace SGA_Desktop.ViewModels
     private void CerrarDropDownUbicaciones()
     {
         IsDropDownOpenUbicaciones = false;
+    }
+
+    [RelayCommand]
+    private void LimpiarSeleccionUbicacionesDestino()
+    {
+        UbicacionDestinoSeleccionada = null;
+    }
+
+    // NUEVO: Comandos para opciones de paletización
+    [RelayCommand]
+    private void SeleccionarOpcionPaletizar()
+    {
+        ResetearOpcionesPalet();
+        OpcionPaletizarSeleccionada = true;
+        ConfirmarCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand]
+    private void SeleccionarOpcionDejarSuelto()
+    {
+        ResetearOpcionesPalet();
+        OpcionDejarSueltoSeleccionada = true;
+        ConfirmarCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand]
+    private void SeleccionarOpcionCancelar()
+    {
+        ResetearOpcionesPalet();
+        OpcionCancelarSeleccionada = true;
+        // Cambiar ubicación para cancelar la operación
+        UbicacionDestinoSeleccionada = null;
+        MostrarOpcionesPalet = false;
+        ConfirmarCommand.NotifyCanExecuteChanged();
+    }
+
+    // 🔷 OPTIMIZADO: Validar traspaso solo cuando sea necesario
+    private async Task<bool> ValidarTraspasoAsync()
+    {
+        try
+        {
+            if (UbicacionDestinoSeleccionada == null)
+                return true; // No validar si no hay ubicación destino seleccionada
+
+            // 🔷 OPTIMIZACIÓN: Solo validar si el artículo está bloqueado por calidad
+            if (IsBloqueadoCalidad)
+            {
+                var ubicacionDestino = UbicacionDestinoSeleccionada.Ubicacion;
+                System.Diagnostics.Debug.WriteLine($"🔍 Validando traspaso - Artículo: {CodigoArticulo}, Ubicación: '{ubicacionDestino}' (longitud: {ubicacionDestino?.Length ?? 0})");
+
+                var request = new ValidacionTraspasoRequest
+                {
+                    CodigoArticulo = CodigoArticulo,
+                    AlmacenDestino = AlmacenDestinoSeleccionado?.CodigoAlmacen ?? "",
+                    UbicacionDestino = ubicacionDestino,
+                    CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+                };
+
+                var resultado = await _traspasoService.ValidarTraspasoArticuloAsync(request);
+                
+                System.Diagnostics.Debug.WriteLine($"🔍 Resultado validación - EsValido: {resultado.EsValido}, Motivo: {resultado.MotivoBloqueo}");
+                
+                if (!resultado.EsValido)
+                {
+                    // 🔷 CORREGIDO: Mostrar diálogo de error personalizado con icono de bloqueo
+                    var errorDialog = new WarningDialog(
+                        "Traspaso Bloqueado", 
+                        resultado.MotivoBloqueo ?? "No se puede realizar el traspaso",
+                        "\uE72E"); // Icono de candado/bloqueo
+                    ShowCenteredDialog(errorDialog);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error validando traspaso: {ex.Message}");
+            // En caso de error, permitir traspaso para no bloquear operaciones
+            return true;
+        }
     }
 
     // No es necesario implementar PropertyChanged, lo gestiona ObservableObject

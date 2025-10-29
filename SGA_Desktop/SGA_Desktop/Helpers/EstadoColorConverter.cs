@@ -24,6 +24,10 @@ namespace SGA_Desktop.Helpers
 					"COMPLETADO" => Brushes.SeaGreen,
 					"CANCELADO" => Brushes.Gray,
 					"EN_TRANSITO" => Brushes.DodgerBlue,
+					// 🔷 NUEVO: Colores para tipos de actividad
+					"APERTURA" => Brushes.Green,
+					"CIERRE" => Brushes.Red,
+					"TRASPASO" => Brushes.DodgerBlue,
 					_ => Brushes.Black
 				};
 			}

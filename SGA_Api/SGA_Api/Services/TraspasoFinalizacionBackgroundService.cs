@@ -54,38 +54,57 @@ namespace SGA_Api.Services
 					{
 						query = query.Where(l => l.Procesada == false);
 					}
-					// Si _soloProcesarPendientes = false, se procesan TODAS las líneas (pendientes y procesadas)
 					
-					var paletIdsConTempLineas = await query
-						.Select(l => l.PaletId)
-						.Distinct()
-						.ToListAsync();
+				var paletIdsConTempLineas = await query
+					.Select(l => l.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				// NUEVO: También procesar palets con traspasos de PALET completados recientes
+				var hace10Minutos = DateTime.Now.AddMinutes(-10);
+				var paletIdsConTraspasos = await dbContext.Traspasos
+					.Where(t => t.TipoTraspaso == "PALET" && 
+								t.CodigoEstado == "COMPLETADO" && 
+								t.FechaFinalizacion >= hace10Minutos &&
+								t.PaletId != Guid.Empty)
+					.Select(t => t.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				// Unir ambas listas
+				var paletIdsAProcesar = paletIdsConTempLineas
+					.Union(paletIdsConTraspasos)
+					.Distinct()
+					.ToList();
 
-					foreach (var paletId in paletIdsConTempLineas)
+				foreach (var paletId in paletIdsAProcesar)
 					{
 						// Usar transacción para garantizar consistencia
 						using var transaction = await dbContext.Database.BeginTransactionAsync();
 						try
 						{
-							// 1) Líneas temporales de este palet (según configuración)
-							var queryTemps = dbContext.TempPaletLineas
-								.Where(l => l.PaletId == paletId);
-							
-							// Aplicar el mismo filtro de configuración
-							if (_soloProcesarPendientes)
-							{
-								queryTemps = queryTemps.Where(l => l.Procesada == false);
-							}
-							
-							var tempsPendientes = await queryTemps
+							// 1) Todas las temporales pendientes de este palet (en orden)
+							var tempsPendientes = await dbContext.TempPaletLineas
+								.Where(l => l.PaletId == paletId && l.Procesada == false)
 								.OrderBy(l => l.FechaAgregado)
 								.ToListAsync();
 
-						foreach (var temp in tempsPendientes)
+					foreach (var temp in tempsPendientes)
+					{
+						// 2) Busca el traspaso de la temporal
+						var traspaso = await dbContext.Traspasos.FindAsync(temp.TraspasoId);
+						if (traspaso == null) continue;
+						
+						// 2.2) Si el traspaso tiene ERROR_ERP, NO procesar la temporal
+						if (traspaso.CodigoEstado == "ERROR_ERP")
 						{
-							// 2) Busca el traspaso de la temporal
-							var traspaso = await dbContext.Traspasos.FindAsync(temp.TraspasoId);
-							if (traspaso == null) continue;
+							logger.LogWarning("⚠️ Temporal {TempId} asociada a traspaso con ERROR_ERP ({TraspasoId}). NO se procesará.", 
+								temp.Id, temp.TraspasoId);
+							// Marcar como procesada para que no se intente de nuevo
+							temp.Procesada = true;
+							dbContext.TempPaletLineas.Update(temp);
+							continue;
+						}
 							
 						// 2.1) Si falta DescripcionArticulo, intentar recuperarla
 						if (string.IsNullOrWhiteSpace(temp.DescripcionArticulo))
@@ -235,29 +254,39 @@ namespace SGA_Api.Services
 						dbContext.TempPaletLineas.Update(temp);
 					}
 
-							// 4) Solo mover l�neas por TRASPASO DE PALET (no por art�culo)
-							var traspasosMoverPalet = await dbContext.Traspasos
-								.Where(t => t.TipoTraspaso == "PALET" &&
-											(t.CodigoEstado == "COMPLETADO") &&
-											t.PaletId == paletId)
-								.OrderBy(t => t.FechaFinalizacion)
+					// 4) Solo mover l�neas por TRASPASO DE PALET (no por art�culo)
+					// Mover TODAS las l�neas del palet al destino del �LTIMO traspaso completado
+					var ultimoTraspasoPalet = await dbContext.Traspasos
+						.Where(t => t.TipoTraspaso == "PALET" &&
+									t.CodigoEstado == "COMPLETADO" &&
+									t.PaletId == paletId &&
+									t.FechaFinalizacion >= DateTime.Now.AddMinutes(-10))
+						.OrderByDescending(t => t.FechaFinalizacion)
+						.FirstOrDefaultAsync();
+
+					if (ultimoTraspasoPalet != null)
+					{
+						// Verificar si las l�neas ya est�n en la ubicaci�n destino (evitar reprocesamiento)
+						var lineaMuestra = await dbContext.PaletLineas
+							.Where(l => l.PaletId == paletId)
+							.FirstOrDefaultAsync();
+						
+						if (lineaMuestra != null && 
+						    (lineaMuestra.CodigoAlmacen != ultimoTraspasoPalet.AlmacenDestino || 
+						     lineaMuestra.Ubicacion != ultimoTraspasoPalet.UbicacionDestino))
+						{
+							var todasLasLineas = await dbContext.PaletLineas
+								.Where(l => l.PaletId == paletId)
 								.ToListAsync();
 
-							foreach (var t in traspasosMoverPalet)
+							foreach (var linea in todasLasLineas)
 							{
-								// CORREGIDO: Mover TODAS las líneas del palet, no solo las del traspaso actual
-								// Esto asegura que líneas más antiguas también se muevan a la nueva ubicación
-								var lineasDelTraspaso = await dbContext.PaletLineas
-									.Where(l => l.PaletId == paletId)
-									.ToListAsync();
-
-								foreach (var linea in lineasDelTraspaso)
-								{
-									linea.CodigoAlmacen = t.AlmacenDestino;
-									linea.Ubicacion = t.UbicacionDestino;
-									dbContext.PaletLineas.Update(linea);
-								}
+								linea.CodigoAlmacen = ultimoTraspasoPalet.AlmacenDestino;
+								linea.Ubicacion = ultimoTraspasoPalet.UbicacionDestino;
+								dbContext.PaletLineas.Update(linea);
 							}
+						}
+					}
 
 							// 5) Marcar VAC�ADO SOLO cuando:
 							//    - no quedan temporales pendientes de ese palet

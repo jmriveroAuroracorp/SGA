@@ -19,7 +19,7 @@ namespace SGA_Desktop.Services
 			if (SessionManager.IsClosing)
 				return;
 
-			dto.Usuario = SessionManager.Operario.ToString();
+			dto.Usuario = SessionManager.NombreOperario;
 			dto.Dispositivo = Environment.MachineName;
 			dto.Copias ??= 1;
 

@@ -38,7 +38,7 @@ namespace SGA_Api.Services
                 TipoNotificacion = "CambioEstado",
                 NuevoEstado = nuevoEstado,
                 Mensaje = mensaje,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             };
 
             await _hubContext.Clients.Group($"Traspaso_{traspasoId}")
@@ -61,7 +61,7 @@ namespace SGA_Api.Services
                 TipoNotificacion = "Actualizacion",
                 TipoActualizacion = tipoActualizacion,
                 Datos = datos,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             };
 
             await _hubContext.Clients.Group($"Traspaso_{traspasoId}")
@@ -81,7 +81,7 @@ namespace SGA_Api.Services
                 Titulo = titulo,
                 Mensaje = mensaje,
                 TipoPopup = tipoNotificacion,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             };
 
             await _hubContext.Clients.Group($"Usuario_{usuarioId}")
@@ -113,7 +113,7 @@ namespace SGA_Api.Services
                 Titulo = titulo,
                 Mensaje = mensaje,
                 TipoPopup = tipoNotificacion,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             };
 
             try
@@ -143,7 +143,7 @@ namespace SGA_Api.Services
                 Titulo = titulo,
                 Mensaje = mensaje,
                 TipoPopup = tipoNotificacion,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             };
 
             // Enviar a todos los grupos de roles con nivel >= nivelMinimo
@@ -175,7 +175,7 @@ namespace SGA_Api.Services
                 Titulo = titulo,
                 Mensaje = mensaje,
                 DatosAdicionales = datosAdicionales,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.Now
             };
 
             // Enviar a supervisores y administradores

@@ -215,32 +215,44 @@ namespace SGA_Api.Services
         {
             var resultado = new List<StockCalidadDto>();
 
-            foreach (var stock in stockData)
+            // 🔷 NUEVO: Agrupar por artículo + lote para consolidar
+            var stockAgrupado = stockData
+                .GroupBy(s => new { s.CodigoArticulo, s.Partida, s.FechaCaducidad })
+                .ToList();
+
+            foreach (var grupo in stockAgrupado)
             {
+                var primerStock = grupo.First();
+                
                 // Verificar si el stock está bloqueado
-                var estaBloqueado = await EstaStockBloqueadoAsync(stock.CodigoEmpresa, stock.CodigoArticulo, stock.Partida);
+                var estaBloqueado = await EstaStockBloqueadoAsync(primerStock.CodigoEmpresa, primerStock.CodigoArticulo, primerStock.Partida);
                 
                 // Obtener información del bloqueo si existe
                 BloqueoCalidad? bloqueoInfo = null;
                 if (estaBloqueado)
                 {
                     bloqueoInfo = await _auroraSgaContext.BloqueosCalidad
-                        .FirstOrDefaultAsync(b => b.CodigoEmpresa == stock.CodigoEmpresa &&
-                                                  b.CodigoArticulo == stock.CodigoArticulo &&
-                                                  b.LotePartida == stock.Partida &&
+                        .FirstOrDefaultAsync(b => b.CodigoEmpresa == primerStock.CodigoEmpresa &&
+                                                  b.CodigoArticulo == primerStock.CodigoArticulo &&
+                                                  b.LotePartida == primerStock.Partida &&
                                                   b.Bloqueado == true);
                 }
 
+                // 🔷 NUEVO: Consolidar cantidades de todas las ubicaciones
+                var cantidadTotal = grupo.Sum(s => s.Disponible);
+                var ubicaciones = grupo.Select(s => s.Ubicacion).Where(u => !string.IsNullOrEmpty(u)).ToList();
+                var almacenes = grupo.Select(s => s.CodigoAlmacen).Distinct().ToList();
+
                 var stockCalidad = new StockCalidadDto
                 {
-                    CodigoArticulo = stock.CodigoArticulo,
-                    DescripcionArticulo = stock.DescripcionArticulo,
-                    CodigoAlmacen = stock.CodigoAlmacen,
-                    Almacen = stock.Almacen,
-                    Ubicacion = stock.Ubicacion,
-                    LotePartida = stock.Partida,
-                    FechaCaducidad = stock.FechaCaducidad,
-                    CantidadDisponible = stock.Disponible,
+                    CodigoArticulo = primerStock.CodigoArticulo,
+                    DescripcionArticulo = primerStock.DescripcionArticulo,
+                    CodigoAlmacen = string.Join(", ", almacenes), // Múltiples almacenes si los hay
+                    Almacen = string.Join(", ", grupo.Select(s => s.Almacen).Distinct()), // Múltiples nombres de almacén
+                    Ubicacion = ubicaciones.Any() ? string.Join(", ", ubicaciones) : "Sin ubicación específica",
+                    LotePartida = primerStock.Partida,
+                    FechaCaducidad = primerStock.FechaCaducidad,
+                    CantidadDisponible = cantidadTotal, // 🔷 NUEVO: Cantidad consolidada
                     EstaBloqueado = estaBloqueado,
                     ComentarioBloqueo = bloqueoInfo?.ComentarioBloqueo,
                     FechaBloqueo = bloqueoInfo?.FechaBloqueo,
@@ -371,6 +383,70 @@ namespace SGA_Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al obtener bloqueos para empresa {CodigoEmpresa}",
+                    codigoEmpresa);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 🔷 NUEVO: Obtiene información de bloqueos de calidad para una lista de artículos
+        /// </summary>
+        public async Task<Dictionary<string, object>> ObtenerBloqueosPorArticulosAsync(
+            short codigoEmpresa, 
+            List<string> codigosArticulos)
+        {
+            try
+            {
+                _logger.LogInformation("Obteniendo bloqueos para empresa {CodigoEmpresa}, artículos: {Count}",
+                    codigoEmpresa, codigosArticulos.Count);
+
+                var resultado = new Dictionary<string, object>();
+
+                foreach (var codigoArticulo in codigosArticulos)
+                {
+                    // Buscar bloqueos activos para este artículo
+                    var bloqueos = await _auroraSgaContext.BloqueosCalidad
+                        .Where(b => b.CodigoEmpresa == codigoEmpresa &&
+                                   b.CodigoArticulo == codigoArticulo &&
+                                   b.Bloqueado == true)
+                        .OrderByDescending(b => b.FechaBloqueo)
+                        .ToListAsync();
+
+                    if (bloqueos.Any())
+                    {
+                        // Si hay bloqueos, tomar el más reciente
+                        var bloqueoMasReciente = bloqueos.First();
+                         resultado[codigoArticulo] = new
+                         {
+                             isBloqueado = true,
+                             motivoBloqueo = bloqueoMasReciente.ComentarioBloqueo,
+                             fechaBloqueo = bloqueoMasReciente.FechaBloqueo,
+                             usuarioBloqueo = bloqueoMasReciente.UsuarioBloqueoId.ToString(),
+                             idBloqueo = bloqueoMasReciente.Id
+                         };
+                    }
+                    else
+                    {
+                        // Si no hay bloqueos, indicar que no está bloqueado
+                         resultado[codigoArticulo] = new
+                         {
+                             isBloqueado = false,
+                             motivoBloqueo = (string?)null,
+                             fechaBloqueo = (DateTime?)null,
+                             usuarioBloqueo = (string?)null,
+                             idBloqueo = (Guid?)null
+                         };
+                    }
+                }
+
+                _logger.LogInformation("Procesados {Count} artículos para empresa {CodigoEmpresa}",
+                    resultado.Count, codigoEmpresa);
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener bloqueos por artículos para empresa {CodigoEmpresa}",
                     codigoEmpresa);
                 throw;
             }
