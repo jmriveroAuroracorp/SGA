@@ -19,6 +19,7 @@ import com.example.sga.view.conteos.ConteoScreen
 import com.example.sga.view.conteos.ConteoProcesoScreen
 import com.example.sga.view.ordenes.OrdenTraspasoScreen
 import com.example.sga.view.ordenes.OrdenTraspasoProcesoScreen
+import com.example.sga.view.conversion.ConversionScreen
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
 
@@ -82,6 +83,10 @@ fun NavGraph(
 
         composable("stock") {
             StockScreen(navController, sessionViewModel)
+        }
+        
+        composable("conversion") {
+            ConversionScreen(navController, sessionViewModel)
         }
         
         composable("conteos") {

@@ -47,9 +47,9 @@ namespace SGA_Desktop.Dialog
                     return;
                 }
 
-                // Verificar que no hay más de 4 decimales
+                // Verificar que no hay más de 6 decimales
                 var parts = newText.Split('.', ',');
-                if (parts.Length > 1 && parts[1].Length > 4)
+                if (parts.Length > 1 && parts[1].Length > 6)
                 {
                     e.Handled = true;
                     return;

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.Stock
 {
@@ -12,7 +13,13 @@ namespace SGA_Api.Models.Stock
         public string? Partida { get; set; }                // varchar
         //public string? CodigoCentro { get; set; }
         public DateTime? FechaCaducidad { get; set; }
+        
+        /// <summary>
+        /// 🔷 ACTUALIZADO: Especificar precisión de 6 decimales para preservar valores exactos
+        /// </summary>
+        [Column(TypeName = "decimal(18,6)")]
         public decimal? UnidadSaldo { get; set; }
+        
         public short Ejercicio { get; set; }                // smallint
     }
 }

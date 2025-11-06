@@ -1,0 +1,101 @@
+<Window x:Class="SGA_Desktop.Dialog.ExcelPreviewDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VISTA PREVIA DE EXCEL"
+        Width="1400"
+        Height="900"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize"
+        WindowStyle="SingleBorderWindow"
+        Background="White">
+
+    <!-- Recursos y Estilos -->
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Marco con fondo y bordes (sin CornerRadius por compatibilidad con WebBrowser) -->
+    <Border Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="0">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="60"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}">
+                <TextBlock x:Name="TxtInfo"
+                           Text="VISTA PREVIA DE EXCEL" 
+                           FontSize="16" 
+                           FontWeight="Bold" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- Contenido principal - Visor de Excel -->
+            <Border Grid.Row="1" 
+                    Margin="0">
+                <WebBrowser x:Name="WebBrowserExcel"/>
+            </Border>
+
+            <!-- Footer con botones -->
+            <Border Grid.Row="2" 
+                    Background="{StaticResource BrushSecundario}" 
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{StaticResource BrushIntermedio}">
+                <Grid Margin="15,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Información/Estado -->
+                    <TextBlock Grid.Column="0"
+                               x:Name="TxtEstado"
+                               Text="Listo" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushPrincipal}"/>
+
+                    <!-- Botón Descargar -->
+                    <Button Grid.Column="1"
+                            x:Name="BtnDescargar"
+                            Content="📥 DESCARGAR"
+                            Click="BtnDescargar_Click"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="140" Height="35"
+                            Margin="0,0,10,0"/>
+
+                    <!-- Botón Imprimir -->
+                    <Button Grid.Column="2"
+                            x:Name="BtnImprimir"
+                            Content="🖨️ IMPRIMIR"
+                            Click="BtnImprimir_Click"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="140" Height="35"
+                            Margin="0,0,10,0"/>
+
+                    <!-- Botón Cerrar -->
+                    <Button Grid.Column="3"
+                            x:Name="BtnCerrar"
+                            Content="❌ CERRAR"
+                            Click="BtnCerrar_Click"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="120" Height="35"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

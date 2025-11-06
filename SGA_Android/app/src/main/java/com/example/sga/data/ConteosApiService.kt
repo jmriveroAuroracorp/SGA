@@ -1,6 +1,7 @@
 package com.example.sga.data
 
 import com.example.sga.data.dto.conteos.*
+import retrofit2.Response
 import retrofit2.http.*
 
 interface ConteosApiService {
@@ -57,12 +58,12 @@ interface ConteosApiService {
     suspend fun obtenerResultados(@Path("guidID") guidID: String): List<ResultadoConteoDto>
     
     // Obtener palets disponibles para una ubicación y artículo
-    @GET("conteos/palets-disponibles")
+    @GET("Conteos/palets-disponibles")
     suspend fun obtenerPaletsDisponibles(
         @Query("codigoAlmacen") codigoAlmacen: String,
-        @Query("ubicacion") ubicacion: String? = null,
-        @Query("codigoArticulo") codigoArticulo: String? = null,
+        @Query("ubicacion") ubicacion: String,
+        @Query("codigoArticulo") codigoArticulo: String,
         @Query("lote") lote: String? = null,
         @Query("fechaCaducidad") fechaCaducidad: String? = null
-    ): List<PaletDisponibleDto>
+    ): Response<List<PaletDisponibleDto>>
 }

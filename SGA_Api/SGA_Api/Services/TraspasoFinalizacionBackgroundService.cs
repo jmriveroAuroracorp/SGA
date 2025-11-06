@@ -23,6 +23,193 @@ namespace SGA_Api.Services
 			_soloProcesarPendientes = configuration.GetValue<bool>("BackgroundService:SoloProcesarPendientes", true);
 		}
 
+        /// <summary>
+        /// Procesa InventarioAjustes asociados a un Palet (PaletId no nulo) cuando el ajuste está COMPLETADO por el integrador ERP.
+        /// Aplica el delta en PaletLineas y registra LogPalet. Evita crear "suelto" cuando el ajuste era de palet.
+        /// </summary>
+        private async Task ProcesarAjustesInventarioPorPaletAsync(AuroraSgaDbContext dbContext, ILogger<TraspasoFinalizacionBackgroundService> logger)
+        {
+            try
+            {
+                var ajustes = await dbContext.InventarioAjustes
+                    .Where(a => a.PaletId != null && a.Estado == "COMPLETADO" && a.ProcesadoPalet == false)
+                    .OrderBy(a => a.Fecha)
+                    .Take(200)
+                    .ToListAsync();
+
+                if (!ajustes.Any()) return;
+
+                foreach (var aj in ajustes)
+                {
+                    using var tx = await dbContext.Database.BeginTransactionAsync();
+                    try
+                    {
+                        var paletId = aj.PaletId!.Value;
+                        var delta = aj.Diferencia; // puede ser +/-
+                        var art = aj.CodigoArticulo;
+                        var alm = aj.CodigoAlmacen;
+                        var ubi = aj.CodigoUbicacion;
+                        var lote = aj.Partida;
+                        var cad = aj.FechaCaducidad;
+
+                        // Buscar líneas del palet para esa clave
+                        var lineasClave = await dbContext.PaletLineas
+                            .Where(pl => pl.PaletId == paletId && pl.CodigoArticulo == art)
+                            .ToListAsync();
+
+                        var coincidentes = lineasClave.Where(pl =>
+                                (pl.CodigoAlmacen ?? "").Trim().ToUpper() == (alm ?? "").Trim().ToUpper() &&
+                                (pl.Ubicacion ?? "").Trim().ToUpper() == (ubi ?? "").Trim().ToUpper() &&
+                                (pl.Lote ?? "") == (lote ?? "") &&
+                                pl.FechaCaducidad == cad)
+                            .ToList();
+
+                        if (delta > 0)
+                        {
+                            if (coincidentes.Any())
+                            {
+                                var linea = coincidentes.First();
+                                linea.Cantidad += delta;
+                                dbContext.PaletLineas.Update(linea);
+                            }
+                            else
+                            {
+                                dbContext.PaletLineas.Add(new PaletLinea
+                                {
+                                    Id = Guid.NewGuid(),
+                                    PaletId = paletId,
+                                    CodigoEmpresa = aj.CodigoEmpresa,
+                                    CodigoArticulo = art,
+                                    DescripcionArticulo = null,
+                                    Cantidad = delta,
+                                    UnidadMedida = null,
+                                    Lote = lote,
+                                    FechaCaducidad = cad,
+                                    CodigoAlmacen = alm,
+                                    Ubicacion = ubi,
+                                    UsuarioId = aj.UsuarioId,
+                                    FechaAgregado = DateTime.Now,
+                                    Observaciones = "AjusteInventario",
+                                    TraspasoId = null
+                                });
+                            }
+                        }
+                        else if (delta < 0)
+                        {
+                            var restante = Math.Abs(delta);
+                            foreach (var l in coincidentes.OrderByDescending(x => x.FechaAgregado))
+                            {
+                                if (restante <= 0) break;
+                                var quitar = Math.Min(restante, l.Cantidad);
+                                l.Cantidad -= quitar;
+                                restante -= quitar;
+                                if (l.Cantidad <= 0m || Math.Abs(l.Cantidad) < 0.0001m)
+                                    dbContext.PaletLineas.Remove(l);
+                                else
+                                    dbContext.PaletLineas.Update(l);
+                            }
+                        }
+
+                        // LogPalet
+                        dbContext.LogPalet.Add(new LogPalet
+                        {
+                            PaletId = paletId,
+                            Fecha = DateTime.Now,
+                            IdUsuario = aj.UsuarioId,
+                            Accion = "AjusteInventario",
+                            Detalle = $"Aplicado ajuste por palet ±{aj.Diferencia:F4} Art={art} Ubi={alm}-{ubi}"
+                        });
+
+                        // 🔷 NUEVO: Marcar TempPaletLineas de conteo como procesadas cuando el ajuste se completa
+                        // Si el ajuste tiene IdConteo, buscar y marcar las TempPaletLineas correspondientes
+                        if (aj.IdConteo.HasValue && aj.IdConteo.Value != Guid.Empty)
+                        {
+                            var tempLineasConteo = await dbContext.TempPaletLineas
+                                .Where(tpl => tpl.PaletId == paletId && 
+                                             tpl.ConteoId == aj.IdConteo.Value && 
+                                             tpl.Procesada == false)
+                                .ToListAsync();
+
+                            foreach (var tempLinea in tempLineasConteo)
+                            {
+                                tempLinea.Procesada = true;
+                                dbContext.TempPaletLineas.Update(tempLinea);
+                                logger.LogInformation("✅ TempPaletLinea {TempId} marcada como procesada tras completar ajuste de conteo {ConteoId}", 
+                                    tempLinea.Id, aj.IdConteo);
+                            }
+                        }
+
+                        // 🔷 NUEVO: Marcar TempPaletLineas de inventario como procesadas cuando el ajuste se completa
+                        // Si el ajuste tiene IdInventario, buscar y marcar las TempPaletLineas correspondientes
+                        if (aj.IdInventario.HasValue && aj.IdInventario.Value != Guid.Empty)
+                        {
+                            logger.LogInformation("🔍 Buscando TempPaletLineas de inventario: PaletId={PaletId}, InventarioId={InventarioId}, Articulo={Articulo}", 
+                                paletId, aj.IdInventario.Value, art);
+                            
+                            // Normalizar código de artículo para comparación (trim y mayúsculas)
+                            var artNormalizado = (art ?? "").Trim().ToUpper();
+                            
+                            var tempLineasInventario = await dbContext.TempPaletLineas
+                                .Where(tpl => tpl.PaletId == paletId && 
+                                             tpl.InventarioId == aj.IdInventario.Value && 
+                                             (tpl.CodigoArticulo ?? "").Trim().ToUpper() == artNormalizado &&
+                                             tpl.Procesada == false)
+                                .ToListAsync();
+
+                            logger.LogInformation("🔍 Encontradas {Cantidad} TempPaletLineas de inventario pendientes", tempLineasInventario.Count);
+
+                            if (!tempLineasInventario.Any())
+                            {
+                                // 🔷 FALLBACK: Intentar buscar sin filtrar por artículo (por si hay discrepancias)
+                                var tempLineasInventarioFallback = await dbContext.TempPaletLineas
+                                    .Where(tpl => tpl.PaletId == paletId && 
+                                                 tpl.InventarioId == aj.IdInventario.Value && 
+                                                 tpl.Procesada == false)
+                                    .ToListAsync();
+                                
+                                if (tempLineasInventarioFallback.Any())
+                                {
+                                    logger.LogWarning("⚠️ Encontradas {Cantidad} TempPaletLineas de inventario sin filtrar por artículo. Artículos: {Articulos}", 
+                                        tempLineasInventarioFallback.Count, 
+                                        string.Join(", ", tempLineasInventarioFallback.Select(t => t.CodigoArticulo).Distinct()));
+                                    
+                                    // Usar las encontradas sin filtrar por artículo
+                                    tempLineasInventario = tempLineasInventarioFallback;
+                                }
+                            }
+
+                            foreach (var tempLinea in tempLineasInventario)
+                            {
+                                tempLinea.Procesada = true;
+                                dbContext.TempPaletLineas.Update(tempLinea);
+                                logger.LogInformation("✅ TempPaletLinea {TempId} marcada como procesada tras completar ajuste de inventario {InventarioId}", 
+                                    tempLinea.Id, aj.IdInventario);
+                            }
+                        }
+                        else
+                        {
+                            logger.LogWarning("⚠️ Ajuste {AjusteId} no tiene IdInventario, no se pueden marcar TempPaletLineas como procesadas", aj.IdAjuste);
+                        }
+
+                        // Marcar como procesado
+                        aj.ProcesadoPalet = true;
+                        dbContext.InventarioAjustes.Update(aj);
+
+                        await dbContext.SaveChangesAsync();
+                        await tx.CommitAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await tx.RollbackAsync();
+                        logger.LogError(ex, "Error al procesar InventarioAjuste por palet {AjusteId}", aj.IdAjuste);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error en ProcesarAjustesInventarioPorPaletAsync");
+            }
+        }
 		protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 		{
 			while (!stoppingToken.IsCancellationRequested)
@@ -42,8 +229,11 @@ namespace SGA_Api.Services
 						var notificacionesService = scope.ServiceProvider.GetRequiredService<INotificacionesTraspasosService>();
 						var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraspasoFinalizacionBackgroundService>>();
 
-						// 1. DETECCI�N DE NOTIFICACIONES - Para TODOS los traspasos (ARTICULO y PALET)
+                        // 1. DETECCIÓN DE NOTIFICACIONES - Para TODOS los traspasos (ARTICULO y PALET)
 						await DetectarYNotificarCambiosEstadoAsync(dbContext, notificacionesService, logger);
+
+                        // 1.1. PROCESAR AJUSTES DE INVENTARIO POR PALET (COMPLETADO)
+                        await ProcesarAjustesInventarioPorPaletAsync(dbContext, logger);
 
 						// 2. CONSOLIDACI�N DE PALETS - Solo para traspasos que afectan palets
 						// Obtener todos los paletId con l�neas temporales
@@ -60,20 +250,82 @@ namespace SGA_Api.Services
 					.Distinct()
 					.ToListAsync();
 				
-				// NUEVO: También procesar palets con traspasos de PALET completados recientes
-				var hace10Minutos = DateTime.Now.AddMinutes(-10);
+				// NUEVO: También procesar palets con traspasos completados recientes (PALET y ARTICULO)
+				var hace1Hora = DateTime.Now.AddHours(-1);
 				var paletIdsConTraspasos = await dbContext.Traspasos
-					.Where(t => t.TipoTraspaso == "PALET" && 
+					.Where(t => (t.TipoTraspaso == "PALET" || t.TipoTraspaso == "ARTICULO") && 
 								t.CodigoEstado == "COMPLETADO" && 
-								t.FechaFinalizacion >= hace10Minutos &&
+								t.FechaFinalizacion >= hace1Hora &&
 								t.PaletId != Guid.Empty)
 					.Select(t => t.PaletId)
 					.Distinct()
 					.ToListAsync();
 				
-				// Unir ambas listas
+				// 🔷 NUEVO: También procesar palets que deberían estar vaciados pero no lo están
+				// (tienen todas las temporales procesadas, no tienen definitivas, pero no están vaciados)
+				// Buscar palets que tienen temporales pero todas están procesadas
+				var paletsConTemporales = await dbContext.TempPaletLineas
+					.Select(tpl => tpl.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				// De esos, buscar los que NO tienen temporales pendientes (todas procesadas)
+				var paletsSinTemporalesPendientes = await dbContext.TempPaletLineas
+					.Where(tpl => paletsConTemporales.Contains(tpl.PaletId) && tpl.Procesada == false)
+					.Select(tpl => tpl.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				var paletIdsConTodasTemporalesProcesadas = paletsConTemporales
+					.Where(id => !paletsSinTemporalesPendientes.Contains(id))
+					.ToList();
+				
+				// Filtrar: solo los que NO tienen definitivas y NO están vaciados
+				var paletsCandidatosVaciado = await dbContext.Palets
+					.Where(p => paletIdsConTodasTemporalesProcesadas.Contains(p.Id) &&
+							   p.Estado != "Vaciado" && p.Estado.ToUpper() != "VACIADO")
+					.Select(p => p.Id)
+					.ToListAsync();
+				
+				var paletsConDefinitivas = await dbContext.PaletLineas
+					.Where(pl => paletsCandidatosVaciado.Contains(pl.PaletId))
+					.Select(pl => pl.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				var paletIdsParaVaciado = paletsCandidatosVaciado
+					.Where(id => !paletsConDefinitivas.Contains(id))
+					.ToList();
+				
+				// 🔷 NUEVO: Buscar palets sin ninguna línea (ni temporales ni definitivas) - eliminados manualmente
+				// Estos palets deberían estar vaciados automáticamente
+				var todosPaletIdsConTemporales = await dbContext.TempPaletLineas
+					.Select(tpl => tpl.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				var todosPaletIdsConDefinitivas = await dbContext.PaletLineas
+					.Select(pl => pl.PaletId)
+					.Distinct()
+					.ToListAsync();
+				
+				// 🔷 PROTECCIÓN: Excluir palets recién creados (menos de 1 hora) que aún no tienen líneas
+				// Solo procesar palets sin líneas si están cerrados o tienen más de 1 hora de antigüedad
+				var paletsSinNingunaLinea = await dbContext.Palets
+					.Where(p => p.Id != Guid.Empty &&
+							   !todosPaletIdsConTemporales.Contains(p.Id) &&
+							   !todosPaletIdsConDefinitivas.Contains(p.Id) &&
+							   p.Estado != "Vaciado" && p.Estado.ToUpper() != "VACIADO" &&
+							   // NO procesar palets recién creados (abiertos con menos de 1 hora)
+							   !(p.Estado == "Abierto" && p.FechaApertura >= hace1Hora))
+					.Select(p => p.Id)
+					.ToListAsync();
+				
+				// Unir todas las listas
 				var paletIdsAProcesar = paletIdsConTempLineas
 					.Union(paletIdsConTraspasos)
+					.Union(paletIdsParaVaciado)
+					.Union(paletsSinNingunaLinea)
 					.Distinct()
 					.ToList();
 
@@ -91,20 +343,36 @@ namespace SGA_Api.Services
 
 					foreach (var temp in tempsPendientes)
 					{
+						// 🔷 PROTECCIÓN: Las líneas de conteo e inventario NO se consolidan aquí
+						// Solo se procesan cuando el InventarioAjustes asociado está COMPLETADO
+						// y se aplican a través de ProcesarAjustesInventarioPorPaletAsync
+						if (temp.ConteoId != null && temp.ConteoId != Guid.Empty)
+						{
+							// Línea de conteo - no procesar aquí, esperar a que el ajuste esté COMPLETADO
+							continue;
+						}
+						
+						if (temp.InventarioId != null && temp.InventarioId != Guid.Empty)
+						{
+							// Línea de inventario - no procesar aquí, esperar a que el ajuste esté COMPLETADO
+							continue;
+						}
+
 						// 2) Busca el traspaso de la temporal
 						var traspaso = await dbContext.Traspasos.FindAsync(temp.TraspasoId);
 						if (traspaso == null) continue;
 						
-						// 2.2) Si el traspaso tiene ERROR_ERP, NO procesar la temporal
-						if (traspaso.CodigoEstado == "ERROR_ERP")
-						{
-							logger.LogWarning("⚠️ Temporal {TempId} asociada a traspaso con ERROR_ERP ({TraspasoId}). NO se procesará.", 
-								temp.Id, temp.TraspasoId);
-							// Marcar como procesada para que no se intente de nuevo
-							temp.Procesada = true;
-							dbContext.TempPaletLineas.Update(temp);
-							continue;
-						}
+					// 2.2) Si el traspaso tiene ERROR_ERP, ELIMINAR la temporal (no procesarla)
+					// Esto limpia las líneas negativas cuando el traspaso falla
+					if (traspaso.CodigoEstado == "ERROR_ERP")
+					{
+						logger.LogWarning("⚠️ Temporal {TempId} asociada a traspaso con ERROR_ERP ({TraspasoId}). Se ELIMINA para mantener consistencia.", 
+							temp.Id, temp.TraspasoId);
+						// Eliminar la línea temporal para revertir el efecto del traspaso fallido
+						dbContext.TempPaletLineas.Remove(temp);
+						await dbContext.SaveChangesAsync();
+						continue;
+					}
 							
 						// 2.1) Si falta DescripcionArticulo, intentar recuperarla
 						if (string.IsNullOrWhiteSpace(temp.DescripcionArticulo))
@@ -155,8 +423,17 @@ namespace SGA_Api.Services
 
 						if (existente != null)
 						{
+							// 🔷 DEBUG: Log para verificar precisión antes de consolidar
+							logger.LogInformation("🔍 DEBUG Consolidación: TempLinea Cantidad={TempCantidad} (F6={TempCantidadF6}), Existente Cantidad={ExistenteCantidad} (F6={ExistenteCantidadF6})", 
+								temp.Cantidad, temp.Cantidad.ToString("F6"), 
+								existente.Cantidad, existente.Cantidad.ToString("F6"));
+							
 							if (!temp.EsHeredada)
 								existente.Cantidad += temp.Cantidad;  // DELTA (+/-)
+							
+							// 🔷 DEBUG: Log después de sumar
+							logger.LogInformation("🔍 DEBUG Consolidación: Cantidad después de sumar={CantidadFinal} (F6={CantidadFinalF6})", 
+								existente.Cantidad, existente.Cantidad.ToString("F6"));
 
 							// Usar comparación más robusta para evitar problemas de precisión decimal
 							if (existente.Cantidad <= 0m || Math.Abs(existente.Cantidad) < 0.0001m)
@@ -211,8 +488,12 @@ namespace SGA_Api.Services
 							}
 							else
 							{
+								// 🔷 DEBUG: Log para verificar precisión antes de crear nueva línea
+								logger.LogInformation("🔍 DEBUG Creando nueva PaletLinea: TempLinea Cantidad={TempCantidad} (F6={TempCantidadF6})", 
+									temp.Cantidad, temp.Cantidad.ToString("F6"));
+								
 								// Crear nueva línea SOLO si es cantidad positiva (agregar a palet)
-								dbContext.PaletLineas.Add(new SGA_Api.Models.Palet.PaletLinea
+								var nuevaLinea = new SGA_Api.Models.Palet.PaletLinea
 								{
 									Id = Guid.NewGuid(),
 									PaletId = temp.PaletId,
@@ -229,7 +510,13 @@ namespace SGA_Api.Services
 									FechaAgregado = temp.FechaAgregado,
 									Observaciones = temp.Observaciones?.Trim(),
 									TraspasoId = traspaso.Id
-								});
+								};
+								
+								// 🔷 DEBUG: Log después de crear el objeto
+								logger.LogInformation("🔍 DEBUG Nueva PaletLinea creada: Cantidad={Cantidad} (F6={CantidadF6})", 
+									nuevaLinea.Cantidad, nuevaLinea.Cantidad.ToString("F6"));
+								
+								dbContext.PaletLineas.Add(nuevaLinea);
 								
 								logger.LogInformation("✅ Creada nueva línea definitiva: PaletId={PaletId}, Articulo={Articulo}, Cantidad={Cantidad}, Ubicacion={Almacen}-{Ubicacion}", 
 									temp.PaletId, temp.CodigoArticulo, temp.Cantidad, temp.CodigoAlmacen, temp.Ubicacion);
@@ -260,7 +547,7 @@ namespace SGA_Api.Services
 						.Where(t => t.TipoTraspaso == "PALET" &&
 									t.CodigoEstado == "COMPLETADO" &&
 									t.PaletId == paletId &&
-									t.FechaFinalizacion >= DateTime.Now.AddMinutes(-10))
+									t.FechaFinalizacion >= DateTime.Now.AddHours(-24)) // Extendido a 24 horas para cubrir más casos
 						.OrderByDescending(t => t.FechaFinalizacion)
 						.FirstOrDefaultAsync();
 
@@ -295,7 +582,157 @@ namespace SGA_Api.Services
 							var quedanTemporales = await dbContext.TempPaletLineas
 								.AnyAsync(l => l.PaletId == paletId && l.Procesada == false);
 
-							if (!quedanTemporales)
+							// 🔷 MEJORADO: También verificar si no quedan líneas definitivas (sin líneas en absoluto)
+							var quedanDefinitivas = await dbContext.PaletLineas
+								.AnyAsync(l => l.PaletId == paletId);
+
+							// Si no quedan temporales ni definitivas, marcar como vaciado directamente
+							if (!quedanTemporales && !quedanDefinitivas)
+							{
+								var palet = await dbContext.Palets.FindAsync(paletId);
+								if (palet != null && palet.Estado != "Vaciado" && palet.Estado.ToUpper() != "VACIADO")
+								{
+									palet.Estado = "Vaciado";
+									palet.FechaVaciado = DateTime.Now;
+
+									// intenta registrar el usuario delltimo delta negativo o del último traspaso
+									var ultNeg = await dbContext.TempPaletLineas
+										.Where(x => x.PaletId == paletId && x.Cantidad < 0 && x.Procesada == true)
+										.OrderByDescending(x => x.FechaAgregado)
+										.FirstOrDefaultAsync();
+
+									// Si no hay temporal negativa, buscar el usuario del último traspaso completado
+									if (ultNeg == null)
+									{
+										var ultimoTraspaso = await dbContext.Traspasos
+											.Where(t => t.PaletId == paletId && t.CodigoEstado == "COMPLETADO")
+											.OrderByDescending(t => t.FechaFinalizacion)
+											.FirstOrDefaultAsync();
+										
+										if (ultimoTraspaso != null)
+										{
+											palet.UsuarioVaciadoId = ultimoTraspaso.UsuarioFinalizacionId ?? palet.UsuarioVaciadoId;
+										}
+									}
+									else
+									{
+										palet.UsuarioVaciadoId = ultNeg.UsuarioId;
+									}
+
+									// opcional: cierra tambin
+									palet.FechaCierre = palet.FechaCierre ?? DateTime.Now;
+									palet.UsuarioCierreId = palet.UsuarioCierreId ?? palet.UsuarioVaciadoId;
+
+									dbContext.Palets.Update(palet);
+
+									dbContext.LogPalet.Add(new LogPalet
+									{
+										PaletId = palet.Id,
+										Fecha = DateTime.Now,
+										IdUsuario = palet.UsuarioVaciadoId ?? 0,
+										Accion = "Vaciado",
+										Detalle = "Marcado vaciado tras consolidación: sin líneas temporales ni definitivas."
+									});
+								}
+							}
+							// 🔷 NUEVO: Si hay temporales PENDIENTES (procesadas o no) que suman 0 y no hay definitivas, también vaciar
+							// Esto incluye líneas de conteo que no se procesan por el BackgroundService
+							// IMPORTANTE: Solo vaciar si NO hay ajustes de conteo pendientes (PENDIENTE_ERP)
+							else if (!quedanDefinitivas)
+							{
+								// Sumar solo las temporales PENDIENTES del palet (no procesadas)
+								// Las procesadas ya están reflejadas o no afectan el cálculo
+								var totalTemporalesPendientes = await dbContext.TempPaletLineas
+									.Where(l => l.PaletId == paletId && l.Procesada == false)
+									.SumAsync(l => (decimal?)l.Cantidad) ?? 0m;
+
+								// Verificar que no haya ninguna temporal pendiente positiva
+								var hayTemporalesPendientesPositivas = await dbContext.TempPaletLineas
+									.AnyAsync(l => l.PaletId == paletId && l.Procesada == false && l.Cantidad > 0m);
+
+								// 🔷 PROTECCIÓN: Verificar que NO haya ajustes de conteo o inventario PENDIENTE_ERP asociados
+								// Si hay ajustes pendientes, no vaciar porque el ajuste puede cambiar las cantidades
+								var conteoIdsPendientes = await dbContext.TempPaletLineas
+									.Where(l => l.PaletId == paletId && l.Procesada == false && l.ConteoId != null && l.ConteoId != Guid.Empty)
+									.Select(l => l.ConteoId)
+									.Distinct()
+									.ToListAsync();
+
+								var inventarioIdsPendientes = await dbContext.TempPaletLineas
+									.Where(l => l.PaletId == paletId && l.Procesada == false && l.InventarioId != null && l.InventarioId != Guid.Empty)
+									.Select(l => l.InventarioId)
+									.Distinct()
+									.ToListAsync();
+
+								var hayAjustesPendientes = false;
+								if (conteoIdsPendientes.Any())
+								{
+									hayAjustesPendientes = await dbContext.InventarioAjustes
+										.AnyAsync(a => conteoIdsPendientes.Contains(a.IdConteo.Value) && 
+													  a.Estado == "PENDIENTE_ERP" && 
+													  a.ProcesadoPalet == false);
+								}
+
+								if (!hayAjustesPendientes && inventarioIdsPendientes.Any())
+								{
+									hayAjustesPendientes = await dbContext.InventarioAjustes
+										.AnyAsync(a => inventarioIdsPendientes.Contains(a.IdInventario.Value) && 
+													  a.Estado == "PENDIENTE_ERP" && 
+													  a.ProcesadoPalet == false);
+								}
+
+								// Si el total de temporales pendientes es 0 o negativo, no hay positivas, 
+								// y NO hay ajustes pendientes, entonces vaciar el palet
+								if (totalTemporalesPendientes <= 0m && !hayTemporalesPendientesPositivas && !hayAjustesPendientes)
+								{
+									var palet = await dbContext.Palets.FindAsync(paletId);
+									if (palet != null && !string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
+									{
+										palet.Estado = "Vaciado";
+										palet.FechaVaciado = DateTime.Now;
+
+										// intenta registrar el usuario del último delta negativo
+										var ultNeg = await dbContext.TempPaletLineas
+											.Where(x => x.PaletId == paletId && x.Cantidad < 0)
+											.OrderByDescending(x => x.FechaAgregado)
+											.FirstOrDefaultAsync();
+
+										// Si no hay temporal negativa, buscar el usuario del último traspaso completado
+										if (ultNeg == null)
+										{
+											var ultimoTraspaso = await dbContext.Traspasos
+												.Where(t => t.PaletId == paletId && t.CodigoEstado == "COMPLETADO")
+												.OrderByDescending(t => t.FechaFinalizacion)
+												.FirstOrDefaultAsync();
+											
+											if (ultimoTraspaso != null)
+											{
+												palet.UsuarioVaciadoId = ultimoTraspaso.UsuarioFinalizacionId ?? palet.UsuarioVaciadoId;
+											}
+										}
+										else
+										{
+											palet.UsuarioVaciadoId = ultNeg.UsuarioId;
+										}
+
+										// opcional: cierra también
+										palet.FechaCierre = palet.FechaCierre ?? DateTime.Now;
+										palet.UsuarioCierreId = palet.UsuarioCierreId ?? palet.UsuarioVaciadoId;
+
+										dbContext.Palets.Update(palet);
+
+										dbContext.LogPalet.Add(new LogPalet
+										{
+											PaletId = palet.Id,
+											Fecha = DateTime.Now,
+											IdUsuario = palet.UsuarioVaciadoId ?? 0,
+											Accion = "Vaciado",
+											Detalle = $"Marcado vaciado tras consolidación: total de temporales pendientes={totalTemporalesPendientes}, sin líneas definitivas y sin ajustes de conteo/inventario pendientes."
+										});
+									}
+								}
+							}
+							else if (!quedanTemporales)
 							{
 								// suma total de cantidades del palet
 								var totalPalet = await dbContext.PaletLineas
@@ -631,11 +1068,11 @@ namespace SGA_Api.Services
 					.Select(t => new { t.Id, t.CodigoEstado, t.TipoTraspaso, t.UsuarioInicioId, t.CodigoPalet, t.CodigoArticulo })
 					.ToListAsync();
 
-				// Solo log cuando hay muchos traspasos activos (para evitar spam)
-				if (traspasosActivos.Count > 10)
-				{
-					logger.LogDebug("?? BackgroundService: Revisando {Cantidad} traspasos activos", traspasosActivos.Count);
-				}
+                // Solo log cuando hay muchos traspasos activos (para evitar spam)
+                if (traspasosActivos.Count > 10)
+                {
+                    logger.LogDebug("?? BackgroundService: Revisando {Cantidad} traspasos activos", traspasosActivos.Count);
+                }
 
 				foreach (var traspaso in traspasosActivos)
 				{

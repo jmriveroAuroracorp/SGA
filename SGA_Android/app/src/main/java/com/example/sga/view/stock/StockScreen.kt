@@ -7,7 +7,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
@@ -36,6 +39,7 @@ import com.example.sga.view.Almacen.AlmacenViewModel
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.flow.*
 import android.widget.Toast
@@ -51,11 +55,13 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalFocusManager
 import com.example.sga.utils.SoundUtils
+import com.example.sga.utils.FormatUtils
 
 @Composable
 fun StockCard(
     stock: Stock,
-    onPrintClick: (Stock) -> Unit,          // ← nuevo callback
+    onPrintClick: (Stock) -> Unit,          // ← callback para imprimir artículo
+    onPrintPaletClick: (Stock) -> Unit,     // ← callback para imprimir palet
     sessionViewModel: SessionViewModel,      // ← agregado para verificar permisos
     modifier: Modifier = Modifier
 ) {
@@ -105,10 +111,24 @@ fun StockCard(
                     Text("🗓 Caducidad: $fechaCorta")
                 }
 
-                // Solo mostrar el icono de impresión si el usuario tiene permiso 11
+                // Iconos de impresión si el usuario tiene permiso 11
                 if (sessionViewModel.tienePermiso(11)) {
-                    IconButton(onClick = { onPrintClick(stock) }) {
-                        Icon(Icons.Default.Print, contentDescription = "Imprimir etiqueta")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Botón para imprimir etiqueta de artículo
+                        IconButton(onClick = { onPrintClick(stock) }) {
+                            Icon(Icons.Default.Print, contentDescription = "Imprimir etiqueta de artículo")
+                        }
+                        
+                        // Botón adicional para imprimir etiqueta de palet (solo si está paletizado)
+                        if (stock.tipoStock == "Paletizado" && stock.paletId != null) {
+                            IconButton(onClick = { onPrintPaletClick(stock) }) {
+                                Icon(
+                                    Icons.Default.Print,
+                                    contentDescription = "Imprimir etiqueta de palet",
+                                    tint = Color(0xFF2196F3) // Azul para diferenciar del botón de artículo
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -122,12 +142,12 @@ fun StockCard(
             ) {
                 Column {
                     Text(
-                        text = "📦 Disponible: ${"%.2f".format(stock.disponible)}",
+                        text = "📦 Disponible: ${FormatUtils.formatearCantidad(stock.disponible)}",
                         color = colorSaldo,
                         style = estiloSaldo
                     )
                     if (stock.reservado > 0) {
-                        Text("🔒 Reservado: ${"%.2f".format(stock.reservado)}")
+                        Text("🔒 Reservado: ${FormatUtils.formatearCantidad(stock.reservado)}")
                     }
                 }
                 
@@ -140,8 +160,8 @@ fun StockCard(
                 ) {
                     Text(
                         text = when (stock.tipoStock) {
-                            "Suelto" -> "📦 Suelto"
-                            "Paletizado" -> "🏗️ Paletizado"
+                            "Suelto" -> "Suelto"
+                            "Paletizado" -> "Paletizado"
                             else -> stock.tipoStock
                         },
                         color = colorTipoStock,
@@ -169,8 +189,8 @@ fun StockCard(
                         Spacer(Modifier.height(4.dp))
                         Text("📋 Código: ${stock.codigoPalet}")
                         Text("📊 Estado: ${stock.estadoPalet}")
-                        if (stock.paletId != null) {
-                            Text("🆔 ID: ${stock.paletId}")
+                        if (stock.ordenTrabajoId != null) {
+                            Text("📋 Orden de Trabajo: ${stock.ordenTrabajoId}")
                         }
                     }
                 }
@@ -255,7 +275,7 @@ fun StockScreen(
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val opcionesVista = listOf("Almacén", "Partida", "Artículo", "Tipo Stock")
+    val opcionesVista = listOf("Almacén", "Partida", "Artículo")
     var vistaSeleccionadaIndex by remember { mutableStateOf(0) }
     val vistaSeleccionada = opcionesVista[vistaSeleccionadaIndex]
 
@@ -423,10 +443,11 @@ fun lanzarConsulta() {
     }
 }
 
+    // ✅ OPTIMIZADO: Debounce mejorado para reducir llamadas de red
     LaunchedEffect(Unit) {
         snapshotFlow { descripcionBusqueda.text }
-            .debounce(900)
-            .filter { it.length >= 3 }
+            .debounce(1200) // ✅ Aumentado de 900ms a 1200ms para menos llamadas
+            .filter { it.length >= 4 } // ✅ Aumentado de 3 a 4 caracteres para menos llamadas
             .distinctUntilChanged()
             .collect { texto ->
                 if (skipNextDescripcionSearch) {
@@ -435,7 +456,7 @@ fun lanzarConsulta() {
                 }
 
                 stockLogic.buscarArticuloPorDescripcion(
-                    codigoEmpresa = empresaCodigo ?: return@collect,  // 👈 nuevo
+                    codigoEmpresa = empresaCodigo ?: return@collect,
                     codigoAlmacen = almacenFiltro,
                     descripcion = texto,
                     onUnico = { codArticulo ->
@@ -497,24 +518,19 @@ fun lanzarConsulta() {
                                             codigoArticulo = it
                                             lanzarConsulta()
                                         },
-
-                                        //onUbicacionDetectada      = { codigoUbicacion = it },
-                                        /*onUbicacionDetectada = { tfv ->
-                                            val s = tfv.text.trim()
-                                            if (s.contains('$')) {
-                                                val parts = s.split('$', limit = 2)
-                                                if (parts.size == 2 && parts[0].isNotBlank()) {
-                                                    // 213$UB...
-                                                    almacenLogic.onAlmacenSeleccionado(parts[0])     // ← marca almacén en la pantalla
-                                                    codigoUbicacion = TextFieldValue(parts[1])       // ← deja solo "UB..."
-                                                } else {
-                                                    // "$UB..." o algo raro: quita el "$" y usa lo que haya después
-                                                    codigoUbicacion = TextFieldValue(parts.getOrNull(1) ?: s.removePrefix("$"))
+                                        onPaletDetectado = { palet ->
+                                            stockLogic.consultarStockPorPalet(
+                                                palet = palet,
+                                                codigoEmpresa = empresa?.codigo?.toShort() ?: return@procesarCodigoEscaneado,
+                                                onSuccess = { stockDelPalet ->
+                                                    Log.d("PALET_STOCK", "✅ Stock del palet ${palet.codigoPalet} cargado: ${stockDelPalet.size} artículos")
+                                                },
+                                                onError = { error ->
+                                                    stockViewModel.setError("Error al consultar stock del palet: $error")
                                                 }
-                                            } else {
-                                                codigoUbicacion = tfv
-                                            }
-                                        }*/
+                                            )
+                                        },
+
                                         onUbicacionDetectada = { tfv ->
                                             val s = tfv.text.trim()
                                             if (s.contains('$')) {
@@ -575,11 +591,8 @@ fun lanzarConsulta() {
                 /** --------- ENCABEZADO Y FORMULARIO --------- **/
                 item {
                     Text("Consulta de Stock", style = MaterialTheme.typography.titleLarge)
+                    
                     Spacer(Modifier.height(16.dp))
-
-
-
-                    Spacer(Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -602,25 +615,7 @@ fun lanzarConsulta() {
                                     Text("Escanear QR")
                                 }
                             }
-                            /*if (almacenSel == null || almacenSel == "Todos") {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = "Selecciona un almacén para escanear ubicaciones.",
-                                        color = MaterialTheme.colorScheme.error,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }*/
+                           
                         }
                     }
 
@@ -721,16 +716,47 @@ fun lanzarConsulta() {
 
                     // Solo mostrar el selector de vista cuando hay resultados
                     if (resultado.isNotEmpty()) {
-                        ScrollableTabRow(
-                            selectedTabIndex = vistaSeleccionadaIndex,
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             opcionesVista.forEachIndexed { index, texto ->
-                                Tab(
-                                    selected = vistaSeleccionadaIndex == index,
-                                    onClick = { vistaSeleccionadaIndex = index },
-                                    text = { Text(texto.capitalize()) }
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(MaterialTheme.shapes.large)
+                                        .background(
+                                            color = if (vistaSeleccionadaIndex == index) 
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            else 
+                                                Color.Transparent
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (vistaSeleccionadaIndex == index) 
+                                                MaterialTheme.colorScheme.primary
+                                            else 
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                            shape = MaterialTheme.shapes.large
+                                        )
+                                        .clickable { vistaSeleccionadaIndex = index }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = texto,
+                                        color = if (vistaSeleccionadaIndex == index) 
+                                            MaterialTheme.colorScheme.primary
+                                        else 
+                                            MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Normal
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
 
@@ -740,6 +766,44 @@ fun lanzarConsulta() {
                     if (error != null) {
                         Text("⚠️ $error", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(16.dp))
+                    }
+                }
+
+                /** --------- INFORMACIÓN DEL PALET --------- **/
+                // Mostrar información del palet solo si TODOS los resultados son del mismo palet
+                // (esto indica que se escaneó un palet específico, no una ubicación)
+                resultado.firstOrNull()?.let { primerStock ->
+                    if (primerStock.tipoStock == "Paletizado" && 
+                        primerStock.paletId != null &&
+                        resultado.all { it.paletId == primerStock.paletId && it.codigoPalet == primerStock.codigoPalet }) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "🏗️ Stock del Palet: ${primerStock.codigoPalet}",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF2196F3)
+                                    )
+                                    Text("📊 Estado: ${primerStock.estadoPalet}")
+                                    if (primerStock.ordenTrabajoId != null) {
+                                        Text("📋 Orden de Trabajo: ${primerStock.ordenTrabajoId}")
+                                    }
+                                    if (primerStock.codigoAlmacen.isNotEmpty()) {
+                                        Text("🏬 Almacén: ${primerStock.codigoAlmacen}")
+                                    }
+                                    if (primerStock.ubicacion.isNotEmpty()) {
+                                        Text("📍 Ubicación: ${primerStock.ubicacion}")
+                                    }
+                                    Text("📦 Artículos en el palet: ${resultado.size}")
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
                     }
                 }
 
@@ -782,8 +846,12 @@ fun lanzarConsulta() {
                     else -> filtrado.groupBy { "Sin clasificar" }
                 }
 
-                /** --------- RESULTADOS AGRUPADOS --------- **/
-                agrupado.forEach { (grupo, items) ->
+                /** --------- RESULTADOS AGRUPADOS Y ORDENADOS --------- **/
+                agrupado.forEach { (grupo, itemsSinOrdenar) ->
+                    // Ordenar por fecha de caducidad (más próxima primero)
+                    val items = itemsSinOrdenar.sortedBy { stock ->
+                        stock.fechaCaducidad?.takeIf { it.isNotEmpty() } ?: "9999-12-31"
+                    }
                     item {
                         Text(
                             text = when (vistaSeleccionada) {
@@ -825,10 +893,12 @@ fun lanzarConsulta() {
                     }*/
                     items(items) { stock ->
                         var mostrarModal by remember { mutableStateOf(false) }
+                        var mostrarModalPalet by remember { mutableStateOf(false) }
 
                         StockCard(
                             stock = stock,
                             onPrintClick = { mostrarModal = true },
+                            onPrintPaletClick = { mostrarModalPalet = true },
                             sessionViewModel = sessionViewModel
                         )
 
@@ -912,6 +982,111 @@ fun lanzarConsulta() {
                                             }
                                             Text(copias.toString(), modifier = Modifier.padding(8.dp))
                                             IconButton(onClick = { copias++ }) {
+                                                Icon(Icons.Default.Add, contentDescription = "Más")
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        // Diálogo de impresión de palet
+                        if (mostrarModalPalet && stock.paletId != null) {
+                            var dropOpenPalet by remember { mutableStateOf(false) }
+                            val impresoraSeleccionadaNombre by sessionViewModel.impresoraSeleccionada.collectAsState()
+                            val impresoraSel = remember(impresoraSeleccionadaNombre, impresionLogic.impresoras.value) {
+                                impresionLogic.impresoras.value.find { imp -> imp.nombre == impresoraSeleccionadaNombre }
+                            }
+                            var copiasPalet by remember { mutableStateOf(1) }
+
+                            AlertDialog(
+                                onDismissRequest = { mostrarModalPalet = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        if (impresoraSel == null || copiasPalet <= 0) {
+                                            stockViewModel.setError("Selecciona impresora y número de copias válido")
+                                            return@TextButton
+                                        }
+
+                                        impresionLogic.imprimirPalet(
+                                            paletId       = stock.paletId!!,
+                                            usuario       = usuario?.name ?: "Desconocido",
+                                            dispositivoId = sessionViewModel.dispositivo.value?.id ?: "Desconocido",
+                                            idImpresora   = impresoraSel.id,
+                                            copias        = copiasPalet
+                                        )
+
+                                        mostrarModalPalet = false
+                                    }) {
+                                        Text("Imprimir")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { mostrarModalPalet = false }) {
+                                        Text("Cancelar")
+                                    }
+                                },
+                                title = { Text("Impresión de etiqueta de palet") },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        // Información del palet
+                                        Card(
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.padding(12.dp)) {
+                                                Text(
+                                                    text = "Palet: ${stock.codigoPalet ?: "—"}",
+                                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFF2196F3)
+                                                )
+                                                Text("📊 Estado: ${stock.estadoPalet ?: "—"}")
+                                                if (stock.ordenTrabajoId != null) {
+                                                    Text("📋 Orden de Trabajo: ${stock.ordenTrabajoId}")
+                                                }
+                                            }
+                                        }
+
+                                        Text("Impresora")
+
+                                        Box {
+                                            OutlinedTextField(
+                                                readOnly = true,
+                                                value = impresoraSel?.nombre ?: "",
+                                                onValueChange = {},
+                                                label = { Text("Impresora") },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                trailingIcon = {
+                                                    IconButton(onClick = { dropOpenPalet = !dropOpenPalet }) {
+                                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                                    }
+                                                }
+                                            )
+                                            DropdownMenu(
+                                                expanded = dropOpenPalet,
+                                                onDismissRequest = { dropOpenPalet = false }
+                                            ) {
+                                                impresionLogic.impresoras.value.forEach { imp ->
+                                                    DropdownMenuItem(
+                                                        text = { Text(imp.nombre) },
+                                                        onClick = {
+                                                            sessionViewModel.actualizarImpresora(imp.nombre)
+                                                            dropOpenPalet = false
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Text("Número de copias")
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = { if (copiasPalet > 1) copiasPalet-- }) {
+                                                Icon(Icons.Default.Remove, contentDescription = "Menos")
+                                            }
+                                            Text(copiasPalet.toString(), modifier = Modifier.padding(8.dp))
+                                            IconButton(onClick = { copiasPalet++ }) {
                                                 Icon(Icons.Default.Add, contentDescription = "Más")
                                             }
                                         }
@@ -1010,9 +1185,10 @@ fun lanzarConsulta() {
                     QRScannerView(
                         modifier = Modifier
                             .fillMaxWidth(0.5f)
-                            .height(250.dp),
+                            .aspectRatio(1f), // Hace que sea cuadrado (mismo ancho que altura)
                         onCodeScanned = { code ->
                             if (escaneoProcesado) return@QRScannerView
+                            escaneoProcesado = true     // marca como procesado para evitar múltiples ejecuciones
                             escaneando = false          // cierra overlay tras 1 lectura
 
                             stockLogic.procesarCodigoEscaneado(
@@ -1024,6 +1200,18 @@ fun lanzarConsulta() {
                                 onCodigoArticuloDetectado = {
                                     codigoArticulo = it
                                     lanzarConsulta()
+                                },
+                                onPaletDetectado = { palet ->
+                                    stockLogic.consultarStockPorPalet(
+                                        palet = palet,
+                                        codigoEmpresa = empresa?.codigo?.toShort() ?: return@procesarCodigoEscaneado,
+                                        onSuccess = { stockDelPalet ->
+                                            Log.d("PALET_STOCK", "✅ Stock del palet ${palet.codigoPalet} cargado: ${stockDelPalet.size} artículos")
+                                        },
+                                        onError = { error ->
+                                            stockViewModel.setError("Error al consultar stock del palet: $error")
+                                        }
+                                    )
                                 },
 
                                 /*onUbicacionDetectada = { tfv ->
@@ -1088,3 +1276,4 @@ fun lanzarConsulta() {
         }
     }
 }
+

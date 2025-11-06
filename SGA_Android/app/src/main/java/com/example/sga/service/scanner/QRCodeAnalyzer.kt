@@ -8,10 +8,13 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 
 class QRCodeAnalyzer(
-    private val onQRCodeScanned: (String) -> Unit
+    private val onQRCodeScanned: (String) -> Unit,
+    private val scanDelayMillis: Long = 1000L // Tiempo mínimo entre escaneos (1 segundo por defecto)
 ) : ImageAnalysis.Analyzer {
 
     private val scanner = BarcodeScanning.getClient()
+    private var lastScanTime: Long = 0L
+    private var lastScannedCode: String? = null
 
     @SuppressLint("UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
@@ -24,12 +27,23 @@ class QRCodeAnalyzer(
 
         scanner.process(image)
             .addOnSuccessListener { barcodes ->
+                val currentTime = System.currentTimeMillis()
+                val timeSinceLastScan = currentTime - lastScanTime
+
                 for (barcode in barcodes) {
                     val value = barcode.rawValue
                     if (value != null) {
-                        Log.d("QR_DEBUG", "Código leído: $value")
-                        onQRCodeScanned(value)
-                        break // ✅ Esto ya está bien porque no está dentro de una lambda
+                        // Solo procesar si ha pasado suficiente tiempo desde el último escaneo
+                        // o si es un código diferente
+                        if (timeSinceLastScan >= scanDelayMillis || value != lastScannedCode) {
+                            Log.d("QR_DEBUG", "Código leído: $value")
+                            lastScanTime = currentTime
+                            lastScannedCode = value
+                            onQRCodeScanned(value)
+                        } else {
+                            Log.d("QR_DEBUG", "Escaneo ignorado (demasiado rápido): $value")
+                        }
+                        break
                     }
                 }
             }

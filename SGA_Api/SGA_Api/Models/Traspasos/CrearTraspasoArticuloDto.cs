@@ -30,5 +30,12 @@ namespace SGA_Api.Models.Traspasos
 		/// Si se especifica, se usará ese palet. Si no, se busca/crea automáticamente.
 		/// </summary>
 		public Guid? PaletIdDestino { get; set; }
+		
+		/// <summary>
+		/// Opcional: ID del palet origen de donde se quiere extraer el stock.
+		/// Si el usuario seleccionó stock desde un palet específico, este campo lo indica.
+		/// Si se especifica, se usará este palet para crear la línea negativa.
+		/// </summary>
+		public Guid? PaletIdOrigen { get; set; }
 	}
 } 

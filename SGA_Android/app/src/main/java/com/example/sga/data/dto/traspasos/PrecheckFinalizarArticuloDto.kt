@@ -5,5 +5,7 @@ data class PrecheckResp(
     val paletId: String? = null,
     val codigoPalet: String? = null,
     val cerrado: Boolean? = null,
+    val cantidadPalets: Int? = null,
+    val palets: List<PaletDto>? = null,
     val aviso: String? = null
 )

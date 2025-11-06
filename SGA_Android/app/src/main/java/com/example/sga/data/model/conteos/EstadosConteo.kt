@@ -39,7 +39,7 @@ enum class EstadoEscaneoConteo {
     Inactivo,
     EsperandoUbicacion,
     EsperandoArticulo,
-    EsperandoPalet,
     EsperandoCantidad,
+    EsperandoPalet, // Nuevo estado
     Procesando
 }

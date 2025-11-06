@@ -18,6 +18,10 @@ namespace SGA_Api.Models.Inventario
         public decimal? AjusteFinal { get; set; }
         public string Estado { get; set; } = string.Empty;
         
+        // Identificación de palet (si la línea proviene de un palet)
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
+
         // Propiedades para información de palets
         public List<PaletDetalleDto> Palets { get; set; } = new();
         

@@ -386,7 +386,8 @@ namespace SGA_Api.Controllers.Inventario
                         StockTeorico = 0, // Se calculará después
                         StockContado = lineaTemp.CantidadContada,
                         Estado = "CONTADA",
-                        Observaciones = lineaTemp.Observaciones
+                        Observaciones = lineaTemp.Observaciones,
+                        PaletId = lineaTemp.PaletId
                     };
 
                     _context.InventarioLineas.Add(linea);
@@ -429,34 +430,190 @@ namespace SGA_Api.Controllers.Inventario
                     .Where(l => l.IdInventario == idInventario)
                     .ToListAsync();
 
-                // Generar ajustes para cada línea
+                // 1) Crear AJUSTES POR PALET (solo SGA) para que el delta se agregue al propio palet
+                var tolPalet = 0.000001m; // Reducido a 0.000001 para permitir diferencias muy pequeñas
+                _logger.LogInformation("🔍 CerrarInventario: Procesando {Cantidad} líneas para crear ajustes", lineas.Count);
                 foreach (var linea in lineas)
                 {
-                    // Calcular la diferencia entre stock contado y stock actual
-                    var diferencia = (linea.StockContado ?? 0) - linea.StockActual;
-                    
-                    // Solo crear ajuste si hay diferencia significativa
-                    if (Math.Abs(diferencia) > 0.01m)
+                    if (!linea.PaletId.HasValue)
                     {
-                        var ajuste = new InventarioAjustes
-                        {
-                            IdAjuste = Guid.NewGuid(),
-                            IdInventario = idInventario,
-                            CodigoArticulo = linea.CodigoArticulo,
-                            CodigoUbicacion = linea.CodigoUbicacion,
-                            Diferencia = diferencia,
-                            UsuarioId = inventario.UsuarioCreacionId,
-                            Fecha = DateTime.Now,
-                            IdConteo = Guid.Empty,
-                            CodigoEmpresa = inventario.CodigoEmpresa,
-                            CodigoAlmacen = linea.CodigoAlmacen ?? inventario.CodigoAlmacen,
-                            Estado = "PENDIENTE_ERP",
-                            FechaCaducidad = linea.FechaCaducidad,
-                            Partida = linea.Partida
-                        };
-
-                        _context.InventarioAjustes.Add(ajuste);
+                        _logger.LogDebug("⏭️ Línea sin PaletId, saltando: Articulo={Articulo}", linea.CodigoArticulo);
+                        continue; // solo líneas de palet
                     }
+                    var deltaPalet = (linea.StockContado ?? 0m) - linea.StockActual;
+                    if (Math.Abs(deltaPalet) < tolPalet)
+                    {
+                        _logger.LogDebug("⏭️ Delta muy pequeño ({Delta}), saltando: PaletId={PaletId}, Articulo={Articulo}", 
+                            deltaPalet, linea.PaletId, linea.CodigoArticulo);
+                        continue; // sin cambios
+                    }
+                    
+                    _logger.LogInformation("✅ Creando ajuste para palet: PaletId={PaletId}, Articulo={Articulo}, Delta={Delta}", 
+                        linea.PaletId, linea.CodigoArticulo, deltaPalet);
+
+                    string? codigoPalet = null;
+                    try
+                    {
+                        codigoPalet = await _context.Palets
+                            .Where(p => p.Id == linea.PaletId.Value)
+                            .Select(p => p.Codigo)
+                            .FirstOrDefaultAsync();
+                    }
+                    catch { }
+
+                    var ajustePalet = new InventarioAjustes
+                    {
+                        IdAjuste = Guid.NewGuid(),
+                        IdInventario = idInventario,
+                        CodigoArticulo = linea.CodigoArticulo,
+                        CodigoUbicacion = linea.CodigoUbicacion,
+                        Diferencia = deltaPalet,
+                        UsuarioId = inventario.UsuarioCreacionId,
+                        Fecha = DateTime.Now,
+                        IdConteo = Guid.Empty,
+                        CodigoEmpresa = inventario.CodigoEmpresa,
+                        CodigoAlmacen = linea.CodigoAlmacen ?? inventario.CodigoAlmacen,
+                        Estado = "PENDIENTE_ERP", // vuestro servicio marcará COMPLETADO y aplicará al palet
+                        FechaCaducidad = linea.FechaCaducidad,
+                        Partida = linea.Partida,
+                        PaletId = linea.PaletId,
+                        CodigoPalet = codigoPalet,
+                        ProcesadoPalet = false
+                    };
+
+                    _context.InventarioAjustes.Add(ajustePalet);
+
+                    // 🔷 NUEVO: Crear TempPaletLinea para trazabilidad (igual que en conteos)
+                    // Esto permite ver los ajustes pendientes en el contenido del palet
+                    
+                    // Obtener descripción del artículo desde Sage
+                    string? descripcionArticulo = null;
+                    try
+                    {
+                        descripcionArticulo = await _sageDbContext.Articulos
+                            .Where(a => a.CodigoEmpresa == inventario.CodigoEmpresa && 
+                                       a.CodigoArticulo == linea.CodigoArticulo)
+                            .Select(a => a.DescripcionArticulo)
+                            .FirstOrDefaultAsync();
+                    }
+                    catch
+                    {
+                        // Si no se puede obtener, continuar sin descripción
+                        _logger.LogWarning("No se pudo obtener descripción del artículo {CodigoArticulo} para TempPaletLinea", linea.CodigoArticulo);
+                    }
+
+                    var tempPaletLinea = new TempPaletLinea
+                    {
+                        Id = Guid.NewGuid(),
+                        PaletId = linea.PaletId.Value,
+                        CodigoEmpresa = inventario.CodigoEmpresa,
+                        CodigoArticulo = linea.CodigoArticulo,
+                        DescripcionArticulo = descripcionArticulo,
+                        Cantidad = deltaPalet, // DELTA (+/-)
+                        UnidadMedida = "UN", // Unidad por defecto
+                        Lote = linea.Partida,
+                        FechaCaducidad = linea.FechaCaducidad,
+                        CodigoAlmacen = linea.CodigoAlmacen ?? inventario.CodigoAlmacen,
+                        Ubicacion = linea.CodigoUbicacion,
+                        UsuarioId = inventario.UsuarioCreacionId,
+                        FechaAgregado = DateTime.Now,
+                        Observaciones = $"Ajuste de inventario - Inventario: {inventario.CodigoInventario}",
+                        TraspasoId = null, // No es un traspaso
+                        ConteoId = null, // No es un conteo
+                        InventarioId = idInventario, // ID del inventario
+                        Procesada = false,
+                        EsHeredada = false
+                    };
+                    _context.TempPaletLineas.Add(tempPaletLinea);
+                    
+                    _logger.LogInformation("✅ Creada TempPaletLinea para trazabilidad de inventario: PaletId={PaletId}, Diferencia={Diferencia}, Articulo={Articulo}", 
+                        linea.PaletId, deltaPalet, linea.CodigoArticulo);
+                }
+
+                // AGRUPAR por clave lógica de inventario (total por ubicación que ve el ERP)
+                var tolerancia = 0.000001m; // Reducido a 0.000001 para permitir diferencias muy pequeñas
+                // Ejercicio actual para leer ERP real
+                var ejercicioCierre = await _sageDbContext.Periodos
+                    .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                    .OrderByDescending(p => p.Fechainicio)
+                    .Select(p => p.Ejercicio)
+                    .FirstOrDefaultAsync();
+
+                // 🔷 CORREGIDO: Agrupar solo líneas SUELTAS (sin PaletId) para calcular ajuste de stock suelto
+                // Los palets ya tienen sus propios ajustes creados arriba
+                var grupos = lineas
+                    .Where(l => !l.PaletId.HasValue) // Solo líneas sueltas
+                    .GroupBy(l => new {
+                        l.CodigoArticulo,
+                        Ubicacion = l.CodigoUbicacion,
+                        Almacen = l.CodigoAlmacen ?? inventario.CodigoAlmacen,
+                        l.Partida,
+                        l.FechaCaducidad
+                    })
+                    .Select(g => new {
+                        g.Key.CodigoArticulo,
+                        g.Key.Ubicacion,
+                        g.Key.Almacen,
+                        g.Key.Partida,
+                        g.Key.FechaCaducidad,
+                        ContadoTotal = g.Sum(x => x.StockContado ?? 0m) // Solo suma de líneas sueltas
+                    })
+                    .ToList();
+
+                foreach (var g in grupos)
+                {
+                    // 🔷 CORREGIDO: Calcular stock suelto real en ERP para la clave
+                    // Stock suelto = Total ERP - Stock paletizado en esa posición
+                    var totalErp = await _storageContext.AcumuladoStockUbicacion
+                        .Where(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                    s.Ejercicio == ejercicioCierre &&
+                                    s.CodigoAlmacen == g.Almacen &&
+                                    s.CodigoArticulo == g.CodigoArticulo &&
+                                    s.Ubicacion == g.Ubicacion &&
+                                    (s.Partida == g.Partida || (s.Partida == null && g.Partida == null)) &&
+                                    (s.FechaCaducidad == g.FechaCaducidad || (s.FechaCaducidad == null && g.FechaCaducidad == null)))
+                        .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+                    // Stock paletizado actual en esa ubicación/artículo/partida/fecha
+                    var paletizadoActual = await _context.PaletLineas
+                        .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                     pl.CodigoAlmacen == g.Almacen &&
+                                     pl.Ubicacion == g.Ubicacion &&
+                                     pl.CodigoArticulo == g.CodigoArticulo &&
+                                     (pl.Lote == g.Partida || (pl.Lote == null && g.Partida == null)) &&
+                                     (pl.FechaCaducidad == g.FechaCaducidad || (pl.FechaCaducidad == null && g.FechaCaducidad == null)))
+                        .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+                    // Stock suelto actual = Total - Paletizado
+                    var actualSueltoErp = totalErp - paletizadoActual;
+                    if (actualSueltoErp < 0) actualSueltoErp = 0; // No permitir negativos
+
+                    // Diferencia solo para stock suelto
+                    var diferencia = g.ContadoTotal - actualSueltoErp;
+                    if (Math.Abs(diferencia) < tolerancia)
+                        continue; // No ajustar si el total no cambia
+
+                    var ajuste = new InventarioAjustes
+                    {
+                        IdAjuste = Guid.NewGuid(),
+                        IdInventario = idInventario,
+                        CodigoArticulo = g.CodigoArticulo,
+                        CodigoUbicacion = g.Ubicacion,
+                        Diferencia = diferencia,
+                        UsuarioId = inventario.UsuarioCreacionId,
+                        Fecha = DateTime.Now,
+                        IdConteo = Guid.Empty,
+                        CodigoEmpresa = inventario.CodigoEmpresa,
+                        CodigoAlmacen = g.Almacen,
+                        Estado = "PENDIENTE_ERP",
+                        FechaCaducidad = g.FechaCaducidad,
+                        Partida = g.Partida,
+                        PaletId = null, // Ajuste de stock suelto
+                        CodigoPalet = null,
+                        ProcesadoPalet = false
+                    };
+
+                    _context.InventarioAjustes.Add(ajuste);
                 }
 
                 // Cambiar el estado a CERRADO
@@ -536,29 +693,163 @@ namespace SGA_Api.Controllers.Inventario
                     paletsInfo = await ObtenerInformacionPaletsAsync(lineas.Select(l => new InventarioLineasTemp
                     {
                         CodigoArticulo = l.CodigoArticulo,
+                        CodigoAlmacen = l.CodigoAlmacen ?? inventario.CodigoAlmacen,
                         CodigoUbicacion = l.CodigoUbicacion,
                         Partida = l.Partida
                     }).ToList(), inventario.CodigoEmpresa);
                 }
 
-                // Crear resultado con descripciones usando DTO
-                var lineasDto = lineas.Select(l => new LineaInventarioDto
+                // Obtener información de palets por ID para asegurar que se incluyan cuando hay PaletId
+                var paletsPorId = new Dictionary<Guid, PaletDetalleDto>();
+                if (inventario != null)
                 {
-                    CodigoArticulo = l.CodigoArticulo,
-                    DescripcionArticulo = articulos.GetValueOrDefault(l.CodigoArticulo, ""),
-                    CodigoUbicacion = l.CodigoUbicacion,
-                    Partida = l.Partida ?? "",
-                    FechaCaducidad = l.FechaCaducidad,
-                    StockActual = l.StockActual,
-                    StockContado = l.StockContado ?? 0,
-                    StockTeorico = l.StockTeorico,
-                    AjusteFinal = l.AjusteFinal,
-                    Estado = l.Estado,
-                    // Información de palets
-                    Palets = paletsInfo.GetValueOrDefault($"{l.CodigoArticulo}_{l.CodigoUbicacion}_{l.Partida ?? ""}", new List<object>())
-                        .Cast<PaletDetalleDto>()
-                        .ToList()
+                    var paletIds = lineas.Where(l => l.PaletId.HasValue).Select(l => l.PaletId!.Value).Distinct().ToList();
+                    if (paletIds.Any())
+                    {
+                        var palets = await _context.Palets
+                            .Where(p => paletIds.Contains(p.Id))
+                            .Select(p => new
+                            {
+                                p.Id,
+                                p.Codigo,
+                                p.Estado,
+                                p.FechaApertura,
+                                p.FechaCierre
+                            })
+                            .ToListAsync();
+
+                        foreach (var palet in palets)
+                        {
+                            paletsPorId[palet.Id] = new PaletDetalleDto
+                            {
+                                PaletId = palet.Id,
+                                CodigoPalet = palet.Codigo,
+                                EstadoPalet = palet.Estado,
+                                FechaApertura = palet.FechaApertura,
+                                FechaCierre = palet.FechaCierre
+                            };
+                        }
+                    }
+                }
+
+                // Crear resultado con descripciones usando DTO
+                var lineasDto = lineas.Select(l =>
+                {
+                    var almacen = l.CodigoAlmacen ?? inventario?.CodigoAlmacen ?? "";
+                    var clave = $"{l.CodigoArticulo}_{almacen}_{l.CodigoUbicacion}_{l.Partida ?? ""}";
+                    var paletsLinea = new List<PaletDetalleDto>();
+                    
+                    // Solo asignar palets si la línea tiene un PaletId (no es suelta)
+                    if (l.PaletId.HasValue)
+                    {
+                        // Obtener todos los palets de esa ubicación
+                        paletsLinea = paletsInfo.GetValueOrDefault(clave, new List<object>()).Cast<PaletDetalleDto>().ToList();
+                        
+                        // Asegurarse de que el palet específico de esta línea esté en la lista
+                        if (paletsPorId.TryGetValue(l.PaletId.Value, out var paletEspecifico))
+                        {
+                            if (!paletsLinea.Any(p => p.PaletId == l.PaletId.Value))
+                            {
+                                paletsLinea.Add(paletEspecifico);
+                            }
+                        }
+                    }
+                    // Si PaletId es null, la lista de palets queda vacía (línea suelta)
+                    
+                    string? codigoPalet = null;
+                    if (l.PaletId.HasValue)
+                    {
+                        var p = paletsLinea.FirstOrDefault(x => x.PaletId == l.PaletId.Value);
+                        codigoPalet = p?.CodigoPalet;
+                    }
+
+                    return new LineaInventarioDto
+                    {
+                        CodigoArticulo = l.CodigoArticulo,
+                        DescripcionArticulo = articulos.GetValueOrDefault(l.CodigoArticulo, ""),
+                        CodigoUbicacion = l.CodigoUbicacion,
+                        Partida = l.Partida ?? "",
+                        FechaCaducidad = l.FechaCaducidad,
+                        StockActual = l.StockActual,
+                        StockContado = l.StockContado ?? 0,
+                        StockTeorico = l.StockTeorico,
+                        AjusteFinal = l.AjusteFinal,
+                        Estado = l.Estado,
+                        PaletId = l.PaletId,
+                        CodigoPalet = codigoPalet,
+                        // Información de palets: solo si la línea tiene PaletId
+                        Palets = paletsLinea
+                    };
                 }).ToList();
+
+                // Asegurar que también aparece una línea de SUELTO cuando exista diferencia (ERP total - paletizado)
+                try
+                {
+                    var ejercicioAct = await _sageDbContext.Periodos
+                        .Where(p => p.CodigoEmpresa == inventario.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+                        .OrderByDescending(p => p.Fechainicio)
+                        .Select(p => p.Ejercicio)
+                        .FirstOrDefaultAsync();
+
+                    var claves = lineas
+                        .GroupBy(l => new { l.CodigoArticulo, l.CodigoUbicacion, Almacen = l.CodigoAlmacen ?? inventario.CodigoAlmacen, l.Partida, l.FechaCaducidad })
+                        .Select(g => g.Key)
+                        .ToList();
+
+                    foreach (var k in claves)
+                    {
+                        // Total ERP en ubicación
+                        var totalErp = await _storageContext.AcumuladoStockUbicacion
+                            .Where(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                        s.Ejercicio == ejercicioAct &&
+                                        s.CodigoAlmacen == k.Almacen &&
+                                        s.CodigoArticulo == k.CodigoArticulo &&
+                                        s.Ubicacion == k.CodigoUbicacion &&
+                                        (s.Partida == k.Partida || (s.Partida == null && k.Partida == null)) &&
+                                        (s.FechaCaducidad == k.FechaCaducidad || (s.FechaCaducidad == null && k.FechaCaducidad == null)))
+                            .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+                        // Paletizado actual conocido en esa posición
+                        var paletizado = await _context.PaletLineas
+                            .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                         pl.CodigoAlmacen == k.Almacen &&
+                                         pl.Ubicacion == k.CodigoUbicacion &&
+                                         pl.CodigoArticulo == k.CodigoArticulo &&
+                                         (pl.Lote == k.Partida || (pl.Lote == null && k.Partida == null)) &&
+                                         (pl.FechaCaducidad == k.FechaCaducidad || (pl.FechaCaducidad == null && k.FechaCaducidad == null)))
+                            .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+                        var suelto = totalErp - paletizado;
+                        if (suelto > 0)
+                        {
+                            // ¿Ya existe una línea suelta para esa clave?
+                            var yaExiste = lineasDto.Any(ld => ld.CodigoArticulo == k.CodigoArticulo &&
+                                                               ld.CodigoUbicacion == k.CodigoUbicacion &&
+                                                               ld.Partida == (k.Partida ?? "") &&
+                                                               ld.PaletId == null);
+                            if (!yaExiste)
+                            {
+                                lineasDto.Add(new LineaInventarioDto
+                                {
+                                    CodigoArticulo = k.CodigoArticulo,
+                                    DescripcionArticulo = articulos.GetValueOrDefault(k.CodigoArticulo, ""),
+                                    CodigoUbicacion = k.CodigoUbicacion,
+                                    Partida = k.Partida ?? "",
+                                    FechaCaducidad = k.FechaCaducidad,
+                                    StockActual = suelto,
+                                    StockContado = suelto,
+                                    StockTeorico = suelto,
+                                    AjusteFinal = 0,
+                                    Estado = "CONTADA",
+                                    PaletId = null,
+                                    CodigoPalet = null,
+                                    Palets = paletsInfo.GetValueOrDefault($"{k.CodigoArticulo}_{k.Almacen}_{k.CodigoUbicacion}_{k.Partida ?? ""}", new List<object>()).Cast<PaletDetalleDto>().ToList()
+                                });
+                            }
+                        }
+                    }
+                }
+                catch { /* si falla este refuerzo, no impedimos la carga */ }
 
                 return Ok(lineasDto);
             }
@@ -836,7 +1127,7 @@ namespace SGA_Api.Controllers.Inventario
                 // Procesar cada artículo del conteo
                 foreach (var articulo in conteo.Articulos)
                 {
-                    // Buscar línea temporal existente para este artículo/ubicación/partida/fecha
+                    // Buscar línea temporal existente para este artículo/ubicación/partida/fecha/PALET
                     var lineaTempExistente = await _context.InventarioLineasTemp
                         .FirstOrDefaultAsync(lt => 
                             lt.IdInventario == inventario.IdInventario &&
@@ -844,6 +1135,7 @@ namespace SGA_Api.Controllers.Inventario
                             lt.CodigoUbicacion == articulo.CodigoUbicacion &&
                             (lt.Partida == articulo.Partida || (lt.Partida == null && articulo.Partida == null)) &&
                             (lt.FechaCaducidad == articulo.FechaCaducidad || (lt.FechaCaducidad == null && articulo.FechaCaducidad == null)) &&
+                            (lt.PaletId == articulo.PaletId || (lt.PaletId == null && articulo.PaletId == null)) && // ← AGREGAR: Diferenciar por palet
                             !lt.Consolidado);
 
                     if (lineaTempExistente != null)
@@ -858,16 +1150,69 @@ namespace SGA_Api.Controllers.Inventario
                     }
                     else
                     {
-                        // Buscar stock actual del artículo para nueva línea
-                        var stockActual = await _storageContext.AcumuladoStockUbicacion
-                            .FirstOrDefaultAsync(s => 
-                                s.CodigoEmpresa == inventario.CodigoEmpresa &&
-                                s.Ejercicio == ejercicio &&
-                                s.CodigoAlmacen == articulo.CodigoAlmacen && // ← CORREGIDO: Usar almacén del artículo
-                                s.CodigoArticulo == articulo.CodigoArticulo &&
-                                s.Ubicacion == articulo.CodigoUbicacion &&
-                                (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
-                                (s.FechaCaducidad == articulo.FechaCaducidad || (s.FechaCaducidad == null && articulo.FechaCaducidad == null)));
+                        // Calcular stock actual correcto según si es palet o suelto
+                        decimal stockActualCalculado = 0;
+                        string? partida = null;
+                        DateTime? fechaCaducidad = null;
+
+                        if (articulo.PaletId.HasValue)
+                        {
+                            // Stock actual del palet específico
+                            var paletLineas = await _context.PaletLineas
+                                .Where(pl => pl.PaletId == articulo.PaletId.Value &&
+                                             pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                             pl.CodigoAlmacen == articulo.CodigoAlmacen &&
+                                             pl.Ubicacion == articulo.CodigoUbicacion &&
+                                             pl.CodigoArticulo == articulo.CodigoArticulo &&
+                                             (pl.Lote == articulo.Partida || (pl.Lote == null && articulo.Partida == null)) &&
+                                             (pl.FechaCaducidad == articulo.FechaCaducidad || (pl.FechaCaducidad == null && articulo.FechaCaducidad == null)))
+                                .ToListAsync();
+
+                            stockActualCalculado = paletLineas.Sum(pl => pl.Cantidad);
+                            if (paletLineas.Any())
+                            {
+                                partida = paletLineas.First().Lote;
+                                fechaCaducidad = paletLineas.First().FechaCaducidad;
+                            }
+                        }
+                        else
+                        {
+                            // Stock suelto = total en ubicación - stock paletizado
+                            var totalSistema = await _storageContext.AcumuladoStockUbicacion
+                                .Where(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                            s.Ejercicio == ejercicio &&
+                                            s.CodigoAlmacen == articulo.CodigoAlmacen &&
+                                            s.CodigoArticulo == articulo.CodigoArticulo &&
+                                            s.Ubicacion == articulo.CodigoUbicacion &&
+                                            (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
+                                            (s.FechaCaducidad == articulo.FechaCaducidad || (s.FechaCaducidad == null && articulo.FechaCaducidad == null)))
+                                .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+                            var paletizadoActual = await _context.PaletLineas
+                                .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                             pl.CodigoAlmacen == articulo.CodigoAlmacen &&
+                                             pl.Ubicacion == articulo.CodigoUbicacion &&
+                                             pl.CodigoArticulo == articulo.CodigoArticulo &&
+                                             (pl.Lote == articulo.Partida || (pl.Lote == null && articulo.Partida == null)) &&
+                                             (pl.FechaCaducidad == articulo.FechaCaducidad || (pl.FechaCaducidad == null && articulo.FechaCaducidad == null)))
+                                .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+                            stockActualCalculado = totalSistema - paletizadoActual;
+                            if (stockActualCalculado < 0) stockActualCalculado = 0;
+
+                            // Obtener partida y fecha de caducidad del stock acumulado
+                            var stockInfo = await _storageContext.AcumuladoStockUbicacion
+                                .FirstOrDefaultAsync(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                                          s.Ejercicio == ejercicio &&
+                                                          s.CodigoAlmacen == articulo.CodigoAlmacen &&
+                                                          s.CodigoArticulo == articulo.CodigoArticulo &&
+                                                          s.Ubicacion == articulo.CodigoUbicacion &&
+                                                          (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
+                                                          (s.FechaCaducidad == articulo.FechaCaducidad || (s.FechaCaducidad == null && articulo.FechaCaducidad == null)));
+                            
+                            partida = stockInfo?.Partida;
+                            fechaCaducidad = stockInfo?.FechaCaducidad;
+                        }
 
                         // Crear nueva línea temporal solo si no existe
                         var nuevaLineaTemp = new InventarioLineasTemp
@@ -875,11 +1220,12 @@ namespace SGA_Api.Controllers.Inventario
                             IdInventario = inventario.IdInventario,
                             CodigoArticulo = articulo.CodigoArticulo,
                             CodigoUbicacion = articulo.CodigoUbicacion,
-                            CodigoAlmacen = articulo.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
+                            CodigoAlmacen = articulo.CodigoAlmacen,
                             CantidadContada = articulo.CantidadInventario,
-                            StockActual = stockActual?.UnidadSaldo ?? 0,
-                            Partida = stockActual?.Partida,
-                            FechaCaducidad = stockActual?.FechaCaducidad,
+                            StockActual = stockActualCalculado, // ← CORREGIDO: Usar stock calculado (palet o suelto)
+                            Partida = partida ?? articulo.Partida,
+                            FechaCaducidad = fechaCaducidad ?? articulo.FechaCaducidad,
+                            PaletId = articulo.PaletId,
                             UsuarioConteoId = articulo.UsuarioConteo,
                             FechaConteo = DateTime.Now, // Siempre usar la hora del servidor/API
                             Consolidado = false
@@ -888,7 +1234,8 @@ namespace SGA_Api.Controllers.Inventario
                         _context.InventarioLineasTemp.Add(nuevaLineaTemp);
                         
                         _logger.LogInformation($"Nueva línea temporal creada: {articulo.CodigoArticulo} en {articulo.CodigoUbicacion}. " +
-                                              $"StockActual: {nuevaLineaTemp.StockActual}, CantidadContada: {articulo.CantidadInventario}");
+                                              $"PaletId: {articulo.PaletId?.ToString() ?? "SUELTO"}, " +
+                                              $"StockActual: {stockActualCalculado}, CantidadContada: {articulo.CantidadInventario}");
                     }
                 }
 
@@ -1083,18 +1430,8 @@ namespace SGA_Api.Controllers.Inventario
                     // Stock teórico: el que había cuando se creó el inventario
                     var stockTeorico = lineaTemp.StockActual;
                     
-                    // Stock actual: consultar el stock actual del sistema al momento de consolidar
-                    // 🔷 CORREGIDO: Usar el almacén de cada línea individual en lugar del almacén del inventario
-                    var stockActualSistema = await _storageContext.AcumuladoStockUbicacion
-                        .FirstOrDefaultAsync(s => 
-                            s.CodigoEmpresa == inventario.CodigoEmpresa &&
-                            s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen && // ← CORREGIDO: Usar almacén de la línea
-                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                            s.Ubicacion == lineaTemp.CodigoUbicacion &&
-                            s.Partida == lineaTemp.Partida);
-                    
-                    var stockActual = stockActualSistema?.UnidadSaldo ?? 0;
+                    // Stock actual: respetar PALET/SUELTO como en la verificación
+                    var stockActual = await CalcularStockActualLineaTempAsync(lineaTemp, inventario.CodigoEmpresa, ejercicio);
                     
                     // Stock contado por el usuario
                     var stockContado = lineaTemp.CantidadContada ?? lineaTemp.StockActual;
@@ -1121,7 +1458,8 @@ namespace SGA_Api.Controllers.Inventario
                         FechaCaducidad = lineaTemp.FechaCaducidad,
                         UsuarioValidacionId = usuarioValidacionId,
                         FechaValidacion = DateTime.Now, // Siempre usar la hora del servidor/API
-                        Observaciones = lineaTemp.Observaciones
+                        Observaciones = lineaTemp.Observaciones,
+                        PaletId = lineaTemp.PaletId
                     };
                     
                     _context.InventarioLineas.Add(nuevaLinea);
@@ -1139,16 +1477,45 @@ namespace SGA_Api.Controllers.Inventario
 
                 foreach (var lineaTemp in lineasTemp)
                 {
-                    // 🔷 CORREGIDO: Usar el almacén de cada línea individual en lugar del almacén del inventario
-                    var stockActualSistema = await _storageContext.AcumuladoStockUbicacion
-                        .FirstOrDefaultAsync(s => 
-                            s.CodigoEmpresa == inventario.CodigoEmpresa &&
-                            s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen && // ← CORREGIDO: Usar almacén de la línea
-                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                            s.Ubicacion == lineaTemp.CodigoUbicacion);
+                    decimal stockActual;
+                    if (lineaTemp.PaletId.HasValue)
+                    {
+                        // Stock actual del palet específico (suma de las líneas del palet para ese artículo/partida/caducidad)
+                        stockActual = await _context.PaletLineas
+                            .Where(pl => pl.PaletId == lineaTemp.PaletId.Value &&
+                                         pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                         pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                         pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                         pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                         (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                         (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                            .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+                    }
+                    else
+                    {
+                        // Stock suelto = total ubicacion - stock paletizado actual en esa posición
+                        var totalSistema = await _storageContext.AcumuladoStockUbicacion
+                            .Where(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                        s.Ejercicio == ejercicio &&
+                                        s.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                        s.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                        s.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                        (s.Partida == lineaTemp.Partida || (s.Partida == null && lineaTemp.Partida == null)) &&
+                                        (s.FechaCaducidad == lineaTemp.FechaCaducidad || (s.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                            .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
 
-                    var stockActual = stockActualSistema?.UnidadSaldo ?? 0;
+                        var paletizadoActual = await _context.PaletLineas
+                            .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                         pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                         pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                         pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                         (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                         (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                            .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+                        stockActual = totalSistema - paletizadoActual;
+                    }
+
                     var stockAlCrear = lineaTemp.StockActual; // Stock cuando se creó el inventario
                     var diferencia = Math.Abs(stockActual - stockAlCrear);
 
@@ -1344,6 +1711,14 @@ namespace SGA_Api.Controllers.Inventario
                 if (inventario == null) 
                     return (false, 0, 0, 0, "Inventario no encontrado");
 
+                // Si es inventario TOTAL, siempre incluir artículos con stock 0
+                // independientemente del parámetro recibido
+                if (inventario.TipoInventario?.ToUpper() == "TOTAL")
+                {
+                    incluirArticulosConStockCero = true;
+                    _logger.LogInformation("Inventario TOTAL detectado - Forzando incluirArticulosConStockCero = true");
+                }
+
                 // 2. Obtener almacenes del inventario
                 var almacenesInventario = inventario.Almacenes.Select(a => a.CodigoAlmacen).ToList();
                 if (!almacenesInventario.Any())
@@ -1430,60 +1805,157 @@ namespace SGA_Api.Controllers.Inventario
                 if (!stockActualTotal.Any())
                     return (false, 0, totalUbicacionesEnRango, 0, "No se encontró stock en ninguno de los almacenes especificados");
 
-                // 5. Crear líneas temporales (agrupando para evitar duplicados entre almacenes)
-                var lineasTemporales = new List<InventarioLineasTemp>();
+                // 🔷 DEBUG: Verificar valores leídos desde la BD
+                var articuloDebug = stockActualTotal
+                    .Where(s => s.CodigoArticulo == "14165" && s.Ubicacion == "UB001020002002")
+                    .ToList();
+                foreach (var item in articuloDebug)
+                {
+                    _logger.LogWarning("🔍 DEBUG BD: Articulo={Articulo}, Ubicacion={Ubicacion}, UnidadSaldo={UnidadSaldo}", 
+                        item.CodigoArticulo, item.Ubicacion, item.UnidadSaldo);
+                }
+
+                _logger.LogInformation("📊 RESUMEN STOCK: Total registros de stock obtenidos={Total}, IncluirArticulosConStockCero={IncluirArticulosConStockCero}, TipoInventario={TipoInventario}", 
+                    stockActualTotal.Count, incluirArticulosConStockCero, inventario.TipoInventario);
                 
-                // Agrupar por artículo, ALMACÉN, ubicación, partida y fecha para evitar duplicados
-                // IMPORTANTE: Incluir CodigoAlmacen en el grouping para inventarios multialmacén
-                var stockAgrupado = stockActualTotal
-                    .GroupBy(s => new { 
-                        s.CodigoArticulo, 
-                        s.CodigoAlmacen,  // ← NUEVO: Agrupar también por almacén
-                        s.Ubicacion, 
-                        s.Partida, 
-                        s.FechaCaducidad 
+                var registrosConStock = stockActualTotal.Count(s => (s.UnidadSaldo ?? 0) > 0);
+                var registrosSinStock = stockActualTotal.Count(s => (s.UnidadSaldo ?? 0) == 0);
+                _logger.LogInformation("📊 DESGLOSE: Registros con stock > 0={ConStock}, Registros con stock = 0={SinStock}", 
+                    registrosConStock, registrosSinStock);
+
+                // 5. Crear líneas temporales separadas por palet y por stock suelto
+                var lineasTemporales = new List<InventarioLineasTemp>();
+
+                // 🔷 CORREGIDO: Materializar primero para preservar precisión completa
+                // Agrupar por artículo, ALMACÉN, ubicación, partida y fecha para procesar por "posición lógica"
+                var claves = stockActualTotal
+                    .GroupBy(s => new {
+                        s.CodigoArticulo,
+                        s.CodigoAlmacen,
+                        s.Ubicacion,
+                        s.Partida,
+                        s.FechaCaducidad
                     })
-                    .Select(g => new
-                    {
-                        CodigoArticulo = g.Key.CodigoArticulo,
-                        CodigoAlmacen = g.Key.CodigoAlmacen,  // ← NUEVO: Incluir almacén en el resultado
-                        Ubicacion = g.Key.Ubicacion,
-                        Partida = g.Key.Partida,
-                        FechaCaducidad = g.Key.FechaCaducidad,
-                        UnidadSaldo = g.Sum(s => s.UnidadSaldo ?? 0), // Sumar stock si hay múltiples registros
-                        RegistrosOriginales = g.Count() // Contar cuántos registros originales había
+                    .Select(g => new {
+                        g.Key.CodigoArticulo,
+                        g.Key.CodigoAlmacen,
+                        g.Key.Ubicacion,
+                        g.Key.Partida,
+                        g.Key.FechaCaducidad,
+                        // Materializar los valores antes de sumar para preservar precisión completa
+                        Valores = g.Select(x => x.UnidadSaldo ?? 0m).ToList()
+                    })
+                    .ToList()
+                    .Select(g => new {
+                        g.CodigoArticulo,
+                        g.CodigoAlmacen,
+                        g.Ubicacion,
+                        g.Partida,
+                        g.FechaCaducidad,
+                        // 🔷 CORREGIDO: Calcular en memoria con precisión completa
+                        Total = g.Valores.Sum(x => (decimal)x),
+                        ValoresDetalle = g.Valores // Mantener para debug
                     })
                     .ToList();
                 
-
-                
-                foreach (var stock in stockAgrupado)
+                // 🔷 DEBUG: Verificar valores después de agrupar
+                var claveDebug = claves
+                    .Where(k => k.CodigoArticulo == "14165" && k.Ubicacion == "UB001020002002")
+                    .FirstOrDefault();
+                if (claveDebug != null)
                 {
-                    // NUEVO: Las líneas se crean SIN contar (CantidadContada = null)
-                    // El progreso se basará en líneas donde el usuario realmente haya contado
+                    _logger.LogWarning("🔍 DEBUG Agrupado: Articulo={Articulo}, Ubicacion={Ubicacion}, Total={Total}, Valores=[{Valores}]", 
+                        claveDebug.CodigoArticulo, claveDebug.Ubicacion, claveDebug.Total, 
+                        string.Join(", ", claveDebug.ValoresDetalle));
+                }
+
+                foreach (var k in claves)
+                {
+                    // 5.1. Obtener líneas de palet (definitivas y temporales no procesadas) que coincidan exactamente con la posición lógica
+                    var lineasPaletDef = await _context.PaletLineas
+                        .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa
+                                     && pl.CodigoAlmacen == k.CodigoAlmacen
+                                     && pl.Ubicacion == k.Ubicacion
+                                     && pl.CodigoArticulo == k.CodigoArticulo
+                                     && (pl.Lote == k.Partida || (pl.Lote == null && k.Partida == null))
+                                     && (pl.FechaCaducidad == k.FechaCaducidad || (pl.FechaCaducidad == null && k.FechaCaducidad == null))
+                                     && pl.Cantidad > 0)
+                        .Select(pl => new { pl.PaletId, pl.Cantidad })
+                        .ToListAsync();
+
+                    // Importante: Para el inventario usamos SOLO líneas definitivas del palet,
+                    // las temporales pueden distorsionar el stock real (aún no aplicadas)
+                    var lineasPalet = lineasPaletDef;
+
+                    var porPalet = lineasPalet
+                        .GroupBy(x => x.PaletId)
+                        .Select(g => new { PaletId = g.Key, Cantidad = g.Sum(x => (decimal)x.Cantidad) })
+                        .ToList();
+
+                    // 🔷 CORREGIDO: Forzar precisión completa en los cálculos
+                    var totalPaletizado = porPalet.Sum(x => (decimal)x.Cantidad);
+                    var stockSuelto = (decimal)k.Total - totalPaletizado;
                     
-                    _logger.LogInformation("Artículo {CodigoArticulo} en {CodigoAlmacen}/{Ubicacion}: Creando línea temporal sin contar (CantidadContada = null), stockActual={StockActual}", 
-                        stock.CodigoArticulo, stock.CodigoAlmacen, stock.Ubicacion, stock.UnidadSaldo);
+                    // 🔷 DEBUG: Log para verificar precisión
+                    _logger.LogInformation("Cálculo stock: Artículo={Articulo}, Ubicacion={Ubicacion}, Total={Total}, Paletizado={Paletizado}, StockSuelto={StockSuelto}", 
+                        k.CodigoArticulo, k.Ubicacion, k.Total, totalPaletizado, stockSuelto);
 
-                    var nuevaLinea = new InventarioLineasTemp
+                    // 5.2. Crear una línea por cada palet encontrado
+                    foreach (var pp in porPalet)
                     {
-                        IdInventario = idInventario,
-                        CodigoArticulo = stock.CodigoArticulo ?? "",
-                        CodigoUbicacion = stock.Ubicacion ?? "",
-                        CodigoAlmacen = stock.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
-                        Partida = stock.Partida,
-                        FechaCaducidad = stock.FechaCaducidad,
-                        CantidadContada = null,
-                        StockActual = stock.UnidadSaldo,
-                        UsuarioConteoId = inventario.UsuarioCreacionId,
-                        FechaConteo = DateTime.Now, // Siempre usar la hora del servidor/API
-                        Consolidado = false
-                    };
+                        var lineaPalet = new InventarioLineasTemp
+                        {
+                            IdInventario = idInventario,
+                            CodigoArticulo = k.CodigoArticulo ?? "",
+                            CodigoUbicacion = k.Ubicacion ?? "",
+                            CodigoAlmacen = k.CodigoAlmacen,
+                            Partida = k.Partida,
+                            FechaCaducidad = k.FechaCaducidad,
+                            CantidadContada = null,
+                            StockActual = (decimal)pp.Cantidad,
+                            UsuarioConteoId = inventario.UsuarioCreacionId,
+                            FechaConteo = DateTime.Now,
+                            Observaciones = "PALET",
+                            PaletId = pp.PaletId,
+                            Consolidado = false
+                        };
+                        lineasTemporales.Add(lineaPalet);
+                    }
 
-                    lineasTemporales.Add(nuevaLinea);
+                    // 5.3. Crear línea para stock suelto
+                    // Para inventario TOTAL: crear línea incluso si stockSuelto = 0
+                    // Para inventario PARCIAL: solo crear si stockSuelto > 0
+                    var esInventarioTotal = inventario.TipoInventario?.ToUpper() == "TOTAL";
+                    if (stockSuelto > 0 || (esInventarioTotal && stockSuelto >= 0))
+                    {
+                        // 🔷 CORREGIDO: Asignar directamente como decimal para preservar precisión completa
+                        var stockSueltoValue = (decimal)stockSuelto;
+                        _logger.LogInformation("Guardando stock suelto: Artículo={Articulo}, Ubicacion={Ubicacion}, StockSuelto={StockSuelto}, TipoInventario={TipoInventario}", 
+                            k.CodigoArticulo, k.Ubicacion, stockSueltoValue, inventario.TipoInventario);
+                        
+                        var lineaSuelto = new InventarioLineasTemp
+                        {
+                            IdInventario = idInventario,
+                            CodigoArticulo = k.CodigoArticulo ?? "",
+                            CodigoUbicacion = k.Ubicacion ?? "",
+                            CodigoAlmacen = k.CodigoAlmacen,
+                            Partida = k.Partida,
+                            FechaCaducidad = k.FechaCaducidad,
+                            CantidadContada = null,
+                            StockActual = stockSueltoValue,
+                            UsuarioConteoId = inventario.UsuarioCreacionId,
+                            FechaConteo = DateTime.Now,
+                            Observaciones = "SUELTO",
+                            Consolidado = false
+                        };
+                        lineasTemporales.Add(lineaSuelto);
+                    }
                 }
 
                 // 7. Guardar líneas temporales
+                _logger.LogInformation("📊 ANTES DE GUARDAR: Total líneas temporales creadas={Total}, TipoInventario={TipoInventario}", 
+                    lineasTemporales.Count, inventario.TipoInventario);
+                
                 await _context.InventarioLineasTemp.AddRangeAsync(lineasTemporales);
                 await _context.SaveChangesAsync();
 
@@ -1491,6 +1963,9 @@ namespace SGA_Api.Controllers.Inventario
                 var lineasGuardadas = await _context.InventarioLineasTemp
                     .Where(l => l.IdInventario == idInventario)
                     .ToListAsync();
+                
+                _logger.LogInformation("📊 DESPUÉS DE GUARDAR: Total líneas guardadas={Total}, Líneas con stock=0={SinStock}", 
+                    lineasGuardadas.Count, lineasGuardadas.Count(l => l.StockActual == 0));
                 
 
 
@@ -1576,9 +2051,14 @@ namespace SGA_Api.Controllers.Inventario
                     Consolidado = l.Consolidado,
                     FechaConsolidacion = l.FechaConsolidacion,
                     UsuarioConsolidacionId = l.UsuarioConsolidacionId,
-                    Palets = paletsInfo.GetValueOrDefault($"{l.CodigoArticulo}_{l.CodigoUbicacion}_{l.Partida ?? ""}", new List<object>())
-                        .Cast<PaletDetalleDto>()
-                        .ToList()
+                    PaletId = l.PaletId,
+                    // Mostrar palets SOLO si la línea tiene PaletId
+                    Palets = l.PaletId.HasValue
+                        ? paletsInfo.GetValueOrDefault($"{l.CodigoArticulo}_{l.CodigoAlmacen}_{l.CodigoUbicacion}_{l.Partida ?? ""}", new List<object>())
+                            .Cast<PaletDetalleDto>()
+                            .Where(p => p.PaletId == l.PaletId.Value)
+                            .ToList()
+                        : new List<PaletDetalleDto>()
                 }).ToList();
 
                 return Ok(lineasDto);
@@ -1646,13 +2126,14 @@ namespace SGA_Api.Controllers.Inventario
                     })
                     .ToDictionaryAsync(p => p.Id, p => p);
 
-                // Agrupar por artículo, ubicación y lote
+                // Agrupar por artículo, almacén, ubicación y lote
                 foreach (var linea in lineas)
                 {
-                    var clave = $"{linea.CodigoArticulo}_{linea.CodigoUbicacion}_{linea.Partida ?? ""}";
+                    var clave = $"{linea.CodigoArticulo}_{linea.CodigoAlmacen}_{linea.CodigoUbicacion}_{linea.Partida ?? ""}";
                     
                     var paletsEnEstaUbicacion = todasLasLineas
                         .Where(l => l.CodigoArticulo == linea.CodigoArticulo &&
+                                   l.CodigoAlmacen == linea.CodigoAlmacen &&
                                    l.Ubicacion.Trim().ToUpper() == linea.CodigoUbicacion.Trim().ToUpper() &&
                                    (l.Lote ?? "") == (linea.Partida ?? ""))
                         .GroupBy(l => l.PaletId)
@@ -1687,6 +2168,50 @@ namespace SGA_Api.Controllers.Inventario
             }
 
             return resultado;
+        }
+
+        /// <summary>
+        /// Calcula el stock actual para una línea temporal respetando la separación PALET/SUELTO
+        /// </summary>
+        private async Task<decimal> CalcularStockActualLineaTempAsync(InventarioLineasTemp lineaTemp, short codigoEmpresa, short ejercicio)
+        {
+            if (lineaTemp.PaletId.HasValue)
+            {
+                // Stock actual del palet específico
+                var paletActual = await _context.PaletLineas
+                    .Where(pl => pl.PaletId == lineaTemp.PaletId.Value &&
+                                 pl.CodigoEmpresa == codigoEmpresa &&
+                                 pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                 pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                 pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                 (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                 (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                    .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+                return paletActual < 0 ? 0 : paletActual;
+            }
+
+            // Stock suelto = total en ubicación (acumulado) - stock paletizado actual en esa posición
+            var totalSistema = await _storageContext.AcumuladoStockUbicacion
+                .Where(s => s.CodigoEmpresa == codigoEmpresa &&
+                            s.Ejercicio == ejercicio &&
+                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                            s.Ubicacion == lineaTemp.CodigoUbicacion &&
+                            (s.Partida == lineaTemp.Partida || (s.Partida == null && lineaTemp.Partida == null)) &&
+                            (s.FechaCaducidad == lineaTemp.FechaCaducidad || (s.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+            var paletizadoActual = await _context.PaletLineas
+                .Where(pl => pl.CodigoEmpresa == codigoEmpresa &&
+                             pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                             pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                             pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                             (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                             (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+            var suelto = totalSistema - paletizadoActual;
+            return suelto < 0 ? 0 : suelto;
         }
 
         /// <summary>
@@ -1796,7 +2321,15 @@ namespace SGA_Api.Controllers.Inventario
 
                 var result = await query.ToListAsync();
 
-
+                // 🔷 DEBUG: Verificar precisión de valores leídos desde BD
+                var debugItems = result
+                    .Where(s => s.CodigoArticulo == "14165" && s.Ubicacion == "UB001020002002")
+                    .ToList();
+                foreach (var item in debugItems)
+                {
+                    _logger.LogWarning("🔍 DEBUG ObtenerStock: Articulo={Articulo}, Ubicacion={Ubicacion}, UnidadSaldo={UnidadSaldo} (tipo: {Tipo})", 
+                        item.CodigoArticulo, item.Ubicacion, item.UnidadSaldo, item.UnidadSaldo?.GetType().Name ?? "null");
+                }
 
                 return result;
             }
@@ -1887,34 +2420,22 @@ namespace SGA_Api.Controllers.Inventario
                     .ToListAsync();
 
                 var lineasConDiferencias = new List<object>();
-                var tolerancia = 0.01m; // Tolerancia para diferencias de redondeo
+                var tolerancia = 0.0001m; // Tolerancia para diferencias de redondeo
 
                 foreach (var lineaTemp in lineasTemp)
                 {
-                    // Obtener stock actual del sistema
-                    // 🔷 CORREGIDO: Usar el almacén de cada línea individual en lugar del almacén del inventario
-                    var stockActual = await _storageContext.AcumuladoStockUbicacion
-                        .FirstOrDefaultAsync(s => 
-                            s.CodigoEmpresa == inventario.CodigoEmpresa &&
-                            s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen && // ← CORREGIDO: Usar almacén de la línea
-                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                            s.Ubicacion == lineaTemp.CodigoUbicacion &&
-                            s.Partida == lineaTemp.Partida);
-
-                    var stockActualSistema = stockActual?.UnidadSaldo ?? 0;
+                    var stockActualSistema = await CalcularStockActualLineaTempAsync(lineaTemp, inventario.CodigoEmpresa, ejercicio);
                     var stockAlCrearInventario = lineaTemp.StockActual; // Stock cuando se creó el inventario
-                    
-                    // SOLO detectar cambios de stock real, NO cambios en el conteo del usuario
                     var diferencia = Math.Abs(stockAlCrearInventario - stockActualSistema);
 
-                    if (diferencia > 0m) // Sin tolerancia, cualquier diferencia cuenta
+                    if (diferencia > tolerancia)
                     {
                         lineasConDiferencias.Add(new
                         {
                             codigoArticulo = lineaTemp.CodigoArticulo,
-                            codigoAlmacen = lineaTemp.CodigoAlmacen, // ← NUEVO: Incluir almacén en las diferencias
+                            codigoAlmacen = lineaTemp.CodigoAlmacen,
                             codigoUbicacion = lineaTemp.CodigoUbicacion,
+                            paletId = lineaTemp.PaletId,
                             partida = lineaTemp.Partida,
                             fechaCaducidad = lineaTemp.FechaCaducidad,
                             stockAlCrear = stockAlCrearInventario,
@@ -1967,32 +2488,55 @@ namespace SGA_Api.Controllers.Inventario
                     .ToListAsync();
 
                 var lineasProblematicas = new List<LineaProblematicaDto>();
+                
+                // 🔷 OPTIMIZACIÓN: Cachear cálculos de stock total por ubicación para evitar duplicados
+                var cacheStockUbicacion = new Dictionary<string, (decimal total, decimal paletizado)>();
 
                 foreach (var lineaTemp in lineasTemp)
                 {
-                    // Verificar stock actual en tiempo real para mostrar información adicional
-                    var stockActual = await _storageContext.AcumuladoStockUbicacion
-                        .FirstOrDefaultAsync(s => 
-                            s.CodigoEmpresa == inventario.CodigoEmpresa &&
-                            s.Ejercicio == ejercicio &&
-                            s.CodigoAlmacen == inventario.CodigoAlmacen &&
-                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                            s.Ubicacion == lineaTemp.CodigoUbicacion &&
-                            s.Partida == lineaTemp.Partida);
+                    // Verificar stock actual en tiempo real para mostrar información adicional (respetando palet/suelto)
+                    decimal stockRealActual;
+                    if (lineaTemp.PaletId.HasValue)
+                    {
+                        stockRealActual = await _context.PaletLineas
+                            .Where(pl => pl.PaletId == lineaTemp.PaletId.Value &&
+                                         pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                         pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                         pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                         pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                         (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                         (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                            .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+                    }
+                    else
+                    {
+                        var totalSistema = await _storageContext.AcumuladoStockUbicacion
+                            .Where(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                        s.Ejercicio == ejercicio &&
+                                        s.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                        s.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                        s.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                        (s.Partida == lineaTemp.Partida || (s.Partida == null && lineaTemp.Partida == null)) &&
+                                        (s.FechaCaducidad == lineaTemp.FechaCaducidad || (s.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                            .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
 
-                    var stockRealActual = stockActual?.UnidadSaldo ?? 0;
+                        var paletizadoActual = await _context.PaletLineas
+                            .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                         pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                         pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                         pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                         (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                         (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                            .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+                        stockRealActual = totalSistema - paletizadoActual;
+                    }
                     var stockAlCrearInventario = lineaTemp.StockActual;
                     var cantidadContada = lineaTemp.CantidadContada ?? 0;
-                    
-                    // DEBUG: Mostrar información de evaluación
-                    Console.WriteLine($"🔍 RECONTEO: Art={lineaTemp.CodigoArticulo}, Ubic={lineaTemp.CodigoUbicacion}");
-                    Console.WriteLine($"   StockAlCrear={stockAlCrearInventario}, StockActual={stockRealActual}");
                     
                     // SOLO detectar cambios de stock real, NO cambios en el conteo del usuario
                     // Comparar stock al crear inventario vs stock actual del sistema
                     var diferenciaStock = Math.Abs(stockRealActual - stockAlCrearInventario);
-                    
-                    Console.WriteLine($"   DiferenciaStock={diferenciaStock}, ¿HaCambiado?={diferenciaStock > 0m}");
                     
                     // Sin tolerancia: cualquier diferencia se considera problemática
                     bool stockHaCambiado = diferenciaStock > 0m;
@@ -2004,17 +2548,62 @@ namespace SGA_Api.Controllers.Inventario
                             .FirstOrDefaultAsync(a => a.CodigoEmpresa == inventario.CodigoEmpresa && 
                                                      a.CodigoArticulo == lineaTemp.CodigoArticulo);
 
+                        // Obtener información de palets en esta ubicación para este artículo
+                        var paletsInfo = await ObtenerPaletsParaLineaProblematicaAsync(
+                            lineaTemp, inventario.CodigoEmpresa);
+
+                        // 🔷 OPTIMIZACIÓN: Calcular stock total y paletizado solo una vez por ubicación/artículo/partida/fecha
+                        var claveUbicacion = $"{lineaTemp.CodigoAlmacen}_{lineaTemp.CodigoUbicacion}_{lineaTemp.CodigoArticulo}_{lineaTemp.Partida ?? ""}_{lineaTemp.FechaCaducidad?.ToString("yyyy-MM-dd") ?? ""}";
+                        
+                        decimal totalUbicacion;
+                        decimal paletizadoUbicacion;
+                        
+                        if (!cacheStockUbicacion.TryGetValue(claveUbicacion, out var cache))
+                        {
+                            // Calcular y cachear
+                            totalUbicacion = await _storageContext.AcumuladoStockUbicacion
+                                .Where(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                            s.Ejercicio == ejercicio &&
+                                            s.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                            s.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                            s.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                            (s.Partida == lineaTemp.Partida || (s.Partida == null && lineaTemp.Partida == null)) &&
+                                            (s.FechaCaducidad == lineaTemp.FechaCaducidad || (s.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                                .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+                            paletizadoUbicacion = await _context.PaletLineas
+                                .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                             pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                             pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                             pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                             (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                             (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                                .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+                            
+                            cacheStockUbicacion[claveUbicacion] = (totalUbicacion, paletizadoUbicacion);
+                        }
+                        else
+                        {
+                            // Usar valor en cache
+                            totalUbicacion = cache.total;
+                            paletizadoUbicacion = cache.paletizado;
+                        }
+
                         lineasProblematicas.Add(new LineaProblematicaDto
                         {
                             CodigoArticulo = lineaTemp.CodigoArticulo,
                             DescripcionArticulo = articulo?.DescripcionArticulo ?? "Sin descripción",
-                            CodigoAlmacen = inventario.CodigoAlmacen,
+                            CodigoAlmacen = lineaTemp.CodigoAlmacen ?? inventario.CodigoAlmacen,
                             CodigoUbicacion = lineaTemp.CodigoUbicacion,
-                            Partida = lineaTemp.Partida,
+                            Partida = lineaTemp.Partida ?? "",
                             FechaCaducidad = lineaTemp.FechaCaducidad,
+                            PaletId = lineaTemp.PaletId,
                             StockAlCrearInventario = stockAlCrearInventario,
                             StockActual = stockRealActual,
-                            CantidadContada = cantidadContada
+                            CantidadContada = cantidadContada,
+                            Palets = paletsInfo,
+                            StockTotalActual = totalUbicacion,
+                            StockPaletizadoActual = paletizadoUbicacion
                         });
                     }
                 }
@@ -2026,6 +2615,134 @@ namespace SGA_Api.Controllers.Inventario
                 _logger.LogError(ex, "Error al obtener líneas problemáticas del inventario {IdInventario}", idInventario);
                 return StatusCode(500, new { mensaje = "Error interno del servidor" });
             }
+        }
+
+        /// <summary>
+        /// Obtiene información de palets para una línea problemática
+        /// Muestra todos los palets de la ubicación y marca cuáles han cambiado
+        /// </summary>
+        private async Task<List<PaletDetalleDto>> ObtenerPaletsParaLineaProblematicaAsync(
+            InventarioLineasTemp lineaTemp, short codigoEmpresa)
+        {
+            var resultado = new List<PaletDetalleDto>();
+
+            try
+            {
+                // Obtener todas las líneas de palets (definitivas y temporales) que coincidan
+                var lineasPalets = await _context.PaletLineas
+                    .Where(pl => pl.CodigoEmpresa == codigoEmpresa &&
+                                 pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                 pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                 pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                 (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
+                                 (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                    .ToListAsync();
+
+                var lineasTempPalets = await _context.TempPaletLineas
+                    .Where(tpl => tpl.CodigoEmpresa == codigoEmpresa &&
+                                  !tpl.Procesada &&
+                                  tpl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                  tpl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                  tpl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                  (tpl.Lote == lineaTemp.Partida || (tpl.Lote == null && lineaTemp.Partida == null)) &&
+                                  (tpl.FechaCaducidad == lineaTemp.FechaCaducidad || (tpl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                    .ToListAsync();
+
+                // Combinar líneas definitivas y temporales para obtener stock actual
+                var todasLasLineas = lineasPalets.Select(pl => new
+                {
+                    PaletId = pl.PaletId,
+                    Cantidad = pl.Cantidad
+                }).Concat(lineasTempPalets.Select(tpl => new
+                {
+                    PaletId = tpl.PaletId,
+                    Cantidad = tpl.Cantidad
+                })).ToList();
+
+                // 🔷 NUEVO: Obtener líneas temporales de inventario para comparar stock al crear vs actual
+                var lineasTempInventario = await _context.InventarioLineasTemp
+                    .Where(lt => lt.IdInventario == lineaTemp.IdInventario &&
+                                 lt.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                 lt.CodigoUbicacion == lineaTemp.CodigoUbicacion &&
+                                 lt.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                 (lt.Partida == lineaTemp.Partida || (lt.Partida == null && lineaTemp.Partida == null)) &&
+                                 (lt.FechaCaducidad == lineaTemp.FechaCaducidad || (lt.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)) &&
+                                 lt.PaletId.HasValue) // Solo palets
+                    .ToListAsync();
+
+                // Crear diccionario de stock al crear por PaletId
+                var stockAlCrearPorPalet = lineasTempInventario
+                    .GroupBy(lt => lt.PaletId!.Value)
+                    .ToDictionary(g => g.Key, g => g.Sum(lt => lt.StockActual));
+
+                // Agrupar por palet y obtener información de los palets
+                var paletIds = todasLasLineas.Select(l => l.PaletId).Distinct().ToList();
+                if (paletIds.Any())
+                {
+                    var palets = await _context.Palets
+                        .Where(p => paletIds.Contains(p.Id))
+                        .Select(p => new
+                        {
+                            p.Id,
+                            p.Codigo,
+                            p.Estado,
+                            p.FechaApertura,
+                            p.FechaCierre
+                        })
+                        .ToDictionaryAsync(p => p.Id, p => p);
+
+                    var paletsAgrupados = todasLasLineas
+                        .GroupBy(l => l.PaletId)
+                        .Select(g => new
+                        {
+                            PaletId = g.Key,
+                            CantidadTotal = g.Sum(x => x.Cantidad),
+                            PaletInfo = palets.GetValueOrDefault(g.Key),
+                            StockAlCrear = stockAlCrearPorPalet.GetValueOrDefault(g.Key, 0m)
+                        })
+                        .Where(p => p.PaletInfo != null && p.CantidadTotal > 0)
+                        .Select(p => new
+                        {
+                            PaletId = p.PaletId,
+                            CodigoPalet = p.PaletInfo!.Codigo,
+                            EstadoPalet = p.PaletInfo.Estado,
+                            Cantidad = p.CantidadTotal,
+                            StockAlCrear = p.StockAlCrear,
+                            HaCambiado = Math.Abs(p.CantidadTotal - p.StockAlCrear) > 0.0001m, // Diferencia significativa
+                            Ubicacion = lineaTemp.CodigoUbicacion,
+                            Partida = lineaTemp.Partida,
+                            FechaApertura = p.PaletInfo.FechaApertura,
+                            FechaCierre = p.PaletInfo.FechaCierre
+                        })
+                        .ToList();
+
+                    // 🔷 NUEVO: Filtrar para mostrar solo los palets que han cambiado
+                    // Si ninguno ha cambiado o todos han cambiado, mostrar todos
+                    var paletsConCambios = paletsAgrupados.Where(p => p.HaCambiado).ToList();
+                    var paletsAMostrar = paletsConCambios.Any() && paletsConCambios.Count < paletsAgrupados.Count 
+                        ? paletsConCambios 
+                        : paletsAgrupados;
+
+                    resultado.AddRange(paletsAMostrar.Select(p => new PaletDetalleDto
+                    {
+                        PaletId = p.PaletId,
+                        CodigoPalet = p.CodigoPalet,
+                        EstadoPalet = p.EstadoPalet,
+                        Cantidad = p.Cantidad,
+                        Ubicacion = p.Ubicacion,
+                        Partida = p.Partida,
+                        FechaApertura = p.FechaApertura,
+                        FechaCierre = p.FechaCierre
+                    }).OrderBy(p => p.CodigoPalet));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo obtener información de palets para línea problemática");
+                // Continuar sin información de palets
+            }
+
+            return resultado;
         }
 
         /// <summary>
@@ -2056,7 +2773,7 @@ namespace SGA_Api.Controllers.Inventario
                     // Calcular diferencia actual
                     var stockActual = await _storageContext.AcumuladoStockUbicacion
                         .FirstOrDefaultAsync(s => s.CodigoEmpresa == inventario.CodigoEmpresa && s.Ejercicio == ejercicio &&
-                                                  s.CodigoAlmacen == inventario.CodigoAlmacen && s.CodigoArticulo == lineaReconteo.CodigoArticulo &&
+                                                  s.CodigoAlmacen == lineaReconteo.CodigoAlmacen && s.CodigoArticulo == lineaReconteo.CodigoArticulo &&
                                                   s.Ubicacion == lineaReconteo.CodigoUbicacion && s.Partida == lineaReconteo.Partida);
 
                     var diferenciaNueva = lineaReconteo.CantidadReconteo - (stockActual?.UnidadSaldo ?? 0);
@@ -2071,7 +2788,9 @@ namespace SGA_Api.Controllers.Inventario
                         .FirstOrDefaultAsync(l => l.IdInventario == reconteo.IdInventario &&
                                                  l.CodigoArticulo == lineaReconteo.CodigoArticulo &&
                                                  l.CodigoUbicacion == lineaReconteo.CodigoUbicacion &&
-                                                 l.Partida == lineaReconteo.Partida);
+                                                 l.CodigoAlmacen == lineaReconteo.CodigoAlmacen &&
+                                                 l.Partida == lineaReconteo.Partida &&
+                                                 ((lineaReconteo.PaletId == null && l.PaletId == null) || (lineaReconteo.PaletId != null && l.PaletId == lineaReconteo.PaletId)));
 
                     if (lineaTemp != null)
                     {
@@ -2122,14 +2841,31 @@ namespace SGA_Api.Controllers.Inventario
                 foreach (var linea in lineas)
                 {
                     // 2. Buscar TODAS las líneas de palet en esa ubicación específica
-                    var lineasPalet = await _context.PaletLineas
-                        .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
-                                    pl.CodigoArticulo == linea.CodigoArticulo &&
-                                    pl.CodigoAlmacen == inventario.CodigoAlmacen &&
-                                    pl.Ubicacion == linea.CodigoUbicacion &&
-                                    pl.Lote == linea.Partida)
-                        .Include(pl => pl.Palet)
-                        .ToListAsync();
+                    List<PaletLinea> lineasPalet;
+                    if (linea.PaletId.HasValue)
+                    {
+                        // Ajuste dirigido a un palet concreto
+                        lineasPalet = await _context.PaletLineas
+                            .Where(pl => pl.PaletId == linea.PaletId.Value &&
+                                        pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                        pl.CodigoArticulo == linea.CodigoArticulo &&
+                                        pl.CodigoAlmacen == (linea.CodigoAlmacen ?? inventario.CodigoAlmacen) &&
+                                        pl.Ubicacion == linea.CodigoUbicacion &&
+                                        pl.Lote == linea.Partida)
+                            .Include(pl => pl.Palet)
+                            .ToListAsync();
+                    }
+                    else
+                    {
+                        lineasPalet = await _context.PaletLineas
+                            .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa &&
+                                        pl.CodigoArticulo == linea.CodigoArticulo &&
+                                        pl.CodigoAlmacen == inventario.CodigoAlmacen &&
+                                        pl.Ubicacion == linea.CodigoUbicacion &&
+                                        pl.Lote == linea.Partida)
+                            .Include(pl => pl.Palet)
+                            .ToListAsync();
+                    }
 
                     if (lineasPalet.Any())
                     {

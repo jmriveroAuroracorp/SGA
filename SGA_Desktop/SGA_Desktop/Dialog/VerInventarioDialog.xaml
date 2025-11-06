@@ -219,7 +219,7 @@
                                             <ColumnDefinition Width="100"/>
                                             <ColumnDefinition Width="100"/>
                                             <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="140"/>
                                         </Grid.ColumnDefinitions>
                                         
                                         <TextBlock Grid.Column="0" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
@@ -231,7 +231,7 @@
                                         <TextBlock Grid.Column="6" Text="Stock Actual" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="7" Text="Stock Inventariado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="8" Text="Ajuste Final" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                        <TextBlock Grid.Column="9" Text="Palets" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="9" Text="Palet" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
                                     </Grid>
                                 </Border>
 
@@ -260,7 +260,7 @@
                                                     <ColumnDefinition Width="100"/>
                                                     <ColumnDefinition Width="100"/>
                                                     <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="140"/>
                                                 </Grid.ColumnDefinitions>
                                                 
                                                 <!-- Artículo -->
@@ -306,7 +306,7 @@
                                                 
                                                 <!-- Stock Teórico -->
                                                 <TextBlock Grid.Column="5" 
-                                                           Text="{Binding StockTeorico, StringFormat=F4}" 
+                                                           Text="{Binding StockTeorico, StringFormat='0.######'}" 
                                                            FontSize="12" 
                                                            FontWeight="Bold"
                                                            Foreground="Red"
@@ -315,7 +315,7 @@
                                                 
                                                 <!-- Stock Actual -->
                                                 <TextBlock Grid.Column="6" 
-                                                           Text="{Binding StockActual, StringFormat=F4}" 
+                                                           Text="{Binding StockActual, StringFormat='0.######'}" 
                                                            FontSize="12" 
                                                            FontWeight="Bold"
                                                            Foreground="Green"
@@ -324,7 +324,7 @@
                                                 
                                                 <!-- Stock Contado -->
                                                 <TextBlock Grid.Column="7" 
-                                                           Text="{Binding StockContado, StringFormat=F4}" 
+                                                           Text="{Binding StockContado, StringFormat='0.######'}" 
                                                            FontSize="12" 
                                                            FontWeight="Bold"
                                                            Foreground="Blue"
@@ -363,15 +363,28 @@
                                                     </TextBlock.Style>
                                                 </TextBlock>
                                                 
-                                                <!-- Palets -->
+                                                <!-- Palet -->
                                                 <TextBlock Grid.Column="9" 
-                                                           Text="{Binding PaletsResumen}" 
                                                            FontSize="10" 
-                                                           Foreground="{Binding TienePalets, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='DarkBlue|Gray'}"
+                                                           FontWeight="Bold"
                                                            TextWrapping="Wrap"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
-                                                           MaxWidth="110"/>
+                                                           MaxWidth="130">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="{Binding PaletsResumen}"/>
+                                                            <Setter Property="Foreground" Value="{Binding TienePalets, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='DarkBlue|Gray'}"/>
+                                                            <Style.Triggers>
+                                                                <!-- Si no tiene palets, mostrar "SUELTO" -->
+                                                                <DataTrigger Binding="{Binding TienePalets}" Value="False">
+                                                                    <Setter Property="Text" Value="SUELTO"/>
+                                                                    <Setter Property="Foreground" Value="Gray"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>

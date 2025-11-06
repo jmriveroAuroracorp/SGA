@@ -5,6 +5,7 @@ using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows;
 
 public partial class ImpresionEtiquetasViewModel : ObservableObject
@@ -282,7 +283,17 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 	}
 	catch (Exception ex)
 	{
-		MessageBox.Show(ex.Message, "Error al encolar impresión", MessageBoxButton.OK, MessageBoxImage.Error);
+		var errorDialog = new WarningDialog(
+			"Error al encolar impresión",
+			ex.Message,
+			"\uE783" // Icono de error
+		)
+		{
+			Owner = Application.Current.Windows.OfType<Window>()
+				.FirstOrDefault(w => w.IsActive)
+				?? Application.Current.MainWindow
+		};
+		errorDialog.ShowDialog();
 	}
 	}
 

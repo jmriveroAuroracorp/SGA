@@ -36,9 +36,9 @@ namespace SGA_Desktop.Helpers
             if (value is decimal ajuste)
             {
                 if (ajuste > 0)
-                    return $"+{ajuste:F4}"; // Agregar + para valores positivos
+                    return $"+{ajuste:F6}"; // Agregar + para valores positivos, 6 decimales
                 else
-                    return $"{ajuste:F4}"; // Los negativos ya tienen el signo -
+                    return $"{ajuste:F6}"; // Los negativos ya tienen el signo -, 6 decimales
             }
             
             // Valor null o no válido

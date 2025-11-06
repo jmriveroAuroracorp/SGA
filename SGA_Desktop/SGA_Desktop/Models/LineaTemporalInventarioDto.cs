@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using System.Collections.Generic;
 using System.Linq;
+using SGA_Desktop.Helpers;
 
 namespace SGA_Desktop.Models
 {
@@ -74,6 +75,8 @@ namespace SGA_Desktop.Models
         public int? UsuarioConsolidacionId { get; set; }
 
         // === NUEVAS PROPIEDADES PARA INFORMACIÓN DE PALETS ===
+        [JsonPropertyName("paletId")]
+        public Guid? PaletId { get; set; }
         
         /// <summary>
         /// Información de los palets que contienen este stock
@@ -104,7 +107,7 @@ namespace SGA_Desktop.Models
                 if (Palets.Count == 1)
                 {
                     var palet = Palets.First();
-                    return $"{palet.CodigoPalet} ({palet.Cantidad:F2})";
+                    return $"{palet.CodigoPalet} ({DecimalFormatHelper.FormatearCantidad(palet.Cantidad)})";
                 }
 
                 return "📦 Múltiples palets";
@@ -137,7 +140,7 @@ namespace SGA_Desktop.Models
         /// </summary>
         public string CantidadContadaTexto
         {
-            get => _cantidadContadaTexto ?? (CantidadContada?.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) ?? "");
+            get => _cantidadContadaTexto ?? (CantidadContada.HasValue ? Helpers.DecimalFormatHelper.FormatearCantidad(CantidadContada.Value) : "");
             set
             {
                 _cantidadContadaTexto = value;

@@ -16,6 +16,7 @@ namespace SGA_Desktop.Models
         public string CodigoAlmacen { get; set; } = string.Empty;
         public string Partida { get; set; } = string.Empty;
         public DateTime? FechaCaducidad { get; set; }
+        public Guid? PaletId { get; set; }
         public decimal CantidadInventario { get; set; }
         public int UsuarioConteo { get; set; }
     }

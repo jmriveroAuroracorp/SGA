@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace SGA_Desktop.Models
 {
@@ -15,6 +16,10 @@ namespace SGA_Desktop.Models
         public decimal StockTeorico { get; set; }
         public decimal? AjusteFinal { get; set; }
         public string Estado { get; set; } = string.Empty;
+        
+        // Identificación de palet
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
         
         // Propiedades para información de palets
         public List<PaletDetalleDto> Palets { get; set; } = new();

@@ -332,6 +332,7 @@ namespace SGA_Desktop.ViewModels
                         CodigoAlmacen = x.Linea.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
                         Partida = x.Linea.Partida ?? "", // Usar la partida real de la línea temporal
                         FechaCaducidad = x.Linea.FechaCaducidad, // Agregar fecha de caducidad
+                        PaletId = x.Linea.PaletId, // ← AGREGAR PaletId para diferenciar por palets
                         CantidadInventario = x.Cantidad!.Value, // Usar solo si realmente hay cantidad
                         UsuarioConteo = SessionManager.UsuarioActual!.operario
                     }).ToList()
@@ -443,6 +444,7 @@ namespace SGA_Desktop.ViewModels
                         CodigoAlmacen = x.Linea.CodigoAlmacen, // ← AGREGAR ESTA LÍNEA
                         Partida = x.Linea.Partida ?? "",
                         FechaCaducidad = x.Linea.FechaCaducidad,
+                        PaletId = x.Linea.PaletId, // ← AGREGAR PaletId para diferenciar por palets
                         CantidadInventario = x.Cantidad!.Value,
                         UsuarioConteo = SessionManager.UsuarioActual!.operario
                     }).ToList()
@@ -737,17 +739,6 @@ namespace SGA_Desktop.ViewModels
                 var cantidadContada = ObtenerCantidadContada(lineaCambiada);
                 var nuevaDiferencia = Math.Abs(cantidadContada - lineaCambiada.StockActual);
 
-                // DEBUG: Log información básica
-                MessageBox.Show($"🔍 VALIDACIÓN LÍMITES\n\n" +
-                    $"Operario: {operarioId}\n" +
-                    $"Artículo: {codigoArticulo}\n" +
-                    $"Stock Actual: {lineaCambiada.StockActual}\n" +
-                    $"Cantidad Contada: {cantidadContada}\n" +
-                    $"Nueva Diferencia: {nuevaDiferencia}\n" +
-                    $"Límite Euros: {LimiteOperarioEuros}\n" +
-                    $"Límite Unidades: {LimiteOperarioUnidades}", 
-                    "DEBUG - Datos Básicos");
-
                 // Obtener diferencias acumuladas del artículo en el día (excluyendo inventario actual)
                 var (unidadesAcumuladas, eurosAcumulados) = await _loginService.ObtenerDiferenciasOperarioArticuloDiaAsync(operarioId, codigoArticulo, Inventario.IdInventario);
 
@@ -755,19 +746,6 @@ namespace SGA_Desktop.ViewModels
                 var diferenciasEnSesion = CalcularDiferenciasArticuloEnSesion(codigoArticulo, lineaCambiada.IdTemp);
                 unidadesAcumuladas += diferenciasEnSesion.unidades;
                 eurosAcumulados += diferenciasEnSesion.euros;
-
-                // DEBUG: Log diferencias acumuladas
-                MessageBox.Show($"📊 DIFERENCIAS ACUMULADAS\n\n" +
-                    $"Diferencias Anteriores Hoy:\n" +
-                    $"  • Unidades: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
-                    $"  • Euros: {eurosAcumulados - diferenciasEnSesion.euros:F2}\n\n" +
-                    $"Diferencias en Sesión Actual:\n" +
-                    $"  • Unidades: {diferenciasEnSesion.unidades:F2}\n" +
-                    $"  • Euros: {diferenciasEnSesion.euros:F2}\n\n" +
-                    $"TOTAL ACUMULADO:\n" +
-                    $"  • Unidades: {unidadesAcumuladas:F2}\n" +
-                    $"  • Euros: {eurosAcumulados:F2}", 
-                    "DEBUG - Acumulados Detallados");
 
                 // Validar límite de euros (acumulado del día + nueva diferencia)
                 if (LimiteOperarioEuros > 0)
@@ -779,17 +757,6 @@ namespace SGA_Desktop.ViewModels
                     // También calcular total global para mostrar en UI
                     var valorTotalGlobal = await CalcularValorTotalDiferenciasAsync();
                     ValorDiferenciasActual = valorTotalGlobal;
-
-                    // DEBUG: Log cálculos de euros
-                    MessageBox.Show($"💰 VALIDACIÓN EUROS\n\n" +
-                        $"Precio Medio: {precioMedio:F4}\n" +
-                        $"Nueva Diferencia: {nuevaDiferencia} unidades\n" +
-                        $"Nueva Diferencia €: {nuevaDiferenciaEuros:F2}\n" +
-                        $"Euros Acumulados: {eurosAcumulados:F2}\n" +
-                        $"Total Euros Artículo: {totalEurosArticulo:F2}\n" +
-                        $"Límite: {LimiteOperarioEuros:F2}\n" +
-                        $"¿Supera límite?: {totalEurosArticulo > LimiteOperarioEuros}", 
-                        "DEBUG - Euros");
 
                     if (totalEurosArticulo > LimiteOperarioEuros)
                     {
@@ -807,17 +774,6 @@ namespace SGA_Desktop.ViewModels
                     var unidadesTotalGlobal = CalcularUnidadesTotalDiferencias();
                     UnidadesDiferenciasActual = unidadesTotalGlobal;
 
-                    // DEBUG: Log cálculos de unidades
-                    MessageBox.Show($"📦 VALIDACIÓN UNIDADES\n\n" +
-                        $"Diferencias Anteriores: {unidadesAcumuladas - diferenciasEnSesion.unidades:F2}\n" +
-                        $"Diferencias en Sesión: {diferenciasEnSesion.unidades:F2}\n" +
-                        $"Nueva Diferencia: {nuevaDiferencia:F2}\n\n" +
-                        $"Total Acumulado: {unidadesAcumuladas:F2}\n" +
-                        $"Total + Nueva: {totalUnidadesArticulo:F2}\n" +
-                        $"Límite: {LimiteOperarioUnidades:F2}\n\n" +
-                        $"¿Supera límite?: {totalUnidadesArticulo > LimiteOperarioUnidades}", 
-                        "DEBUG - Unidades Detallado");
-
                     if (totalUnidadesArticulo > LimiteOperarioUnidades)
                     {
                         limiteSuperadoUnidades = true;
@@ -828,20 +784,13 @@ namespace SGA_Desktop.ViewModels
                     }
                 }
 
-                // DEBUG: Log resultado final
-                MessageBox.Show($"🏁 RESULTADO VALIDACIÓN\n\n" +
-                    $"Límite Euros Superado: {limiteSuperadoEuros}\n" +
-                    $"Límite Unidades Superado: {limiteSuperadoUnidades}\n" +
-                    $"Tipo Límite Superado: {tipoLimiteSuperado}", 
-                    "DEBUG - Resultado");
-
                 // Si se supera algún límite
                 if (limiteSuperadoEuros || limiteSuperadoUnidades)
                 {
                     LimiteSuperado = true;
                     
                     // Resetear el valor que causó el problema
-                    lineaCambiada.CantidadContadaTexto = lineaCambiada.StockActual.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
+                    lineaCambiada.CantidadContadaTexto = Helpers.DecimalFormatHelper.FormatearCantidad(lineaCambiada.StockActual);
                     
                     // Mostrar warning más específico
                     var warning = new WarningDialog(

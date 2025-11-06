@@ -16,6 +16,7 @@ import android.util.Log
 import com.example.sga.data.model.conteos.OrdenConteo
 import com.example.sga.data.model.conteos.LecturaConteo
 import com.example.sga.view.components.AppTopBar
+import com.example.sga.utils.FormatUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
@@ -263,14 +264,7 @@ fun OrdenConteoCard(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "ID: ${orden.guidID}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -317,14 +311,14 @@ fun OrdenConteoCard(
                 InfoRow(
                     icon = Icons.Default.Schedule,
                     label = "Asignado",
-                    value = orden.fechaAsignacion?.let { conteoViewModel.formatearFecha(it) } ?: "No asignado"
+                    value = orden.fechaAsignacion?.let { FormatUtils.formatearFecha(it) } ?: "No asignado"
                 )
 
                 orden.fechaInicio?.let { fechaInicio ->
                     InfoRow(
                         icon = Icons.Default.PlayArrow,
                         label = "Iniciado",
-                        value = conteoViewModel.formatearFecha(fechaInicio)
+                        value = FormatUtils.formatearFecha(fechaInicio) ?: ""
                     )
                 }
             }

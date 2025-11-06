@@ -29,14 +29,18 @@ namespace SGA_Api.Models.Inventario
 
         public DateTime? FechaCaducidad { get; set; }
 
-        [Column(TypeName = "decimal(18,4)")]
+        /// <summary>
+        /// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+        /// </summary>
+        [Column(TypeName = "decimal(18,6)")]
         public decimal? CantidadContada { get; set; }
 
         /// <summary>
         /// Stock actual en la ubicación al momento de crear la línea temporal
+        /// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
         /// </summary>
-        [Column(TypeName = "decimal(18,4)")]
-        public decimal StockActual { get; set; } = 0.0000m;
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal StockActual { get; set; } = 0m;
 
         [Required]
         public int UsuarioConteoId { get; set; }
@@ -53,6 +57,9 @@ namespace SGA_Api.Models.Inventario
         public DateTime? FechaConsolidacion { get; set; }
 
         public int? UsuarioConsolidacionId { get; set; }
+
+        // Identificador del palet al que pertenece esta línea durante el inventario (si aplica)
+        public Guid? PaletId { get; set; }
 
         // Navigation property
         [ForeignKey("IdInventario")]

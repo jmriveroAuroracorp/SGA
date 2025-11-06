@@ -80,17 +80,31 @@
             Style="{StaticResource EstiloBotonPrincipal}"
             Margin="10,0"/>
                 
-                <!-- 🔷 NUEVO: Combo de almacenes para filtrar -->
+                <!-- 🔷 NUEVO: Filtros de almacén y partida -->
                 <StackPanel Orientation="Horizontal" 
                             Visibility="{Binding MostrarComboAlmacenes, Converter={StaticResource BooleanToVisibilityConverter}}"
                             Margin="20,0,0,0">
                     <TextBlock Text="Filtrar por almacén:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox Width="250" Height="40" Margin="8,0,0,0"
+                    <ComboBox Width="180" Height="40" Margin="8,0,0,0"
                               Style="{StaticResource EstiloComboBox}"
                               ItemsSource="{Binding AlmacenesFiltroView}"
                               DisplayMemberPath="DescripcionCombo"
                               SelectedItem="{Binding AlmacenFiltroSeleccionado, Mode=TwoWay}"
                               Text="{Binding FiltroAlmacenesTexto, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              StaysOpenOnEdit="True"/>
+                </StackPanel>
+                
+                <StackPanel Orientation="Horizontal" 
+                            Visibility="{Binding MostrarFiltroPartida, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            Margin="20,0,0,0">
+                    <TextBlock Text="Filtrar por partida:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox Width="150" Height="40" Margin="8,0,0,0"
+                              Style="{StaticResource EstiloComboBox}"
+                              ItemsSource="{Binding PartidasDisponiblesView}"
+                              SelectedItem="{Binding PartidaSeleccionada, Mode=TwoWay}"
+                              Text="{Binding FiltroPartidaTexto, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               IsEditable="True"
                               IsTextSearchEnabled="False"
                               StaysOpenOnEdit="True"/>
@@ -136,6 +150,12 @@
                                                                         <Setter Property="BorderBrush" Value="#FF6B6B"/>
                                                                         <Setter Property="BorderThickness" Value="4"/>
                                                                     </DataTrigger>
+                                                                    <!-- 🔷 NUEVO: Diferenciar visualmente líneas paletizadas -->
+                                                                    <DataTrigger Binding="{Binding EsStockPaletizado}" Value="True">
+                                                                        <Setter Property="Background" Value="#F0F8FF"/>
+                                                                        <Setter Property="BorderBrush" Value="#4A90E2"/>
+                                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                                    </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </Border.Style>
@@ -178,6 +198,10 @@
                                                                 <TextBlock Text="{Binding Ubicacion}" Margin="5,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                             </StackPanel>
                                                             <Grid Grid.Row="1">
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="*" /> <!-- Lote -->
                                                                     <ColumnDefinition Width="*" /> <!-- Caducidad -->
@@ -195,13 +219,13 @@
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="2">
                                                                     <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat='0.########'}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                     <StackPanel Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}">
                                                                         <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                        <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="4,0,0,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                        <TextBlock Text="{Binding Reservado, StringFormat='0.########'}" Margin="4,0,0,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                     </StackPanel>
                                                                     <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,2,0,0"/>
-                                                                    <TextBlock Text="{Binding Disponible, StringFormat=F4}" FontWeight="Bold" Foreground="Black" FontSize="18" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding Disponible, StringFormat='0.########'}" FontWeight="Bold" Foreground="Black" FontSize="18" Margin="4,0,0,0" VerticalAlignment="Center"/>
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                                                                     <TextBlock Text="Cantidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,0,6,0"/>
@@ -223,6 +247,37 @@
                                                                         Padding="8,2"
                                                                         Width="60"
                                                                         Height="28"/>
+                                                                </StackPanel>
+                                                                
+                                                                <!-- 🔷 NUEVO: Información del palet (solo si es paletizado) -->
+                                                                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,4,0,0"
+                                                                            Visibility="{Binding EsStockPaletizado, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                                    <TextBlock Text="Palet:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,0,5,0"/>
+                                                                    <TextBlock Text="{Binding CodigoPalet}" 
+                                                                               FontWeight="Bold" 
+                                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                                               Margin="0,0,6,0"/>
+                                                                    <Ellipse Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                                        <Ellipse.Style>
+                                                                            <Style TargetType="Ellipse">
+                                                                                <Setter Property="Fill" Value="Gray"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Cerrado">
+                                                                                        <Setter Property="Fill" Value="Red"/>
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Abierto">
+                                                                                        <Setter Property="Fill" Value="Green"/>
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding EstadoPalet}" Value="Vaciado">
+                                                                                        <Setter Property="Fill" Value="Orange"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Ellipse.Style>
+                                                                    </Ellipse>
+                                                                    <TextBlock Text="{Binding EstadoPalet}" 
+                                                                               FontSize="11" 
+                                                                               Foreground="{StaticResource BrushGrisOscuro}"/>
                                                                 </StackPanel>
                                                             </Grid>
                                                         </Grid>
@@ -303,6 +358,8 @@
                                   Height="28"
                                   Padding="6,2"
                                   HorizontalAlignment="Stretch"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="True"
                                   Style="{StaticResource EstiloComboBox}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
@@ -437,6 +494,8 @@
                                                         Height="28"
                                                         Padding="6,2"
                                                         HorizontalAlignment="Stretch"
+                                                        IsEditable="True"
+                                                        IsTextSearchEnabled="True"
                                                         Style="{StaticResource ComboBoxSinSelector}">
                                                         <ComboBox.ItemTemplate>
                                                             <DataTemplate>

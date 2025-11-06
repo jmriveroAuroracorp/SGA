@@ -390,7 +390,7 @@
                                                             
                                                             <!-- Stock -->
                                                             <TextBlock Grid.Column="5" 
-                                                                       Text="{Binding CantidadStock, StringFormat=F2}" 
+                                                                       Text="{Binding CantidadStock, StringFormat='0.########'}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"
                                                                        Foreground="Green"
@@ -399,7 +399,7 @@
                                                             
                                                             <!-- Contado -->
                                                             <TextBlock Grid.Column="6" 
-                                                                       Text="{Binding CantidadContada, StringFormat=F2}" 
+                                                                       Text="{Binding CantidadContada, StringFormat='0.########'}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"
                                                                        Foreground="Blue"

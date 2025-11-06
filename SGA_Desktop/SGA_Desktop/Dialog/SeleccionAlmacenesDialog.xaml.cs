@@ -125,6 +125,9 @@ namespace SGA_Desktop.Dialog
                 almacenesFiltrados = almacenesFiltrados.Where(a => a.CodigoEmpresa == empresaSeleccionada.Value);
             }
             
+            // Ordenar por código de almacén
+            almacenesFiltrados = almacenesFiltrados.OrderBy(a => a.CodigoAlmacen);
+            
             // Actualizar la colección filtrada
             _almacenesFiltrados.Clear();
             foreach (var almacen in almacenesFiltrados)

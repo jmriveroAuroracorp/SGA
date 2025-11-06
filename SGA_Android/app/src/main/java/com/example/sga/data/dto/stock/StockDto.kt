@@ -8,12 +8,13 @@ data class StockDto(
     val almacen: String,
     val ubicacion: String,
     val partida: String,
-    val fechaCaducidad: String,
+    val fechaCaducidad: String?,
     val unidadSaldo: Double,
     val reservado: Double,
     val disponible: Double,
     val tipoStock: String,
     val paletId: String?,
     val codigoPalet: String?,
-    val estadoPalet: String?
+    val estadoPalet: String?,
+    val ordenTrabajoId: String?
 )

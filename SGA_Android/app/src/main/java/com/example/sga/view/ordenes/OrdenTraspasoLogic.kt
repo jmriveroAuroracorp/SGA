@@ -76,6 +76,23 @@ class OrdenTraspasoLogic(
         }
     }
     
+    // Cancelar línea de orden
+    suspend fun cancelarLineaOrdenTraspaso(idLinea: String): Boolean {
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                apiService.cancelarLineaOrdenTraspaso(idLinea)
+            }
+            
+            if (response.isSuccessful) {
+                response.body() ?: false
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
     // Cargar orden específica con detalles completos
     fun cargarOrdenDetallada(idOrden: String) {
         ordenTraspasoViewModel.setCargando(true)

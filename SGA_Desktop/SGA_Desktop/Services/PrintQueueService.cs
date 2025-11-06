@@ -4,6 +4,8 @@ using SGA_Desktop.Models;
 using System.Threading.Tasks;
 using System.Net.Http;
 using System.Windows;
+using SGA_Desktop.Dialog;
+using System.Linq;
 
 namespace SGA_Desktop.Services
 {
@@ -33,29 +35,69 @@ namespace SGA_Desktop.Services
 				// Solo mostrar el diálogo si la aplicación no se está cerrando
 				if (!SessionManager.IsClosing)
 				{
-					MessageBox.Show(
-						$"Error de red al llamar al servicio:\n{ex.Message}",
-						"Error HTTP",
-						MessageBoxButton.OK,
-						MessageBoxImage.Error);
+					Application.Current.Dispatcher.Invoke(() =>
+					{
+						var errorDialog = new WarningDialog(
+							"Error HTTP",
+							$"Error de red al llamar al servicio:\n{ex.Message}",
+							"\uE783" // Icono de error
+						)
+						{
+							Owner = Application.Current.Windows.OfType<Window>()
+								.FirstOrDefault(w => w.IsActive)
+								?? Application.Current.MainWindow
+						};
+						errorDialog.ShowDialog();
+					});
 				}
-				return;
+				// Lanzar excepción para que el código que llama sepa que falló
+				throw new HttpRequestException($"Error de red al llamar al servicio: {ex.Message}", ex);
 			}
 
 			string body = await response.Content.ReadAsStringAsync();
 
 			if (!response.IsSuccessStatusCode)
 			{
+				string mensajeError = body;
+				
+				// Limpiar comillas si el mensaje viene entre comillas
+				if (mensajeError.StartsWith("\"") && mensajeError.EndsWith("\""))
+				{
+					mensajeError = mensajeError.Substring(1, mensajeError.Length - 2);
+				}
+				
 				// Solo mostrar el diálogo si la aplicación no se está cerrando
 				if (!SessionManager.IsClosing)
 				{
-					MessageBox.Show(
-						$"La API respondió con {(int)response.StatusCode} {response.ReasonPhrase}:\n{body}",
-						"Error en API",
-						MessageBoxButton.OK,
-						MessageBoxImage.Error);
+					Application.Current.Dispatcher.Invoke(() =>
+					{
+						string mensaje = mensajeError;
+						string titulo = "Error en API";
+						string icono = "\uE783"; // Icono de error por defecto
+						
+						// Si es un BadRequest (400), mostrar el mensaje del backend directamente
+						if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+						{
+							titulo = "Error de validación";
+							icono = "\uE814"; // Icono de advertencia
+						}
+						else
+						{
+							mensaje = $"La API respondió con {(int)response.StatusCode} {response.ReasonPhrase}:\n{body}";
+						}
+						
+						var errorDialog = new WarningDialog(titulo, mensaje, icono)
+						{
+							Owner = Application.Current.Windows.OfType<Window>()
+								.FirstOrDefault(w => w.IsActive)
+								?? Application.Current.MainWindow
+						};
+						errorDialog.ShowDialog();
+					});
 				}
-				return;
+				
+				// Lanzar excepción para que el código que llama sepa que falló
+				throw new HttpRequestException($"Error en API: {(int)response.StatusCode} {response.ReasonPhrase}. {mensajeError}");
 			}
 
 			// Si llega aquí, todo ok - MessageBox eliminado

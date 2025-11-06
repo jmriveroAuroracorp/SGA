@@ -18,6 +18,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
@@ -76,45 +79,35 @@ fun HomeScreen(
     val ordenTraspasoLogic = remember { OrdenTraspasoLogic(ordenTraspasoViewModel, sessionViewModel) }
     val ordenesActivas by ordenTraspasoViewModel.ordenesActivas.collectAsState()
 
-    // Verificar conteos activos solo una vez al cargar HomeScreen
-    LaunchedEffect(user?.id) {
-        user?.id?.let { codigo ->
-            Log.d("HomeScreen", "🔄 Cargando conteos activos para usuario: $codigo")
-            conteoLogic.verificarConteosActivos(codigo) { cantidad ->
-                Log.d("HomeScreen", "📊 Conteos activos recibidos: $cantidad")
-            }
-        }
-    }
-    
-    // Verificar órdenes de traspaso activas solo una vez al cargar HomeScreen
+    // ✅ OPTIMIZADO: Un solo LaunchedEffect que maneja todo sin duplicaciones
+    // Los servicios de fondo (ConteosService y OrdenesTraspasoService) manejan la actualización automática cada 15 segundos
     LaunchedEffect(user?.id) {
         user?.let { usuario ->
-            Log.d("HomeScreen", "🔄 Cargando órdenes activas para usuario: ${usuario.id}")
-            ordenTraspasoLogic.verificarOrdenesActivas(usuario) { cantidad ->
-                Log.d("HomeScreen", "📊 Órdenes activas recibidas: $cantidad")
-            }
-        }
-    }
-    
-    // Actualización automática cada 30 segundos
-    LaunchedEffect(user?.id) {
-        user?.let { usuario ->
-            while (isActive) {
-                delay(30_000L) // cada 30 segundos
-                Log.d("HomeScreen", "🔄 Actualización automática de datos")
-                
-                // Recargar conteos
+            Log.d("HomeScreen", "🔄 Inicializando HomeScreen para usuario: ${usuario.id}")
+            
+            // Refresco inmediato al cargar (sin delay para mejor UX)
+            Log.d("HomeScreen", "🔄 Verificación inicial de datos")
+            
+            // Hacer llamadas en paralelo para mejor rendimiento
+            val conteosJob = async {
                 usuario.id?.let { codigo ->
+                    Log.d("HomeScreen", "🔄 Cargando conteos activos para usuario: $codigo")
                     conteoLogic.verificarConteosActivos(codigo) { cantidad ->
-                        Log.d("HomeScreen", "📊 Conteos actualizados: $cantidad")
+                        Log.d("HomeScreen", "📊 Conteos activos recibidos: $cantidad")
                     }
                 }
-                
-                // Recargar órdenes de traspaso
+            }
+            
+            val ordenesJob = async {
+                Log.d("HomeScreen", "🔄 Cargando órdenes activas para usuario: ${usuario.id}")
                 ordenTraspasoLogic.verificarOrdenesActivas(usuario) { cantidad ->
-                    Log.d("HomeScreen", "📊 Órdenes actualizadas: $cantidad")
+                    Log.d("HomeScreen", "📊 Órdenes activas recibidas: $cantidad")
                 }
             }
+            
+            // Esperar a que ambas se completen
+            awaitAll(conteosJob, ordenesJob)
+            Log.d("HomeScreen", "✅ Verificación inicial completada")
         }
     }
     
@@ -210,6 +203,15 @@ fun HomeScreen(
                 permiso = 11,
                 icono = { Icon(Icons.Filled.Print, contentDescription = null) },
                 onClick = { navController.navigate("etiquetas") }
+            )
+        )
+        // Conversión (sin permisos por ahora)
+        add(
+            Acceso(
+                titulo = "Conversión",
+                permiso = null,
+                icono = { Icon(Icons.Filled.Autorenew, contentDescription = null) },
+                onClick = { navController.navigate("conversion") }
             )
         )
         // Conteos (permiso 13)

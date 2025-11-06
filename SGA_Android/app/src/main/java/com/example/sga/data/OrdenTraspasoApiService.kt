@@ -89,4 +89,10 @@ interface OrdenTraspasoApiService {
         @Path("idLinea") idLinea: String,
         @Body dto: ActualizarIdTraspasoDto
     ): Response<Unit>
+    
+    /** 10. Cancelar línea de orden */
+    @POST("OrdenTraspaso/linea/{idLinea}/cancelar")
+    suspend fun cancelarLineaOrdenTraspaso(
+        @Path("idLinea") idLinea: String
+    ): Response<Boolean>
 }

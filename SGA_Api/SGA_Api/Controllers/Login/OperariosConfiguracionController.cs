@@ -14,6 +14,9 @@ namespace SGA_Api.Controllers.Login
         private readonly AuroraSgaDbContext _auroraContext;
         private readonly IRolesSgaService _rolesSgaService;
 
+        // Longitud máxima del campo NombreOperario en la tabla operarios (varchar(30))
+        private const int MAX_LONGITUD_NOMBRE_OPERARIO = 30;
+
         public OperariosConfiguracionController(SageDbContext context, AuroraSgaDbContext auroraContext, IRolesSgaService rolesSgaService)
         {
             _context = context;
@@ -1094,15 +1097,22 @@ namespace SGA_Api.Controllers.Login
                     var fechaAlta = DateTime.Now;
                     var contraseña = dto.Contraseña ?? dto.CodigoEmpleado.ToString();
                     
+                    // Truncar el nombre a la longitud máxima permitida para evitar errores de truncamiento en la base de datos
+                    var nombreTruncado = string.IsNullOrEmpty(dto.Nombre) 
+                        ? string.Empty 
+                        : (dto.Nombre.Length > MAX_LONGITUD_NOMBRE_OPERARIO 
+                            ? dto.Nombre.Substring(0, MAX_LONGITUD_NOMBRE_OPERARIO) 
+                            : dto.Nombre);
+                    
                     var sql = @"INSERT INTO operarios (CodigoEmpresa, Operario, NombreOperario, FechaAlta, Contraseña, CodigoCentro, FechaBaja, MRH_LimiteInventarioEuros, MRH_LimiteInventarioUnidades)
                                VALUES (1, @operarioId, @nombre, @fechaAlta, @contraseña, @codigoCentro, NULL, 0, 0)";
 
                     await _context.Database.ExecuteSqlRawAsync(sql,
                         new Microsoft.Data.SqlClient.SqlParameter("@operarioId", dto.CodigoEmpleado),
-                        new Microsoft.Data.SqlClient.SqlParameter("@nombre", dto.Nombre),
+                        new Microsoft.Data.SqlClient.SqlParameter("@nombre", nombreTruncado),
                         new Microsoft.Data.SqlClient.SqlParameter("@fechaAlta", fechaAlta),
                         new Microsoft.Data.SqlClient.SqlParameter("@contraseña", contraseña),
-                        new Microsoft.Data.SqlClient.SqlParameter("@codigoCentro", dto.CodigoCentro ?? ""));
+                        new Microsoft.Data.SqlClient.SqlParameter("@codigoCentro", ""));
                 }
                 // Si YA es operario existente, solo se le asignarán permisos/empresas/almacenes más adelante
 

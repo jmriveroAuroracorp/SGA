@@ -41,9 +41,13 @@ namespace SGA_Desktop.Views
 					{
 						viewModel.BuscarPorArticuloCommand.Execute(null);
 					}
-					else
+					else if (viewModel.IsLocationMode)
 					{
 						viewModel.BuscarPorUbicacionCommand.Execute(null);
+					}
+					else if (viewModel.IsPaletMode)
+					{
+						viewModel.BuscarPorPaletCommand.Execute(null);
 					}
 				}
 			}

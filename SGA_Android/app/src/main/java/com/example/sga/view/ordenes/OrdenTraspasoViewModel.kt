@@ -253,6 +253,7 @@ class OrdenTraspasoViewModel : ViewModel() {
                         
                         // Si cambió a EN_PROCESO, es línea normal (no se subdividió)
                         if (lineaActualizada?.estado == "EN_PROCESO") {
+                            android.util.Log.d("DEBUG_ORDEN", "✅ EN_PROCESO detectado - línea normal")
                             break
                         }
                     }
@@ -273,6 +274,30 @@ class OrdenTraspasoViewModel : ViewModel() {
     
     fun setStockDisponible(stock: List<StockDisponibleDto>) {
         _stockDisponible.value = stock
+    }
+    
+    fun cancelarLineaActual() {
+        viewModelScope.launch {
+            val lineaSeleccionada = _lineaSeleccionada.value
+            if (lineaSeleccionada != null) {
+                setCargando(true)
+                
+                val cancelado = logic.cancelarLineaOrdenTraspaso(lineaSeleccionada.idLineaOrdenTraspaso)
+                
+                if (cancelado) {
+                    // Recargar la orden para ver los cambios
+                    val ordenId = _ordenSeleccionada.value?.idOrdenTraspaso
+                    if (ordenId != null) {
+                        cargarOrdenDetallada(ordenId)
+                    }
+                    setMensaje("Línea cancelada correctamente")
+                } else {
+                    setError("Error al cancelar la línea")
+                }
+                
+                setCargando(false)
+            }
+        }
     }
     
     fun setCargando(cargando: Boolean) {

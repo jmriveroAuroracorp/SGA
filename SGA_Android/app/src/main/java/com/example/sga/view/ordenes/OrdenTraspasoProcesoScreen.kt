@@ -58,6 +58,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.*
+import com.example.sga.utils.FormatUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -201,9 +202,10 @@ fun OrdenTraspasoProcesoScreen(
                     showBackButton = false,
                     customNavigationIcon = {
                         IconButton(onClick = {
-                            // Si hay una línea seleccionada, volver a selección de líneas
+                            // Si hay una línea seleccionada, cancelar línea y volver a selección
                             if (lineaSeleccionada != null) {
-                                // Solo limpiar la línea seleccionada para volver a la lista
+                                // Cancelar la línea actual y volver a la lista
+                                viewModel.cancelarLineaActual()
                                 viewModel.setLineaSeleccionada(null)
                             } else {
                                 // Si no hay línea seleccionada, volver a órdenes
@@ -544,8 +546,8 @@ fun OrdenTraspasoProcesoScreen(
                     articuloParaLinea!!.descripcion?.let { desc ->
                         Text("📝 $desc", style = MaterialTheme.typography.bodySmall)
                     }
-                    Text("📊 Cantidad planificada: ${lineaParaAnadir!!.cantidadPlan}")
-                    Text("📦 Stock disponible: ${stockDisponible.firstOrNull()?.cantidadDisponible ?: 0.0}")
+                    Text("📊 Cantidad planificada: ${FormatUtils.formatearCantidad(lineaParaAnadir!!.cantidadPlan)}")
+                    Text("📦 Stock disponible: ${FormatUtils.formatearCantidad(stockDisponible.firstOrNull()?.cantidadDisponible ?: 0.0)}")
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -718,8 +720,8 @@ fun OrdenTraspasoProcesoScreen(
                     lineaParaAjuste!!.descripcionArticulo?.let { desc ->
                         Text("📝 $desc", style = MaterialTheme.typography.bodySmall)
                     }
-                    Text("📊 Cantidad planificada: ${lineaParaAjuste!!.cantidadPlan}")
-                    Text("📦 Stock disponible: ${stockDisponible.firstOrNull()?.cantidadDisponible ?: 0.0}")
+                    Text("📊 Cantidad planificada: ${FormatUtils.formatearCantidad(lineaParaAjuste!!.cantidadPlan)}")
+                    Text("📦 Stock disponible: ${FormatUtils.formatearCantidad(stockDisponible.firstOrNull()?.cantidadDisponible ?: 0.0)}")
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -1141,7 +1143,7 @@ fun LineaOrdenCard(
     }
     
     Card(
-        onClick = if (linea.estado == "SUBDIVIDIDO" || linea.estado == "BLOQUEADA") { {} } else onClick,
+        onClick = if (linea.estado == "BLOQUEADA") { {} } else onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when (linea.estado) {
@@ -1198,13 +1200,13 @@ fun LineaOrdenCard(
             Spacer(modifier = Modifier.height(4.dp))
             
             Text(
-                text = "Cantidad Necesaria: ${linea.cantidadPlan}",
+                text = "Cantidad Necesaria: ${FormatUtils.formatearCantidad(linea.cantidadPlan)}",
                 style = MaterialTheme.typography.bodyMedium
             )
             
             if (linea.cantidadMovida > 0) {
                 Text(
-                    text = "Cantidad movida: ${linea.cantidadMovida}",
+                    text = "Cantidad movida: ${FormatUtils.formatearCantidad(linea.cantidadMovida)}",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -1252,7 +1254,7 @@ fun StockDisponibleCard(
                 )
                 
                 Text(
-                    text = "Stock: ${stock.cantidadDisponible}",
+                    text = "Stock: ${FormatUtils.formatearCantidad(stock.cantidadDisponible)}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -1909,7 +1911,7 @@ fun PaletPendienteCard(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text("Líneas completas: ${palet.lineasCompletas}")
-            Text("Cantidad total: ${palet.cantidadTotal}")
+            Text("Cantidad total: ${FormatUtils.formatearCantidad(palet.cantidadTotal)}")
             Text(
                 text = if (palet.listoParaUbicar) "✅ Listo para ubicar" else "⏳ Pendiente",
                 color = if (palet.listoParaUbicar) 
@@ -2380,7 +2382,7 @@ fun PaletExistenteSeccion(
                 )
                 lineasDelPalet.forEach { linea ->
                     Text(
-                        text = "• ${linea.codigoArticulo}: ${linea.cantidad} uds",
+                        text = "• ${linea.codigoArticulo}: ${FormatUtils.formatearCantidad(linea.cantidad)} uds",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2692,7 +2694,7 @@ fun GestionarPaletSeccion(
                                 items(lineasDelPalet) { linea ->
                                     Column {
                                         Text(
-                                            text = "• ${linea.codigoArticulo}: ${linea.cantidad} uds",
+                                            text = "• ${linea.codigoArticulo}: ${FormatUtils.formatearCantidad(linea.cantidad)} uds",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -2853,7 +2855,7 @@ fun GestionarPaletSeccion(
                             )
                         }
                         Text(
-                            text = "Cantidad: ${lineaSeleccionada.cantidadPlan}",
+                            text = "Cantidad: ${FormatUtils.formatearCantidad(lineaSeleccionada.cantidadPlan)}",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         articuloEscaneado.partida?.let { partida ->
@@ -3503,7 +3505,7 @@ fun InformacionApoyo(
                         }
                         item {
                             Text(
-                                text = "Cantidad a recoger: ${linea.cantidadPlan}",
+                                text = "Cantidad a recoger: ${FormatUtils.formatearCantidad(linea.cantidadPlan)}",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -3534,7 +3536,7 @@ fun InformacionApoyo(
                         }
                         item {
                             Text(
-                                text = "Stock disponible: ${stock.cantidadDisponible}",
+                                text = "Stock disponible: ${FormatUtils.formatearCantidad(stock.cantidadDisponible)}",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -3614,7 +3616,7 @@ fun LineasPaletInfo(
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
-                        text = "  ${lineaPalet.cantidad} uds",
+                        text = "  ${FormatUtils.formatearCantidad(lineaPalet.cantidad)} uds",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

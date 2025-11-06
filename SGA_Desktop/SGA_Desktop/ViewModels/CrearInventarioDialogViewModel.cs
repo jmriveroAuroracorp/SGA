@@ -512,16 +512,25 @@ namespace SGA_Desktop.ViewModels
                 ShowDialog(confirmacion);
                 if (confirmacion.DialogResult != true) return;
 
+                // Determinar tipo de inventario
+                var tipoInventario = UsarFiltroArticulo || UsarRangoArticulos || ArticulosSeleccionados == "Con stock" ? "PARCIAL" : TipoInventarioSeleccionado;
+                
+                // Si es inventario TOTAL, siempre incluir artículos con stock 0
+                // Si es PARCIAL, usar la selección del combo
+                var incluirArticulosConStockCero = tipoInventario == "TOTAL" 
+                    ? true 
+                    : ArticulosSeleccionados == "Todos";
+
                 var dto = new CrearInventarioDto
                 {
                     CodigoInventario = CodigoInventario,
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-                    TipoInventario = UsarFiltroArticulo || UsarRangoArticulos || ArticulosSeleccionados == "Con stock" ? "PARCIAL" : "TOTAL",
+                    TipoInventario = tipoInventario,
                     FechaInventario = FechaInventario.Date, // Asegurar que solo se envía la fecha sin hora
                     Comentarios = Comentarios,
                     UsuarioCreacionId = SessionManager.UsuarioActual!.operario,
                     IncluirUnidadesCero = IncluirUnidadesCero, // Checkbox "Inicializar a 0"
-                    IncluirArticulosConStockCero = ArticulosSeleccionados == "Todos", // Combo "Todos" vs "Con stock"
+                    IncluirArticulosConStockCero = incluirArticulosConStockCero, // TRUE si es TOTAL, o según combo si es PARCIAL
                     IncluirUbicacionesEspeciales = IncluirUbicacionesEspeciales,
                     // NUEVO: Filtro de artículo específico
                     CodigoArticuloFiltro = UsarFiltroArticulo ? ArticuloSeleccionado?.CodigoArticulo : null,

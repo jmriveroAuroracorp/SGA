@@ -58,6 +58,10 @@ class TraspasosViewModel : ViewModel() {
 
     private val _lineasPalet = MutableStateFlow<Map<String, List<LineaPaletDto>>>(emptyMap())
     val lineasPalet: StateFlow<Map<String, List<LineaPaletDto>>> = _lineasPalet
+    
+    // Mapa temporal para almacenar el codigoPaletOrigen de cada línea
+    private val _codigosPaletOrigen = MutableStateFlow<Map<String, String>>(emptyMap())
+    val codigosPaletOrigen: StateFlow<Map<String, String>> = _codigosPaletOrigen
 
     private val _articulosFiltrados = MutableStateFlow<List<ArticuloDto>>(emptyList())
     val articulosFiltrados: StateFlow<List<ArticuloDto>> = _articulosFiltrados
@@ -312,12 +316,19 @@ class TraspasosViewModel : ViewModel() {
     fun anadirLinea(
         idPalet: String,
         dto: LineaPaletCrearDto,
+        codigoPaletOrigen: String? = null,
         onSuccess: () -> Unit
     ) {
         logic.anadirLineaPalet(
             idPalet = idPalet,
             dto = dto,
             onSuccess = {
+                // Almacenar temporalmente el codigoPaletOrigen
+                if (codigoPaletOrigen != null) {
+                    val currentMap = _codigosPaletOrigen.value.toMutableMap()
+                    currentMap[idPalet] = codigoPaletOrigen
+                    _codigosPaletOrigen.value = currentMap
+                }
                 obtenerLineasDePalet(idPalet)
                 onSuccess()
             },
@@ -328,6 +339,24 @@ class TraspasosViewModel : ViewModel() {
         logic.eliminarLineaPalet(idLinea, usuarioId,
             onSuccess = {
                 obtenerLineasDePalet(paletId)
+            },
+            onError = {
+                _error.value = it
+            }
+        )
+    }
+
+    fun limpiarPaletVacío(paletId: String, usuarioId: Int) {
+        logic.forzarVaciadoPalet(
+            idPalet = paletId,
+            usuarioId = usuarioId,
+            onSuccess = {
+                // Limpiar el palet seleccionado y finalizar el flujo de creación
+                clearPaletSeleccionado()
+                finalizarFlujoCreacion()
+                _paletCreado.value = null
+                _lineasPalet.value = emptyMap()
+                _error.value = null
             },
             onError = {
                 _error.value = it
@@ -433,11 +462,29 @@ class TraspasosViewModel : ViewModel() {
     fun imprimirEtiquetaPalet(dto: LogImpresionDto) {
         logic.imprimirEtiquetaPalet(
             dto = dto,
-            onSuccess = {
+            onSuccess = { responseJson ->
                 _error.value = null
+                // Aquí podrías almacenar la respuesta si necesitas mostrarla
+                Log.d("IMPRESION_SUCCESS", "Respuesta del backend: $responseJson")
             },
             onError = {
                 _error.value = it
+            }
+        )
+    }
+    
+    fun imprimirEtiquetaPaletConCallback(dto: LogImpresionDto, onComplete: (String) -> Unit) {
+        logic.imprimirEtiquetaPalet(
+            dto = dto,
+            onSuccess = { responseJson ->
+                _error.value = null
+                Log.d("IMPRESION_SUCCESS", "Respuesta del backend: $responseJson")
+                onComplete(responseJson)
+            },
+            onError = { error ->
+                _error.value = error
+                Log.e("IMPRESION_ERROR", "Error al imprimir: $error")
+                onComplete("ERROR: $error")
             }
         )
     }
@@ -505,6 +552,7 @@ class TraspasosViewModel : ViewModel() {
         id: String,
         dto: FinalizarTraspasoArticuloDto,
         onSuccess: () -> Unit,
+        onConflictoPalet: (com.example.sga.data.dto.traspasos.ConflictoPaletResponse) -> Unit = {},
         onError: (String) -> Unit
     ) {
         _cargando.value = true
@@ -519,6 +567,10 @@ class TraspasosViewModel : ViewModel() {
                 _cargando.value = false
                 onSuccess()
             },
+            onConflictoPalet = { conflicto ->
+                _cargando.value = false
+                onConflictoPalet(conflicto)
+            },
             onError = {
                 _cargando.value = false
                 onError(it)
@@ -530,7 +582,7 @@ class TraspasosViewModel : ViewModel() {
         codigoEmpresa: Short,
         almacenDestino: String,
         ubicacionDestino: String,
-        onResult: (existe: Boolean, paletId: String?, cerrado: Boolean, aviso: String?) -> Unit,
+        onResult: (existe: Boolean, paletId: String?, cerrado: Boolean, aviso: String?, cantidadPalets: Int?, palets: List<PaletDto>?) -> Unit,
         onError: (String) -> Unit
     ) {
         logic.precheckFinalizarArticulo(
@@ -540,6 +592,38 @@ class TraspasosViewModel : ViewModel() {
             onResult = onResult,
             onError = onError
         )
+    }
+
+    /**
+     * Valida que un código GS1 escaneado corresponda a uno de los palets en la ubicación destino
+     */
+    fun validarGS1ContraPalets(
+        codigoEscaneado: String,
+        paletsDisponibles: List<PaletDto>
+    ): String? {
+        val TAG = "VALIDAR_GS1_PALET"
+        Log.d(TAG, "🔍 Validando código: '$codigoEscaneado'")
+        
+        // Extraer GS1 si viene con prefijo "00"
+        val gs1Regex = Regex("""^00(\d{18})""")
+        val gs1Extraido = gs1Regex.find(codigoEscaneado)?.groupValues?.get(1) ?: codigoEscaneado.trim()
+        
+        Log.d(TAG, "🔢 GS1 normalizado: '$gs1Extraido'")
+        
+        val paletCoincidente = paletsDisponibles.find { palet ->
+            val gs1Palet = palet.codigoGS1?.trim()
+            val coincide = gs1Palet == gs1Extraido
+            Log.d(TAG, "   Comparando: ${palet.codigoPalet} GS1='$gs1Palet' -> ${if (coincide) "✅" else "❌"}")
+            coincide
+        }
+        
+        return paletCoincidente?.let {
+            Log.d(TAG, "✅ Palet validado: ${it.codigoPalet} (ID: ${it.id})")
+            it.id
+        } ?: run {
+            Log.w(TAG, "❌ GS1 no encontrado: $gs1Extraido")
+            null
+        }
     }
 
     fun comprobarTraspasoPendiente(
@@ -654,5 +738,4 @@ class TraspasosViewModel : ViewModel() {
             onError = onError
         )
     }
-
 }

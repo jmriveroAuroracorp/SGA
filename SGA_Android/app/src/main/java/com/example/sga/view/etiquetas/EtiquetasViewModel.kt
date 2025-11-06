@@ -150,12 +150,18 @@ class EtiquetasViewModel : ViewModel() {
     }
 
     fun enviarLogImpresion(dto: LogImpresionDto) {
-        logic.enviarImpresion(dto) { respuesta ->
-            if (respuesta == null) {
-                setError("Error al enviar log de impresión")
+        logic.enviarImpresion(
+            dto,
+            onResult = { respuesta ->
+                if (respuesta == null) {
+                    // El error ya se maneja en onError
+                }
+                // si necesitas actualizar estado, puedes hacerlo aquí
+            },
+            onError = { mensaje ->
+                setError(mensaje)
             }
-            // si necesitas actualizar estado, puedes hacerlo aquí
-        }
+        )
     }
 
     fun actualizarImpresoraSeleccionadaEnBD(nombre: String) {

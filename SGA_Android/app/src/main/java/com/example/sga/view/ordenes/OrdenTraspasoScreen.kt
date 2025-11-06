@@ -110,7 +110,7 @@ fun OrdenTraspasoScreen(
                         paletId = traspaso.paletId,
                         onSuccess = {
                             Log.d("ORDEN_TRASPASO_UI", "✅ Traspaso completado: ${traspaso.id}")
-                            // 3. Actualizar línea de orden con el ID del traspaso
+                                                    // 3. Actualizar línea de orden con el ID del traspaso
                             if (traspaso.idLineaOrden != null) {
                                 Log.d("ORDEN_TRASPASO_UI", "📝 Actualizando línea de orden: ${traspaso.idLineaOrden} con traspasoId: ${traspaso.id}")
                                 scope.launch {

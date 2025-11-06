@@ -167,17 +167,17 @@
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="2">
                                                                     <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat='0.########'}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,16,0">
                                                                     <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                                                         <StackPanel Orientation="Vertical" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}" HorizontalAlignment="Center">
                                                                             <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                                                            <TextBlock Text="{Binding Reservado, StringFormat=F4}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13" HorizontalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding Reservado, StringFormat='0.########'}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13" HorizontalAlignment="Center"/>
                                                                         </StackPanel>
                                                                         <StackPanel Orientation="Vertical" Margin="0,8,0,0" HorizontalAlignment="Center">
                                                                             <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                                                            <TextBlock Text="{Binding Disponible, StringFormat=F4}" FontWeight="Bold" Foreground="Black" FontSize="18" HorizontalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding Disponible, StringFormat='0.########'}" FontWeight="Bold" Foreground="Black" FontSize="18" HorizontalAlignment="Center"/>
                                                                         </StackPanel>
                                                                     </StackPanel>
                                                                 </StackPanel>

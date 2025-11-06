@@ -3,9 +3,10 @@ package com.example.sga.data.dto.traspasos
 import com.google.gson.annotations.SerializedName
 
 data class PaletDto(
+    @SerializedName(value = "id", alternate = ["paletId"])
     val id: String,
 
-    @SerializedName("codigo")
+    @SerializedName(value = "codigo", alternate = ["codigoPalet"])
     val codigoPalet: String,
 
     @SerializedName("tipoPaletCodigo")

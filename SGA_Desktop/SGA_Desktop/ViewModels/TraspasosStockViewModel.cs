@@ -22,6 +22,9 @@ namespace SGA_Desktop.ViewModels
         public ObservableCollection<StockDisponibleDto> Ubicaciones { get; set; } = new();
         public string HeaderArticulo => $"{CodigoArticulo} - {DescripcionArticulo}";
         
+        // Total del artículo sumando todas las ubicaciones sin importar lote ni fecha de caducidad
+        public decimal TotalArticulo => Ubicaciones?.Sum(x => x.Disponible) ?? 0;
+        
         [ObservableProperty]
         private bool isExpanded = false;
     }
@@ -35,6 +38,32 @@ namespace SGA_Desktop.ViewModels
         
         // 🔷 NUEVO: Almacenar todos los resultados de stock para filtrado local
         private List<StockDisponibleDto> _todosLosResultadosStock = new();
+        
+        // 🔷 NUEVO: Propiedades para filtro de partida (como ComboBox)
+        public ObservableCollection<string> PartidasDisponibles { get; } = new();
+        public ICollectionView PartidasDisponiblesView { get; private set; }
+        
+        [ObservableProperty]
+        private string partidaSeleccionada;
+        
+        [ObservableProperty]
+        private string filtroPartidaTexto = "";
+        
+        [ObservableProperty]
+        private bool mostrarFiltroPartida = false;
+
+        // 🔷 NUEVO: Propiedades para filtro de palets (como ComboBox)
+        public ObservableCollection<string> PaletsDisponibles { get; } = new();
+        public ICollectionView PaletsDisponiblesView { get; private set; }
+        
+        [ObservableProperty]
+        private string paletSeleccionado;
+        
+        [ObservableProperty]
+        private string filtroPaletsTexto = "";
+        
+        [ObservableProperty]
+        private bool mostrarFiltroPalets = false;
 
         public TraspasosStockViewModel(StockService stockService, TraspasosService traspasosService)
         {
@@ -48,6 +77,14 @@ namespace SGA_Desktop.ViewModels
             // Inicializar la vista filtrable de almacenes
             AlmacenesFiltroView = CollectionViewSource.GetDefaultView(AlmacenesFiltro);
             AlmacenesFiltroView.Filter = FiltraAlmacenesFiltro;
+            
+            // 🔷 NUEVO: Inicializar la vista filtrable de partidas
+            PartidasDisponiblesView = CollectionViewSource.GetDefaultView(PartidasDisponibles);
+            PartidasDisponiblesView.Filter = FiltraPartidasDisponibles;
+            
+            // 🔷 NUEVO: Inicializar la vista filtrable de palets
+            PaletsDisponiblesView = CollectionViewSource.GetDefaultView(PaletsDisponibles);
+            PaletsDisponiblesView.Filter = FiltraPaletsDisponibles;
             
             // NO cargar almacenes aquí - se cargarán cuando se busque un artículo
         }
@@ -121,6 +158,12 @@ namespace SGA_Desktop.ViewModels
                 AlmacenFiltroSeleccionado = null;
                 _todosLosResultadosStock.Clear();
                 MostrarComboAlmacenes = false;
+                MostrarFiltroPartida = false;
+                PartidaSeleccionada = null;
+                FiltroPartidaTexto = "";
+                MostrarFiltroPalets = false;
+                PaletSeleccionado = null;
+                FiltroPaletsTexto = "";
                 Feedback = "Introduce un código o descripción de artículo.";
                 return;
             }
@@ -143,6 +186,12 @@ namespace SGA_Desktop.ViewModels
                     AlmacenFiltroSeleccionado = null;
                     _todosLosResultadosStock.Clear();
                     MostrarComboAlmacenes = false;
+                    MostrarFiltroPartida = false;
+                    PartidaSeleccionada = null;
+                    FiltroPartidaTexto = "";
+                    MostrarFiltroPalets = false;
+                    PaletSeleccionado = null;
+                    FiltroPaletsTexto = "";
                     Feedback = "No hay stock para ese artículo.";
                     return;
                 }
@@ -158,6 +207,12 @@ namespace SGA_Desktop.ViewModels
 
                 // 🔷 NUEVO: Cargar combo con los almacenes que realmente tienen stock del artículo
                 await CargarAlmacenesConStockAsync(stock);
+                
+                // 🔷 NUEVO: Cargar partidas disponibles del stock
+                CargarPartidasDisponibles(stock);
+                
+                // 🔷 NUEVO: Cargar palets disponibles del stock
+                CargarPaletsDisponibles(stock);
 
                 // 🔷 NUEVO: Aplicar filtrado por almacén si hay uno seleccionado
                 FiltrarResultadosPorAlmacen();
@@ -362,6 +417,101 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(ArticulosConUbicaciones));
         }
 
+        // 🔷 NUEVO: Método para cargar partidas disponibles del stock
+        private void CargarPartidasDisponibles(List<StockDisponibleDto> stock)
+        {
+            try
+            {
+                // Obtener partidas únicas del stock (excluyendo nulas o vacías)
+                var partidasUnicas = stock
+                    .Where(x => !string.IsNullOrEmpty(x.Partida))
+                    .Select(x => x.Partida)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+                
+                // Limpiar y poblar la colección
+                PartidasDisponibles.Clear();
+                foreach (var partida in partidasUnicas)
+                    PartidasDisponibles.Add(partida);
+                
+                // Limpiar selección previa si la partida ya no está disponible
+                if (!string.IsNullOrEmpty(PartidaSeleccionada) && 
+                    !partidasUnicas.Contains(PartidaSeleccionada))
+                {
+                    PartidaSeleccionada = null;
+                }
+                
+                // Mostrar filtro solo si hay partidas
+                MostrarFiltroPartida = PartidasDisponibles.Count > 0;
+                
+                OnPropertyChanged(nameof(PartidasDisponibles));
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, continuar sin filtro de partidas
+                PartidasDisponibles.Clear();
+                MostrarFiltroPartida = false;
+            }
+        }
+        
+        // 🔷 NUEVO: Método para cargar palets disponibles del stock
+        private void CargarPaletsDisponibles(List<StockDisponibleDto> stock)
+        {
+            try
+            {
+                var codigosPaletsUnicos = new List<string>();
+                
+                // 1) Obtener palets de la lista Palets (si existe)
+                var paletsDeLista = stock
+                    .Where(x => x.Palets != null && x.Palets.Any())
+                    .SelectMany(x => x.Palets)
+                    .Where(p => !string.IsNullOrEmpty(p.CodigoPalet))
+                    .Select(p => p.CodigoPalet)
+                    .ToList();
+                
+                codigosPaletsUnicos.AddRange(paletsDeLista);
+                
+                // 2) Obtener palets del campo CodigoPalet directo (si no está en la lista)
+                var paletsDirectos = stock
+                    .Where(x => !string.IsNullOrEmpty(x.CodigoPalet))
+                    .Select(x => x.CodigoPalet)
+                    .ToList();
+                
+                codigosPaletsUnicos.AddRange(paletsDirectos);
+                
+                // Eliminar duplicados y ordenar
+                codigosPaletsUnicos = codigosPaletsUnicos
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+                
+                // Limpiar y poblar la colección
+                PaletsDisponibles.Clear();
+                foreach (var codigoPalet in codigosPaletsUnicos)
+                    PaletsDisponibles.Add(codigoPalet);
+                
+                // Limpiar selección previa si el palet ya no está disponible
+                if (!string.IsNullOrEmpty(PaletSeleccionado) && 
+                    !codigosPaletsUnicos.Contains(PaletSeleccionado))
+                {
+                    PaletSeleccionado = null;
+                }
+                
+                // Mostrar filtro solo si hay palets
+                MostrarFiltroPalets = PaletsDisponibles.Count > 0;
+                
+                OnPropertyChanged(nameof(PaletsDisponibles));
+                OnPropertyChanged(nameof(MostrarFiltroPalets));
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, continuar sin filtro de palets
+                PaletsDisponibles.Clear();
+                MostrarFiltroPalets = false;
+            }
+        }
+
         // 🔷 NUEVO: Método para cargar almacenes basándose en el stock encontrado
         private async Task CargarAlmacenesConStockAsync(List<StockDisponibleDto> stock)
         {
@@ -410,6 +560,9 @@ namespace SGA_Desktop.ViewModels
                 
                 // 🔷 NUEVO: Mostrar combo solo si hay almacenes
                 MostrarComboAlmacenes = AlmacenesFiltro.Count > 0;
+                
+                // 🔷 NUEVO: Mostrar filtro de partida si hay stock
+                MostrarFiltroPartida = _todosLosResultadosStock.Count > 0;
                     
                 OnPropertyChanged(nameof(AlmacenesFiltro));
             }
@@ -418,6 +571,12 @@ namespace SGA_Desktop.ViewModels
                 // En caso de error, continuar sin filtro de almacenes
                 AlmacenesFiltro.Clear();
                 MostrarComboAlmacenes = false;
+                MostrarFiltroPartida = false;
+                PartidaSeleccionada = null;
+                FiltroPartidaTexto = "";
+                MostrarFiltroPalets = false;
+                PaletSeleccionado = null;
+                FiltroPaletsTexto = "";
             }
         }
 
@@ -430,14 +589,60 @@ namespace SGA_Desktop.ViewModels
             return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
                 .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
         }
+        
+        // 🔷 NUEVO: Método para filtrar partidas en el combo
+        private bool FiltraPartidasDisponibles(object obj)
+        {
+            if (obj is not string partida) return false;
+            if (string.IsNullOrEmpty(FiltroPartidaTexto)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(partida, FiltroPartidaTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+        
+        // 🔷 NUEVO: Método para filtrar palets en el combo
+        private bool FiltraPaletsDisponibles(object obj)
+        {
+            if (obj is not string codigoPalet) return false;
+            if (string.IsNullOrEmpty(FiltroPaletsTexto)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(codigoPalet, FiltroPaletsTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
 
         // 🔷 NUEVO: Método para manejar cambios en el filtro de almacenes
         partial void OnFiltroAlmacenesTextoChanged(string value)
         {
             AlmacenesFiltroView?.Refresh();
         }
+        
+        // 🔷 NUEVO: Método para manejar cambios en el filtro de partida
+        partial void OnFiltroPartidaTextoChanged(string value)
+        {
+            PartidasDisponiblesView?.Refresh();
+        }
+        
+        // 🔷 NUEVO: Método para manejar cambios en el filtro de palets
+        partial void OnFiltroPaletsTextoChanged(string value)
+        {
+            PaletsDisponiblesView?.Refresh();
+        }
+        
+        // 🔷 NUEVO: Método para manejar cambios en la selección de partida
+        partial void OnPartidaSeleccionadaChanged(string value)
+        {
+            // Aplicar filtrado cuando se seleccione una partida
+            FiltrarResultadosPorAlmacen();
+        }
+        
+        // 🔷 NUEVO: Método para manejar cambios en la selección de palet
+        partial void OnPaletSeleccionadoChanged(string value)
+        {
+            // Aplicar filtrado cuando se seleccione un palet
+            FiltrarResultadosPorAlmacen();
+        }
 
-        // 🔷 NUEVO: Método para filtrar resultados por almacén sin hacer nueva búsqueda
+        // 🔷 NUEVO: Método para filtrar resultados por almacén y partida sin hacer nueva búsqueda
         private void FiltrarResultadosPorAlmacen()
         {
             // Guardar el estado de expansión antes de limpiar
@@ -453,6 +658,27 @@ namespace SGA_Desktop.ViewModels
             if (AlmacenFiltroSeleccionado != null)
             {
                 stockFiltrado = stockFiltrado.Where(x => x.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen).ToList();
+            }
+            
+            // 🔷 NUEVO: Aplicar filtro por partida si hay una seleccionada
+            if (!string.IsNullOrWhiteSpace(PartidaSeleccionada))
+            {
+                stockFiltrado = stockFiltrado.Where(x => 
+                    !string.IsNullOrEmpty(x.Partida) && 
+                    x.Partida.Equals(PartidaSeleccionada, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            
+            // 🔷 NUEVO: Aplicar filtro por palet si hay uno seleccionado
+            if (!string.IsNullOrWhiteSpace(PaletSeleccionado))
+            {
+                stockFiltrado = stockFiltrado.Where(x => 
+                    // Buscar en la lista Palets
+                    (x.Palets != null && 
+                     x.Palets.Any(p => !string.IsNullOrEmpty(p.CodigoPalet) && 
+                                      p.CodigoPalet.Equals(PaletSeleccionado, StringComparison.OrdinalIgnoreCase))) ||
+                    // O buscar en el campo CodigoPalet directo
+                    (!string.IsNullOrEmpty(x.CodigoPalet) && 
+                     x.CodigoPalet.Equals(PaletSeleccionado, StringComparison.OrdinalIgnoreCase))).ToList();
             }
             
             // Agrupar por artículo
@@ -519,12 +745,6 @@ namespace SGA_Desktop.ViewModels
         // 🔷 NUEVO: Método para manejar cambios en la selección del almacén
         partial void OnAlmacenFiltroSeleccionadoChanged(AlmacenDto value)
         {
-            // Actualizar el texto del filtro con la selección
-            if (value != null)
-            {
-                FiltroAlmacenesTexto = value.DescripcionCombo;
-            }
-            
             // 🔷 CORREGIDO: Solo filtrar los resultados existentes, NO hacer otra búsqueda
             FiltrarResultadosPorAlmacen();
         }

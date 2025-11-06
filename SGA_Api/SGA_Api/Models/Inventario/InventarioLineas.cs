@@ -26,11 +26,17 @@ namespace SGA_Api.Models.Inventario
 		public string? CodigoAlmacen { get; set; }
 
 		[Required]
-		[Column(TypeName = "decimal(18,4)")]
-		public decimal StockTeorico { get; set; } = 0;
+	/// <summary>
+	/// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+	/// </summary>
+	[Column(TypeName = "decimal(18,6)")]
+	public decimal StockTeorico { get; set; } = 0;
 
-		[Column(TypeName = "decimal(18,4)")]
-		public decimal? StockContado { get; set; }
+	/// <summary>
+	/// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+	/// </summary>
+	[Column(TypeName = "decimal(18,6)")]
+	public decimal? StockContado { get; set; }
 
 		[Required]
 		[StringLength(20)]
@@ -48,16 +54,23 @@ namespace SGA_Api.Models.Inventario
 
 		public DateTime? FechaCaducidad { get; set; }
 
-		[Required]
-		[Column(TypeName = "decimal(18,4)")]
-		public decimal StockActual { get; set; } = 0;
+	/// <summary>
+	/// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+	/// </summary>
+	[Required]
+	[Column(TypeName = "decimal(18,6)")]
+	public decimal StockActual { get; set; } = 0;
 
-		/// <summary>
-		/// Ajuste final calculado: StockContado - StockActual
-		/// Representa la diferencia entre lo que contó el usuario y lo que hay actualmente en el sistema
-		/// </summary>
-		[Column(TypeName = "decimal(18,4)")]
-		public decimal? AjusteFinal { get; set; }
+	/// <summary>
+	/// Ajuste final calculado: StockContado - StockActual
+	/// Representa la diferencia entre lo que contó el usuario y lo que hay actualmente en el sistema
+	/// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+	/// </summary>
+	[Column(TypeName = "decimal(18,6)")]
+	public decimal? AjusteFinal { get; set; }
+
+		// Identificador del palet asociado a esta línea (si procede)
+		public Guid? PaletId { get; set; }
 
 		// Navigation property
 		[ForeignKey("IdInventario")]

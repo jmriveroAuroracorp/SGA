@@ -60,9 +60,10 @@ namespace SGA_Desktop.ViewModels
 			FiltroUbicacion = string.Empty;
 			FiltroPartida = string.Empty;
 
-			// ② Inicializa ambas colecciones
+			// ② Inicializa todas las colecciones
 			ResultadosStock = new ObservableCollection<StockDto>();
 			ResultadosStockPorUbicacion = new ObservableCollection<StockDto>();
+			ResultadosStockPorPalet = new ObservableCollection<StockDto>();
 			
 			// 🔷 NUEVO: Inicializar colección de artículos agrupados
 			ArticulosConUbicaciones = new ObservableCollection<ArticuloStockGroup>();
@@ -87,6 +88,7 @@ namespace SGA_Desktop.ViewModels
 	public ObservableCollection<string> Ubicaciones { get; }
 	public ObservableCollection<StockDto> ResultadosStock { get; }
 	public ObservableCollection<StockDto> ResultadosStockPorUbicacion { get; }
+	public ObservableCollection<StockDto> ResultadosStockPorPalet { get; }
 	public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
 	public ObservableCollection<StockDto> StockFiltrado { get; } = new();
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
@@ -123,6 +125,9 @@ namespace SGA_Desktop.ViewModels
 
 		[ObservableProperty]
 		private bool isLocationMode = false;
+
+		[ObservableProperty]
+		private bool isPaletMode = false;
 
 		[ObservableProperty]
 		private string filtroDescripcion;
@@ -177,6 +182,13 @@ namespace SGA_Desktop.ViewModels
 	[ObservableProperty]
 	private bool isDropDownOpenUbicacionesUbicacion = false;
 
+	// Propiedades para filtrado de palet (modo palet)
+	[ObservableProperty]
+	private string filtroArticuloPalet = "";
+
+	[ObservableProperty]
+	private string filtroCodigoPalet = "";
+
 		#endregion
 
 		#region Computed Properties
@@ -211,6 +223,25 @@ namespace SGA_Desktop.ViewModels
 
 		public Visibility ArticleFiltersVisibility => IsArticleMode ? Visibility.Visible : Visibility.Collapsed;
 		public Visibility LocationFiltersVisibility => IsLocationMode ? Visibility.Visible : Visibility.Collapsed;
+		public Visibility PaletFiltersVisibility => IsPaletMode ? Visibility.Visible : Visibility.Collapsed;
+
+		/// <summary>
+		/// Determina si se deben mostrar los resultados de ubicación/palet (comparten el mismo ListView)
+		/// </summary>
+		public bool MostrarResultadosUbicacion => IsLocationMode || IsPaletMode;
+
+		/// <summary>
+		/// Determina si el TextBox de código de palet está habilitado (requiere almacén válido seleccionado)
+		/// </summary>
+		public bool CodigoPaletHabilitado => AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != TODAS;
+		
+		/// <summary>
+		/// Devuelve la colección de resultados activa según el modo
+		/// </summary>
+		public ObservableCollection<StockDto> ResultadosActivos => 
+			IsLocationMode ? ResultadosStockPorUbicacion :
+			IsPaletMode ? ResultadosStockPorPalet :
+			ResultadosStock;
 
 		public Visibility ArticulosUnicosVisibility =>
 	_busquedaPorDescripcion && ArticulosUnicos.Count > 1
@@ -223,14 +254,17 @@ namespace SGA_Desktop.ViewModels
 				: Visibility.Collapsed;
 
 		public IRelayCommand BuscarCommand =>
-			IsArticleMode ? BuscarPorArticuloCommand : BuscarPorUbicacionCommand;
+			IsArticleMode ? BuscarPorArticuloCommand :
+			IsLocationMode ? BuscarPorUbicacionCommand :
+			BuscarPorPaletCommand;
 
 		/// <summary>
 		/// Determina si el botón de refrescar debe estar habilitado
 		/// </summary>
 		public bool CanRefresh =>
 			(IsArticleMode && StockFiltrado.Any()) ||
-			(IsLocationMode && ResultadosStockPorUbicacion.Any());
+			(IsLocationMode && ResultadosStockPorUbicacion.Any()) ||
+			(IsPaletMode && ResultadosStockPorPalet.Any());
 
 		/// <summary>
 		/// Determina si el botón de limpiar filtros debe estar habilitado
@@ -242,14 +276,19 @@ namespace SGA_Desktop.ViewModels
 							   (AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas"))) ||
 			(IsLocationMode && (!string.IsNullOrWhiteSpace(FiltroUbicacion) || 
 								!string.IsNullOrWhiteSpace(FiltroBusqueda) ||
-								(AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas")));
+								(AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas"))) ||
+			(IsPaletMode && (!string.IsNullOrWhiteSpace(FiltroArticuloPalet) || 
+							 !string.IsNullOrWhiteSpace(FiltroCodigoPalet) ||
+							 !string.IsNullOrWhiteSpace(FiltroUbicacion) ||
+							 (AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas")));
 
 		/// <summary>
 		/// Determina si el botón de exportar Excel debe estar habilitado
 		/// </summary>
 		public bool CanExportExcel =>
 			(IsArticleMode && StockFiltrado.Any()) ||
-			(IsLocationMode && ResultadosStockPorUbicacion.Any());
+			(IsLocationMode && ResultadosStockPorUbicacion.Any()) ||
+			(IsPaletMode && ResultadosStockPorPalet.Any());
 
 		/// <summary>
 		/// Determina si el botón de imprimir etiqueta debe estar habilitado
@@ -273,12 +312,18 @@ namespace SGA_Desktop.ViewModels
 
 		partial void OnAlmacenSeleccionadoComboChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
 		{
-			if (newValue is null) return;
+			if (newValue is null)
+			{
+				// Notificar cambio en CodigoPaletHabilitado cuando se deselecciona
+				OnPropertyChanged(nameof(CodigoPaletHabilitado));
+				return;
+			}
 
 			AlmacenSeleccionado = newValue.CodigoAlmacen;
 			OnPropertyChanged(nameof(CanClearFilters));
 			OnPropertyChanged(nameof(CanRefresh));
 			OnPropertyChanged(nameof(CanExportExcel));
+			OnPropertyChanged(nameof(CodigoPaletHabilitado)); // 🔷 NUEVO: Notificar cambio en habilitación del código de palet
 			_ = LoadUbicacionesAsync(newValue.CodigoAlmacen);
 		}
 
@@ -298,10 +343,21 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(CanClearFilters));
 		}
 
+		partial void OnFiltroArticuloPaletChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanClearFilters));
+		}
+
+		partial void OnFiltroCodigoPaletChanged(string oldValue, string newValue)
+		{
+			OnPropertyChanged(nameof(CanClearFilters));
+		}
+
 		partial void OnIsArticleModeChanged(bool oldValue, bool newValue)
 		{
 			if (newValue)
 			{
+				IsPaletMode = false;
 				almacenUbicacionPorDefecto = AlmacenSeleccionadoCombo;
 				AlmacenSeleccionadoCombo = almacenArticuloPorDefecto; // No seleccionar automáticamente
 				SwitchMode(resetFilters: false, setArticle: true);
@@ -322,6 +378,9 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(CanRefresh));
 			OnPropertyChanged(nameof(CanClearFilters));
 			OnPropertyChanged(nameof(CanExportExcel));
+			OnPropertyChanged(nameof(PaletFiltersVisibility));
+			OnPropertyChanged(nameof(MostrarResultadosUbicacion));
+			OnPropertyChanged(nameof(ResultadosActivos));
 		}
 
 
@@ -329,6 +388,7 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (newValue)
 			{
+				IsPaletMode = false;
 				almacenArticuloPorDefecto = AlmacenSeleccionadoCombo;
 				AlmacenSeleccionadoCombo = almacenUbicacionPorDefecto; // No seleccionar automáticamente
 				SwitchMode(resetFilters: false, setArticle: false);
@@ -349,6 +409,44 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(CanRefresh));
 			OnPropertyChanged(nameof(CanClearFilters));
 			OnPropertyChanged(nameof(CanExportExcel));
+			OnPropertyChanged(nameof(PaletFiltersVisibility));
+			OnPropertyChanged(nameof(MostrarResultadosUbicacion));
+			OnPropertyChanged(nameof(ResultadosActivos));
+		}
+
+		partial void OnIsPaletModeChanged(bool oldValue, bool newValue)
+		{
+			if (newValue)
+			{
+				// Establecer los otros modos a false antes de limpiar
+				IsArticleMode = false;
+				IsLocationMode = false;
+				
+				// Limpiar filtros de otros modos
+				FiltroArticulo = "";
+				FiltroPartida = "";
+				FiltroUbicacion = "";
+				FiltroBusqueda = "";
+				FiltroUbicacionesUbicacion = "";
+				FiltroUbicaciones = "";
+				FiltroAlmacenesCombo = "";
+				FiltroAlmacenesComboLocation = "";
+				
+				// Limpiar selecciones
+				AlmacenSeleccionadoCombo = null;
+				
+				// 🔷 NO limpiar resultados - conservarlos como en los otros modos
+			}
+			OnPropertyChanged(nameof(BuscarCommand));
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanClearFilters));
+			OnPropertyChanged(nameof(CanExportExcel));
+			OnPropertyChanged(nameof(ArticleFiltersVisibility));
+			OnPropertyChanged(nameof(LocationFiltersVisibility));
+			OnPropertyChanged(nameof(PaletFiltersVisibility));
+			OnPropertyChanged(nameof(MostrarResultadosUbicacion));
+			OnPropertyChanged(nameof(ResultadosActivos));
+			OnPropertyChanged(nameof(CodigoPaletHabilitado)); // 🔷 NUEVO: Notificar cambio en habilitación del código de palet
 		}
 
 		partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? oldValue, ArticuloResumenDto? newValue)
@@ -411,10 +509,19 @@ namespace SGA_Desktop.ViewModels
 				FiltroBusqueda = string.Empty;
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
+			else if (IsPaletMode)
+			{
+				FiltroArticuloPalet = string.Empty;
+				FiltroCodigoPalet = string.Empty;
+				FiltroUbicacion = string.Empty;
+				AlmacenSeleccionado = TODAS;
+				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
+			}
 			
 			// Limpiar resultados al limpiar filtros
 			ResultadosStock.Clear();
 			ResultadosStockPorUbicacion.Clear();
+			ResultadosStockPorPalet.Clear();
 			StockFiltrado.Clear();
 			ArticulosConUbicaciones.Clear();
 			ArticuloMostrado = string.Empty;
@@ -636,6 +743,364 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
+		[RelayCommand]
+		private async Task BuscarPorPaletAsync()
+		{
+			try
+			{
+			// Validación: Al menos un filtro debe estar presente
+			bool tieneArticulo = !string.IsNullOrWhiteSpace(FiltroArticuloPalet);
+			bool tieneAlmacen = AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != TODAS;
+			// 🔷 MODIFICADO: Validar que el código de palet tenga al menos 3 caracteres Y que haya un almacén válido
+			bool tieneCodigoPalet = !string.IsNullOrWhiteSpace(FiltroCodigoPalet) && 
+			                        FiltroCodigoPalet.Trim().Length >= 3 && 
+			                        tieneAlmacen; // Requiere almacén válido
+
+			// 🔷 NUEVO: Si hay código de palet pero no hay almacén válido, mostrar error
+			if (!string.IsNullOrWhiteSpace(FiltroCodigoPalet) && !tieneAlmacen)
+			{
+				var advertencia = new WarningDialog(
+					"Buscar por palet",
+					"Para buscar por código de palet, debes seleccionar un almacén válido (no 'Todas').",
+					"\uE814"
+				);
+				if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+					advertencia.Owner = Application.Current.MainWindow;
+				advertencia.ShowDialog();
+				return;
+			}
+
+			if (!tieneArticulo && !tieneAlmacen && !tieneCodigoPalet)
+			{
+				var mensaje = string.IsNullOrWhiteSpace(FiltroCodigoPalet) 
+					? "Debes introducir al menos un filtro: código de artículo, almacén o código de palet."
+					: "El código de palet debe tener al menos 3 caracteres para realizar la búsqueda.";
+				
+				var advertencia = new WarningDialog(
+					"Buscar por palet",
+					mensaje,
+					"\uE814"
+				);
+				if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+					advertencia.Owner = Application.Current.MainWindow;
+				advertencia.ShowDialog();
+				return;
+			}
+
+				// Limpiar resultados previos del modo palet
+				ResultadosStockPorPalet.Clear();
+				StockFiltrado.Clear();
+				ArticulosConUbicaciones.Clear();
+
+				// Construir parámetros para la búsqueda
+				string? codigoArticuloParam = tieneArticulo ? FiltroArticuloPalet : null;
+				string? codigoAlmacenParam = tieneAlmacen ? AlmacenSeleccionadoCombo?.CodigoAlmacen : null;
+				
+				// 🔷 NUEVO: Determinar parámetro de ubicación (similar a modo ubicación)
+				string? ubicacionParam = null;
+				if (!string.IsNullOrWhiteSpace(FiltroUbicacion))
+				{
+					switch (FiltroUbicacion)
+					{
+						case TODO_ALMACEN:
+							// Consultar todo el almacén (sin especificar ubicación)
+							ubicacionParam = null;
+							break;
+
+						case SIN_UBICACION:
+							// Consultar ubicaciones vacías (artículos sin ubicar)
+							ubicacionParam = string.Empty;
+							break;
+
+						default:
+							// Consultar ubicación específica
+							ubicacionParam = FiltroUbicacion;
+							break;
+					}
+				}
+
+				List<StockDisponibleDto> stockDisponible;
+				
+				// Si solo hay almacén (sin artículo), usar el endpoint de ubicación
+				if (!tieneArticulo && tieneAlmacen && !string.IsNullOrWhiteSpace(codigoAlmacenParam))
+				{
+					// Usar el endpoint de ubicación que permite buscar por almacén directamente
+					var stockPorUbicacion = await _stockService.ObtenerPorUbicacionAsync(
+						SessionManager.EmpresaSeleccionada!.Value,
+						codigoAlmacenParam,
+						codigoUbicacion: ubicacionParam // 🔷 NUEVO: Usar el parámetro de ubicación
+					);
+					
+					// 🔷 CORREGIDO: Expandir cada StockDto en múltiples StockDisponibleDto (uno por palet)
+					// El endpoint ubicacion puede devolver una entrada con múltiples palets en la lista Palets
+					// pero con UnidadSaldo que es la suma total. Necesitamos expandir cada palet individualmente.
+					stockDisponible = new List<StockDisponibleDto>();
+					
+					foreach (var s in stockPorUbicacion)
+					{
+						// Si tiene palets, crear una entrada por cada palet
+						if (s.Palets != null && s.Palets.Any())
+						{
+							foreach (var palet in s.Palets)
+							{
+								stockDisponible.Add(new StockDisponibleDto
+								{
+									CodigoEmpresa = (short)s.CodigoEmpresa,
+									CodigoArticulo = s.CodigoArticulo,
+									DescripcionArticulo = s.DescripcionArticulo,
+									CodigoAlternativo = s.CodigoAlternativo,
+									CodigoAlmacen = s.CodigoAlmacen,
+									Ubicacion = palet.Ubicacion ?? s.Ubicacion, // Usar ubicación del palet si está disponible
+									Partida = palet.Partida ?? s.Partida, // Usar partida del palet si está disponible
+									FechaCaducidad = s.FechaCaducidad,
+									UnidadSaldo = palet.Cantidad, // 🔷 IMPORTANTE: Usar la cantidad del palet individual
+									Reservado = 0,
+									Disponible = palet.Cantidad, // 🔷 IMPORTANTE: Usar la cantidad del palet individual
+									Palets = new List<PaletDetalleDto> { palet }, // Solo este palet en la lista
+									TotalArticuloGlobal = s.TotalArticuloGlobal, // Preservar totales
+									TotalArticuloAlmacen = s.TotalArticuloAlmacen, // Preservar totales
+									TipoStock = "Paletizado",
+									CodigoPalet = palet.CodigoPalet,
+									EstadoPalet = palet.EstadoPalet,
+									PaletId = palet.PaletId
+								});
+							}
+						}
+						else
+						{
+							// Si no tiene palets, crear una entrada suelta
+							stockDisponible.Add(new StockDisponibleDto
+							{
+								CodigoEmpresa = (short)s.CodigoEmpresa,
+								CodigoArticulo = s.CodigoArticulo,
+								DescripcionArticulo = s.DescripcionArticulo,
+								CodigoAlternativo = s.CodigoAlternativo,
+								CodigoAlmacen = s.CodigoAlmacen,
+								Ubicacion = s.Ubicacion,
+								Partida = s.Partida,
+								FechaCaducidad = s.FechaCaducidad,
+								UnidadSaldo = s.UnidadSaldo,
+								Reservado = 0,
+								Disponible = s.UnidadSaldo,
+								Palets = new List<PaletDetalleDto>(),
+								TotalArticuloGlobal = s.TotalArticuloGlobal,
+								TotalArticuloAlmacen = s.TotalArticuloAlmacen,
+								TipoStock = "Suelto",
+								CodigoPalet = null,
+								EstadoPalet = null,
+								PaletId = null
+							});
+						}
+					}
+				}
+				else
+				{
+					// Buscar stock disponible usando el endpoint articulo/disponible
+					// Requiere código de artículo o descripción
+					stockDisponible = await _stockService.ObtenerStockDisponibleAsync(
+						codigoArticulo: codigoArticuloParam,
+						descripcion: null
+					);
+
+					// Filtrar por almacén si está especificado
+					if (tieneAlmacen && !string.IsNullOrWhiteSpace(codigoAlmacenParam))
+					{
+						stockDisponible = stockDisponible
+							.Where(s => s.CodigoAlmacen == codigoAlmacenParam)
+							.ToList();
+					}
+					
+					// 🔷 NUEVO: Filtrar por ubicación si está especificado
+					if (ubicacionParam != null)
+					{
+						if (ubicacionParam == string.Empty)
+						{
+							// Sin ubicación: filtrar ubicaciones vacías o null
+							stockDisponible = stockDisponible
+								.Where(s => string.IsNullOrWhiteSpace(s.Ubicacion))
+								.ToList();
+						}
+						else
+						{
+							// Ubicación específica
+							stockDisponible = stockDisponible
+								.Where(s => s.Ubicacion == ubicacionParam)
+								.ToList();
+						}
+					}
+				}
+
+				// Filtrar solo los que tienen stock paletizado
+				// El endpoint articulo/disponible devuelve entradas con TipoStock = "Paletizado" cuando hay palets
+				var stockConPalets = stockDisponible
+					.Where(s => 
+						// Tiene TipoStock = "Paletizado" (esto es lo que devuelve el API para stock paletizado)
+						s.TipoStock == "Paletizado" ||
+						// O tiene código de palet directo (por si acaso)
+						!string.IsNullOrWhiteSpace(s.CodigoPalet) ||
+						// O tiene palets en la lista (por compatibilidad con otros endpoints)
+						(s.Palets != null && s.Palets.Any())
+					)
+					.ToList();
+
+				// Filtrar por código de palet si está especificado
+				var stockFiltradoPorPalet = stockConPalets;
+				if (tieneCodigoPalet)
+				{
+					stockFiltradoPorPalet = stockConPalets
+						.Where(s => 
+							// Buscar en el campo CodigoPalet directo (el API lo devuelve así)
+							(!string.IsNullOrWhiteSpace(s.CodigoPalet) && s.CodigoPalet.Contains(FiltroCodigoPalet, StringComparison.OrdinalIgnoreCase)) ||
+							// O buscar en la lista de palets (por compatibilidad)
+							(s.Palets?.Any(p => p.CodigoPalet?.Contains(FiltroCodigoPalet, StringComparison.OrdinalIgnoreCase) == true) == true)
+						)
+						.ToList();
+				}
+
+				// Filtrar por permisos de almacén
+				var almacenesAutorizados = ObtenerAlmacenesAutorizados();
+				stockFiltradoPorPalet = stockFiltradoPorPalet
+					.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen))
+					.ToList();
+
+				// Calcular totales si no están disponibles (cuando viene del endpoint articulo/disponible)
+				// Si ya vienen del endpoint ubicacion, los preservamos
+				var todosLosArticulos = stockFiltradoPorPalet.Select(s => s.CodigoArticulo).Distinct().ToList();
+				var todasLasPartidas = stockFiltradoPorPalet.Select(s => s.Partida).Distinct().ToList();
+				
+				// Calcular totales globales y por almacén si no están disponibles
+				var totalesGlobales = new Dictionary<(string CodigoArticulo, string Partida), decimal>();
+				var totalesPorAlmacen = new Dictionary<(string CodigoArticulo, string Partida, string CodigoAlmacen), decimal>();
+				
+				// Si algún item no tiene totales, los calculamos
+				if (stockFiltradoPorPalet.Any(s => !s.TotalArticuloGlobal.HasValue || !s.TotalArticuloAlmacen.HasValue))
+				{
+					// Agrupar por artículo/partida para calcular totales globales
+					var gruposGlobales = stockFiltradoPorPalet
+						.GroupBy(s => new { s.CodigoArticulo, s.Partida })
+						.ToDictionary(
+							g => (g.Key.CodigoArticulo, g.Key.Partida),
+							g => g.Sum(x => x.Disponible)
+						);
+					
+					// Agrupar por artículo/partida/almacén para calcular totales por almacén
+					var gruposPorAlmacen = stockFiltradoPorPalet
+						.GroupBy(s => new { s.CodigoArticulo, s.Partida, s.CodigoAlmacen })
+						.ToDictionary(
+							g => (g.Key.CodigoArticulo, g.Key.Partida, g.Key.CodigoAlmacen),
+							g => g.Sum(x => x.Disponible)
+						);
+					
+					totalesGlobales = gruposGlobales;
+					totalesPorAlmacen = gruposPorAlmacen;
+				}
+				
+				// 🔷 MODIFICADO: En modo palet, agrupar por PaletId para que cada palet sea una entrada separada
+				// Usar PaletId como clave única, o CodigoPalet como fallback si no hay PaletId
+				var stockAgrupado = stockFiltradoPorPalet
+					.Where(x => x.TipoStock == "Paletizado" && (!string.IsNullOrWhiteSpace(x.CodigoPalet) || x.PaletId.HasValue))
+					.GroupBy(s =>
+					{
+						if (s.PaletId.HasValue)
+							return s.PaletId.Value;
+						
+						if (!string.IsNullOrWhiteSpace(s.CodigoPalet))
+						{
+							// Crear un Guid determinístico a partir del código del palet
+							using var md5 = System.Security.Cryptography.MD5.Create();
+							var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(s.CodigoPalet));
+							var guidBytes = new byte[16];
+							Array.Copy(hash, guidBytes, 16);
+							return new Guid(guidBytes);
+						}
+						
+						return Guid.Empty;
+					})
+					.Select(g =>
+					{
+						var primerItem = g.First();
+						
+						// Cada palet es una entrada separada, así que la lista de palets solo contiene este palet
+						var palets = new List<PaletDetalleDto>
+						{
+							new PaletDetalleDto
+							{
+								PaletId = primerItem.PaletId ?? Guid.Empty,
+								CodigoPalet = primerItem.CodigoPalet ?? "",
+								EstadoPalet = primerItem.EstadoPalet ?? "",
+								Cantidad = primerItem.Disponible, // La cantidad del palet individual
+								Ubicacion = primerItem.Ubicacion,
+								Partida = primerItem.Partida
+							}
+						};
+						
+						// Obtener totales: usar los que vienen del API si están disponibles, sino calcular
+						var totalGlobal = primerItem.TotalArticuloGlobal;
+						var totalAlmacen = primerItem.TotalArticuloAlmacen;
+						
+						if (!totalGlobal.HasValue && totalesGlobales.TryGetValue((primerItem.CodigoArticulo, primerItem.Partida ?? ""), out var globalCalc))
+						{
+							totalGlobal = globalCalc;
+						}
+						
+						if (!totalAlmacen.HasValue && totalesPorAlmacen.TryGetValue((primerItem.CodigoArticulo, primerItem.Partida ?? "", primerItem.CodigoAlmacen), out var almacenCalc))
+						{
+							totalAlmacen = almacenCalc;
+						}
+						
+						return new StockDto
+						{
+							CodigoEmpresa = primerItem.CodigoEmpresa, // short se convierte implícitamente a int
+							CodigoArticulo = primerItem.CodigoArticulo,
+							DescripcionArticulo = primerItem.DescripcionArticulo,
+							CodigoAlternativo = primerItem.CodigoAlternativo,
+							CodigoAlmacen = primerItem.CodigoAlmacen,
+							Almacen = "", // No disponible en StockDisponibleDto
+							Ubicacion = primerItem.Ubicacion,
+							Partida = primerItem.Partida,
+							FechaCaducidad = primerItem.FechaCaducidad,
+							UnidadSaldo = primerItem.Disponible, // Cantidad del palet individual, no sumar
+							Palets = palets,
+							TotalArticuloGlobal = totalGlobal,
+							TotalArticuloAlmacen = totalAlmacen,
+							IsBloqueadoCalidad = primerItem.IsBloqueadoCalidad,
+							MotivoBloqueoCalidad = primerItem.MotivoBloqueoCalidad,
+							FechaBloqueoCalidad = primerItem.FechaBloqueoCalidad
+						};
+					})
+					.ToList();
+				
+				var lista = stockAgrupado;
+
+				// 🔷 NUEVO: Consultar bloqueos de calidad
+				var codigosArticulos = lista.Select(s => s.CodigoArticulo).Distinct().ToList();
+				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
+					SessionManager.EmpresaSeleccionada!.Value, 
+					codigosArticulos);
+
+				// Aplicar información de bloqueos a los resultados
+				foreach (var stock in lista)
+				{
+					var bloqueo = bloqueosCalidad.GetValueOrDefault(stock.CodigoArticulo);
+					if (bloqueo != null)
+					{
+						stock.IsBloqueadoCalidad = bloqueo.IsBloqueado;
+						stock.MotivoBloqueoCalidad = bloqueo.MotivoBloqueo;
+						stock.FechaBloqueoCalidad = bloqueo.FechaBloqueo;
+					}
+				}
+
+				// Llenar resultados en modo palet (usa ResultadosStockPorPalet)
+				LlenarResultados(lista, filterByPermissions: false); // Ya filtrado por permisos arriba
+				OnPropertyChanged(nameof(CanRefresh));
+				OnPropertyChanged(nameof(CanExportExcel));
+			}
+			catch (Exception ex)
+			{
+				MostrarError("Error al consultar por palet", ex);
+			}
+		}
+
 
 
 		[RelayCommand]
@@ -644,7 +1109,9 @@ namespace SGA_Desktop.ViewModels
 			// ▶️ Cambiado: exportamos StockFiltrado en modo artículo
 			var listaActiva = IsArticleMode
 				? StockFiltrado.ToList()
-				: ResultadosStockPorUbicacion.ToList();
+				: IsLocationMode
+					? ResultadosStockPorUbicacion.ToList()
+					: ResultadosStockPorPalet.ToList();
 
 			if (!listaActiva.Any())
 			{
@@ -666,69 +1133,82 @@ namespace SGA_Desktop.ViewModels
 				$"Se van a exportar {listaActiva.Count} registros.\n¿Deseas continuar?",
 				"\uE11B"    // ícono de pregunta
 			);
-			// Solo establecer Owner si la ventana principal está disponible
-			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
-				confirm.Owner = Application.Current.MainWindow;
+            // Solo establecer Owner si la ventana principal está disponible y no es el propio diálogo
+            if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+            {
+                if (!ReferenceEquals(Application.Current.MainWindow, confirm))
+                    confirm.Owner = Application.Current.MainWindow;
+            }
 			if (confirm.ShowDialog() != true)
 				return;
 
-			// 2) Diálogo para elegir fichero
-			var dlg = new SaveFileDialog
+			try
 			{
-				Filter = "Libro de Excel (*.xlsx)|*.xlsx",
-				FileName = IsArticleMode
-					? "ConsultaPorArticulo.xlsx"
-					: "ConsultaPorUbicacion.xlsx"
-			};
-			if (dlg.ShowDialog() != true) return;
+				// 2) Generar nombre de archivo descriptivo
+				var nombreArchivo = GenerarNombreArchivo();
+				var rutaTemporal = Path.Combine(Path.GetTempPath(), $"SGA_{Guid.NewGuid()}_{nombreArchivo}");
 
-			// 3) Crear workbook...
-			using var wb = new XLWorkbook();
-			var ws = wb.Worksheets.Add("Stock");
+				// 3) Crear workbook...
+				using var wb = new XLWorkbook();
+				var ws = wb.Worksheets.Add("Stock");
 
-			// 4) Cabeceras
-			var headers = new[] {
-		"Código Empresa",
-		"Código Artículo",
-		"Descripción",
-		"Almacén",
-		"Ubicación",
-		"Partida",
-		"Fecha Caducidad",
-		"Saldo"
-	};
-			for (int i = 0; i < headers.Length; i++)
-				ws.Cell(1, i + 1).Value = headers[i];
+				// 4) Cabeceras
+				var headers = new[] {
+			"Código Empresa",
+			"Código Artículo",
+			"Descripción",
+			"Almacén",
+			"Ubicación",
+			"Partida",
+			"Fecha Caducidad",
+			"Saldo"
+		};
+				for (int i = 0; i < headers.Length; i++)
+					ws.Cell(1, i + 1).Value = headers[i];
 
-			// 5) Filas
-			int row = 2;
-			foreach (var item in listaActiva)
-			{
-				ws.Cell(row, 1).Value = item.CodigoEmpresa;
-				ws.Cell(row, 2).Value = item.CodigoArticulo;
-				ws.Cell(row, 3).Value = item.DescripcionArticulo ?? "";
-				ws.Cell(row, 4).Value = $"{item.CodigoAlmacen} – {item.Almacen}";
-				ws.Cell(row, 5).Value = item.Ubicacion;
-				ws.Cell(row, 6).Value = item.Partida;
-				ws.Cell(row, 7).Value = item.FechaCaducidad;
-				ws.Cell(row, 8).Value = item.UnidadSaldo;
-				row++;
+				// 5) Filas
+				int row = 2;
+				foreach (var item in listaActiva)
+				{
+					ws.Cell(row, 1).Value = item.CodigoEmpresa;
+					ws.Cell(row, 2).Value = item.CodigoArticulo;
+					ws.Cell(row, 3).Value = item.DescripcionArticulo ?? "";
+					ws.Cell(row, 4).Value = $"{item.CodigoAlmacen} – {item.Almacen}";
+					ws.Cell(row, 5).Value = item.Ubicacion;
+					ws.Cell(row, 6).Value = item.Partida;
+					ws.Cell(row, 7).Value = item.FechaCaducidad;
+					ws.Cell(row, 8).Value = item.UnidadSaldo;
+					row++;
+				}
+
+				// 6) Auto‐ajustar anchos
+				ws.Columns().AdjustToContents();
+
+				// 7) Guardar archivo temporal
+				wb.SaveAs(rutaTemporal);
+
+				// 8) 🔷 NUEVO: Abrir Excel directamente y mostrar opciones
+                var previewDialog = new ExcelPreviewDialog(rutaTemporal, nombreArchivo);
+                if (Application.Current.MainWindow != null && !ReferenceEquals(Application.Current.MainWindow, previewDialog) && Application.Current.MainWindow.IsVisible)
+                    previewDialog.Owner = Application.Current.MainWindow;
+				previewDialog.ShowDialog();
+
+				// 9) Limpiar archivo temporal después de cerrar el diálogo
+				try
+				{
+					if (File.Exists(rutaTemporal))
+						File.Delete(rutaTemporal);
+				}
+				catch
+				{
+					// Ignorar errores al limpiar archivos temporales
+				}
 			}
-
-			// 6) Auto‐ajustar anchos
-			ws.Columns().AdjustToContents();
-
-			// 7) Guardar y aviso final
-			wb.SaveAs(dlg.FileName);
-			var info = new WarningDialog(
-				"Exportación completada",
-				$"Datos exportados correctamente a:\n{dlg.FileName}",
-				"\uE946" // ícono de información
-			);
-			// Solo establecer Owner si la ventana principal está disponible
-			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
-				info.Owner = Application.Current.MainWindow;
-			info.ShowDialog();
+			catch (Exception ex)
+			{
+				MessageBox.Show($"Error al generar el archivo Excel:\n{ex.Message}", 
+							  "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+			}
 		}
 
 		[RelayCommand]
@@ -873,7 +1353,17 @@ namespace SGA_Desktop.ViewModels
 		}
 		catch (Exception ex)
 		{
-			MessageBox.Show(ex.Message, "Error al encolar impresión", MessageBoxButton.OK, MessageBoxImage.Error);
+			var errorDialog = new WarningDialog(
+				"Error al encolar impresión",
+				ex.Message,
+				"\uE783" // Icono de error
+			)
+			{
+				Owner = Application.Current.Windows.OfType<Window>()
+					.FirstOrDefault(w => w.IsActive)
+					?? Application.Current.MainWindow
+			};
+			errorDialog.ShowDialog();
 		}
 		}
 
@@ -921,6 +1411,10 @@ namespace SGA_Desktop.ViewModels
 				else if (IsLocationMode)
 				{
 					await BuscarPorUbicacionAsync();
+				}
+				else if (IsPaletMode)
+				{
+					await BuscarPorPaletAsync();
 				}
 				
 				// Pequeño delay para asegurar que la UI se actualice
@@ -1139,13 +1633,21 @@ namespace SGA_Desktop.ViewModels
 				ResultadosStock.Clear();
 				filtrada.ForEach(x => ResultadosStock.Add(x));
 			}
-			else
+			else if (IsLocationMode)
 			{
-				// en modo ubicación no mostramos destacado y clear/fill la otra colección
+				// en modo ubicación no mostramos destacado y clear/fill la colección de ubicación
 				ArticuloMostrado = string.Empty;
 
 				ResultadosStockPorUbicacion.Clear();
 				filtrada.ForEach(x => ResultadosStockPorUbicacion.Add(x));
+			}
+			else if (IsPaletMode)
+			{
+				// en modo palet no mostramos destacado y clear/fill la colección de palet
+				ArticuloMostrado = string.Empty;
+
+				ResultadosStockPorPalet.Clear();
+				filtrada.ForEach(x => ResultadosStockPorPalet.Add(x));
 			}
 			
 			// Notificar cambios en las propiedades calculadas
@@ -1354,6 +1856,70 @@ namespace SGA_Desktop.ViewModels
 		
 		// Forzar la actualización de la UI
 		OnPropertyChanged(nameof(ArticulosConUbicaciones));
+	}
+
+	/// <summary>
+	/// Genera un nombre de archivo descriptivo basado en el modo y filtros activos
+	/// </summary>
+	private string GenerarNombreArchivo()
+	{
+		var nombreBase = "Stock";
+		var fechaActual = DateTime.Now.ToString("dd-MM-yyyy");
+		
+		if (IsArticleMode)
+		{
+			// Modo artículo: Stock PR10002 en 201
+			if (!string.IsNullOrWhiteSpace(FiltroArticulo))
+			{
+				nombreBase = $"Stock {FiltroArticulo}";
+				
+				// Agregar almacén si está seleccionado
+				if (AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != TODAS)
+				{
+					nombreBase += $" en {AlmacenSeleccionadoCombo.CodigoAlmacen}";
+				}
+			}
+			else
+			{
+				nombreBase = "ConsultaPorArticulo";
+			}
+		}
+		else
+		{
+			// Modo ubicación: Stock en almacen X
+			if (AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != TODAS)
+			{
+				nombreBase = $"Stock en almacén {AlmacenSeleccionadoCombo.CodigoAlmacen}";
+			}
+			else
+			{
+				nombreBase = "ConsultaPorUbicacion";
+			}
+		}
+		
+		// Agregar información de ubicación si está seleccionada
+		if (!string.IsNullOrWhiteSpace(FiltroUbicacion) && FiltroUbicacion != TODAS && FiltroUbicacion != TODO_ALMACEN)
+		{
+			nombreBase += $" - {FiltroUbicacion}";
+		}
+		
+		// Agregar información de partida si está filtrada
+		if (!string.IsNullOrWhiteSpace(FiltroPartida))
+		{
+			nombreBase += $" - Partida {FiltroPartida}";
+		}
+		
+		// 🔷 FECHA SIEMPRE AL FINAL
+		nombreBase += $" {fechaActual}";
+		
+		// Limpiar caracteres no válidos para nombres de archivo
+		var caracteresInvalidos = Path.GetInvalidFileNameChars();
+		foreach (var caracter in caracteresInvalidos)
+		{
+			nombreBase = nombreBase.Replace(caracter, '_');
+		}
+		
+		return $"{nombreBase}.xlsx";
 	}
 }
 }

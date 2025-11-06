@@ -84,11 +84,13 @@
                     
                     <TextBlock Text="Almacén destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,5"/>
                     <ComboBox ItemsSource="{Binding AlmacenesDestinoView}"
-                              SelectedItem="{Binding AlmacenDestinoSeleccionado}"
+                              SelectedItem="{Binding AlmacenDestinoSeleccionado, Mode=TwoWay}"
                               DisplayMemberPath="DescripcionCombo"
                               Style="{StaticResource EstiloComboBox}"
                               Margin="0,0,0,15"
                               IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              StaysOpenOnEdit="True"
                               Text="{Binding FiltroAlmacenes, UpdateSourceTrigger=PropertyChanged}"
                               PreviewKeyDown="ComboBox_PreviewKeyDown"/>
                     

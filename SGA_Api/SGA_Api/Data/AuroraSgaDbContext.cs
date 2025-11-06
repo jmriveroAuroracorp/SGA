@@ -285,8 +285,16 @@ namespace SGA_Api.Data
 
 			modelBuilder.Entity<TempPaletLinea>(eb =>
 			{
+				// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
 				eb.Property(e => e.Cantidad)
-				  .HasColumnType("decimal(18,4)");
+				  .HasColumnType("DECIMAL(18,6)");
+			});
+
+			modelBuilder.Entity<PaletLinea>(eb =>
+			{
+				// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+				eb.Property(e => e.Cantidad)
+				  .HasColumnType("DECIMAL(18,6)");
 			});
 
             // Mapeo explícito de la entidad Traspaso
@@ -308,7 +316,8 @@ namespace SGA_Api.Data
                 ent.Property(t => t.UbicacionOrigen).HasColumnName("UbicacionOrigen");
                 ent.Property(t => t.CodigoPalet).HasColumnName("CodigoPalet");
                 ent.Property(t => t.CodigoArticulo).HasColumnName("CodigoArticulo");
-                ent.Property(t => t.Cantidad).HasColumnName("Cantidad").HasColumnType("decimal(18,4)");
+                // 🔷 CORREGIDO: Cambiar precisión de 4 a 6 decimales para preservar valores exactos
+                ent.Property(t => t.Cantidad).HasColumnName("Cantidad").HasColumnType("decimal(18,6)");
                 ent.Property(t => t.TipoTraspaso).HasColumnName("TipoTraspaso");
                 ent.Property(t => t.FechaCaducidad).HasColumnName("FechaCaducidad");
                 ent.Property(t => t.Partida).HasColumnName("Partida");
@@ -355,8 +364,9 @@ namespace SGA_Api.Data
                 ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
                 ent.Property(i => i.Partida).HasColumnName("Partida").HasMaxLength(50);
                 ent.Property(i => i.FechaCaducidad).HasColumnName("FechaCaducidad").HasColumnType("DATETIME");
-                ent.Property(i => i.CantidadContada).HasColumnName("CantidadContada").HasColumnType("DECIMAL(18,4)");
-                ent.Property(i => i.StockActual).HasColumnName("StockActual").HasColumnType("DECIMAL(18,4)");
+                // 🔷 CORREGIDO: Cambiar precisión de 4 a 6 decimales para preservar valores exactos
+                ent.Property(i => i.CantidadContada).HasColumnName("CantidadContada").HasColumnType("DECIMAL(18,6)");
+                ent.Property(i => i.StockActual).HasColumnName("StockActual").HasColumnType("DECIMAL(18,6)");
                 ent.Property(i => i.UsuarioConteoId).HasColumnName("UsuarioConteoId");
                 ent.Property(i => i.FechaConteo).HasColumnName("FechaConteo").HasColumnType("DATETIME");
                 ent.Property(i => i.Observaciones).HasColumnName("Observaciones").HasColumnType("NVARCHAR(500)");
@@ -379,8 +389,11 @@ namespace SGA_Api.Data
                 ent.Property(i => i.IdInventario).HasColumnName("IdInventario");
                 ent.Property(i => i.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
                 ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
-                ent.Property(i => i.StockTeorico).HasColumnName("StockTeorico").HasColumnType("DECIMAL(18,4)");
-                ent.Property(i => i.StockContado).HasColumnName("StockContado").HasColumnType("DECIMAL(18,4)");
+                // 🔷 CORREGIDO: Cambiar precisión de 4 a 6 decimales para preservar valores exactos
+                ent.Property(i => i.StockTeorico).HasColumnName("StockTeorico").HasColumnType("DECIMAL(18,6)");
+                ent.Property(i => i.StockContado).HasColumnName("StockContado").HasColumnType("DECIMAL(18,6)");
+                ent.Property(i => i.StockActual).HasColumnName("StockActual").HasColumnType("DECIMAL(18,6)");
+                ent.Property(i => i.AjusteFinal).HasColumnName("AjusteFinal").HasColumnType("DECIMAL(18,6)");
                 ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20);
                 ent.Property(i => i.UsuarioValidacionId).HasColumnName("UsuarioValidacionId");
                 ent.Property(i => i.FechaValidacion).HasColumnName("FechaValidacion").HasColumnType("DATETIME");
@@ -401,7 +414,8 @@ namespace SGA_Api.Data
                 ent.Property(i => i.IdInventario).HasColumnName("IdInventario").IsRequired(false);
                 ent.Property(i => i.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(30);
                 ent.Property(i => i.CodigoUbicacion).HasColumnName("CodigoUbicacion").HasMaxLength(30);
-                ent.Property(i => i.Diferencia).HasColumnName("Diferencia").HasColumnType("DECIMAL(18,4)");
+                // 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+                ent.Property(i => i.Diferencia).HasColumnName("Diferencia").HasColumnType("DECIMAL(18,6)");
                 // ent.Property(i => i.TipoAjuste).HasColumnName("TipoAjuste").HasMaxLength(10).IsRequired(); // Comentado temporalmente
                 ent.Property(i => i.UsuarioId).HasColumnName("UsuarioId");
                 ent.Property(i => i.Fecha).HasColumnName("Fecha").HasColumnType("DATETIME");

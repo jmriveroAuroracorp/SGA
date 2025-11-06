@@ -34,5 +34,11 @@ namespace SGA_Desktop.Models
 		/// Si true, deja el material suelto en la ubicación (sin paletizar)
 		/// </summary>
 		public bool? DejarSuelto { get; set; }
+		
+		/// <summary>
+		/// Opcional: ID del palet origen de donde se quiere extraer el stock.
+		/// Si el usuario seleccionó stock desde un palet específico, este campo lo indica.
+		/// </summary>
+		public Guid? PaletIdOrigen { get; set; }
 	}
 } 

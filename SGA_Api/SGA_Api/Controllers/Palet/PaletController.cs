@@ -118,15 +118,13 @@ public class PaletController : ControllerBase
 		if (usuarioCierre.HasValue)
 			q = q.Where(p => p.UsuarioCierreId == usuarioCierre);
 
-		// Filtro por almacén: buscar palets que tengan traspasos completados en ese almacén
+		// Filtro por almacén: buscar palets que tengan líneas en ese almacén
 		if (!string.IsNullOrWhiteSpace(almacen))
 		{
-			// Buscar IDs de palets que tengan traspasos completados en el almacén especificado
-			var paletIdsEnAlmacen = await _auroraSgaContext.Traspasos
-				.Where(t => t.TipoTraspaso == "PALET" && 
-						   t.CodigoEstado == "COMPLETADO" && 
-						   t.AlmacenDestino == almacen)
-				.Select(t => t.PaletId)
+			// Buscar IDs de palets que tengan líneas en el almacén especificado
+			var paletIdsEnAlmacen = await _auroraSgaContext.PaletLineas
+				.Where(pl => pl.CodigoAlmacen == almacen && pl.Cantidad > 0)
+				.Select(pl => pl.PaletId)
 				.Distinct()
 				.ToListAsync();
 
@@ -673,6 +671,10 @@ public class PaletController : ControllerBase
 		}
 
 		// 🔷 Crear la línea temporal POSITIVA para el palet nuevo
+		// 🔷 DEBUG: Log para verificar precisión de cantidad
+		_logger.LogInformation("🔍 DEBUG Cantidad recibida en DTO: {Cantidad} (formato completo: {CantidadFormato})", 
+			dto.Cantidad, dto.Cantidad.ToString("F6"));
+		
 		var linea = new TempPaletLinea
 		{
 			PaletId = palet.Id,
@@ -692,6 +694,9 @@ public class PaletController : ControllerBase
 			TraspasoId = null
 		};
 
+		_logger.LogInformation("🔍 DEBUG Cantidad asignada a TempPaletLinea: {Cantidad} (formato completo: {CantidadFormato})", 
+			linea.Cantidad, linea.Cantidad.ToString("F6"));
+
 		_auroraSgaContext.TempPaletLineas.Add(linea);
 
 			// 🔷 Registrar en log
@@ -704,10 +709,15 @@ public class PaletController : ControllerBase
 				Detalle = $"Artículo: {dto.CodigoArticulo}, Cantidad: {dto.Cantidad}, Almacén: {dto.CodigoAlmacen}, Ubicación: {dto.Ubicacion}, Lote: {dto.Lote}"
 			});
 
-			// 🔷 Guardar cambios
-			await _auroraSgaContext.SaveChangesAsync();
+		// 🔷 Guardar cambios
+		await _auroraSgaContext.SaveChangesAsync();
+		
+		// 🔷 DEBUG: Verificar valor después de guardar
+		await _auroraSgaContext.Entry(linea).ReloadAsync();
+		_logger.LogInformation("🔍 DEBUG Cantidad después de SaveChanges (reloaded): {Cantidad} (formato completo: {CantidadFormato})", 
+			linea.Cantidad, linea.Cantidad.ToString("F6"));
 
-			// 🔷 Confirmar la transacción
+		// 🔷 Confirmar la transacción
 			await transaction.CommitAsync();
 
 			return Ok(new { message = "Línea registrada correctamente", linea.Id });
@@ -1079,6 +1089,90 @@ public class PaletController : ControllerBase
 			});
 
 			await _auroraSgaContext.SaveChangesAsync();
+
+			// 🔷 NUEVO: Verificar si el palet quedó sin líneas y marcarlo como vaciado automáticamente
+			// NOTA: Esta verificación es segura y compatible con TraspasoFinalizacionBackgroundService porque:
+			// 1. Ambos verifican palet.Estado != "Vaciado" antes de actualizar (evita duplicados)
+			// 2. Ambos usan transacciones para garantizar consistencia
+			// 3. El BackgroundService procesa traspasos, mientras esto procesa eliminaciones manuales
+			// 4. Si el BackgroundService ya marcó el palet como vaciado, esta verificación no lo vuelve a marcar
+			
+			var quedanTemporales = await _auroraSgaContext.TempPaletLineas
+				.AnyAsync(l => l.PaletId == palet.Id && l.Procesada == false);
+			
+			var quedanDefinitivas = await _auroraSgaContext.PaletLineas
+				.AnyAsync(l => l.PaletId == palet.Id);
+
+			// Verificar condición: solo marcar como vaciado si NO está ya vaciado (evita condiciones de carrera)
+			// Esta verificación es compatible con el BackgroundService que también verifica el estado
+			if (!quedanTemporales && !quedanDefinitivas && palet.Estado != "Vaciado")
+			{
+				palet.Estado = "Vaciado";
+				palet.FechaVaciado = DateTime.Now;
+				palet.UsuarioVaciadoId = usuarioId;
+				
+				// Si no tiene fecha de cierre, establecerla
+				if (!palet.FechaCierre.HasValue)
+				{
+					palet.FechaCierre = DateTime.Now;
+					palet.UsuarioCierreId = usuarioId;
+				}
+
+				_auroraSgaContext.Palets.Update(palet);
+
+				_auroraSgaContext.LogPalet.Add(new LogPalet
+				{
+					PaletId = palet.Id,
+					Fecha = DateTime.Now,
+					IdUsuario = usuarioId,
+					Accion = "Vaciado",
+					Detalle = "Marcado automáticamente como vaciado al eliminar todas las líneas."
+				});
+
+				await _auroraSgaContext.SaveChangesAsync();
+			}
+
+			// 🔷 NUEVO: También verificar el palet de la línea correspondiente si se eliminó una
+			if (lineaCorrespondiente != null && lineaCorrespondiente.PaletId != palet.Id)
+			{
+				var paletCorrespondiente = await _auroraSgaContext.Palets.FindAsync(lineaCorrespondiente.PaletId);
+				if (paletCorrespondiente != null && paletCorrespondiente.Estado != "Vaciado")
+				{
+					var quedanTemporalesCorrespondiente = await _auroraSgaContext.TempPaletLineas
+						.AnyAsync(l => l.PaletId == paletCorrespondiente.Id && l.Procesada == false);
+					
+					var quedanDefinitivasCorrespondiente = await _auroraSgaContext.PaletLineas
+						.AnyAsync(l => l.PaletId == paletCorrespondiente.Id);
+
+					if (!quedanTemporalesCorrespondiente && !quedanDefinitivasCorrespondiente)
+					{
+						paletCorrespondiente.Estado = "Vaciado";
+						paletCorrespondiente.FechaVaciado = DateTime.Now;
+						paletCorrespondiente.UsuarioVaciadoId = usuarioId;
+						
+						// Si no tiene fecha de cierre, establecerla
+						if (!paletCorrespondiente.FechaCierre.HasValue)
+						{
+							paletCorrespondiente.FechaCierre = DateTime.Now;
+							paletCorrespondiente.UsuarioCierreId = usuarioId;
+						}
+
+						_auroraSgaContext.Palets.Update(paletCorrespondiente);
+
+						_auroraSgaContext.LogPalet.Add(new LogPalet
+						{
+							PaletId = paletCorrespondiente.Id,
+							Fecha = DateTime.Now,
+							IdUsuario = usuarioId,
+							Accion = "Vaciado",
+							Detalle = "Marcado automáticamente como vaciado al eliminar todas las líneas (incluyendo línea correspondiente eliminada)."
+						});
+
+						await _auroraSgaContext.SaveChangesAsync();
+					}
+				}
+			}
+
 			await transaction.CommitAsync();
 
 			var mensaje = lineaCorrespondiente != null 
@@ -2019,6 +2113,74 @@ public class PaletController : ControllerBase
 
 		await _auroraSgaContext.SaveChangesAsync();
 		return Ok(new { message = $"Palet {palet.Codigo} marcado como Vaciado." });
+	}
+
+	[HttpPost("marcar-vaciados-sin-lineas")]
+	public async Task<IActionResult> MarcarVaciadosSinLineas([FromQuery] int? usuarioId = null)
+	{
+		var fechaActual = DateTime.Now;
+		
+		// Buscar palets que no tienen líneas temporales ni definitivas
+		var paletsSinLineas = await (
+			from p in _auroraSgaContext.Palets
+			where !_auroraSgaContext.TempPaletLineas.Any(tpl => tpl.PaletId == p.Id)
+				&& !_auroraSgaContext.PaletLineas.Any(pl => pl.PaletId == p.Id)
+				&& p.Estado != "Vaciado" // Solo actualizar los que aún no están vaciados
+			select p
+		).ToListAsync();
+
+		if (!paletsSinLineas.Any())
+		{
+			return Ok(new { message = "No se encontraron palets sin líneas para marcar como vaciados.", cantidad = 0 });
+		}
+
+		var cantidadActualizados = 0;
+		foreach (var palet in paletsSinLineas)
+		{
+			palet.Estado = "Vaciado";
+			palet.FechaVaciado = fechaActual;
+			palet.IsVaciado = true;
+			
+			if (usuarioId.HasValue)
+			{
+				palet.UsuarioVaciadoId = usuarioId.Value;
+				palet.UsuarioCierreId = usuarioId.Value;
+			}
+			
+			// Si no tiene fecha de cierre, la establecemos
+			if (!palet.FechaCierre.HasValue)
+			{
+				palet.FechaCierre = fechaActual;
+			}
+
+			_auroraSgaContext.Palets.Update(palet);
+
+			// Registrar en log si hay usuario
+			if (usuarioId.HasValue)
+			{
+				_auroraSgaContext.LogPalet.Add(new LogPalet
+				{
+					PaletId = palet.Id,
+					Fecha = fechaActual,
+					IdUsuario = usuarioId.Value,
+					Accion = "Vaciado",
+					Detalle = "Marcado automáticamente como vaciado por no tener líneas temporales ni definitivas."
+				});
+			}
+
+			cantidadActualizados++;
+		}
+
+		await _auroraSgaContext.SaveChangesAsync();
+
+		_logger.LogInformation($"Se marcaron {cantidadActualizados} palets como vaciados automáticamente.");
+
+		return Ok(new 
+		{ 
+			message = $"Se marcaron {cantidadActualizados} palet(s) como vaciados.",
+			cantidad = cantidadActualizados,
+			palets = paletsSinLineas.Select(p => new { p.Id, p.Codigo, p.Estado })
+		});
 	}
 
 

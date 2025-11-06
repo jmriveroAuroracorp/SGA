@@ -63,6 +63,11 @@ namespace SGA_Desktop.ViewModels
             SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
             MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
 
+            // Inicializar vistas filtrables
+            AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
+            AlmacenesDestinoView.Filter = FiltraAlmacenes;
+            UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
+            UbicacionesDestinoView.Filter = FiltraUbicaciones;
 
             _ = CargarAlmacenesDestinoAsync();
         }
@@ -76,6 +81,11 @@ namespace SGA_Desktop.ViewModels
             SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
             MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
 
+            // Inicializar vistas filtrables
+            AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
+            AlmacenesDestinoView.Filter = FiltraAlmacenes;
+            UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
+            UbicacionesDestinoView.Filter = FiltraUbicaciones;
 
             // Precargar el palet seleccionado con datos básicos
             PaletSeleccionado = new PaletMovibleDto
@@ -120,20 +130,51 @@ namespace SGA_Desktop.ViewModels
 
         private async Task CargarAlmacenesDestinoAsync()
         {
-            AlmacenesDestino.Clear();
-            var empresa = Helpers.SessionManager.EmpresaSeleccionada;
-            var centro = Helpers.SessionManager.UsuarioActual?.codigoCentro ?? "0";
-            var desdeLogin = Helpers.SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-            if (empresa == null) return;
-            var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa.Value, centro, desdeLogin);
-            foreach (var a in almacenes)
-                AlmacenesDestino.Add(a);
-            AlmacenDestinoSeleccionado = AlmacenesDestino.FirstOrDefault();
-
-            // 🔷 NUEVO: Inicializar vista filtrable para almacenes
-            AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
-            AlmacenesDestinoView.Filter = FiltraAlmacenes;
-            OnPropertyChanged(nameof(AlmacenesDestinoView));
+            try
+            {
+                AlmacenesDestino.Clear();
+                var empresa = Helpers.SessionManager.EmpresaSeleccionada;
+                var centro = Helpers.SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var permisos = Helpers.SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+                
+                if (empresa == null) return;
+                
+                // Si no hay permisos específicos, obtener almacenes del centro
+                if (!permisos.Any())
+                {
+                    permisos = await _stockService.ObtenerAlmacenesAsync(centro);
+                }
+                
+                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa.Value, centro, permisos);
+                
+                System.Diagnostics.Debug.WriteLine($"DEBUG: Se obtuvieron {almacenes.Count} almacenes del servicio");
+                
+                // Limpiar filtro ANTES de agregar elementos
+                FiltroAlmacenes = "";
+                
+                foreach (var a in almacenes)
+                {
+                    AlmacenesDestino.Add(a);
+                    System.Diagnostics.Debug.WriteLine($"DEBUG: Agregado almacén {a.CodigoAlmacen} - {a.NombreAlmacen}");
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"DEBUG: AlmacenesDestino tiene {AlmacenesDestino.Count} elementos");
+                System.Diagnostics.Debug.WriteLine($"DEBUG: FiltroAlmacenes = '{FiltroAlmacenes}'");
+                
+                // Forzar refresh de la vista y notificar cambios
+                AlmacenesDestinoView?.Refresh();
+                OnPropertyChanged(nameof(AlmacenesDestinoView));
+                OnPropertyChanged(nameof(AlmacenesDestino));
+                
+                System.Diagnostics.Debug.WriteLine($"DEBUG: Después de Refresh, AlmacenesDestinoView tiene {AlmacenesDestinoView?.Cast<object>().Count() ?? 0} elementos visibles");
+                
+                // NO seleccionar automáticamente el primer almacén - dejar en blanco
+                // AlmacenDestinoSeleccionado = AlmacenesDestino.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando almacenes: {ex.Message}");
+            }
         }
 
         partial void OnPaletSeleccionadoChanged(PaletMovibleDto? value)
@@ -146,9 +187,19 @@ namespace SGA_Desktop.ViewModels
         {
             MoverPaletCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(PuedeMoverPalet));
+            
             if (value is not null)
             {
+                // Cuando se selecciona un almacén, limpiar el filtro para que el dropdown muestre todos
+                FiltroAlmacenes = "";
+                AlmacenesDestinoView?.Refresh();
                 _ = CargarUbicacionesParaAlmacenAsync(value.CodigoAlmacen);
+            }
+            else
+            {
+                // Si se deselecciona, también limpiar el filtro
+                FiltroAlmacenes = "";
+                AlmacenesDestinoView?.Refresh();
             }
         }
 
@@ -173,9 +224,8 @@ namespace SGA_Desktop.ViewModels
                         Ubicacion = u.Ubicacion
                     });
 
-                // 🔷 NUEVO: Inicializar vista filtrable para ubicaciones
-                UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
-                UbicacionesDestinoView.Filter = FiltraUbicaciones;
+                // Refrescar la vista para que muestre todos los elementos
+                UbicacionesDestinoView?.Refresh();
                 OnPropertyChanged(nameof(UbicacionesDestinoView));
             }
             catch
@@ -346,7 +396,16 @@ namespace SGA_Desktop.ViewModels
 
         partial void OnFiltroAlmacenesChanged(string value)
         {
-            AlmacenesDestinoView?.Refresh();
+            // Si el filtro está vacío o es null, mostrar todos los almacenes
+            if (string.IsNullOrEmpty(value))
+            {
+                AlmacenesDestinoView?.Refresh();
+            }
+            else
+            {
+                // Solo refrescar cuando hay un filtro activo
+                AlmacenesDestinoView?.Refresh();
+            }
         }
 
         [RelayCommand]

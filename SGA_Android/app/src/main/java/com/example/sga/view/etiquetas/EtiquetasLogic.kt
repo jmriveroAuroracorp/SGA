@@ -301,7 +301,7 @@ class EtiquetasLogic(
             })
     }
 
-    fun enviarImpresion(dto: LogImpresionDto, onResult: (LogImpresionDto?) -> Unit) {
+    fun enviarImpresion(dto: LogImpresionDto, onResult: (LogImpresionDto?) -> Unit, onError: ((String) -> Unit)? = null) {
         Log.d("ETIQ_API", "📝 Enviando impresión: $dto")
         ApiManager.etiquetasApiService.insertarLogImpresion(dto)
             .enqueue(object : Callback<LogImpresionDto> {
@@ -312,17 +312,33 @@ class EtiquetasLogic(
                     if (response.isSuccessful) {
                         onResult(response.body())
                     } else {
-                        Log.e("ETIQ_API", "Error HTTP: ${response.code()}")
+                        val errorBody = response.errorBody()?.string()
+                        Log.e("ETIQ_API", "Error HTTP ${response.code()}: $errorBody")
+                        
+                        // Extraer mensaje del errorBody
+                        val mensajeError = if (errorBody != null) {
+                            // Limpiar comillas si viene entre comillas
+                            errorBody.trim().removeSurrounding("\"")
+                        } else {
+                            "Error ${response.code()} al enviar impresión"
+                        }
+                        
+                        // Si es un BadRequest (400), mostrar el mensaje del backend directamente
+                        if (response.code() == 400) {
+                            onError?.invoke(mensajeError)
+                        } else {
+                            onError?.invoke("Error en API: $mensajeError")
+                        }
                         onResult(null)
                     }
                 }
 
                 override fun onFailure(call: Call<LogImpresionDto>, t: Throwable) {
                     Log.e("ETIQ_API", "Fallo al imprimir", t)
+                    onError?.invoke("Error de red: ${t.message}")
                     onResult(null)
                 }
             })
-        onResult(dto)
     }
     fun actualizarImpresoraSeleccionadaEnBD(nombre: String) {
         val userId = sessionViewModel.user.value?.id?.toIntOrNull() ?: return

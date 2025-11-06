@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Impresion;
 using SGA_Api.Models.Impresion.ImpUbiMultiple;
+using System.Linq;
 
 namespace SGA_Api.Controllers.Impresion
 {
@@ -22,12 +23,30 @@ namespace SGA_Api.Controllers.Impresion
 		{
 			try
 			{
+				// ==========================================
+				// VALIDACIONES ANTES DE INSERTAR EN BD
+				// ==========================================
+				
 				// Validación: si es etiqueta de palet (2), los dos campos extra son obligatorios
 				if (dto.TipoEtiqueta == 2 &&
 					(string.IsNullOrWhiteSpace(dto.CodigoGS1) || string.IsNullOrWhiteSpace(dto.CodigoPalet)))
 				{
 					return BadRequest("Para etiquetas de tipo 2 (palet), debe enviar CodigoGS1 y CodigoPalet.");
 				}
+
+				// Validación CRÍTICA: si tiene CodigoAlternativo (EAN13), debe ser válido
+				// Si no es válido, NO se inserta en BD
+				if (!string.IsNullOrWhiteSpace(dto.CodigoAlternativo))
+				{
+					if (!ValidarEAN13(dto.CodigoAlternativo))
+					{
+						return BadRequest("El código EAN13 proporcionado no es válido. Debe tener 13 dígitos y un dígito de control correcto.");
+					}
+				}
+
+				// ==========================================
+				// SI LLEGA AQUÍ, TODAS LAS VALIDACIONES PASARON
+				// ==========================================
 
 				var log = new LogImpresion
 				{
@@ -172,6 +191,49 @@ namespace SGA_Api.Controllers.Impresion
 			return Ok(lista);
 		}
 
+		/// <summary>
+		/// Valida que un código EAN13 sea válido (13 dígitos y dígito de control correcto)
+		/// </summary>
+		private bool ValidarEAN13(string codigo)
+		{
+			if (string.IsNullOrWhiteSpace(codigo))
+				return false;
+
+			// Eliminar espacios y verificar que solo tenga dígitos
+			var codigoLimpio = codigo.Trim().Replace(" ", "");
+			if (codigoLimpio.Length != 13)
+				return false;
+
+			if (!codigoLimpio.All(char.IsDigit))
+				return false;
+
+			// Calcular dígito de control
+			var sumaImpares = 0;
+			var sumaPares = 0;
+
+			// Sumar dígitos en posiciones impares (1, 3, 5, 7, 9, 11) - índice 0, 2, 4, 6, 8, 10
+			for (int i = 0; i < 12; i += 2)
+			{
+				sumaImpares += int.Parse(codigoLimpio[i].ToString());
+			}
+
+			// Sumar dígitos en posiciones pares (2, 4, 6, 8, 10, 12) - índice 1, 3, 5, 7, 9, 11
+			for (int i = 1; i < 12; i += 2)
+			{
+				sumaPares += int.Parse(codigoLimpio[i].ToString());
+			}
+
+			// Multiplicar suma de pares por 3 y sumar con impares
+			var sumaTotal = sumaImpares + (sumaPares * 3);
+
+			// Calcular dígito de control
+			var resto = sumaTotal % 10;
+			var digitoControl = resto == 0 ? 0 : 10 - resto;
+
+			// Comparar con el último dígito del código
+			var digitoControlEsperado = int.Parse(codigoLimpio[12].ToString());
+			return digitoControl == digitoControlEsperado;
+		}
 
 	}
 }

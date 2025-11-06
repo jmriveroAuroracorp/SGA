@@ -24,6 +24,11 @@ namespace SGA_Api.Models.Traspasos
 
 		public string? CodigoPalet { get; set; }
 		public string? CodigoArticulo { get; set; }
+		
+		/// <summary>
+		/// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+		/// </summary>
+		[Column(TypeName = "decimal(18,6)")]
 		public decimal? Cantidad { get; set; }
 		public string? TipoTraspaso { get; set; }
 		public Palet.Palet Palet { get; set; }

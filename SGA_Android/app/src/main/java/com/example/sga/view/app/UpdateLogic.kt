@@ -9,9 +9,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.sga.data.VersionApiService
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.system.exitProcess
 
@@ -68,7 +66,7 @@ class UpdateLogic(private val sessionViewModel: SessionViewModel) {
 
                 guardarYLanzarAPK(context, apkBytes, "SGA.apk")
                 Log.d("SGA_UPDATE", "APK lanzada. Cerrando app.")
-                exitProcess(0) // <- no sigue, pero por completitud
+                exitProcess(0)
             } else {
                 Log.d("SGA_UPDATE", "Ya está actualizada.")
             }
@@ -93,14 +91,76 @@ class UpdateLogic(private val sessionViewModel: SessionViewModel) {
     }
 
     private fun guardarYLanzarAPK(context: Context, bytes: ByteArray, nombreArchivo: String) {
-        val apkFile = context.getExternalFilesDir(null)?.resolve(nombreArchivo)
-        apkFile?.writeBytes(bytes)
+        Log.d("SGA_UPDATE", "Iniciando instalación. Android Version: ${Build.VERSION.SDK_INT}")
+        
+        // Usar siempre el método con Intent que abre el diálogo del instalador
+        instalarConIntent(context, bytes, nombreArchivo)
+    }
+    
+    private fun instalarConIntent(context: Context, bytes: ByteArray, nombreArchivo: String) {
+        // Guardar el APK en disco
+        val apkFile = java.io.File(context.getExternalFilesDir(null), nombreArchivo)
+        
+        if (apkFile.exists()) {
+            apkFile.delete()
+            Log.d("SGA_UPDATE", "APK antiguo eliminado")
+        }
 
-        val apkUri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            apkFile!!
-        )
+        try {
+            apkFile.outputStream().use { outputStream ->
+                outputStream.write(bytes)
+                outputStream.flush()
+                outputStream.fd.sync()
+            }
+            
+            Log.d("SGA_UPDATE", "APK guardado: ${apkFile.absolutePath}")
+            Log.d("SGA_UPDATE", "Tamaño: ${apkFile.length()} bytes")
+            
+            // Verificar integridad
+            if (apkFile.length() != bytes.size.toLong()) {
+                Log.e("SGA_UPDATE", "Error: archivo incompleto")
+                Toast.makeText(context, "Error al guardar APK", Toast.LENGTH_LONG).show()
+                return
+            }
+        } catch (e: Exception) {
+            Log.e("SGA_UPDATE", "Error al escribir APK", e)
+            Toast.makeText(context, "Error al guardar APK: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Pequeño delay para Android 10+ asegurando que el archivo esté disponible
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Thread.sleep(300)
+            Log.d("SGA_UPDATE", "Delay aplicado para Android 10+")
+        }
+
+        val apkUri = try {
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                apkFile
+            )
+        } catch (e: Exception) {
+            Log.e("SGA_UPDATE", "Error al crear URI", e)
+            Toast.makeText(context, "Error al crear URI: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        Log.d("SGA_UPDATE", "URI generado: $apkUri")
+
+        // Otorgar permisos explícitos para Android 10+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                context.grantUriPermission(
+                    "com.google.android.packageinstaller",
+                    apkUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                Log.d("SGA_UPDATE", "Permisos otorgados al instalador")
+            } catch (e: Exception) {
+                Log.w("SGA_UPDATE", "No se pudo otorgar permiso explícito: ${e.message}")
+            }
+        }
 
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(apkUri, "application/vnd.android.package-archive")
@@ -108,7 +168,13 @@ class UpdateLogic(private val sessionViewModel: SessionViewModel) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+            Log.d("SGA_UPDATE", "Instalador lanzado con Intent")
+        } catch (e: Exception) {
+            Log.e("SGA_UPDATE", "Error al lanzar instalador", e)
+            Toast.makeText(context, "Error al abrir instalador: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 }
 

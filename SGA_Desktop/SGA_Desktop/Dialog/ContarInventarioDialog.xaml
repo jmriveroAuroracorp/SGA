@@ -440,7 +440,7 @@
                                                     
                                                     <!-- Stock -->
                                                     <TextBlock Grid.Column="6" 
-                                                               Text="{Binding StockActual, StringFormat=F4}" 
+                                                               Text="{Binding StockActual, StringFormat='0.########'}" 
                                                                FontSize="12" 
                                                                FontWeight="Bold"
                                                                Foreground="{Binding StockActual, Converter={StaticResource NegativeValueColorConverter}}"

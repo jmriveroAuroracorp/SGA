@@ -8,6 +8,7 @@ import com.example.sga.data.dto.etiquetas.AlergenosDto
 import com.example.sga.data.dto.etiquetas.ImpresoraDto
 import com.example.sga.data.dto.etiquetas.LogImpresionDto
 import com.example.sga.data.dto.stock.ArticuloDto
+import com.example.sga.data.dto.traspasos.PaletDto
 import com.example.sga.data.model.stock.Stock
 import retrofit2.Call
 import retrofit2.Callback
@@ -54,10 +55,18 @@ class ImpresionLogic(private val onToast: (String) -> Unit) {
                         call: Call<LogImpresionDto>,
                         response: Response<LogImpresionDto>
                     ) {
-                        if (response.isSuccessful)
+                        if (response.isSuccessful) {
                             onToast("✅ Impresión registrada")
-                        else
-                            onToast("❌ Error ${response.code()} al imprimir")
+                        } else {
+                            val errorBody = response.errorBody()?.string()
+                            val mensajeError = if (errorBody != null) {
+                                // Limpiar comillas si viene entre comillas
+                                errorBody.trim().removeSurrounding("\"")
+                            } else {
+                                "Error ${response.code()} al imprimir"
+                            }
+                            onToast("❌ $mensajeError")
+                        }
                     }
 
                     override fun onFailure(call: Call<LogImpresionDto>, t: Throwable) {
@@ -129,6 +138,63 @@ class ImpresionLogic(private val onToast: (String) -> Unit) {
                 override fun onFailure(call: Call<List<ImpresoraDto>>, t: Throwable) {
                     Log.e("IMPRESION", "No se pudieron obtener impresoras: ${t.message}")
                     onToast("❌ Error al obtener impresoras")
+                }
+            })
+    }
+
+    /** Obtiene la información del palet e imprime su etiqueta. */
+    fun imprimirPalet(
+        paletId: String,
+        usuario: String,
+        dispositivoId: String,
+        idImpresora: Int,
+        copias: Int = 1
+    ) {
+        // Primero obtener el palet completo para tener el codigoGS1
+        ApiManager.traspasosApi.obtenerPalet(paletId)
+            .enqueue(object : Callback<PaletDto> {
+                override fun onResponse(call: Call<PaletDto>, response: Response<PaletDto>) {
+                    if (response.isSuccessful) {
+                        response.body()?.let { palet ->
+                            val dto = LogImpresionDto(
+                                usuario = usuario,
+                                dispositivo = dispositivoId,
+                                idImpresora = idImpresora,
+                                etiquetaImpresa = 0,
+                                tipoEtiqueta = 2, // Tipo 2 para etiquetas de palet
+                                copias = copias,
+                                pathEtiqueta = "\\\\Sage200\\mrh\\Servicios\\PrintCenter\\ETIQUETAS\\PALET.nlbl",
+                                codigoGS1 = palet.codigoGS1,
+                                codigoPalet = palet.codigoPalet
+                            )
+
+                            Log.i("IMPRESION_PALET", "Payload → $dto")
+
+                            ApiManager.etiquetasApiService.insertarLogImpresion(dto)
+                                .enqueue(object : Callback<LogImpresionDto> {
+                                    override fun onResponse(
+                                        call: Call<LogImpresionDto>,
+                                        response: Response<LogImpresionDto>
+                                    ) {
+                                        if (response.isSuccessful)
+                                            onToast("✅ Etiqueta de palet enviada a impresión")
+                                        else
+                                            onToast("❌ Error ${response.code()} al imprimir palet")
+                                    }
+
+                                    override fun onFailure(call: Call<LogImpresionDto>, t: Throwable) {
+                                        onToast("💥 Fallo de red: ${t.message}")
+                                    }
+                                })
+                        } ?: onToast("❌ No se pudo obtener información del palet")
+                    } else {
+                        onToast("❌ Error ${response.code()} al obtener palet")
+                    }
+                }
+
+                override fun onFailure(call: Call<PaletDto>, t: Throwable) {
+                    Log.e("IMPRESION_PALET", "Error obteniendo palet: ${t.message}")
+                    onToast("💥 Error al obtener palet: ${t.message}")
                 }
             })
     }

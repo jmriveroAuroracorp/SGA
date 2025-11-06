@@ -12,5 +12,7 @@ data class LineaPaletCrearDto(
     val cantidad: Double,
     val codigoAlmacen: String,
     val ubicacion: String? = null,
-    val usuarioId: Int
+    val usuarioId: Int,
+    val observaciones: String? = null,
+    val paletIdOrigen: String? = null
 )

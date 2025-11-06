@@ -10,6 +10,11 @@ data class StockDisponibleDto(
     val almacen: String?,
     val fechaCaducidad: String?,
     val unidadSaldo: Double?,
-    val reservado: Double?
+    val reservado: Double?,
+    val tipoStock: String?, // "Suelto" o "Paletizado"
+    val paletId: String?, // ID del palet si es paletizado
+    val codigoPalet: String?, // Código del palet si es paletizado
+    val estadoPalet: String?, // "Abierto" o "Cerrado" si es paletizado
+    val ordenTrabajoId: String?
 )
 

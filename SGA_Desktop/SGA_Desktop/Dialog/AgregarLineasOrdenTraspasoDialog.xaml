@@ -145,13 +145,13 @@
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="2">
                                                                     <TextBlock Text="Total:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat='0.########'}" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                     <StackPanel Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}">
                                                                         <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                        <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="4,0,0,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
+                                                                        <TextBlock Text="{Binding Reservado, StringFormat='0.########'}" Margin="4,0,0,0" Foreground="{StaticResource BrushGrisOscuro}" FontSize="13"/>
                                                                     </StackPanel>
                                                                     <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,2,0,0"/>
-                                                                    <TextBlock Text="{Binding Disponible, StringFormat=F4}" FontWeight="Bold" Foreground="Black" FontSize="18" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding Disponible, StringFormat='0.########'}" FontWeight="Bold" Foreground="Black" FontSize="18" Margin="4,0,0,0" VerticalAlignment="Center"/>
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                                                                     <TextBlock Text="Cantidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,0,6,0"/>

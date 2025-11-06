@@ -44,6 +44,13 @@ interface TraspasosApiService {
         @Query("usuarioId") usuarioId: Int
     ): Call<Void>
 
+    /** Forzar vaciado de palet **/
+    @POST("Palet/{id}/forzar-vaciado")
+    fun forzarVaciadoPalet(
+        @Path("id") idPalet: String,
+        @Body dto: ForzarVaciadoPaletDto
+    ): Call<Void>
+
     @POST("Palet/{id}/cerrar-mobility")
     fun cerrarPalet(
         @Path("id") idPalet: String,

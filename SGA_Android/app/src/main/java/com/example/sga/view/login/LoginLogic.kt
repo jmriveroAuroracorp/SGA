@@ -88,6 +88,14 @@ class LoginLogic(
                         sessionViewModel.sessionToken = dto.token
                         sessionViewModel.actualizarTimestamp()
                         sessionViewModel.setContraseña(password)
+                        
+                        // Establecer el dispositivo después del login exitoso
+                        val dispositivoDto = DispositivoDto(
+                            id = request.idDispositivo,
+                            tipo = request.tipoDispositivo,
+                            idUsuario = idUsuario
+                        )
+                        sessionViewModel.setDispositivo(dispositivoDto)
 
                         // Llamada para cargar la empresa por defecto
                         ApiManager.userApi.obtenerConfiguracionUsuario(dto.operario)
@@ -119,7 +127,8 @@ class LoginLogic(
                         // Inicializar ApiManager sin callback de sesión caducada
                         ApiManager.init(sessionViewModel) {
                             // Solo mostrar mensaje si no es inmediatamente después del login
-                            if (System.currentTimeMillis() - sessionViewModel.tokenTimestamp.value!! > 5000) {
+                            val timestamp = sessionViewModel.tokenTimestamp.value ?: 0L
+                            if (System.currentTimeMillis() - timestamp > 5000) {
                                 sessionViewModel.mostrarMensajeCaducidad()
                                 Handler(Looper.getMainLooper()).postDelayed({
                                     sessionViewModel.clearSession()

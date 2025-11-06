@@ -13,5 +13,8 @@ data class LecturaConteoDto(
     val usuarioCodigo: String,
     val fecha: String,
     val comentario: String?,
-    val fechaCaducidad: String?
+    val fechaCaducidad: String?,
+    val paletId: String? = null,
+    val codigoPalet: String? = null,
+    val codigoGS1: String? = null
 )

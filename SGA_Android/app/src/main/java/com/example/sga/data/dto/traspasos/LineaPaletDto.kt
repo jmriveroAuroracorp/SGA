@@ -12,5 +12,6 @@ data class LineaPaletDto(
     val lote: String?,
     val fechaCaducidad: String?,
     val cantidad: Double,
-    val ubicacion: String?
+    val ubicacion: String?,
+    val codigoAlmacen: String?
 )

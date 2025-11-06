@@ -155,7 +155,7 @@ namespace SGA_Desktop.ViewModels
                     worksheet.Cell(row, 7).Value = linea.StockTeorico;
                     worksheet.Cell(row, 8).Value = linea.StockContado;
                     worksheet.Cell(row, 9).Value = linea.AjusteFinal ?? 0;
-                    worksheet.Cell(row, 10).Value = linea.PaletsResumen;
+                    worksheet.Cell(row, 10).Value = linea.TienePalets ? linea.PaletsResumen : "SUELTO";
 
                     // Aplicar formato a las celdas numéricas
                     worksheet.Cell(row, 6).Style.NumberFormat.Format = "#,##0.0000";

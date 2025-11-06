@@ -264,13 +264,17 @@ namespace SGA_Desktop.Services
 						CodigoPalet = jObject["codigoPalet"]?.ToString(),
 						EstadoPalet = jObject["estadoPalet"]?.ToString(),
 						
+						// 🔷 NUEVO: Deserializar lista de palets
+						Palets = jObject["palets"]?.ToObject<List<PaletDetalleDto>>() ?? new List<PaletDetalleDto>(),
+						
 						// 🔷 NUEVO: Información de bloqueo por calidad
 						IsBloqueadoCalidad = jObject["isBloqueadoCalidad"]?.ToObject<bool>() ?? false,
 						MotivoBloqueoCalidad = jObject["motivoBloqueoCalidad"]?.ToString(),
 						FechaBloqueoCalidad = jObject["fechaBloqueoCalidad"]?.ToObject<DateTime?>(),
 						
 						// 🔷 NUEVO: Inicializar CantidadAMoverTexto con el valor máximo disponible
-						CantidadAMoverTexto = (jObject["disponible"]?.ToObject<decimal>() ?? 0).ToString("F4")
+						// 🔷 CAMBIADO: Usar formato adaptativo que muestra solo decimales significativos
+						CantidadAMoverTexto = Helpers.DecimalFormatHelper.FormatearCantidad(jObject["disponible"]?.ToObject<decimal>() ?? 0)
 					};
 					resultado.Add(stock);
 				}

@@ -20,7 +20,11 @@ namespace SGA_Api.Models.Inventario
         [StringLength(30)]
         public string CodigoUbicacion { get; set; } = string.Empty;
 
+        /// <summary>
+        /// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
+        /// </summary>
         [Required]
+        [Column(TypeName = "decimal(18,6)")]
         public decimal Diferencia { get; set; }
 
         [Required]

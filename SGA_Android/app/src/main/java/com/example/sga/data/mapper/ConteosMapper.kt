@@ -2,6 +2,7 @@ package com.example.sga.data.mapper
 
 import com.example.sga.data.dto.conteos.*
 import com.example.sga.data.model.conteos.*
+import java.util.UUID
 
 object ConteosMapper {
     
@@ -42,7 +43,10 @@ object ConteosMapper {
             usuarioCodigo = dto.usuarioCodigo,
             fecha = dto.fecha,
             comentario = dto.comentario,
-            fechaCaducidad = dto.fechaCaducidad
+            fechaCaducidad = dto.fechaCaducidad,
+            paletId = dto.paletId,
+            codigoPalet = dto.codigoPalet,
+            codigoGS1 = dto.codigoGS1
         )
     }
     
@@ -92,9 +96,9 @@ object ConteosMapper {
         )
     }
     
-    fun fromPaletDisponibleDto(dto: com.example.sga.data.dto.conteos.PaletDisponibleDto): PaletDisponible {
+    fun fromPaletDisponibleDto(dto: PaletDisponibleDto): PaletDisponible {
         return PaletDisponible(
-            paletId = dto.paletId,
+            paletId = UUID.fromString(dto.paletId),
             codigoPalet = dto.codigoPalet,
             codigoGS1 = dto.codigoGS1,
             cantidad = dto.cantidad,

@@ -217,7 +217,10 @@ class ConteoLogic(
                          cantidadStock = lectura.cantidadStock,
                          cantidadTeorica = null, // No tenemos este campo en el modelo actual
                          cantidadContada = lectura.cantidadContada,
-                         fechaCaducidad = lectura.fechaCaducidad
+                         fechaCaducidad = lectura.fechaCaducidad,
+                         paletId = lectura.paletId,
+                         codigoPalet = lectura.codigoPalet,
+                         codigoGS1 = lectura.codigoGS1
                      )
                  }
                 
@@ -234,6 +237,9 @@ class ConteoLogic(
                      Log.d("ConteoLogic", "   - Stock: ${lectura.cantidadStock}")
                      Log.d("ConteoLogic", "   - Contada: ${lectura.cantidadContada}")
                      Log.d("ConteoLogic", "   - Fecha Caducidad: ${lectura.fechaCaducidad}")
+                     Log.d("ConteoLogic", "   - Palet ID: ${lectura.paletId}")
+                     Log.d("ConteoLogic", "   - Código Palet: ${lectura.codigoPalet}")
+                     Log.d("ConteoLogic", "   - Código GS1: ${lectura.codigoGS1}")
                  }
                  
                  conteoViewModel.setLecturasPendientes(lecturasPendientes)
@@ -290,9 +296,9 @@ class ConteoLogic(
             comentario = comentario,
             ordenGuid = ordenGuid,
             fechaCaducidad = fechaCaducidad,
-            paletId = paletId,
-            codigoPalet = codigoPalet,
-            codigoGS1 = codigoGS1
+            paletId = paletId,  // ← null para stock suelto (GUID nullable)
+            codigoPalet = codigoPalet ?: "",  // ← valor vacío para stock suelto
+            codigoGS1 = codigoGS1 ?: ""  // ← valor vacío para stock suelto
         )
         
         scope.launch {
@@ -301,7 +307,7 @@ class ConteoLogic(
                 Log.d("ConteoLogic", "📤 DTO enviado:")
                 Log.d("ConteoLogic", "   - codigoArticulo: '${lecturaDto.codigoArticulo}'")
                 Log.d("ConteoLogic", "   - codigoUbicacion: '${lecturaDto.codigoUbicacion}'")
-                Log.d("ConteoLogic", "   - codigoAlmacen: '${lecturaDto.codigoAlmacen}'")  // ← nuevo log
+                Log.d("ConteoLogic", "   - codigoAlmacen: '${lecturaDto.codigoAlmacen}'")
                 Log.d("ConteoLogic", "   - lotePartida: '${lecturaDto.lotePartida}'")
                 Log.d("ConteoLogic", "   - cantidadContada: ${lecturaDto.cantidadContada}")
                 Log.d("ConteoLogic", "   - fechaCaducidad: '${lecturaDto.fechaCaducidad}'")
@@ -403,6 +409,29 @@ class ConteoLogic(
             } finally {
                 conteoViewModel.setCargando(false)
             }
+        }
+    }
+
+    // Obtener palets disponibles
+    suspend fun obtenerPaletsDisponibles(
+        codigoAlmacen: String,
+        ubicacion: String,
+        codigoArticulo: String,
+        lote: String? = null,
+        fechaCaducidad: String? = null
+    ): List<PaletDisponible> {
+        return try {
+            val response = apiService.obtenerPaletsDisponibles(
+                codigoAlmacen, ubicacion, codigoArticulo, lote, fechaCaducidad
+            )
+            if (response.isSuccessful) {
+                response.body()?.map { ConteosMapper.fromPaletDisponibleDto(it) } ?: emptyList()
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e("ConteoLogic", "Error obteniendo palets disponibles: ${e.message}")
+            emptyList()
         }
     }
 
@@ -553,7 +582,17 @@ class ConteoLogic(
             val codAlm = ubicacionParts[0]
             val codUbi = ubicacionParts[1]
 
-            // Usar la API de etiquetas para convertir EAN13 a código de artículo (igual que en traspasos)
+            // Buscar directamente en las lecturas pendientes por EAN13
+            val lecturasPendientes = conteoViewModel.lecturasPendientes.value
+            val lecturasFiltradas = lecturasPendientes.filter { lectura ->
+                // Filtrar por ubicación escaneada
+                lectura.codigoAlmacen == codAlm && lectura.codigoUbicacion == codUbi
+            }
+            
+            Log.d("ConteoLogic", "🔍 Lecturas en ubicación $codAlm-$codUbi: ${lecturasFiltradas.size}")
+            
+            // Buscar lecturas que coincidan con el EAN13 escaneado
+            // Para esto necesitamos usar la API de etiquetas para convertir EAN13 a código de artículo
             ApiManager.etiquetasApiService.buscarArticulo(
                 codigoEmpresa = empresaId,
                 codigoAlternativo = ean13,
@@ -568,72 +607,49 @@ class ConteoLogic(
                 ) {
                     if (response.isSuccessful) {
                         val lista = response.body().orEmpty()
-                        Log.d("ConteoLogic", "🎯 Artículos encontrados: ${lista.size}")
+                        Log.d("ConteoLogic", "🎯 Artículos encontrados en API: ${lista.size}")
 
-                        // Asegura que todos los DTO llevan la partida y fecha de caducidad extraídas si no la tienen
-                        val listaConDatos = lista.map {
-                            it.copy(
-                                partida = it.partida ?: partida,
-                                fechaCaducidad = it.fechaCaducidad ?: fechaCaducidad
-                            )
+                        if (lista.isEmpty()) {
+                            onError("No se encontró ningún artículo con ese código")
+                            return
                         }
 
-                        // Filtrar por partida si existe (misma lógica que TraspasosLogic)
-                        val listaFiltrada = partida?.let { p ->
-                            val pNorm = p.filter { it.isDigit() }
-                            listaConDatos.filter { art ->
-                                val artNorm = art.partida?.filter { it.isDigit() }
-                                artNorm == pNorm
-                            }
-                        } ?: listaConDatos
-
-                        val candidatos = listaFiltrada.distinctBy {
-                            "${it.codigoArticulo}-${it.descripcion}-${it.partida}"
+                        // Tomar el primer artículo de la API (asumiendo que es el correcto)
+                        val articuloDto = lista.first()
+                        Log.d("ConteoLogic", "✅ Artículo de API: ${articuloDto.codigoArticulo}")
+                        
+                        // Buscar lecturas pendientes que coincidan con este artículo
+                        val lecturasDelArticulo = lecturasFiltradas.filter { lectura ->
+                            lectura.codigoArticulo == articuloDto.codigoArticulo
                         }
-
-                        when (candidatos.size) {
-                            0 -> onError("No se encontró ningún artículo con ese código y partida.")
-                            1 -> {
-                                val articuloDto = candidatos.first()
-                                Log.d("ConteoLogic", "✅ Artículo encontrado: ${articuloDto.codigoArticulo}")
+                        
+                        Log.d("ConteoLogic", "🔍 Lecturas pendientes para ${articuloDto.codigoArticulo}: ${lecturasDelArticulo.size}")
+                        
+                        when {
+                            lecturasDelArticulo.isEmpty() -> {
+                                // Buscar si el artículo existe en otra ubicación
+                                val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
+                                    lectura.codigoArticulo == articuloDto.codigoArticulo
+                                }
                                 
-                                if (modoManual) {
-                                    // En modo manual, ir directo al diálogo de cantidad
-                                    // Pasar también la fecha de caducidad extraída del código
-                                    onArticuloManual(codAlm, codUbi, articuloDto.codigoArticulo, articuloDto.partida, fechaCaducidad)
+                                if (articuloEnOtraUbicacion != null) {
+                                    onError("El artículo ${articuloDto.codigoArticulo} está en la ubicación ${articuloEnOtraUbicacion.codigoAlmacen}-${articuloEnOtraUbicacion.codigoUbicacion}, no en $codAlm-$codUbi")
                                 } else {
-                                    // Buscar el artículo en las lecturas pendientes usando el código del artículo
-                                    val lecturasPendientes = conteoViewModel.lecturasPendientes.value
-                                    val articuloEncontrado = lecturasPendientes.find { lectura ->
-                                        lectura.codigoAlmacen == codAlm && 
-                                        lectura.codigoUbicacion == codUbi &&
-                                        lectura.codigoArticulo == articuloDto.codigoArticulo
-                                    }
-                                    
-                                    if (articuloEncontrado != null) {
-                                        // Crear una copia del artículo con la fecha de caducidad extraída del código
-                                        val articuloConFechaCaducidad = articuloEncontrado.copy(
-                                            fechaCaducidad = fechaCaducidad
-                                        )
-                                        onArticuloDetectado(articuloConFechaCaducidad)
-                                    } else {
-                                        // Buscar si el artículo existe en otra ubicación
-                                        val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
-                                            lectura.codigoArticulo == articuloDto.codigoArticulo
-                                        }
-                                        
-                                        if (articuloEnOtraUbicacion != null) {
-                                            onError("El artículo ${articuloDto.codigoArticulo} está en la ubicación ${articuloEnOtraUbicacion.codigoAlmacen}-${articuloEnOtraUbicacion.codigoUbicacion}, no en $codAlm-$codUbi")
-                                        } else {
-                                            onError("El artículo ${articuloDto.codigoArticulo} no está en las lecturas pendientes de esta orden")
-                                        }
-                                    }
+                                    onError("El artículo ${articuloDto.codigoArticulo} no está en las lecturas pendientes de esta orden")
                                 }
                             }
+                            lecturasDelArticulo.size == 1 -> {
+                                // Una sola lectura → Va directo a cantidad
+                                val lectura = lecturasDelArticulo.first()
+                                val lecturaConFechaCaducidad = lectura.copy(fechaCaducidad = fechaCaducidad)
+                                onArticuloDetectado(lecturaConFechaCaducidad)
+                            }
                             else -> {
-                                // Múltiples artículos encontrados - mostrar diálogo de selección
-                                Log.d("ConteoLogic", "🔍 Múltiples artículos encontrados: ${candidatos.size}")
-                                onMultipleArticulos(candidatos)
+                                // Múltiples lecturas → Pide escanear palet
+                                Log.d("ConteoLogic", "🔍 Múltiples lecturas encontradas: ${lecturasDelArticulo.size}")
+                                val lectura = lecturasDelArticulo.first() // Usar la primera como referencia
+                                val lecturaConFechaCaducidad = lectura.copy(fechaCaducidad = fechaCaducidad)
+                                onArticuloDetectado(lecturaConFechaCaducidad)
                             }
                         }
                     } else {
@@ -648,49 +664,31 @@ class ConteoLogic(
             return
         }
 
-        // 3) SSCC (palets) - para conteos, verificar si estamos esperando un palet
+        // 3) SSCC (palets) - manejo según el estado del escaneo
         ssccRegex.find(code)?.let { m ->
             val gs1 = m.groupValues[1]
             Log.d("ConteoLogic", "📦 SSCC detectado: $gs1")
             
-            // Verificar si estamos en estado de esperar palet
-            val estadoActual = conteoViewModel.estadoEscaneo.value
-            if (estadoActual == EstadoEscaneoConteo.EsperandoPalet) {
-                // Buscar el palet por GS1 en la lista de disponibles
-                val paletsDisponibles = conteoViewModel.paletsDisponibles.value
-                val paletEncontrado = paletsDisponibles.find { it.codigoGS1 == gs1 }
-                
-                if (paletEncontrado != null) {
-                    // Palet válido, continuar con el conteo
-                    Log.d("ConteoLogic", "✅ Palet válido encontrado: ${paletEncontrado.codigoPalet}")
-                    
-                    // Buscar el artículo correspondiente a este palet
-                    val ubicacionEscaneada = conteoViewModel.ubicacionEscaneada.value
-                    val articuloEscaneado = conteoViewModel.articuloEscaneado.value
-                    
-                    if (ubicacionEscaneada != null && articuloEscaneado != null) {
-                        // Crear un artículo con la cantidad específica del palet seleccionado
-                        val articuloConCantidadPalet = articuloEscaneado.copy(
-                            cantidadStock = paletEncontrado.cantidad, // Cantidad específica del palet
-                            paletId = paletEncontrado.paletId,
-                            codigoPalet = paletEncontrado.codigoPalet,
-                            codigoGS1 = paletEncontrado.codigoGS1
-                        )
-                        
-                        // Actualizar el artículo escaneado con la información del palet
-                        conteoViewModel.setArticuloEscaneado(articuloConCantidadPalet)
+            // Verificar si estamos en el estado esperando palet
+            if (conteoViewModel.estadoEscaneo.value == EstadoEscaneoConteo.EsperandoPalet) {
+                val ssccSimple = Regex("^[0-9]{18}$")
+                if (ssccSimple.matches(gs1)) {
+                    val paletsDisponibles = conteoViewModel.paletsDisponibles.value
+                    val paletEncontrado = paletsDisponibles.find { it.codigoGS1 == gs1 }
+                    if (paletEncontrado != null) {
+                        Log.d("ConteoLogic", "✅ Palet válido: ${paletEncontrado.codigoPalet}")
+                        conteoViewModel.setPaletSeleccionado(paletEncontrado)
+                        conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                        conteoViewModel.setMensaje("Palet ${paletEncontrado.codigoPalet} confirmado. Introduzca la cantidad.")
+                    } else {
+                        Log.e("ConteoLogic", "❌ Palet no válido: $gs1")
+                        conteoViewModel.setError("El palet $gs1 no está disponible en esta ubicación para este artículo.")
                     }
-                    
-                    conteoViewModel.setPaletSeleccionado(paletEncontrado)
-                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
-                    conteoViewModel.setMensaje("Palet ${paletEncontrado.codigoPalet} confirmado. Introduzca la cantidad.")
                 } else {
-                    // Palet no válido
-                    Log.e("ConteoLogic", "❌ Palet no válido: $gs1")
-                    onError("El palet con GS1 $gs1 no está disponible en esta ubicación para este artículo.")
+                    conteoViewModel.setError("Código GS1 inválido. Debe tener 18 dígitos.")
                 }
             } else {
-                onError("Los códigos SSCC (palets) no son válidos para conteos en este momento")
+                onError("Los códigos SSCC (palets) no son válidos en este momento")
             }
             return
         }
@@ -721,76 +719,14 @@ class ConteoLogic(
             } else {
                 // Buscar el artículo en las lecturas pendientes
                 val lecturasPendientes = conteoViewModel.lecturasPendientes.value
-                val articulosEncontrados = lecturasPendientes.filter { lectura ->
+                val articuloEncontrado = lecturasPendientes.find { lectura ->
                     lectura.codigoAlmacen == codAlm && 
                     lectura.codigoUbicacion == codUbi &&
                     lectura.codigoArticulo == codArt
                 }
                 
-                if (articulosEncontrados.isNotEmpty()) {
-                    // Verificar si hay múltiples palets para este artículo
-                    val paletsConInfo = articulosEncontrados.filter { it.paletId != null }
-                    val articulosSinPalet = articulosEncontrados.filter { it.paletId == null }
-                    
-                    when {
-                        // Caso 1: Solo hay un palet
-                        paletsConInfo.size == 1 -> {
-                            val articulo = paletsConInfo.first()
-                            Log.d("ConteoLogic", "✅ Un palet encontrado: ${articulo.codigoPalet}")
-                            
-                            // Crear un artículo con la cantidad específica del palet
-                            val articuloConCantidadPalet = articulo.copy(
-                                cantidadStock = articulo.cantidadStock ?: 0.0 // Usar la cantidad específica del palet
-                            )
-                            
-                            conteoViewModel.setPaletSeleccionado(PaletDisponible(
-                                paletId = articulo.paletId!!,
-                                codigoPalet = articulo.codigoPalet ?: "",
-                                codigoGS1 = articulo.codigoGS1 ?: "",
-                                cantidad = articulo.cantidadStock ?: 0.0, // Cantidad específica del palet
-                                estado = ""
-                            ))
-                            onArticuloDetectado(articuloConCantidadPalet)
-                        }
-                        
-                        // Caso 2: Múltiples palets
-                        paletsConInfo.size > 1 -> {
-                            Log.d("ConteoLogic", "📦 Múltiples palets encontrados: ${paletsConInfo.size}")
-                            val paletsDisponibles = paletsConInfo.map { lectura ->
-                                PaletDisponible(
-                                    paletId = lectura.paletId!!,
-                                    codigoPalet = lectura.codigoPalet ?: "",
-                                    codigoGS1 = lectura.codigoGS1 ?: "",
-                                    cantidad = lectura.cantidadStock ?: 0.0, // Cantidad específica de cada palet
-                                    estado = ""
-                                )
-                            }
-                            conteoViewModel.setPaletsDisponibles(paletsDisponibles)
-                            conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoPalet)
-                            conteoViewModel.setMensaje("Múltiples palets encontrados. Escanee la etiqueta GS1 del palet específico.")
-                        }
-                        
-                        // Caso 3: Sin palets (conteo normal)
-                        articulosSinPalet.isNotEmpty() -> {
-                            val articulo = articulosSinPalet.first()
-                            Log.d("ConteoLogic", "📦 Sin palets - conteo normal")
-                            onArticuloDetectado(articulo)
-                        }
-                        
-                        // Caso 4: No se encontró el artículo
-                        else -> {
-                            // Buscar si el artículo existe en otra ubicación
-                            val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
-                                lectura.codigoArticulo == codArt
-                            }
-                            
-                            if (articuloEnOtraUbicacion != null) {
-                                onError("El artículo $codArt está en la ubicación ${articuloEnOtraUbicacion.codigoAlmacen}-${articuloEnOtraUbicacion.codigoUbicacion}, no en $codAlm-$codUbi")
-                            } else {
-                                onError("El artículo $codArt no está en las lecturas pendientes de esta orden")
-                            }
-                        }
-                    }
+                if (articuloEncontrado != null) {
+                    onArticuloDetectado(articuloEncontrado)
                 } else {
                     // Buscar si el artículo existe en otra ubicación
                     val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
@@ -809,46 +745,6 @@ class ConteoLogic(
 
         // 5) Si no coincide con ningún patrón
         onError("Código no reconocido: $trimmed")
-    }
-
-    // Obtener palets disponibles para una ubicación y artículo
-    fun obtenerPaletsDisponibles(
-        codigoAlmacen: String,
-        ubicacion: String?,
-        codigoArticulo: String?,
-        lote: String? = null,
-        fechaCaducidad: String? = null,
-        onSuccess: (List<PaletDisponible>) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        conteoViewModel.setCargando(true)
-        conteoViewModel.limpiarMensajes()
-
-        scope.launch {
-            try {
-                val response = withContext(Dispatchers.IO) {
-                    apiService.obtenerPaletsDisponibles(
-                        codigoAlmacen = codigoAlmacen,
-                        ubicacion = ubicacion,
-                        codigoArticulo = codigoArticulo,
-                        lote = lote,
-                        fechaCaducidad = fechaCaducidad
-                    )
-                }
-                
-                val palets = response.map { ConteosMapper.fromPaletDisponibleDto(it) }
-                conteoViewModel.setPaletsDisponibles(palets)
-                onSuccess(palets)
-                
-            } catch (e: Exception) {
-                Log.e("ConteoLogic", "Error al obtener palets disponibles", e)
-                val errorMsg = "Error al obtener palets disponibles: ${e.message}"
-                conteoViewModel.setError(errorMsg)
-                onError(errorMsg)
-            } finally {
-                conteoViewModel.setCargando(false)
-            }
-        }
     }
 
     // Procesar selección de artículo cuando hay múltiples candidatos
@@ -881,7 +777,22 @@ class ConteoLogic(
         }
         
         if (articuloEncontrado != null) {
-            onArticuloDetectado(articuloEncontrado)
+            // Verificar si hay múltiples lecturas para el mismo artículo
+            val lecturasDelMismoArticulo = lecturasPendientes.filter { lectura ->
+                lectura.codigoAlmacen == codAlm && 
+                lectura.codigoUbicacion == codUbi &&
+                lectura.codigoArticulo == articuloSeleccionado.codigoArticulo
+            }
+            
+            if (lecturasDelMismoArticulo.size > 1) {
+                // Hay múltiples lecturas para el mismo artículo → Pide escanear palet
+                Log.d("ConteoLogic", "🔍 Múltiples lecturas encontradas para ${articuloSeleccionado.codigoArticulo}: ${lecturasDelMismoArticulo.size}")
+                // Llamar a la lógica de palets
+                onArticuloDetectado(articuloEncontrado)
+            } else {
+                // Solo una lectura → Va directo
+                onArticuloDetectado(articuloEncontrado)
+            }
         } else {
             // Buscar si el artículo existe en otra ubicación
             val articuloEnOtraUbicacion = lecturasPendientes.find { lectura ->
@@ -894,6 +805,115 @@ class ConteoLogic(
                 onError("El artículo ${articuloSeleccionado.codigoArticulo} no está en las lecturas pendientes de esta orden")
             }
         }
+    }
+
+    // Procesar código escaneado desde la UI (wrapper para la lógica principal)
+    fun procesarCodigoEscaneadoDesdeUI(
+        code: String,
+        ordenGuid: String,
+        codigoOperario: String?,
+        modoManual: Boolean,
+        scope: kotlinx.coroutines.CoroutineScope,
+        onArticuloManual: (String, String, String, String?, String?) -> Unit
+    ) {
+        Log.d("ConteoLogic", "📥 Procesando código desde UI: $code")
+        
+        if (codigoOperario == null) {
+            conteoViewModel.setError("Usuario no identificado")
+            return
+        }
+
+        procesarCodigoEscaneado(
+            code = code,
+            ordenGuid = ordenGuid,
+            codigoOperario = codigoOperario,
+            modoManual = modoManual,
+            onUbicacionDetectada = { ubicacion ->
+                Log.d("ConteoLogic", "📍 Ubicación detectada: $ubicacion")
+                conteoViewModel.setUbicacionEscaneada(ubicacion)
+                conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoArticulo)
+                conteoViewModel.setMensaje("Ubicación escaneada: $ubicacion. Ahora escanee el artículo.")
+                conteoViewModel.setError(null)
+            },
+            onArticuloDetectado = { articulo ->
+                Log.d("ConteoLogic", "🛒 Artículo detectado: ${articulo.codigoArticulo}")
+                conteoViewModel.setError(null)
+                
+                // Verificar si el artículo está en la ubicación escaneada
+                val ubicacionActual = conteoViewModel.ubicacionEscaneada.value
+                if (ubicacionActual != null) {
+                    val (codAlm, codUbi) = ubicacionActual.split("$")
+                    if (articulo.codigoAlmacen == codAlm && articulo.codigoUbicacion == codUbi) {
+                        // Artículo correcto, verificar si ya tiene información de palet
+                        conteoViewModel.setArticuloEscaneado(articulo)
+                        
+                        // Siempre verificar si hay múltiples palets disponibles
+                        scope.launch {
+                            val palets = obtenerPaletsDisponibles(
+                                codigoAlmacen = articulo.codigoAlmacen,
+                                ubicacion = articulo.codigoUbicacion,
+                                codigoArticulo = articulo.codigoArticulo,
+                                lote = articulo.lotePartida,
+                                fechaCaducidad = articulo.fechaCaducidad?.toString()
+                            )
+                            
+                            Log.d("ConteoLogic", "🔍 Palets disponibles: ${palets.size}")
+                            palets.forEach { palet ->
+                                Log.d("ConteoLogic", "   - Palet: ${palet.codigoPalet} (${palet.paletId})")
+                            }
+                            
+                            conteoViewModel.setPaletsDisponibles(palets)
+                            
+                            // Verificar si hay múltiples lecturas del mismo artículo en la misma ubicación
+                            val lecturasPendientes = conteoViewModel.lecturasPendientes.value
+                            val lecturasDelArticulo = lecturasPendientes.filter { lectura ->
+                                lectura.codigoAlmacen == articulo.codigoAlmacen &&
+                                lectura.codigoUbicacion == articulo.codigoUbicacion &&
+                                lectura.codigoArticulo == articulo.codigoArticulo
+                            }
+                            
+                            when {
+                                palets.size > 1 -> {
+                                    // Múltiples palets → Pide escanear GS1 específico
+                                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoPalet)
+                                    conteoViewModel.setMensaje("Múltiples palets encontrados. Escanee la etiqueta GS1 del palet o continúe para stock suelto.")
+                                }
+                                palets.size == 1 && lecturasDelArticulo.size > 1 -> {
+                                    // Un palet + stock suelto → Pide confirmar si es palet o suelto
+                                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoPalet)
+                                    conteoViewModel.setMensaje("Detectados palet y stock suelto. Escanee GS1 del palet ${palets.first().codigoPalet} o pulse 'Stock Suelto'.")
+                                }
+                                palets.size == 1 -> {
+                                    // Un solo palet y una sola lectura → Va directo a cantidad
+                                    conteoViewModel.setPaletSeleccionado(palets.first())
+                                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                                    conteoViewModel.setMensaje("Palet ${palets.first().codigoPalet} detectado. Introduzca la cantidad.")
+                                }
+                                else -> {
+                                    // Sin palets → Solo stock suelto → Va directo a cantidad
+                                    conteoViewModel.setEstadoEscaneo(EstadoEscaneoConteo.EsperandoCantidad)
+                                    conteoViewModel.setMensaje("Artículo detectado: ${articulo.descripcionArticulo}. Introduzca la cantidad.")
+                                }
+                            }
+                        }
+                    } else {
+                        // Artículo en ubicación diferente, mostrar diálogo de confirmación
+                        conteoViewModel.setArticuloParaConfirmar(articulo)
+                        conteoViewModel.setMostrarDialogoConfirmacionArticulo(true)
+                    }
+                }
+            },
+            onMultipleArticulos = { articulos ->
+                Log.d("ConteoLogic", "🔍 Múltiples artículos encontrados: ${articulos.size}")
+                conteoViewModel.setArticulosFiltrados(articulos)
+                conteoViewModel.setMostrarDialogoSeleccionArticulo(true)
+            },
+            onArticuloManual = onArticuloManual,
+            onError = { errorMsg ->
+                Log.e("ConteoLogic", "❌ Error: $errorMsg")
+                conteoViewModel.setError(errorMsg)
+            }
+        )
     }
 
 }

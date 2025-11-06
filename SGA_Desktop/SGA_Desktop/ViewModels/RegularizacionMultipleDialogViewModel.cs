@@ -71,7 +71,13 @@ namespace SGA_Desktop.ViewModels
 	// NUEVO: Palets disponibles para el palet común
 	public ObservableCollection<PaletDto> PaletsComunDisponibles { get; } = new();
 
-	// 🔷 NUEVO: Combo de almacenes para filtrar (como en TraspasosStockViewModel)
+	// 🔷 NUEVO: Almacenar todos los resultados de stock
+	private List<StockDisponibleDto> _todosLosResultadosStock = new();
+	
+	// 🔷 NUEVO: Control de estados de expansión para evitar que se cierren al filtrar
+	private Dictionary<string, bool> _estadosExpansion = new();
+	
+	// 🔷 NUEVO: Propiedades para filtro de almacén (filtra resultados)
 	public ObservableCollection<AlmacenDto> AlmacenesFiltro { get; } = new();
 	public ICollectionView AlmacenesFiltroView { get; private set; }
 	
@@ -80,16 +86,22 @@ namespace SGA_Desktop.ViewModels
 	
 	[ObservableProperty]
 	private string filtroAlmacenesTexto = "";
-
-	// 🔷 NUEVO: Propiedad para controlar la visibilidad del combo de almacenes
+	
 	[ObservableProperty]
 	private bool mostrarComboAlmacenes = false;
-
-	// 🔷 NUEVO: Almacenar todos los resultados de stock para filtrado local
-	private List<StockDisponibleDto> _todosLosResultadosStock = new();
 	
-	// 🔷 NUEVO: Control de estados de expansión para evitar que se cierren al filtrar
-	private Dictionary<string, bool> _estadosExpansion = new();
+	// 🔷 NUEVO: Propiedades para filtro de partida (filtra resultados)
+	public ObservableCollection<string> PartidasDisponibles { get; } = new();
+	public ICollectionView PartidasDisponiblesView { get; private set; }
+	
+	[ObservableProperty]
+	private string partidaSeleccionada;
+	
+	[ObservableProperty]
+	private string filtroPartidaTexto = "";
+	
+	[ObservableProperty]
+	private bool mostrarFiltroPartida = false;
 
 	partial void OnDestinoComunAlmacenChanged(AlmacenDto value)
 	{
@@ -134,6 +146,10 @@ namespace SGA_Desktop.ViewModels
 		// Inicializar la vista filtrable de almacenes
 		AlmacenesFiltroView = CollectionViewSource.GetDefaultView(AlmacenesFiltro);
 		AlmacenesFiltroView.Filter = FiltraAlmacenesFiltro;
+		
+		// Inicializar la vista filtrable de partidas
+		PartidasDisponiblesView = CollectionViewSource.GetDefaultView(PartidasDisponibles);
+		PartidasDisponiblesView.Filter = FiltraPartidasDisponibles;
 	}
 
 	public async Task InitializeAsync()
@@ -314,11 +330,13 @@ namespace SGA_Desktop.ViewModels
 
 			if (codigo == null && descripcion == null)
 			{
-				// 🔷 NUEVO: Limpiar combo de almacenes cuando no hay artículo
 				AlmacenesFiltro.Clear();
 				AlmacenFiltroSeleccionado = null;
+				PartidasDisponibles.Clear();
+				PartidaSeleccionada = null;
 				_todosLosResultadosStock.Clear();
 				MostrarComboAlmacenes = false;
+				MostrarFiltroPartida = false;
 				new WarningDialog("Aviso", "Introduce al menos código de artículo o descripción para buscar.").ShowDialog();
 				return;
 			}
@@ -335,22 +353,27 @@ namespace SGA_Desktop.ViewModels
 
 			if (resultados.Count == 0)
 			{
-				// 🔷 NUEVO: Limpiar combo cuando no hay stock
 				AlmacenesFiltro.Clear();
 				AlmacenFiltroSeleccionado = null;
+				PartidasDisponibles.Clear();
+				PartidaSeleccionada = null;
 				_todosLosResultadosStock.Clear();
 				MostrarComboAlmacenes = false;
+				MostrarFiltroPartida = false;
 				new WarningDialog("Aviso", "No hay stock para ese artículo.").ShowDialog();
 				return;
 			}
 
-			// 🔷 NUEVO: Guardar todos los resultados para filtrado local
+			// Guardar todos los resultados
 			_todosLosResultadosStock = new List<StockDisponibleDto>(resultados);
 
-			// 🔷 NUEVO: Cargar combo con los almacenes que realmente tienen stock del artículo
+			// Cargar combo con los almacenes que tienen stock del artículo
 			await CargarAlmacenesConStockAsync(resultados);
+			
+			// Cargar partidas disponibles del stock
+			CargarPartidasDisponibles(resultados);
 
-			// 🔷 NUEVO: Aplicar filtrado por almacén si hay uno seleccionado
+			// Aplicar filtrado por almacén y partida
 			await FiltrarResultadosPorAlmacen();
 		}
 		catch (Exception ex)
@@ -380,11 +403,17 @@ namespace SGA_Desktop.ViewModels
 
 			dto.CantidadAMover = cantidad;
 
+			// 🔷 CORREGIDO: Permitir añadir la misma ubicación/artículo/partida si es diferente tipo de stock
+			// (suelto vs paletizado) o si son palets diferentes
 			bool yaExiste = LineasPendientes.Any(x =>
 				x.CodigoArticulo == dto.CodigoArticulo &&
 				x.Partida == dto.Partida &&
 				x.Ubicacion == dto.Ubicacion &&
-				x.CodigoAlmacen == dto.CodigoAlmacen);
+				x.CodigoAlmacen == dto.CodigoAlmacen &&
+				// 🔷 NUEVO: Comparar también el tipo de stock y el palet
+				x.TipoStock == dto.TipoStock &&
+				// Si ambos son paletizados, comparar también el PaletId
+				(dto.TipoStock != "Paletizado" || x.PaletId == dto.PaletId));
 
 			if (yaExiste)
 			{
@@ -641,14 +670,21 @@ namespace SGA_Desktop.ViewModels
 			// 1) Consultar estado de palet ORIGEN y DESTINO para cada línea
 			foreach (var dto in LineasPendientes)
 			{
-				// Origen
-				dto.EstadoPaletOrigen = await _traspasosService.ConsultarEstadoPaletOrigenAsync(
-					empresa,
-					dto.CodigoAlmacen,
-					dto.Ubicacion
-				);
+				// 🔷 NUEVO: Origen - Solo consultar si el stock es paletizado
+				if (dto.EsStockPaletizado)
+				{
+					dto.EstadoPaletOrigen = await _traspasosService.ConsultarEstadoPaletOrigenAsync(
+						empresa,
+						dto.CodigoAlmacen,
+						dto.Ubicacion
+					);
+				}
+				else
+				{
+					dto.EstadoPaletOrigen = "NINGUNO";
+				}
 
-				// Destino (puede ser vacío → “NINGUNO”)
+				// Destino (puede ser vacío → "NINGUNO")
 				dto.EstadoPaletDestino = await _traspasosService.ConsultarEstadoPaletDestinoAsync(
 					empresa,
 					dto.AlmacenDestino,
@@ -751,8 +787,12 @@ namespace SGA_Desktop.ViewModels
 					DescripcionArticulo = dto.DescripcionArticulo,
 					Comentario = comentariosTexto, // Añadir comentarios
 					
-					// NUEVO: Incluir ID del palet destino si está seleccionado
-					PaletIdDestino = !string.IsNullOrWhiteSpace(dto.PaletDestinoId) && Guid.TryParse(dto.PaletDestinoId, out var paletId) ? paletId : null,
+					// 🔷 NUEVO: Incluir ID del palet destino si está seleccionado
+					PaletIdDestino = !string.IsNullOrWhiteSpace(dto.PaletDestinoId) && Guid.TryParse(dto.PaletDestinoId, out var paletIdDestino) ? paletIdDestino : null,
+					
+					// 🔷 NUEVO: Incluir ID del palet origen si el stock es paletizado
+					// Esto asegura que el backend use exactamente ese palet y no la lógica automática
+					PaletIdOrigen = dto.EsStockPaletizado && dto.PaletId.HasValue ? dto.PaletId.Value : (Guid?)null,
 
 					// 🔹 clave: si el ORIGEN está Cerrado, pedimos reapertura automática
 					ReabrirSiCerradoOrigen = string.Equals(dto.EstadoPaletOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase)
@@ -893,7 +933,68 @@ namespace SGA_Desktop.ViewModels
 		IsDropDownOpenUbicacionesComun = false;
 	}
 
-	// 🔷 NUEVO: Método para cargar almacenes basándose en el stock encontrado (igual que TraspasosStockViewModel)
+
+	// 🔷 Método para filtrar resultados por almacén y partida
+	private async Task FiltrarResultadosPorAlmacen()
+	{
+		// Guardar el estado de expansión antes de limpiar
+		GuardarEstadosExpansion();
+		
+		// Limpiar resultados actuales
+		ArticulosConStock.Clear();
+		
+		// Obtener stock filtrado
+		var stockFiltrado = _todosLosResultadosStock;
+		
+		// Aplicar filtro por almacén si hay uno seleccionado
+		if (AlmacenFiltroSeleccionado != null)
+		{
+			stockFiltrado = stockFiltrado.Where(x => x.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen).ToList();
+		}
+		
+		// Aplicar filtro por partida si hay una seleccionada
+		if (!string.IsNullOrWhiteSpace(PartidaSeleccionada))
+		{
+			stockFiltrado = stockFiltrado.Where(x => 
+				!string.IsNullOrEmpty(x.Partida) && 
+				x.Partida.Equals(PartidaSeleccionada, StringComparison.OrdinalIgnoreCase)).ToList();
+		}
+		
+		// Agrupar por artículo
+		var grupos = stockFiltrado.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
+								  .Select(g => new ArticuloConStockDto
+								  {
+									  CodigoArticulo = g.Key.CodigoArticulo,
+									  DescripcionArticulo = g.Key.DescripcionArticulo,
+									  Ubicaciones = new ObservableCollection<StockDisponibleDto>(
+										  g.OrderBy(x => x.CodigoAlmacen)
+											.ThenBy(x => x.Ubicacion)
+											// 🔷 NUEVO: Ordenar primero stock suelto, luego paletizado
+											.ThenBy(x => x.EsStockPaletizado ? 1 : 0)
+											// 🔷 NUEVO: Si es paletizado, ordenar por código de palet
+											.ThenBy(x => x.CodigoPalet ?? "")
+											.ToList())
+								  })
+								  .OrderBy(a => a.CodigoArticulo)
+								  .ToList();
+		
+		// Añadir grupos a la colección
+		foreach (var g in grupos)
+		{
+			// Pre-rellenar la cantidad con el valor disponible para cada ubicación
+			// 🔷 CAMBIADO: Usar formato adaptativo que muestra solo decimales significativos
+			foreach (var ubicacion in g.Ubicaciones)
+			{
+				ubicacion.CantidadAMoverTexto = Helpers.DecimalFormatHelper.FormatearCantidad(ubicacion.Disponible);
+			}
+			ArticulosConStock.Add(g);
+		}
+		
+		// Restaurar el estado de expansión después de añadir los elementos
+		await RestaurarEstadosExpansion();
+	}
+	
+	// 🔷 NUEVO: Método para cargar almacenes basándose en el stock encontrado
 	private async Task CargarAlmacenesConStockAsync(List<StockDisponibleDto> stock)
 	{
 		try
@@ -939,7 +1040,7 @@ namespace SGA_Desktop.ViewModels
 				AlmacenFiltroSeleccionado = null;
 			}
 			
-			// 🔷 NUEVO: Mostrar combo solo si hay almacenes
+			// Mostrar combo solo si hay almacenes
 			MostrarComboAlmacenes = AlmacenesFiltro.Count > 0;
 				
 			OnPropertyChanged(nameof(AlmacenesFiltro));
@@ -951,7 +1052,45 @@ namespace SGA_Desktop.ViewModels
 			MostrarComboAlmacenes = false;
 		}
 	}
-
+	
+	// 🔷 NUEVO: Método para cargar partidas disponibles del stock
+	private void CargarPartidasDisponibles(List<StockDisponibleDto> stock)
+	{
+		try
+		{
+			// Obtener partidas únicas del stock (excluyendo nulas o vacías)
+			var partidasUnicas = stock
+				.Where(x => !string.IsNullOrEmpty(x.Partida))
+				.Select(x => x.Partida)
+				.Distinct()
+				.OrderBy(x => x)
+				.ToList();
+			
+			// Limpiar y poblar la colección
+			PartidasDisponibles.Clear();
+			foreach (var partida in partidasUnicas)
+				PartidasDisponibles.Add(partida);
+			
+			// Limpiar selección previa si la partida ya no está disponible
+			if (!string.IsNullOrEmpty(PartidaSeleccionada) && 
+				!partidasUnicas.Contains(PartidaSeleccionada))
+			{
+				PartidaSeleccionada = null;
+			}
+			
+			// Mostrar filtro solo si hay partidas
+			MostrarFiltroPartida = PartidasDisponibles.Count > 0;
+			
+			OnPropertyChanged(nameof(PartidasDisponibles));
+		}
+		catch (Exception ex)
+		{
+			// En caso de error, continuar sin filtro de partidas
+			PartidasDisponibles.Clear();
+			MostrarFiltroPartida = false;
+		}
+	}
+	
 	// 🔷 NUEVO: Método para filtrar almacenes en el combo
 	private bool FiltraAlmacenesFiltro(object obj)
 	{
@@ -961,60 +1100,17 @@ namespace SGA_Desktop.ViewModels
 		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
 			.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 	}
-
-	// 🔷 NUEVO: Método para manejar cambios en el filtro de almacenes
-	partial void OnFiltroAlmacenesTextoChanged(string value)
+	
+	// 🔷 NUEVO: Método para filtrar partidas en el combo
+	private bool FiltraPartidasDisponibles(object obj)
 	{
-		AlmacenesFiltroView?.Refresh();
+		if (obj is not string partida) return false;
+		if (string.IsNullOrEmpty(FiltroPartidaTexto)) return true;
+		
+		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+			.IndexOf(partida, FiltroPartidaTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 	}
-
-	// 🔷 NUEVO: Método para filtrar resultados por almacén sin hacer nueva búsqueda
-	private async Task FiltrarResultadosPorAlmacen()
-	{
-		// Guardar el estado de expansión antes de limpiar
-		GuardarEstadosExpansion();
-		
-		// Limpiar resultados actuales
-		ArticulosConStock.Clear();
-		
-		// Obtener stock filtrado
-		var stockFiltrado = _todosLosResultadosStock;
-		
-		// Aplicar filtro por almacén si hay uno seleccionado
-		if (AlmacenFiltroSeleccionado != null)
-		{
-			stockFiltrado = stockFiltrado.Where(x => x.CodigoAlmacen == AlmacenFiltroSeleccionado.CodigoAlmacen).ToList();
-		}
-		
-		// Agrupar por artículo
-		var grupos = stockFiltrado.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
-								  .Select(g => new ArticuloConStockDto
-								  {
-									  CodigoArticulo = g.Key.CodigoArticulo,
-									  DescripcionArticulo = g.Key.DescripcionArticulo,
-									  Ubicaciones = new ObservableCollection<StockDisponibleDto>(
-										  g.OrderBy(x => x.CodigoAlmacen)
-											.ThenBy(x => x.Ubicacion)
-											.ToList())
-								  })
-								  .OrderBy(a => a.CodigoArticulo)
-								  .ToList();
-		
-		// Añadir grupos a la colección
-		foreach (var g in grupos)
-		{
-			// Pre-rellenar la cantidad con el valor disponible para cada ubicación
-			foreach (var ubicacion in g.Ubicaciones)
-			{
-				ubicacion.CantidadAMoverTexto = ubicacion.Disponible.ToString("F4");
-			}
-			ArticulosConStock.Add(g);
-		}
-		
-		// Restaurar el estado de expansión después de añadir los elementos
-		await RestaurarEstadosExpansion();
-	}
-
+	
 	// 🔷 NUEVO: Método para manejar cambios en la selección del almacén
 	partial void OnAlmacenFiltroSeleccionadoChanged(AlmacenDto value)
 	{
@@ -1024,8 +1120,33 @@ namespace SGA_Desktop.ViewModels
 			FiltroAlmacenesTexto = value.DescripcionCombo;
 		}
 		
-		// 🔷 CORREGIDO: Solo filtrar los resultados existentes, NO hacer otra búsqueda
+		// Filtrar los resultados existentes
 		_ = FiltrarResultadosPorAlmacen();
+	}
+	
+	// 🔷 NUEVO: Método para manejar cambios en el filtro de almacenes
+	partial void OnFiltroAlmacenesTextoChanged(string value)
+	{
+		AlmacenesFiltroView?.Refresh();
+	}
+	
+	// 🔷 NUEVO: Método para manejar cambios en la selección de partida
+	partial void OnPartidaSeleccionadaChanged(string value)
+	{
+		// Actualizar el texto del filtro con la selección
+		if (!string.IsNullOrEmpty(value))
+		{
+			FiltroPartidaTexto = value;
+		}
+		
+		// Filtrar los resultados existentes
+		_ = FiltrarResultadosPorAlmacen();
+	}
+	
+	// 🔷 NUEVO: Método para manejar cambios en el filtro de partidas
+	partial void OnFiltroPartidaTextoChanged(string value)
+	{
+		PartidasDisponiblesView?.Refresh();
 	}
 
 	// 🔷 NUEVO: Método para guardar estados de expansión

@@ -178,9 +178,10 @@ namespace SGA_Desktop.Services
 			var resultado = await response.Content.ReadFromJsonAsync<List<StockDisponibleDto>>() ?? new();
 			
 			// 🔷 NUEVO: Inicializar CantidadAMoverTexto con el valor máximo disponible
+			// 🔷 CAMBIADO: Usar formato adaptativo que muestra solo decimales significativos
 			foreach (var stock in resultado)
 			{
-				stock.CantidadAMoverTexto = stock.Disponible.ToString("F4");
+				stock.CantidadAMoverTexto = Helpers.DecimalFormatHelper.FormatearCantidad(stock.Disponible);
 			}
 			
 			return resultado;

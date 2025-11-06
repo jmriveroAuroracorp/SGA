@@ -60,7 +60,15 @@
    FontFamily="{StaticResource FuentePrincipal}"
              GroupName="Mode"
              Style="{StaticResource FancyRadioButton}"
-             IsChecked="{Binding IsLocationMode}"/>
+             IsChecked="{Binding IsLocationMode}"
+             Margin="0,0,40,0"/>
+
+            <RadioButton Content="Por Palet"
+                            FontWeight="Bold"
+   FontFamily="{StaticResource FuentePrincipal}"
+             GroupName="Mode"
+             Style="{StaticResource FancyRadioButton}"
+             IsChecked="{Binding IsPaletMode, Mode=TwoWay}"/>
         </StackPanel>
 
         <Grid Grid.Row="1" Margin="20,10">
@@ -100,23 +108,12 @@
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="250"
                           Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding AlmacenesComboArticleView}"
+                          ItemsSource="{Binding AlmacenesCombo}"
                           DisplayMemberPath="DescripcionCombo"
                           SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"
-                          Text="{Binding FiltroAlmacenesCombo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                           IsEnabled="{Binding CanEnableInputs}"
                           IsEditable="True"
-                          IsTextSearchEnabled="False"
-                          StaysOpenOnEdit="True">
-                            <i:Interaction.Triggers>
-                                <i:EventTrigger EventName="GotFocus">
-                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesCommand}"/>
-                                </i:EventTrigger>
-                                <i:EventTrigger EventName="TextChanged">
-                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesCommand}"/>
-                                </i:EventTrigger>
-                            </i:Interaction.Triggers>
-                        </ComboBox>
+                          IsTextSearchEnabled="True"/>
                     </StackPanel>
 
                     <!-- Ubicación -->
@@ -125,22 +122,11 @@
                         <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="120"
                           Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding UbicacionesView}"
+                          ItemsSource="{Binding Ubicaciones}"
                           SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
-                          Text="{Binding FiltroUbicaciones, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                           IsEditable="True"
-                          IsTextSearchEnabled="False"
-                          StaysOpenOnEdit="True"
-                          MaxDropDownHeight="200">
-                            <i:Interaction.Triggers>
-                                <i:EventTrigger EventName="GotFocus">
-                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownUbicacionesCommand}"/>
-                                </i:EventTrigger>
-                                <i:EventTrigger EventName="TextChanged">
-                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUbicacionesCommand}"/>
-                                </i:EventTrigger>
-                            </i:Interaction.Triggers>
-                        </ComboBox>
+                          IsTextSearchEnabled="True"
+                          MaxDropDownHeight="200"/>
                     </StackPanel>
 
                     <!-- Combo de Artículos únicos (solo tras búsqueda por descripción) -->
@@ -162,22 +148,11 @@
                         <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="250"
                          Style="{StaticResource EstiloComboBox}"
-                         ItemsSource="{Binding AlmacenesComboLocationView}"
+                         ItemsSource="{Binding AlmacenesCombo}"
                          DisplayMemberPath="DescripcionCombo"
                          SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"
-                         Text="{Binding FiltroAlmacenesComboLocation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          IsEditable="True"
-                         IsTextSearchEnabled="False"
-                         StaysOpenOnEdit="True">
-                            <i:Interaction.Triggers>
-                                <i:EventTrigger EventName="GotFocus">
-                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesLocationCommand}"/>
-                                </i:EventTrigger>
-                                <i:EventTrigger EventName="TextChanged">
-                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionAlmacenesLocationCommand}"/>
-                                </i:EventTrigger>
-                            </i:Interaction.Triggers>
-                        </ComboBox>
+                         IsTextSearchEnabled="True"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0"
@@ -185,22 +160,11 @@
                         <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
                         <ComboBox Width="120"
                           Style="{StaticResource EstiloComboBox}"
-                          ItemsSource="{Binding UbicacionesUbicacionView}"
+                          ItemsSource="{Binding Ubicaciones}"
                           SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
-                          Text="{Binding FiltroUbicacionesUbicacion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                           IsEditable="True"
-                          IsTextSearchEnabled="False"
-                          StaysOpenOnEdit="True"
-                          KeyDown="TextBox_KeyDown">
-                            <i:Interaction.Triggers>
-                                <i:EventTrigger EventName="GotFocus">
-                                    <i:InvokeCommandAction Command="{Binding AbrirDropDownUbicacionesUbicacionCommand}"/>
-                                </i:EventTrigger>
-                                <i:EventTrigger EventName="TextChanged">
-                                    <i:InvokeCommandAction Command="{Binding LimpiarSeleccionUbicacionesUbicacionCommand}"/>
-                                </i:EventTrigger>
-                            </i:Interaction.Triggers>
-                        </ComboBox>
+                          IsTextSearchEnabled="True"
+                          KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
                     <StackPanel Orientation="Vertical">
                         <TextBlock Text="Buscar" FontWeight="Bold" Margin="0,0,0,4"/>
@@ -210,6 +174,53 @@
                          Text="{Binding FiltroBusqueda, UpdateSourceTrigger=PropertyChanged}"
                          ToolTip="Buscar por código o descripción"
                           Style="{StaticResource EstiloCajaTexto}"
+                         KeyDown="TextBox_KeyDown"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Filtros por palet -->
+                <StackPanel Orientation="Horizontal" Visibility="{Binding PaletFiltersVisibility}">
+                    <!-- Artículo -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Código Artículo" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Width="150"
+                         Style="{StaticResource EstiloCajaTexto}"
+                         Text="{Binding FiltroArticuloPalet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         KeyDown="TextBox_KeyDown"/>
+                    </StackPanel>
+
+                    <!-- Almacén -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="250"
+                         Style="{StaticResource EstiloComboBox}"
+                         ItemsSource="{Binding AlmacenesCombo}"
+                         DisplayMemberPath="DescripcionCombo"
+                         SelectedItem="{Binding AlmacenSeleccionadoCombo, Mode=TwoWay}"
+                         IsEditable="True"
+                         IsTextSearchEnabled="True"/>
+                    </StackPanel>
+
+                    <!-- Ubicación -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Ubicación" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ComboBox Width="120"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding Ubicaciones}"
+                          SelectedItem="{Binding FiltroUbicacion, Mode=TwoWay}"
+                          IsEditable="True"
+                          IsTextSearchEnabled="True"
+                          KeyDown="TextBox_KeyDown"/>
+                    </StackPanel>
+
+                    <!-- Código Palet -->
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock Text="Código Palet" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Width="150"
+                         Style="{StaticResource EstiloCajaTexto}"
+                         Text="{Binding FiltroCodigoPalet, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Código del palet a buscar (requiere seleccionar un almacén)"
+                         IsEnabled="{Binding CodigoPaletHabilitado}"
                          KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
                 </StackPanel>
@@ -302,11 +313,6 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 <Setter Property="Background" Value="White"/>
                                 <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                 <Style.Triggers>
-                                    <!-- 🔷 NUEVO: Bloqueo por calidad -->
-                                    <DataTrigger Binding="{Binding IsBloqueadoCalidad}" Value="True">
-                                        <Setter Property="BorderBrush" Value="#FF6B6B"/>
-                                        <Setter Property="BorderThickness" Value="4"/>
-                                    </DataTrigger>
                                     <!-- Hover -->
                                     <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
                                         <Setter Property="Background" Value="#E6F0FA"/>
@@ -315,27 +321,67 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             </Style>
                         </Border.Style>
 
-                        <!-- 👇 Expander con header del artículo -->
-                        <Expander IsExpanded="{Binding IsExpanded}"
-                                  Margin="8,4">
-                            <Expander.Header>
-                                <TextBlock Text="{Binding HeaderArticulo}"
-                                           FontWeight="Bold"
-                                           FontSize="16"
-                                           Foreground="{StaticResource BrushPrincipal}"/>
-                            </Expander.Header>
+                        <!-- Grid principal: Expander ocupa todo el ancho -->
+                        <Grid Margin="8,4">
+                            <!-- 👇 Expander con header del artículo - ocupa todo el ancho -->
+                            <Expander IsExpanded="{Binding IsExpanded}"
+                                      HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Stretch">
+                                <Expander.Header>
+                                    <Grid HorizontalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding HeaderArticulo}"
+                                                   FontWeight="Bold"
+                                                   FontSize="16"
+                                                   Foreground="{StaticResource BrushPrincipal}"
+                                                   VerticalAlignment="Center"
+                                                   Grid.Column="0"/>
+                                        <Border Grid.Column="1"
+                                                Background="#E3F2FD"
+                                                CornerRadius="4"
+                                                Padding="12,8"
+                                                BorderThickness="1"
+                                                BorderBrush="{StaticResource BrushPrincipal}"
+                                                HorizontalAlignment="Right"
+                                                Margin="12,0,0,0"
+                                                MinWidth="180">
+                                            <StackPanel Orientation="Vertical">
+                                                <TextBlock Text="Total"
+                                                           FontWeight="Bold"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                           HorizontalAlignment="Center"
+                                                           Margin="0,0,0,4"/>
+                                                <TextBlock Text="{Binding TotalArticulo, StringFormat='0.######'}"
+                                                           FontWeight="Bold"
+                                                           FontSize="20"
+                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                           HorizontalAlignment="Center"
+                                                           TextAlignment="Center"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Expander.Header>
+                                
                             <ListView ItemsSource="{Binding Ubicaciones}" 
                                       SelectedItem="{Binding Data.ArticuloSeleccionadoParaImprimir, Source={StaticResource VmProxy}, Mode=TwoWay}"
                                       SelectionMode="Single"
-                                      Margin="8,4,8,8"
-                                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                      Margin="0,4,0,8"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                      ScrollViewer.CanContentScroll="False">
+                                      ScrollViewer.CanContentScroll="False"
+                                      HorizontalContentAlignment="Stretch"
+                                      HorizontalAlignment="Stretch">
                                       
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem">
                                         <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
                                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="HorizontalAlignment" Value="Stretch"/>
                                         <Setter Property="Margin" Value="0,0,0,5"/>
                                         <Setter Property="Background" Value="Transparent"/>
                                         <Setter Property="Foreground" Value="Black"/>
@@ -371,7 +417,8 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                         BorderThickness="2"
                                         BorderBrush="{StaticResource BrushPrincipal}"
                                         Background="White"
-                                        Margin="0,0,0,5">
+                                        Margin="0,0,0,5"
+                                        HorizontalAlignment="Stretch">
 
                         <Border.Style>
                             <Style TargetType="Border">
@@ -397,7 +444,8 @@ CommandParameter="{Binding FechaCaducidad}"/>
                         </Border.Style>
 
                                             <!-- 👇 Tu contenido -->
-                        <Grid Margin="8,4">
+                        <Grid Margin="8,4"
+                              HorizontalAlignment="Stretch">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -405,7 +453,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="220"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- FILA 1: Código, Descripción, Almacén, Ubicación -->
@@ -486,7 +534,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                                         </Style>
                                                     </Ellipse.Style>
                                                 </Ellipse>
-                                                <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:F4}'}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:0.########}'}" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -520,7 +568,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                                             </Style>
                                                         </Ellipse.Style>
                                                     </Ellipse>
-                                                    <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:F4}'}" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:0.########}'}" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -544,7 +592,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                             </ToolTip>
                                         </TextBlock.ToolTip>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat=F4}" Margin="4,0,12,0"/>
+                                    <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat='0.######'}" Margin="4,0,12,0" MinWidth="120" TextAlignment="Left"/>
                                     <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
                                         <TextBlock.ToolTip>
                                             <ToolTip>
@@ -560,7 +608,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                             </ToolTip>
                                         </TextBlock.ToolTip>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat=F4}" Margin="4,0,0,0"/>
+                                    <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat='0.######'}" Margin="4,0,0,0" MinWidth="120" TextAlignment="Left"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -570,17 +618,21 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             CornerRadius="6"
                             Padding="12,4"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal">
+                            VerticalAlignment="Center"
+                            MinWidth="280">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                     <TextBlock Text="Disponible:" 
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}" 
                                        FontSize="15"
-                                       Margin="0,0,4,0"/>
-                                                        <TextBlock Text="{Binding Disponible, StringFormat=F4}"  
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding Disponible, StringFormat='0.######'}"  
                                        FontWeight="Bold" 
                                        FontSize="22"
-                                                           Foreground="{Binding Disponible, Converter={StaticResource NegativeValueColorConverter}}"/>
+                                       Foreground="{Binding Disponible, Converter={StaticResource NegativeValueColorConverter}}"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -589,17 +641,18 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 </ListView.ItemTemplate>
                             </ListView>
                         </Expander>
+                    </Grid>
                     </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
 
 
-        <!-- RESULTADOS: MODO POR UBICACIÓN -->
+        <!-- RESULTADOS: MODO POR UBICACIÓN Y POR PALET -->
         <ListView Grid.Row="3"
-          ItemsSource="{Binding ResultadosStockPorUbicacion}"
+          ItemsSource="{Binding ResultadosActivos}"
           SelectedItem="{Binding ArticuloSeleccionadoParaImprimir, Mode=TwoWay}"
-          Visibility="{Binding IsLocationMode, Converter={StaticResource BoolToVis}}"
+          Visibility="{Binding MostrarResultadosUbicacion, Converter={StaticResource BoolToVis}}"
           SelectionMode="Single"
           ScrollViewer.VerticalScrollBarVisibility="Auto"
           ScrollViewer.CanContentScroll="False"
@@ -682,7 +735,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="220"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- FILA 1: Código, Descripción, Almacén, Ubicación -->
@@ -763,7 +816,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                                         </Style>
                                                     </Ellipse.Style>
                                                 </Ellipse>
-                                                <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:F4}'}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:0.######}'}" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -797,7 +850,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                                             </Style>
                                                         </Ellipse.Style>
                                                     </Ellipse>
-                                                    <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:F4}'}" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Cantidad, StringFormat='Cantidad: {0:0.######}'}" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -821,7 +874,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                             </ToolTip>
                                         </TextBlock.ToolTip>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat=F4}" Margin="4,0,12,0"/>
+                                    <TextBlock Text="{Binding TotalArticuloGlobal, StringFormat='0.######'}" Margin="4,0,12,0" MinWidth="120" TextAlignment="Left"/>
                                     <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
                                         <TextBlock.ToolTip>
                                             <ToolTip>
@@ -837,7 +890,7 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                             </ToolTip>
                                         </TextBlock.ToolTip>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat=F4}" Margin="4,0,0,0"/>
+                                    <TextBlock Text="{Binding TotalArticuloAlmacen, StringFormat='0.######'}" Margin="4,0,0,0" MinWidth="120" TextAlignment="Left"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -847,17 +900,21 @@ CommandParameter="{Binding FechaCaducidad}"/>
                             CornerRadius="6"
                             Padding="12,4"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal">
+                            VerticalAlignment="Center"
+                            MinWidth="280">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                     <TextBlock Text="Disponible:" 
                                        FontWeight="Bold" 
                                        Foreground="{StaticResource BrushPrincipal}" 
                                        FontSize="15"
-                                       Margin="0,0,4,0"/>
-                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat=F4}"  
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding UnidadSaldo, StringFormat='0.######'}"  
                                        FontWeight="Bold" 
                                        FontSize="22"
-                                       Foreground="{Binding UnidadSaldo, Converter={StaticResource NegativeValueColorConverter}}"/>
+                                       Foreground="{Binding UnidadSaldo, Converter={StaticResource NegativeValueColorConverter}}"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </Grid>

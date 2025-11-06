@@ -102,15 +102,15 @@ class ConteoViewModel : ViewModel() {
     private val _conteoCompletado = MutableStateFlow(false)
     val conteoCompletado: StateFlow<Boolean> = _conteoCompletado.asStateFlow()
 
-    // Estados para selección de palets
+    // Estados para selección de palet
     private val _paletsDisponibles = MutableStateFlow<List<PaletDisponible>>(emptyList())
-    val paletsDisponibles: StateFlow<List<PaletDisponible>> = _paletsDisponibles.asStateFlow()
+    val paletsDisponibles: StateFlow<List<PaletDisponible>> = _paletsDisponibles
 
     private val _mostrarDialogoSeleccionPalet = MutableStateFlow(false)
-    val mostrarDialogoSeleccionPalet: StateFlow<Boolean> = _mostrarDialogoSeleccionPalet.asStateFlow()
+    val mostrarDialogoSeleccionPalet: StateFlow<Boolean> = _mostrarDialogoSeleccionPalet
 
     private val _paletSeleccionado = MutableStateFlow<PaletDisponible?>(null)
-    val paletSeleccionado: StateFlow<PaletDisponible?> = _paletSeleccionado.asStateFlow()
+    val paletSeleccionado: StateFlow<PaletDisponible?> = _paletSeleccionado
 
 
     // Setters
@@ -247,8 +247,8 @@ class ConteoViewModel : ViewModel() {
         _articuloParaConfirmar.value = null
         _mostrarDialogoSeleccionArticulo.value = false
         _articulosFiltrados.value = emptyList()
-        _mostrarDialogoSeleccionPalet.value = false
         _paletsDisponibles.value = emptyList()
+        _mostrarDialogoSeleccionPalet.value = false
         _paletSeleccionado.value = null
     }
 

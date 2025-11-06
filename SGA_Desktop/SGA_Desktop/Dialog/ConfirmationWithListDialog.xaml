@@ -52,7 +52,13 @@
                             <GridView>
                                 <GridViewColumn Header="Artículo" Width="120" DisplayMemberBinding="{Binding CodigoArticulo}"/>
                                 <GridViewColumn Header="Descripción" Width="150" DisplayMemberBinding="{Binding DescripcionArticulo}"/>
-                                <GridViewColumn Header="Cantidad" Width="80" DisplayMemberBinding="{Binding Cantidad}"/>
+                                <GridViewColumn Header="Cantidad" Width="80">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Cantidad, StringFormat='0.########'}"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                                 <GridViewColumn Header="Lote" Width="100" DisplayMemberBinding="{Binding Lote}"/>
                                 <GridViewColumn Header="Ubicación" Width="100" DisplayMemberBinding="{Binding Ubicacion}"/>
                             </GridView>

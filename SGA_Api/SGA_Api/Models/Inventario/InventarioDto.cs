@@ -136,6 +136,8 @@ namespace SGA_Api.Models.Inventario
         public int? UsuarioConsolidacionId { get; set; }
 
         // === PROPIEDADES PARA INFORMACIÓN DE PALETS ===
+        [JsonPropertyName("paletId")]
+        public Guid? PaletId { get; set; }
         
         /// <summary>
         /// Información de los palets que contienen este stock

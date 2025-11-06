@@ -12,6 +12,7 @@
             <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
             <helpers:NullToBoolConverter x:Key="NullToBoolConverter" />
             <helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter" />
+            <helpers:NegativeValueColorConverter x:Key="NegativeValueColorConverter"/>
             <DataTemplate x:Key="ArticuloExpanderHeaderTemplate">
                 <StackPanel Orientation="Horizontal" Margin="8,2">
                     <TextBlock Text="{Binding CodigoArticulo}" 
@@ -38,51 +39,129 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
-            <!-- Lado izquierdo: Buscador -->
-            <StackPanel Orientation="Horizontal" Grid.Column="0">
-                <TextBlock Text="Buscar artículo:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center"/>
-                <TextBox Width="200" Margin="8,0,0,0" Style="{StaticResource EstiloCajaTexto}"
-                         Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Return" Command="{Binding BuscarStockCommand}"/>
-                    </TextBox.InputBindings>
-                </TextBox>
-                <Button Content="🔍" Width="40" Height="40" Margin="8,0,0,0" Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding BuscarStockCommand}"/>
+            <!-- Lado izquierdo: Buscador y Filtros -->
+            <StackPanel Grid.Column="0">
+                <!-- Fila 1: Buscador de artículo y Botones -->
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Buscador -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock Text="Buscar artículo:" 
+                                   Style="{StaticResource LabelStyle}" 
+                                   VerticalAlignment="Center"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushPrincipal}"/>
+                        <TextBox Width="200" 
+                                 Height="36"
+                                 Margin="8,0,0,0" 
+                                 Style="{StaticResource EstiloCajaTexto}"
+                             Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding BuscarStockCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+                        <Button Content="🔍" 
+                                Width="40" 
+                                Height="36" 
+                                Margin="8,0,0,0" 
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                            Command="{Binding BuscarStockCommand}"/>
+                </StackPanel>
                 
-                <!-- NUEVO: Combo de almacenes para filtrar -->
+                    <!-- Botones de acción alineados con el buscador -->
+                    <StackPanel Grid.Column="2" 
+                               Orientation="Horizontal" 
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <Button Content="Ver Histórico"
+                                Width="140" 
+                                Height="36" 
+                                Margin="0,0,8,0"
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                Command="{Binding VerHistorialCommand}"/>
+                        <Button Content="Traspaso múltiple"
+                                Width="140" 
+                                Height="36" 
+                                Margin="0,0,8,0"
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                Command="{Binding AbrirDialogoRegularizacionMultipleCommand}"/>
+                        <Button Content="Refrescar"
+                                Width="120" 
+                                Height="36"
+                                Command="{Binding RefrescarCommand}"
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                ToolTip="Actualizar la lista de stock"/>
+                    </StackPanel>
+                </Grid>
+                
+                <!-- Fila 2: Filtros -->
                 <StackPanel Orientation="Horizontal" 
-                            Visibility="{Binding MostrarComboAlmacenes, Converter={StaticResource BoolToVisibilityConverter}}"
-                            Margin="20,0,0,0">
-                    <TextBlock Text="Filtrar por almacén:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox Width="250" Height="40" Margin="8,0,0,0"
-                              Style="{StaticResource EstiloComboBox}"
-                              ItemsSource="{Binding AlmacenesFiltroView}"
-                              DisplayMemberPath="DescripcionCombo"
-                              SelectedItem="{Binding AlmacenFiltroSeleccionado, Mode=TwoWay}"
-                              Text="{Binding FiltroAlmacenesTexto, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              IsEditable="True"
-                              IsTextSearchEnabled="False"
-                              StaysOpenOnEdit="True"/>
+                            Visibility="{Binding MostrarComboAlmacenes, Converter={StaticResource BoolToVisibilityConverter}}">
+                    
+                    <!-- Filtro de Almacén -->
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0">
+                        <TextBlock Text="Filtrar por almacén" 
+                                   FontWeight="Bold" 
+                                   FontSize="13"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   Margin="0,0,0,4"/>
+                        <ComboBox Width="220" 
+                                  Height="36"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  ItemsSource="{Binding AlmacenesFiltro}"
+                                  DisplayMemberPath="DescripcionCombo"
+                                  SelectedItem="{Binding AlmacenFiltroSeleccionado, Mode=TwoWay}"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="True"/>
+                    </StackPanel>
+                    
+                    <!-- Filtro de Partida -->
+                    <StackPanel Orientation="Vertical" 
+                                Margin="0,0,20,0"
+                                Visibility="{Binding MostrarFiltroPartida, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="Filtrar por partida" 
+                                   FontWeight="Bold" 
+                                   FontSize="13"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   Margin="0,0,0,4"/>
+                        <ComboBox Width="180" 
+                                  Height="36"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  ItemsSource="{Binding PartidasDisponibles}"
+                                  SelectedItem="{Binding PartidaSeleccionada, Mode=TwoWay}"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="True"
+                                  ToolTip="Selecciona o escribe para filtrar por partida"/>
+                    </StackPanel>
+                    
+                    <!-- Filtro de Palets -->
+                    <StackPanel Orientation="Vertical" 
+                                Margin="0,0,0,0"
+                                Visibility="{Binding MostrarFiltroPalets, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="Filtrar por palet" 
+                                   FontWeight="Bold" 
+                                   FontSize="13"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   Margin="0,0,0,4"/>
+                        <ComboBox Width="180" 
+                                  Height="36"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  ItemsSource="{Binding PaletsDisponibles}"
+                                  SelectedItem="{Binding PaletSeleccionado, Mode=TwoWay}"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="True"
+                                  ToolTip="Selecciona o escribe para filtrar por palet"/>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
             
-            <!-- Lado derecho: Botones de acción -->
-            <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
-                <Button Content="Ver Histórico"
-                        Width="140" Height="40" Margin="0,0,8,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding VerHistorialCommand}"/>
-                <Button Content="Traspaso múltiple"
-                        Width="140" Height="40" Margin="0,0,8,0"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding AbrirDialogoRegularizacionMultipleCommand}"/>
-                <Button Content="Refrescar"
-                        Width="100" Height="40"
-                        Command="{Binding RefrescarCommand}"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        ToolTip="Actualizar la lista de stock"/>
-            </StackPanel>
+            <!-- Espaciador para mantener el layout -->
+            <StackPanel Grid.Column="1" />
         </Grid>
 
         <!-- Stock disponible: agrupado o clásico -->
@@ -128,19 +207,20 @@
                                                                                     </Style.Triggers>
                                                                                 </Style>
                                                                             </Border.Style>
-                                                                            <Grid Margin="8,4">
+                                                                            <Grid Margin="12,8">
                                                                                 <Grid.RowDefinitions>
+                                                                                    <RowDefinition Height="Auto"/>
                                                                                     <RowDefinition Height="Auto"/>
                                                                                     <RowDefinition Height="Auto"/>
                                                                                     <RowDefinition Height="Auto"/>
                                                                                 </Grid.RowDefinitions>
                                                                                 <Grid.ColumnDefinitions>
                                                                                     <ColumnDefinition Width="*"/>
-                                                                                    <ColumnDefinition Width="220"/>
+                                                                                    <ColumnDefinition Width="300"/>
                                                                                 </Grid.ColumnDefinitions>
 
-                                                                                <!-- Fila 1: Datos principales -->
-                                                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,0" >
+                                                                                <!-- Fila 0: Código y Descripción del artículo -->
+                                                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6">
                                                                                     <!-- 🔷 NUEVO: Indicador de bloqueo por calidad -->
                                                                                     <Border Background="#FF6B6B" 
                                                                                             CornerRadius="3" 
@@ -167,23 +247,37 @@
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                     
-                                                                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                                    <TextBlock Text="{Binding CodigoAlmacen}" Margin="2,0,12,0"/>
-                                                                                    <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                                    <TextBlock Text="{Binding Ubicacion}" Margin="2,0,12,0"/>
-                                                                                    <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                                    <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
-                                                                                    <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,0,0"/>
+                                                                                    <TextBlock Text="{Binding CodigoArticulo}"
+                                                                                               FontWeight="Bold"
+                                                                                               FontSize="18"
+                                                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                                                               Margin="0,0,12,0"/>
+                                                                                    <TextBlock Text="{Binding DescripcionArticulo}"
+                                                                                               FontSize="16"
+                                                                                               FontWeight="SemiBold"
+                                                                                               Margin="0,0,0,0"/>
                                                                                 </StackPanel>
 
-                                                                                <!-- NUEVA FILA: Información del palet (solo si es paletizado) -->
-                                                                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0"
+                                                                                <!-- Fila 1: Almacén, Ubicación, Lote y Caducidad -->
+                                                                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6">
+                                                                                    <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
+                                                                                    <TextBlock Text="{Binding CodigoAlmacen}" Margin="4,0,20,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
+                                                                                    <TextBlock Text="{Binding Ubicacion}" Margin="4,0,20,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
+                                                                                    <TextBlock Text="{Binding Partida}" Margin="4,0,20,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
+                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="4,0,0,0" FontSize="14" FontWeight="Bold"/>
+                                                                                </StackPanel>
+
+                                                                                <!-- Fila 2: Palet (si es paletizado) -->
+                                                                                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6"
                                                                                             Visibility="{Binding EsStockPaletizado, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                                                    <TextBlock Text="Palet:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                    <TextBlock Text="Palet:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
                                                                                     <TextBlock Text="{Binding CodigoPalet}" 
                                                                                                FontWeight="Bold" 
-                                                                                               Margin="2,0,6,0"/>
+                                                                                               FontSize="14"
+                                                                                               Margin="4,0,8,0"/>
                                                                                     <Ellipse Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center">
                                                                                         <Ellipse.Style>
                                                                                             <Style TargetType="Ellipse">
@@ -204,22 +298,43 @@
                                                                                     </Ellipse>
                                                                                     <TextBlock Text="{Binding EstadoPalet}" 
                                                                                                FontWeight="Bold" 
-                                                                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                                                               FontSize="14"/>
                                                                                 </StackPanel>
 
-                                                                                <!-- Fila 2: Solo Reservado (si hay) -->
-                                                                                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
+                                                                                <!-- Fila 3: Reservado (si hay) -->
+                                                                                <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,0">
                                                                                     <TextBlock Text="Reservado:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
+                                                                                               FontSize="14"
                                                                                                Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
-                                                                                    <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="2,0,0,0" 
+                                                                                    <TextBlock Text="{Binding Reservado, StringFormat='0.######'}" 
+                                                                                               Margin="4,0,0,0" 
+                                                                                               FontSize="14"
+                                                                                               FontWeight="Bold"
                                                                                                Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
                                                                                 </StackPanel>
 
                                                                                 <!-- Disponible destacado a la derecha -->
-                                                                                <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Background="#F0F6FF" CornerRadius="6" Padding="12,4" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                                                                    <StackPanel Orientation="Horizontal">
-                                                                                        <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="15" Margin="0,0,4,0"/>
-                                                                                        <TextBlock Text="{Binding Disponible, StringFormat=F4}"  FontWeight="Bold" FontSize="22"/>
+                                                                                <Border Grid.Row="0" Grid.RowSpan="4" Grid.Column="1"
+                                                                                        Background="#F0F6FF"
+                                                                                        CornerRadius="6"
+                                                                                        Padding="12,8"
+                                                                                        HorizontalAlignment="Right"
+                                                                                        VerticalAlignment="Center"
+                                                                                        MinWidth="280">
+                                                                                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                                                                        <TextBlock Text="Disponible:" 
+                                                                                                   FontWeight="Bold" 
+                                                                                                   Foreground="{StaticResource BrushPrincipal}" 
+                                                                                                   FontSize="15"
+                                                                                                   HorizontalAlignment="Center"
+                                                                                                   Margin="0,0,0,6"/>
+                                                                                        <TextBlock Text="{Binding Disponible, StringFormat='0.######'}"  
+                                                                                                   FontWeight="Bold" 
+                                                                                                   FontSize="24"
+                                                                                                   Foreground="{Binding Disponible, Converter={StaticResource NegativeValueColorConverter}}"
+                                                                                                   HorizontalAlignment="Center"
+                                                                                                   TextAlignment="Center"/>
                                                                                     </StackPanel>
                                                                                 </Border>
                                                                             </Grid>

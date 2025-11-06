@@ -96,15 +96,15 @@
                 </StackPanel>
 
                 <TextBlock Text="Cantidad disponible:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8"/>
-                <TextBlock Text="{Binding CantidadDisponible}" Margin="0,0,0,12"/>
+                <TextBlock Text="{Binding CantidadDisponible, StringFormat='0.######'}" Margin="0,0,0,12"/>
 
                 <TextBlock Text="Reservado:" Style="{StaticResource LabelStyle}" Margin="0,0,0,8" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
-                <TextBlock Text="{Binding Reservado, StringFormat=F4}" Margin="0,0,0,12" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
+                <TextBlock Text="{Binding Reservado, StringFormat='0.######'}" Margin="0,0,0,12" Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
 
-                <Border Background="#F0F6FF" CornerRadius="6" Padding="12,4" Margin="0,8,0,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="15" Margin="0,0,4,0"/>
-                        <TextBlock Text="{Binding Disponible, StringFormat=F4}" Foreground="{StaticResource BrushPrincipal}" FontWeight="Bold" FontSize="22"/>
+                <Border Background="#F0F6FF" CornerRadius="6" Padding="12,8" Margin="0,8,0,0" MinWidth="250">
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                        <TextBlock Text="Disponible:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="15" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                        <TextBlock Text="{Binding Disponible, StringFormat='0.######'}" Foreground="{StaticResource BrushPrincipal}" FontWeight="Bold" FontSize="22" HorizontalAlignment="Center" TextAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

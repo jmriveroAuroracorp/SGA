@@ -18,10 +18,11 @@ object StockDisponibleMapper {
             unidadesSaldo       = dto.disponible,
             reservado           = dto.reservado ?: 0.0,
             disponible          = dto.disponible,
-            tipoStock           = "Disponible", // StockDisponibleDto no distingue entre suelto/paletizado
-            paletId             = null,
-            codigoPalet         = null,
-            estadoPalet         = null
+            tipoStock           = dto.tipoStock ?: "Suelto", // Usar el tipoStock real del endpoint
+            paletId             = dto.paletId,
+            codigoPalet         = dto.codigoPalet,
+            estadoPalet         = dto.estadoPalet,
+            ordenTrabajoId      = dto.ordenTrabajoId
         )
     }
 }

@@ -20,7 +20,8 @@ object StockMapper {
             tipoStock = dto.tipoStock,
             paletId = dto.paletId,
             codigoPalet = dto.codigoPalet,
-            estadoPalet = dto.estadoPalet
+            estadoPalet = dto.estadoPalet,
+            ordenTrabajoId = dto.ordenTrabajoId
         )
     }
 }

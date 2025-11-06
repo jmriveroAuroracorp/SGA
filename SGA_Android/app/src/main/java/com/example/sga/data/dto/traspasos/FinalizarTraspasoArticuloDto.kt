@@ -6,6 +6,10 @@ data class FinalizarTraspasoArticuloDto(
     val almacenDestino: String,
     val ubicacionDestino: String,
     val usuarioId: Int,
-    @SerializedName("confirmarAgregarAPalet")
-    val confirmarAgregarAPalet: Boolean? = null
+    @SerializedName("ConfirmarAgregarAPalet")
+    val confirmarAgregarAPalet: Boolean? = null,
+    @SerializedName("DejarSuelto")
+    val dejarSuelto: Boolean? = null,
+    @SerializedName("PaletIdConfirmado")
+    val paletIdConfirmado: String? = null  // ID del palet seleccionado mediante escaneo GS1
 ) 

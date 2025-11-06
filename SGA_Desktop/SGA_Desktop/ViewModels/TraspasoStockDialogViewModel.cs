@@ -268,7 +268,8 @@ namespace SGA_Desktop.ViewModels
             EstadoPalet = stockSeleccionado.EstadoPalet ?? "";
             
             // 🔷 NUEVO: Establecer la cantidad disponible como valor por defecto
-            CantidadATraspasarTexto = stockSeleccionado.Disponible.ToString("F4");
+            // 🔷 CAMBIADO: Usar formato adaptativo que muestra solo decimales significativos
+            CantidadATraspasarTexto = Helpers.DecimalFormatHelper.FormatearCantidad(stockSeleccionado.Disponible);
             
             _ = InitializeAsync();
         }
@@ -340,35 +341,41 @@ namespace SGA_Desktop.ViewModels
 			var empresa = SessionManager.EmpresaSeleccionada.Value;
 
 			// --- ORIGEN ---
+			// 🔷 NUEVO: Solo consultar estado de palet si el stock ES paletizado
 			bool reabrirOrigen = false; // ← se enviará al DTO si el usuario acepta
 			var ubicacionOrigen = _stockSeleccionado.Ubicacion ?? "";
-			var estadoOrigen = await _traspasoService.ConsultarEstadoPaletOrigenAsync(
-				empresa,
-				_stockSeleccionado.CodigoAlmacen,
-				ubicacionOrigen
-			);
-
-			if (string.Equals(estadoOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase))
+			
+			// Solo validar palet de origen si el stock está paletizado
+			if (EsStockPaletizado)
 			{
-				var confirmOrigen = new ConfirmationDialog(
-					"Palet de origen cerrado",
-					"El palet de ORIGEN está CERRADO. ¿Deseas reabrirlo para poder extraer stock?"
+				var estadoOrigen = await _traspasoService.ConsultarEstadoPaletOrigenAsync(
+					empresa,
+					_stockSeleccionado.CodigoAlmacen,
+					ubicacionOrigen
 				);
 
-				// 🔷 MEJORADO: Centrar el diálogo
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-						 ?? Application.Current.MainWindow;
-				if (owner != null && owner != confirmOrigen)
-					confirmOrigen.Owner = owner;
+				if (string.Equals(estadoOrigen, "Cerrado", StringComparison.OrdinalIgnoreCase))
+				{
+					var confirmOrigen = new ConfirmationDialog(
+						"Palet de origen cerrado",
+						"El palet de ORIGEN está CERRADO. ¿Deseas reabrirlo para poder extraer stock?"
+					);
 
-				if (confirmOrigen.ShowDialog() == true)
-				{
-					reabrirOrigen = true; // ← que lo reabra el backend
-				}
-				else
-				{
-					Feedback = "Operación cancelada: palet de origen cerrado.";
-					return;
+					// 🔷 MEJORADO: Centrar el diálogo
+					var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							 ?? Application.Current.MainWindow;
+					if (owner != null && owner != confirmOrigen)
+						confirmOrigen.Owner = owner;
+
+					if (confirmOrigen.ShowDialog() == true)
+					{
+						reabrirOrigen = true; // ← que lo reabra el backend
+					}
+					else
+					{
+						Feedback = "Operación cancelada: palet de origen cerrado.";
+						return;
+					}
 				}
 			}
 
@@ -461,7 +468,10 @@ namespace SGA_Desktop.ViewModels
 
 			// 🔹 NUEVO: Opciones de paletización
 			ConfirmarAgregarAPalet = OpcionPaletizarSeleccionada ? true : (bool?)null,
-			DejarSuelto = OpcionDejarSueltoSeleccionada ? true : (bool?)null
+			DejarSuelto = OpcionDejarSueltoSeleccionada ? true : (bool?)null,
+			
+			// 🔷 NUEVO: Enviar el palet origen si el usuario seleccionó stock desde un palet
+			PaletIdOrigen = _stockSeleccionado.PaletId
 		};
 
 			var resultado = await _traspasoService.CrearTraspasoArticuloAsync(dto);

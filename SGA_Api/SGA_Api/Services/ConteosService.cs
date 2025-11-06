@@ -1021,237 +1021,640 @@ namespace SGA_Api.Services
 
 
 
-        // TODO: Implementar métodos restantes
-        public async Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto)
-        {
-            using var tx = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == ordenGuid);
-                if (orden is null)
-                    throw new InvalidOperationException($"No se encontró la orden con Guid {ordenGuid}");
-                if (orden.Estado != "EN_PROCESO")
-                    throw new InvalidOperationException($"No se puede crear lecturas para una orden en estado {orden.Estado}");
+		// TODO: Implementar métodos restantes
+		//public async Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto)
+		//{
+		//    using var tx = await _context.Database.BeginTransactionAsync();
+		//    try
+		//    {
+		//        var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == ordenGuid);
+		//        if (orden is null)
+		//            throw new InvalidOperationException($"No se encontró la orden con Guid {ordenGuid}");
+		//        if (orden.Estado != "EN_PROCESO")
+		//            throw new InvalidOperationException($"No se puede crear lecturas para una orden en estado {orden.Estado}");
 
-                // Obtener el almacén de la orden (la ubicación viene del frontend)
-                var almacenOrden = orden.CodigoAlmacen ?? ExtraerAlmacenDelFiltro(orden.FiltrosJson);
+		//        Obtener el almacén de la lectura(viene del frontend)
+		//        var almacenOrden = dto.CodigoAlmacen;
+		//        if (string.IsNullOrWhiteSpace(almacenOrden))
+		//            throw new InvalidOperationException("El código de almacén es obligatorio en la lectura.");
 
-                // Obtener el stock actual del artículo
-                var ejercicio = await _sageDbContext.Periodos
-                    .Where(p => p.CodigoEmpresa == orden.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
-                    .OrderByDescending(p => p.Fechainicio)
-                    .Select(p => p.Ejercicio)
-                    .FirstOrDefaultAsync();
+		//        Obtener el stock actual del artículo
+		//        var ejercicio = await _sageDbContext.Periodos
+		//            .Where(p => p.CodigoEmpresa == orden.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+		//            .OrderByDescending(p => p.Fechainicio)
+		//            .Select(p => p.Ejercicio)
+		//            .FirstOrDefaultAsync();
 
-                if (ejercicio == 0)
-                    throw new InvalidOperationException("No se encontró ejercicio válido");
+		//        if (ejercicio == 0)
+		//            throw new InvalidOperationException("No se encontró ejercicio válido");
 
-                var stockActual = await _storageControlContext.AcumuladoStockUbicacion
-                    .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
-                               x.Ejercicio == ejercicio &&
-                               x.CodigoAlmacen == almacenOrden &&
-                               x.Ubicacion == dto.CodigoUbicacion &&
-                               x.CodigoArticulo == dto.CodigoArticulo &&
-                               (string.IsNullOrEmpty(dto.LotePartida) || x.Partida == dto.LotePartida))
-                    .Select(x => x.UnidadSaldo ?? 0m)
-                    .FirstOrDefaultAsync();
+		//        var stockTotalUbicacion = await _storageControlContext.AcumuladoStockUbicacion
+		//            .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+		//                       x.Ejercicio == ejercicio &&
+		//                       x.CodigoAlmacen == almacenOrden &&
+		//                       x.Ubicacion == dto.CodigoUbicacion &&
+		//                       x.CodigoArticulo == dto.CodigoArticulo &&
+		//                       (string.IsNullOrEmpty(dto.LotePartida) || x.Partida == dto.LotePartida))
+		//            .Select(x => x.UnidadSaldo ?? 0m)
+		//            .FirstOrDefaultAsync();
 
-                // Operario (para límites)
-                var operarioCodigo = !string.IsNullOrEmpty(orden.CodigoOperario) ? orden.CodigoOperario : dto.UsuarioCodigo;
-                var operario = await _sageDbContext.Operarios.AsNoTracking().FirstOrDefaultAsync(o => o.Id.ToString() == operarioCodigo);
-                var limUnidades = operario?.MRH_LimiteInventarioUnidades ?? 0m;
-                var limEuros    = operario?.MRH_LimiteInventarioEuros    ?? 0m;
+		//        Operario(para límites)
+		//        var operarioCodigo = !string.IsNullOrEmpty(orden.CodigoOperario) ? orden.CodigoOperario : dto.UsuarioCodigo;
+		//        var operario = await _sageDbContext.Operarios.AsNoTracking().FirstOrDefaultAsync(o => o.Id.ToString() == operarioCodigo);
+		//        var limUnidades = operario?.MRH_LimiteInventarioUnidades ?? 0m;
+		//        var limEuros = operario?.MRH_LimiteInventarioEuros ?? 0m;
 
-                // Descripción del artículo (siempre obtenerla del servicio)
-                var descripcionArticulo = !string.IsNullOrEmpty(dto.CodigoArticulo)
-                    ? await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, dto.CodigoArticulo)
-                    : "";
+		//        Descripción del artículo(siempre obtenerla del servicio)
+		//        var descripcionArticulo = !string.IsNullOrEmpty(dto.CodigoArticulo)
+		//            ? await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, dto.CodigoArticulo)
+		//            : "";
 
-                // Detectar si hay material paletizado en esta ubicación
-                var materialPaletizado = await DetectarMaterialPaletizadoAsync(
-                    almacenOrden, 
-                    dto.CodigoUbicacion, 
-                    dto.CodigoArticulo, 
-                    dto.LotePartida, 
-                    dto.FechaCaducidad);
+		//        Detectar si hay material paletizado en esta ubicación
+		//        var materialPaletizado = await DetectarMaterialPaletizadoAsync(
+		//            almacenOrden,
+		//            dto.CodigoUbicacion,
+		//            dto.CodigoArticulo,
+		//            dto.LotePartida,
+		//            dto.FechaCaducidad);
 
-                // Si no se proporcionó PaletId en el DTO, intentar detectarlo automáticamente
-                Guid? paletIdDetectado = dto.PaletId;
-                string? codigoPaletDetectado = dto.CodigoPalet;
-                string? codigoGS1Detectado = dto.CodigoGS1;
-                
-                if (!paletIdDetectado.HasValue && materialPaletizado != null)
-                {
-                    // UN SOLO PALET: Detectar automáticamente
-                    paletIdDetectado = materialPaletizado.PaletId;
-                    codigoPaletDetectado = materialPaletizado.CodigoPalet;
-                    codigoGS1Detectado = materialPaletizado.CodigoGS1;
-                    
-                    _logger.LogInformation("🔍 Palet detectado automáticamente: {CodigoPalet} (ID: {PaletId}) en ubicación {Ubicacion}", 
-                        codigoPaletDetectado, paletIdDetectado, dto.CodigoUbicacion);
-                }
+		//        Datos de palet proporcionados por el cliente
+		//       Guid? paletIdDetectado = dto.PaletId;
+		//        string? codigoPaletDetectado = dto.CodigoPalet;
+		//        string? codigoGS1Detectado = dto.CodigoGS1;
+		//        var dtoProporcionoPalet = paletIdDetectado.HasValue ||
+		//                                   !string.IsNullOrWhiteSpace(codigoPaletDetectado) ||
+		//                                   !string.IsNullOrWhiteSpace(codigoGS1Detectado);
 
-                // Crear SIEMPRE una lectura nueva (no actualizar "pendientes")
-                var lectura = new LecturaConteo
-                {
-                    OrdenGuid = orden.GuidID,
-                    CodigoAlmacen = almacenOrden,
-                    CodigoUbicacion = dto.CodigoUbicacion,
-                    CodigoArticulo = dto.CodigoArticulo,
-                    DescripcionArticulo = descripcionArticulo,
-                    LotePartida = dto.LotePartida,
-                    CantidadContada = dto.CantidadContada,
-                    CantidadStock = stockActual,
-                    UsuarioCodigo = dto.UsuarioCodigo,
-                    Comentario = dto.Comentario,
-                    Fecha = DateTime.Now,
-                    FechaCaducidad = dto.FechaCaducidad,
-                    // Información de palet (detectado automáticamente si no se proporcionó)
-                    PaletId = paletIdDetectado,
-                    CodigoPalet = codigoPaletDetectado,
-                    CodigoGS1 = codigoGS1Detectado
-                };
-                _context.LecturasConteo.Add(lectura);
-                await _context.SaveChangesAsync();
+		//        Complementar datos del palet solo si el DTO indicó alguno
+		//        if (dtoProporcionoPalet && !paletIdDetectado.HasValue && materialPaletizado != null)
+		//        {
+		//            paletIdDetectado = materialPaletizado.PaletId;
+		//            codigoPaletDetectado = materialPaletizado.CodigoPalet;
+		//            codigoGS1Detectado = materialPaletizado.CodigoGS1;
 
-                // Diferencia y acción
-                var diferencia = (dto.CantidadContada ?? 0m) - stockActual;
-                if (Math.Abs(diferencia) >= 0.0001m)
-                {
-                    // Calcular acción considerando límites por unidades y por euros (precio medio)
-                    var diferenciaAbs = Math.Abs(diferencia);
-                    decimal? precioMedio = null;
-                    try
-                    {
-                        precioMedio = await _sageDbContext.AcumuladoStock
-                            .Where(a => a.CodigoEmpresa == orden.CodigoEmpresa
-                                    && a.Ejercicio == ejercicio
-                                    && a.CodigoArticulo == dto.CodigoArticulo)
-                            .Select(a => a.PrecioMedio)
-                            .FirstOrDefaultAsync();
-                    }
-                    catch { /* si falla el precio, tratamos como 0 */ }
+		//            _logger.LogInformation("🔍 Palet detectado automáticamente para completar DTO: {CodigoPalet} (ID: {PaletId}) en ubicación {Ubicacion}",
+		//                codigoPaletDetectado, paletIdDetectado, dto.CodigoUbicacion);
+		//        }
 
-                    var superaUnidades = limUnidades > 0m && diferenciaAbs > limUnidades;
-                    var superaEuros = false;
-                    if (limEuros > 0m && precioMedio.HasValue)
-                    {
-                        superaEuros = diferenciaAbs * precioMedio.Value > limEuros;
-                    }
+		//        Determinar el stock de referencia para la lectura
+		//        decimal stockReferencia = stockTotalUbicacion;
 
-                    var accion = (superaUnidades || superaEuros) ? "SUPERVISION" : "AJUSTE";
+		//        Obtener información de palets y cantidades en la ubicación
+		//       var paletsDisponiblesEnUbicacion = await DetectarTodosLosPaletsAsync(
+		//           almacenOrden,
+		//           dto.CodigoUbicacion,
+		//           dto.CodigoArticulo,
+		//           dto.LotePartida,
+		//           dto.FechaCaducidad);
 
-                    // Crear un nuevo ResultadoConteo para cada lectura
-                    var resultado = new ResultadoConteo
-                        {
-                            OrdenGuid = orden.GuidID,
-                            CodigoAlmacen = lectura.CodigoAlmacen,
-                            CodigoUbicacion = lectura.CodigoUbicacion,
-                            CodigoArticulo = lectura.CodigoArticulo,
-                            DescripcionArticulo = lectura.DescripcionArticulo,
-                            LotePartida = lectura.LotePartida,
-                            CantidadContada = lectura.CantidadContada,
-                            CantidadStock = lectura.CantidadStock,
-                            UsuarioCodigo = lectura.UsuarioCodigo,
-                            Diferencia = diferencia,
-                            AccionFinal = accion,
-                            FechaEvaluacion = DateTime.Now,
-                            AjusteAplicado = false,
-                            FechaCaducidad = lectura.FechaCaducidad,
-                            // Información de palet (detectado automáticamente si no se proporcionó)
-                            PaletId = lectura.PaletId,
-                            CodigoPalet = lectura.CodigoPalet,
-                            CodigoGS1 = lectura.CodigoGS1
-                        };
-                        _context.ResultadosConteo.Add(resultado);
+		//        var sumaPalets = paletsDisponiblesEnUbicacion.Sum(pl => pl.Cantidad);
+		//        var remanente = stockTotalUbicacion - sumaPalets;
+		//        if (remanente < 0m)
+		//            remanente = 0m;
 
-                    await _context.SaveChangesAsync();
+		//        var dtoSolicitaPalet = dtoProporcionoPalet;
 
-                    // Si la acción es AJUSTE, crear registro en InventarioAjustes (funcionalidad básica)
-                    if (accion == "AJUSTE")
-                    {
-                        var inventarioAjuste = new InventarioAjustes
-                        {
-                            IdInventario = null, // Para ajustes de conteo no necesitamos InventarioCabecera
-                            CodigoArticulo = resultado.CodigoArticulo,
-                            CodigoUbicacion = resultado.CodigoUbicacion,
-                            Diferencia = resultado.Diferencia,
-                            UsuarioId = int.Parse(resultado.UsuarioCodigo), // Convertir string a int
-                            Fecha = DateTime.Now,
-                            IdConteo = resultado.OrdenGuid,
-                            CodigoEmpresa = (short)orden.CodigoEmpresa, // Convertir int a short
-                            CodigoAlmacen = resultado.CodigoAlmacen,
-                            Estado = "PENDIENTE_ERP",
-                            FechaCaducidad = resultado.FechaCaducidad,
-                            // Información de palet si existe
-                            PaletId = resultado.PaletId,
-                            CodigoPalet = resultado.CodigoPalet,
-                            CodigoGS1 = resultado.CodigoGS1,
-                            Partida = resultado.LotePartida
-                        };
+		//        if (dtoSolicitaPalet)
+		//        {
+		//            var paletCoincidente = paletsDisponiblesEnUbicacion.FirstOrDefault(pl =>
+		//                (paletIdDetectado.HasValue && pl.PaletId == paletIdDetectado.Value) ||
+		//                (!string.IsNullOrWhiteSpace(codigoPaletDetectado) && pl.CodigoPalet == codigoPaletDetectado) ||
+		//                (!string.IsNullOrWhiteSpace(codigoGS1Detectado) && pl.CodigoGS1 == codigoGS1Detectado))
+		//                ?? (paletsDisponiblesEnUbicacion.Count == 1 ? paletsDisponiblesEnUbicacion[0] : null);
 
-                        _context.InventarioAjustes.Add(inventarioAjuste);
-                        
-                        _logger.LogInformation("InventarioAjustes creado para resultado {ResultadoGuid} con diferencia {Diferencia}", resultado.GuidID, diferencia);
+		//            if (paletCoincidente != null)
+		//            {
+		//                paletIdDetectado = paletCoincidente.PaletId;
+		//                codigoPaletDetectado = paletCoincidente.CodigoPalet;
+		//                codigoGS1Detectado = paletCoincidente.CodigoGS1;
+		//                stockReferencia = paletCoincidente.Cantidad;
+		//            }
+		//            else
+		//            {
+		//                paletIdDetectado = null;
+		//                codigoPaletDetectado = null;
+		//                codigoGS1Detectado = null;
+		//                stockReferencia = remanente;
+		//            }
+		//        }
+		//        else
+		//        {
+		//            if (!dtoProporcionoPalet && paletsDisponiblesEnUbicacion.Count == 1 && remanente <= 0.0001m)
+		//            {
+		//                var paletUnico = paletsDisponiblesEnUbicacion[0];
+		//                paletIdDetectado = paletUnico.PaletId;
+		//                codigoPaletDetectado = paletUnico.CodigoPalet;
+		//                codigoGS1Detectado = paletUnico.CodigoGS1;
+		//                stockReferencia = paletUnico.Cantidad;
+		//            }
+		//            else
+		//            {
+		//                paletIdDetectado = null;
+		//                codigoPaletDetectado = null;
+		//                codigoGS1Detectado = null;
+		//                stockReferencia = remanente;
+		//            }
+		//        }
 
-                        // ADICIONAL: Si hay palets en la ubicación, crear TempPaletLinea para consolidación unificada
-                        if (resultado.PaletId.HasValue)
-                        {
-                            var tempPaletLinea = new TempPaletLinea
-                            {
-                                Id = Guid.NewGuid(),
-                                PaletId = resultado.PaletId.Value,
-                                CodigoEmpresa = (short)orden.CodigoEmpresa,
-                                CodigoArticulo = resultado.CodigoArticulo,
-                                DescripcionArticulo = resultado.DescripcionArticulo,
-                                Cantidad = resultado.Diferencia, // DELTA (+/-)
-                                UnidadMedida = "UN", // Unidad por defecto
-                                Lote = resultado.LotePartida,
-                                FechaCaducidad = resultado.FechaCaducidad,
-                                CodigoAlmacen = resultado.CodigoAlmacen,
-                                Ubicacion = resultado.CodigoUbicacion,
-                                UsuarioId = int.Parse(resultado.UsuarioCodigo),
-                                FechaAgregado = DateTime.Now,
-                                Observaciones = $"Ajuste de conteo - Orden: {orden.Titulo}",
-                                TraspasoId = null, // No es un traspaso
-                                ConteoId = resultado.OrdenGuid, // ID del conteo
-                                Procesada = false,
-                                EsHeredada = false
-                            };
-                            _context.TempPaletLineas.Add(tempPaletLinea);
-                            
-                            _logger.LogInformation("✅ Creada TempPaletLinea adicional para consolidación de palet: PaletId={PaletId}, Diferencia={Diferencia}, Articulo={Articulo}", 
-                                resultado.PaletId, resultado.Diferencia, resultado.CodigoArticulo);
-                        }
-                    }
-                }
+		//        Crear SIEMPRE una lectura nueva(no actualizar "pendientes")
+		//        var lectura = new LecturaConteo
+		//        {
+		//            OrdenGuid = orden.GuidID,
+		//            CodigoAlmacen = almacenOrden,
+		//            CodigoUbicacion = dto.CodigoUbicacion,
+		//            CodigoArticulo = dto.CodigoArticulo,
+		//            DescripcionArticulo = descripcionArticulo,
+		//            LotePartida = dto.LotePartida,
+		//            CantidadContada = dto.CantidadContada,
+		//            CantidadStock = stockReferencia,
+		//            UsuarioCodigo = dto.UsuarioCodigo,
+		//            Comentario = dto.Comentario,
+		//            Fecha = DateTime.Now,
+		//            FechaCaducidad = dto.FechaCaducidad,
+		//            Información de palet(detectado automáticamente si no se proporcionó)
+		//            PaletId = paletIdDetectado,
+		//            CodigoPalet = codigoPaletDetectado,
+		//            CodigoGS1 = codigoGS1Detectado
+		//        };
+		//        _context.LecturasConteo.Add(lectura);
+		//        await _context.SaveChangesAsync();
 
-                // TEMPORAL: Comentar verificación de lecturas pendientes para debug
-                
-                var lecturasPendientes = await ObtenerLecturasPendientesAsync(orden.GuidID, dto.UsuarioCodigo);
-                
-                if (!lecturasPendientes.Any())
-                {
-                    // No quedan lecturas pendientes, cerrar la orden automáticamente
-                    orden.Estado = "CERRADO";
-                    orden.FechaCierre = DateTime.Now;
-                    await _context.SaveChangesAsync();
-                    
-                    _logger.LogInformation("Orden {OrdenGuid} cerrada automáticamente al completar todas las lecturas", orden.GuidID);
-                }
-                
+		//        Diferencia y acción
+		//       var diferencia = (dto.CantidadContada ?? 0m) - stockReferencia;
+		//        if (Math.Abs(diferencia) >= 0.0001m)
+		//        {
+		//            Calcular acción considerando límites por unidades y por euros(precio medio)
+		//            var diferenciaAbs = Math.Abs(diferencia);
+		//            decimal? precioMedio = null;
+		//            try
+		//            {
+		//                precioMedio = await _sageDbContext.AcumuladoStock
+		//                    .Where(a => a.CodigoEmpresa == orden.CodigoEmpresa
+		//                            && a.Ejercicio == ejercicio
+		//                            && a.CodigoArticulo == dto.CodigoArticulo)
+		//                    .Select(a => a.PrecioMedio)
+		//                    .FirstOrDefaultAsync();
+		//            }
+		//            catch { /* si falla el precio, tratamos como 0 */ }
 
-                await tx.CommitAsync();
-                return MapToLecturaResponseDto(lectura);
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
-        }
+		//            var superaUnidades = limUnidades > 0m && diferenciaAbs > limUnidades;
+		//            var superaEuros = false;
+		//            if (limEuros > 0m && precioMedio.HasValue)
+		//            {
+		//                superaEuros = diferenciaAbs * precioMedio.Value > limEuros;
+		//            }
 
-        public async Task<CerrarOrdenResponseDto> CerrarOrdenAsync(Guid guid)
+		//            var accion = (superaUnidades || superaEuros) ? "SUPERVISION" : "AJUSTE";
+
+		//            Crear un nuevo ResultadoConteo para cada lectura
+		//           var resultado = new ResultadoConteo
+		//           {
+		//               OrdenGuid = orden.GuidID,
+		//               CodigoAlmacen = lectura.CodigoAlmacen,
+		//               CodigoUbicacion = lectura.CodigoUbicacion,
+		//               CodigoArticulo = lectura.CodigoArticulo,
+		//               DescripcionArticulo = lectura.DescripcionArticulo,
+		//               LotePartida = lectura.LotePartida,
+		//               CantidadContada = lectura.CantidadContada,
+		//               CantidadStock = lectura.CantidadStock,
+		//               UsuarioCodigo = lectura.UsuarioCodigo,
+		//               Diferencia = diferencia,
+		//               AccionFinal = accion,
+		//               FechaEvaluacion = DateTime.Now,
+		//               AjusteAplicado = false,
+		//               FechaCaducidad = lectura.FechaCaducidad,
+		//               Información de palet(detectado automáticamente si no se proporcionó)
+
+		//                   PaletId = lectura.PaletId,
+		//               CodigoPalet = lectura.CodigoPalet,
+		//               CodigoGS1 = lectura.CodigoGS1
+		//           };
+		//            _context.ResultadosConteo.Add(resultado);
+
+		//            await _context.SaveChangesAsync();
+
+		//            Si la acción es AJUSTE, crear registro en InventarioAjustes(funcionalidad básica)
+		//            if (accion == "AJUSTE")
+		//            {
+		//                _logger.LogInformation("🔧 Creando InventarioAjustes para resultado {ResultadoGuid} con diferencia {Diferencia}", resultado.GuidID, diferencia);
+
+		//                var inventarioAjuste = new InventarioAjustes
+		//                {
+		//                    IdInventario = null, // Para ajustes de conteo no necesitamos InventarioCabecera
+		//                    CodigoArticulo = resultado.CodigoArticulo,
+		//                    CodigoUbicacion = resultado.CodigoUbicacion,
+		//                    Diferencia = resultado.Diferencia,
+		//                    UsuarioId = operario?.Id ?? int.Parse(resultado.UsuarioCodigo), // Usar operario.Id o parsear UsuarioCodigo
+		//                    Fecha = DateTime.Now,
+		//                    IdConteo = resultado.OrdenGuid,
+		//                    CodigoEmpresa = (short)orden.CodigoEmpresa, // Convertir int a short
+		//                    CodigoAlmacen = resultado.CodigoAlmacen,
+		//                    Estado = "PENDIENTE_ERP",
+		//                    FechaCaducidad = resultado.FechaCaducidad,
+		//                    Información de palet si existe
+		//                    PaletId = resultado.PaletId,
+		//                    CodigoPalet = resultado.CodigoPalet,
+		//                    CodigoGS1 = resultado.CodigoGS1,
+		//                    Partida = resultado.LotePartida
+		//                };
+
+		//                _context.InventarioAjustes.Add(inventarioAjuste);
+		//                _logger.LogInformation("✅ InventarioAjustes agregado al contexto para resultado {ResultadoGuid}", resultado.GuidID);
+
+		//            ADICIONAL: Si hay palets en la ubicación, crear TempPaletLinea para consolidación unificada
+		//                if (resultado.PaletId.HasValue)
+		//                {
+		//                    var tempPaletLinea = new TempPaletLinea
+		//                    {
+		//                        Id = Guid.NewGuid(),
+		//                        PaletId = resultado.PaletId.Value,
+		//                        CodigoEmpresa = (short)orden.CodigoEmpresa,
+		//                        CodigoArticulo = resultado.CodigoArticulo,
+		//                        DescripcionArticulo = resultado.DescripcionArticulo,
+		//                        Cantidad = resultado.Diferencia, // DELTA (+/-)
+		//                        UnidadMedida = "UN", // Unidad por defecto
+		//                        Lote = resultado.LotePartida,
+		//                        FechaCaducidad = resultado.FechaCaducidad,
+		//                        CodigoAlmacen = resultado.CodigoAlmacen,
+		//                        Ubicacion = resultado.CodigoUbicacion,
+		//                        UsuarioId = operario?.Id ?? int.Parse(resultado.UsuarioCodigo),
+		//                        FechaAgregado = DateTime.Now,
+		//                        Observaciones = $"Ajuste de conteo - Orden: {orden.Titulo}",
+		//                        TraspasoId = null, // No es un traspaso
+		//                        ConteoId = resultado.OrdenGuid, // ID del conteo
+		//                        Procesada = false,
+		//                        EsHeredada = false
+		//                    };
+		//                    _context.TempPaletLineas.Add(tempPaletLinea);
+
+		//                    _logger.LogInformation("✅ Creada TempPaletLinea adicional para consolidación de palet: PaletId={PaletId}, Diferencia={Diferencia}, Articulo={Articulo}",
+		//                        resultado.PaletId, resultado.Diferencia, resultado.CodigoArticulo);
+		//                }
+
+		//                Guardar ajustes ANTES de verificar lecturas pendientes
+		//               await _context.SaveChangesAsync();
+		//                _logger.LogInformation("💾 Ajustes guardados en BD para resultado {ResultadoGuid}", resultado.GuidID);
+		//            }
+		//        }
+
+		//    TEMPORAL: Comentar verificación de lecturas pendientes para debug
+		//        _logger.LogInformation("🔍 Verificando lecturas pendientes para orden {OrdenGuid} con operario {Operario}", orden.GuidID, dto.UsuarioCodigo);
+
+		//        var lecturasPendientes = await ObtenerLecturasPendientesAsync(orden.GuidID, dto.UsuarioCodigo);
+		//        _logger.LogInformation("📊 Lecturas pendientes encontradas: {Count}", lecturasPendientes.Count());
+
+		//        if (!lecturasPendientes.Any())
+		//        {
+		//            No quedan lecturas pendientes, cerrar la orden automáticamente
+		//            _logger.LogInformation("🔒 Cerrando orden {OrdenGuid} automáticamente - no quedan lecturas pendientes", orden.GuidID);
+		//            orden.Estado = "CERRADO";
+		//            orden.FechaCierre = DateTime.Now;
+		//            await _context.SaveChangesAsync();
+
+		//            _logger.LogInformation("✅ Orden {OrdenGuid} cerrada automáticamente al completar todas las lecturas", orden.GuidID);
+		//        }
+		//        else
+		//        {
+		//            _logger.LogInformation("⏳ Orden {OrdenGuid} mantiene estado EN_PROCESO - quedan {Count} lecturas pendientes", orden.GuidID, lecturasPendientes.Count());
+		//        }
+
+		//        _logger.LogInformation("💾 Confirmando transacción para orden {OrdenGuid}", orden.GuidID);
+		//        await tx.CommitAsync();
+		//        _logger.LogInformation("✅ Transacción confirmada para orden {OrdenGuid}", orden.GuidID);
+
+		//        return MapToLecturaResponseDto(lectura);
+		//    }
+		//    catch
+		//    {
+		//        await tx.RollbackAsync();
+		//        throw;
+		//    }
+		//}
+		// TODO: Implementar métodos restantes
+		public async Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto)
+		{
+			using var tx = await _context.Database.BeginTransactionAsync();
+			try
+			{
+				var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == ordenGuid);
+				if (orden is null)
+					throw new InvalidOperationException($"No se encontró la orden con Guid {ordenGuid}");
+				if (orden.Estado != "EN_PROCESO")
+					throw new InvalidOperationException($"No se puede crear lecturas para una orden en estado {orden.Estado}");
+
+				// Obtener el almacén de la lectura (viene del frontend)
+				var almacenOrden = dto.CodigoAlmacen;
+				if (string.IsNullOrWhiteSpace(almacenOrden))
+					throw new InvalidOperationException("El código de almacén es obligatorio en la lectura.");
+
+				// Obtener el stock actual del artículo
+				var ejercicio = await _sageDbContext.Periodos
+					.Where(p => p.CodigoEmpresa == orden.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+
+				if (ejercicio == 0)
+					throw new InvalidOperationException("No se encontró ejercicio válido");
+
+				var stockTotalUbicacion = await _storageControlContext.AcumuladoStockUbicacion
+					.Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+							   x.Ejercicio == ejercicio &&
+							   x.CodigoAlmacen == almacenOrden &&
+							   x.Ubicacion == dto.CodigoUbicacion &&
+							   x.CodigoArticulo == dto.CodigoArticulo &&
+							   (string.IsNullOrEmpty(dto.LotePartida) || x.Partida == dto.LotePartida))
+					.Select(x => x.UnidadSaldo ?? 0m)
+					.FirstOrDefaultAsync();
+
+				// Operario (para límites)
+				var operarioCodigo = !string.IsNullOrEmpty(orden.CodigoOperario) ? orden.CodigoOperario : dto.UsuarioCodigo;
+				var operario = await _sageDbContext.Operarios.AsNoTracking().FirstOrDefaultAsync(o => o.Id.ToString() == operarioCodigo);
+				var limUnidades = operario?.MRH_LimiteInventarioUnidades ?? 0m;
+				var limEuros = operario?.MRH_LimiteInventarioEuros ?? 0m;
+
+				// Descripción del artículo (siempre obtenerla del servicio)
+				var descripcionArticulo = !string.IsNullOrEmpty(dto.CodigoArticulo)
+					? await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, dto.CodigoArticulo)
+					: "";
+
+				// Detectar si hay material paletizado en esta ubicación
+				var materialPaletizado = await DetectarMaterialPaletizadoAsync(
+					almacenOrden,
+					dto.CodigoUbicacion,
+					dto.CodigoArticulo,
+					dto.LotePartida,
+					dto.FechaCaducidad);
+
+				// Datos de palet proporcionados por el cliente
+				Guid? paletIdDetectado = dto.PaletId;
+				string? codigoPaletDetectado = dto.CodigoPalet;
+				string? codigoGS1Detectado = dto.CodigoGS1;
+				var dtoProporcionoPalet = paletIdDetectado.HasValue ||
+										   !string.IsNullOrWhiteSpace(codigoPaletDetectado) ||
+										   !string.IsNullOrWhiteSpace(codigoGS1Detectado);
+
+				// LOG: Verificar datos de palet recibidos del cliente
+				_logger.LogInformation("📦 DATOS PALET RECIBIDOS - PaletId: {PaletId}, CodigoPalet: '{CodigoPalet}', CodigoGS1: '{CodigoGS1}', ProporcPalet: {ProporcPalet}",
+					paletIdDetectado, codigoPaletDetectado ?? "NULL", codigoGS1Detectado ?? "NULL", dtoProporcionoPalet);
+
+				// Complementar datos del palet solo si el DTO indicó alguno
+				if (dtoProporcionoPalet && !paletIdDetectado.HasValue && materialPaletizado != null)
+				{
+					paletIdDetectado = materialPaletizado.PaletId;
+					codigoPaletDetectado = materialPaletizado.CodigoPalet;
+					codigoGS1Detectado = materialPaletizado.CodigoGS1;
+
+					_logger.LogInformation("🔍 Palet detectado automáticamente para completar DTO: {CodigoPalet} (ID: {PaletId}) en ubicación {Ubicacion}",
+						codigoPaletDetectado, paletIdDetectado, dto.CodigoUbicacion);
+				}
+
+				// Determinar el stock de referencia para la lectura
+				decimal stockReferencia = stockTotalUbicacion;
+
+				// Obtener información de palets y cantidades en la ubicación
+				var paletsDisponiblesEnUbicacion = await DetectarTodosLosPaletsAsync(
+					almacenOrden,
+					dto.CodigoUbicacion,
+					dto.CodigoArticulo,
+					dto.LotePartida,
+					dto.FechaCaducidad);
+
+				var sumaPalets = paletsDisponiblesEnUbicacion.Sum(pl => pl.Cantidad);
+				var remanente = stockTotalUbicacion - sumaPalets;
+				if (remanente < 0m)
+					remanente = 0m;
+
+				var dtoSolicitaPalet = dtoProporcionoPalet;
+
+				if (dtoSolicitaPalet)
+				{
+					var paletCoincidente = paletsDisponiblesEnUbicacion.FirstOrDefault(pl =>
+						(paletIdDetectado.HasValue && pl.PaletId == paletIdDetectado.Value) ||
+						(!string.IsNullOrWhiteSpace(codigoPaletDetectado) && pl.CodigoPalet == codigoPaletDetectado) ||
+						(!string.IsNullOrWhiteSpace(codigoGS1Detectado) && pl.CodigoGS1 == codigoGS1Detectado))
+						?? (paletsDisponiblesEnUbicacion.Count == 1 ? paletsDisponiblesEnUbicacion[0] : null);
+
+					if (paletCoincidente != null)
+					{
+						// Palet existente encontrado: usar sus datos y cantidad específica
+						paletIdDetectado = paletCoincidente.PaletId;
+						codigoPaletDetectado = paletCoincidente.CodigoPalet;
+						codigoGS1Detectado = paletCoincidente.CodigoGS1;
+						stockReferencia = paletCoincidente.Cantidad;
+
+						_logger.LogInformation("✅ Palet coincidente encontrado: {CodigoPalet} (ID: {PaletId}), Cantidad: {Cantidad}",
+							codigoPaletDetectado, paletIdDetectado, stockReferencia);
+					}
+					else
+					{
+						// No hay palet existente, pero PRESERVAR los datos enviados por el cliente
+						// Esto permite lecturas manuales con datos de palet que aún no existen físicamente
+						stockReferencia = remanente;
+
+						_logger.LogInformation("ℹ️ No se encontró palet coincidente en BD, pero se preservan datos del cliente: PaletId={PaletId}, Codigo={Codigo}, GS1={GS1}, StockReferencia={Stock}",
+							paletIdDetectado, codigoPaletDetectado, codigoGS1Detectado, stockReferencia);
+					}
+				}
+				else
+				{
+					if (!dtoProporcionoPalet && paletsDisponiblesEnUbicacion.Count == 1 && remanente <= 0.0001m)
+					{
+						var paletUnico = paletsDisponiblesEnUbicacion[0];
+						paletIdDetectado = paletUnico.PaletId;
+						codigoPaletDetectado = paletUnico.CodigoPalet;
+						codigoGS1Detectado = paletUnico.CodigoGS1;
+						stockReferencia = paletUnico.Cantidad;
+					}
+					else
+					{
+						paletIdDetectado = null;
+						codigoPaletDetectado = null;
+						codigoGS1Detectado = null;
+						stockReferencia = remanente;
+					}
+				}
+
+				// LOG: Datos finales que se guardarán en la lectura
+				_logger.LogInformation("💾 DATOS FINALES LECTURA - PaletId: {PaletId}, CodigoPalet: '{CodigoPalet}', CodigoGS1: '{CodigoGS1}', StockRef: {StockRef}, CantContada: {CantContada}",
+					paletIdDetectado, codigoPaletDetectado ?? "NULL", codigoGS1Detectado ?? "NULL", stockReferencia, dto.CantidadContada);
+
+				// Crear SIEMPRE una lectura nueva (no actualizar "pendientes")
+				var lectura = new LecturaConteo
+				{
+					OrdenGuid = orden.GuidID,
+					CodigoAlmacen = almacenOrden,
+					CodigoUbicacion = dto.CodigoUbicacion,
+					CodigoArticulo = dto.CodigoArticulo,
+					DescripcionArticulo = descripcionArticulo,
+					LotePartida = dto.LotePartida,
+					CantidadContada = dto.CantidadContada,
+					CantidadStock = stockReferencia,
+					UsuarioCodigo = dto.UsuarioCodigo,
+					Comentario = dto.Comentario,
+					Fecha = DateTime.Now,
+					FechaCaducidad = dto.FechaCaducidad,
+					// Información de palet (detectado automáticamente si no se proporcionó)
+					PaletId = paletIdDetectado,
+					CodigoPalet = codigoPaletDetectado,
+					CodigoGS1 = codigoGS1Detectado
+				};
+				_context.LecturasConteo.Add(lectura);
+				await _context.SaveChangesAsync();
+
+				// Diferencia y acción
+				var diferencia = (dto.CantidadContada ?? 0m) - stockReferencia;
+				if (Math.Abs(diferencia) >= 0.0001m)
+				{
+					// Calcular acción considerando límites por unidades y por euros (precio medio)
+					var diferenciaAbs = Math.Abs(diferencia);
+					decimal? precioMedio = null;
+					try
+					{
+						precioMedio = await _sageDbContext.AcumuladoStock
+							.Where(a => a.CodigoEmpresa == orden.CodigoEmpresa
+									&& a.Ejercicio == ejercicio
+									&& a.CodigoArticulo == dto.CodigoArticulo)
+							.Select(a => a.PrecioMedio)
+							.FirstOrDefaultAsync();
+					}
+					catch { /* si falla el precio, tratamos como 0 */ }
+
+					var superaUnidades = limUnidades > 0m && diferenciaAbs > limUnidades;
+					var superaEuros = false;
+					if (limEuros > 0m && precioMedio.HasValue)
+					{
+						superaEuros = diferenciaAbs * precioMedio.Value > limEuros;
+					}
+
+					var accion = (superaUnidades || superaEuros) ? "SUPERVISION" : "AJUSTE";
+
+					// Crear un nuevo ResultadoConteo para cada lectura
+					var resultado = new ResultadoConteo
+					{
+						OrdenGuid = orden.GuidID,
+						CodigoAlmacen = lectura.CodigoAlmacen,
+						CodigoUbicacion = lectura.CodigoUbicacion,
+						CodigoArticulo = lectura.CodigoArticulo,
+						DescripcionArticulo = lectura.DescripcionArticulo,
+						LotePartida = lectura.LotePartida,
+						CantidadContada = lectura.CantidadContada,
+						CantidadStock = lectura.CantidadStock,
+						UsuarioCodigo = lectura.UsuarioCodigo,
+						Diferencia = diferencia,
+						AccionFinal = accion,
+						FechaEvaluacion = DateTime.Now,
+						AjusteAplicado = false,
+						FechaCaducidad = lectura.FechaCaducidad,
+						// Información de palet (detectado automáticamente si no se proporcionó)
+						PaletId = lectura.PaletId,
+						CodigoPalet = lectura.CodigoPalet,
+						CodigoGS1 = lectura.CodigoGS1
+					};
+					_context.ResultadosConteo.Add(resultado);
+
+					await _context.SaveChangesAsync();
+
+					// Si la acción es AJUSTE, crear registro en InventarioAjustes (funcionalidad básica)
+					if (accion == "AJUSTE")
+					{
+						_logger.LogInformation("🔧 Creando InventarioAjustes para resultado {ResultadoGuid} con diferencia {Diferencia}", resultado.GuidID, diferencia);
+
+						var inventarioAjuste = new InventarioAjustes
+						{
+							IdInventario = null, // Para ajustes de conteo no necesitamos InventarioCabecera
+							CodigoArticulo = resultado.CodigoArticulo,
+							CodigoUbicacion = resultado.CodigoUbicacion,
+							Diferencia = resultado.Diferencia,
+							UsuarioId = operario?.Id ?? int.Parse(resultado.UsuarioCodigo), // Usar operario.Id o parsear UsuarioCodigo
+							Fecha = DateTime.Now,
+							IdConteo = resultado.OrdenGuid,
+							CodigoEmpresa = (short)orden.CodigoEmpresa, // Convertir int a short
+							CodigoAlmacen = resultado.CodigoAlmacen,
+							Estado = "PENDIENTE_ERP",
+							FechaCaducidad = resultado.FechaCaducidad,
+							// Información de palet si existe
+							PaletId = resultado.PaletId,
+							CodigoPalet = resultado.CodigoPalet,
+							CodigoGS1 = resultado.CodigoGS1,
+							Partida = resultado.LotePartida
+						};
+
+						_context.InventarioAjustes.Add(inventarioAjuste);
+						_logger.LogInformation("✅ InventarioAjustes agregado al contexto para resultado {ResultadoGuid}", resultado.GuidID);
+
+						// ADICIONAL: Si hay palets en la ubicación, crear TempPaletLinea para consolidación unificada
+						if (resultado.PaletId.HasValue)
+						{
+							var tempPaletLinea = new TempPaletLinea
+							{
+								Id = Guid.NewGuid(),
+								PaletId = resultado.PaletId.Value,
+								CodigoEmpresa = (short)orden.CodigoEmpresa,
+								CodigoArticulo = resultado.CodigoArticulo,
+								DescripcionArticulo = resultado.DescripcionArticulo,
+								Cantidad = resultado.Diferencia, // DELTA (+/-)
+								UnidadMedida = "UN", // Unidad por defecto
+								Lote = resultado.LotePartida,
+								FechaCaducidad = resultado.FechaCaducidad,
+								CodigoAlmacen = resultado.CodigoAlmacen,
+								Ubicacion = resultado.CodigoUbicacion,
+								UsuarioId = operario?.Id ?? int.Parse(resultado.UsuarioCodigo),
+								FechaAgregado = DateTime.Now,
+								Observaciones = $"Ajuste de conteo - Orden: {orden.Titulo}",
+								TraspasoId = null, // No es un traspaso
+								ConteoId = resultado.OrdenGuid, // ID del conteo
+								Procesada = false,
+								EsHeredada = false
+							};
+							_context.TempPaletLineas.Add(tempPaletLinea);
+
+							_logger.LogInformation("✅ Creada TempPaletLinea adicional para consolidación de palet: PaletId={PaletId}, Diferencia={Diferencia}, Articulo={Articulo}",
+								resultado.PaletId, resultado.Diferencia, resultado.CodigoArticulo);
+						}
+
+						// Guardar ajustes ANTES de verificar lecturas pendientes
+						await _context.SaveChangesAsync();
+						_logger.LogInformation("💾 Ajustes guardados en BD para resultado {ResultadoGuid}", resultado.GuidID);
+					}
+				}
+
+				// TEMPORAL: Comentar verificación de lecturas pendientes para debug
+				_logger.LogInformation("🔍 Verificando lecturas pendientes para orden {OrdenGuid} con operario {Operario}", orden.GuidID, dto.UsuarioCodigo);
+
+				var lecturasPendientes = await ObtenerLecturasPendientesAsync(orden.GuidID, dto.UsuarioCodigo);
+				_logger.LogInformation("📊 Lecturas pendientes encontradas: {Count}", lecturasPendientes.Count());
+
+				if (!lecturasPendientes.Any())
+				{
+					// No quedan lecturas pendientes, cerrar la orden automáticamente
+					_logger.LogInformation("🔒 Cerrando orden {OrdenGuid} automáticamente - no quedan lecturas pendientes", orden.GuidID);
+					orden.Estado = "CERRADO";
+					orden.FechaCierre = DateTime.Now;
+					await _context.SaveChangesAsync();
+
+					_logger.LogInformation("✅ Orden {OrdenGuid} cerrada automáticamente al completar todas las lecturas", orden.GuidID);
+				}
+				else
+				{
+					_logger.LogInformation("⏳ Orden {OrdenGuid} mantiene estado EN_PROCESO - quedan {Count} lecturas pendientes", orden.GuidID, lecturasPendientes.Count());
+				}
+
+				_logger.LogInformation("💾 Confirmando transacción para orden {OrdenGuid}", orden.GuidID);
+				await tx.CommitAsync();
+				_logger.LogInformation("✅ Transacción confirmada para orden {OrdenGuid}", orden.GuidID);
+
+				return MapToLecturaResponseDto(lectura);
+			}
+			catch
+			{
+				await tx.RollbackAsync();
+				throw;
+			}
+		}
+
+
+		public async Task<CerrarOrdenResponseDto> CerrarOrdenAsync(Guid guid)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             
@@ -1674,88 +2077,114 @@ namespace SGA_Api.Services
                 {
                     if (EsUbicacionValidaParaConteo(stock.Ubicacion))
                     {
-                        // Verificar si ya existe una lectura para esta combinación
-                        var yaExiste = lecturasCreadas.Any(l => 
+                        // Verificar si ya existe una lectura para esta combinación (sin palet)
+                        var yaExisteLecturaSinPalet = lecturasCreadas.Any(l => 
                             l.CodigoAlmacen == stock.CodigoAlmacen &&
                             l.CodigoUbicacion == stock.Ubicacion &&
                             l.CodigoArticulo == stock.CodigoArticulo &&
                             (string.IsNullOrEmpty(stock.Partida) || l.LotePartida == stock.Partida) &&
-                            l.PaletId == null); // Solo verificar lecturas sin palet
-                        
-                        if (!yaExiste)
+                            l.PaletId == null);
+
+                        var descripcionArticulo = await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, stock.CodigoArticulo);
+
+                        // Detectar si hay material paletizado en esta ubicación
+                        var paletsDisponibles = await DetectarTodosLosPaletsAsync(
+                            stock.CodigoAlmacen, 
+                            stock.Ubicacion, 
+                            stock.CodigoArticulo, 
+                            stock.Partida, 
+                            stock.FechaCaducidad);
+
+                        decimal totalCantidadPalets = 0m;
+
+                        if (paletsDisponibles.Any())
                         {
-                            var descripcionArticulo = await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, stock.CodigoArticulo);
-                            
-                            // Detectar si hay material paletizado en esta ubicación
-                            var paletsDisponibles = await DetectarTodosLosPaletsAsync(
-                                stock.CodigoAlmacen, 
-                                stock.Ubicacion, 
-                                stock.CodigoArticulo, 
-                                stock.Partida, 
-                                stock.FechaCaducidad);
-                            
-                            if (paletsDisponibles.Any())
+                            // Si hay múltiples palets, crear una lectura por cada palet
+                            foreach (var palet in paletsDisponibles)
                             {
-                                // Si hay múltiples palets, crear una lectura por cada palet
-                                foreach (var palet in paletsDisponibles)
+                                totalCantidadPalets += palet.Cantidad;
+
+                                // Verificar si ya existe una lectura para este palet específico
+                                var yaExistePalet = lecturasCreadas.Any(l => 
+                                    l.CodigoAlmacen == stock.CodigoAlmacen &&
+                                    l.CodigoUbicacion == stock.Ubicacion &&
+                                    l.CodigoArticulo == stock.CodigoArticulo &&
+                                    (string.IsNullOrEmpty(stock.Partida) || l.LotePartida == stock.Partida) &&
+                                    l.PaletId == palet.PaletId);
+                                
+                                if (!yaExistePalet)
                                 {
-                                    // Verificar si ya existe una lectura para este palet específico
-                                    var yaExistePalet = lecturasCreadas.Any(l => 
-                                        l.CodigoAlmacen == stock.CodigoAlmacen &&
-                                        l.CodigoUbicacion == stock.Ubicacion &&
-                                        l.CodigoArticulo == stock.CodigoArticulo &&
-                                        (string.IsNullOrEmpty(stock.Partida) || l.LotePartida == stock.Partida) &&
-                                        l.PaletId == palet.PaletId);
-                                    
-                                    if (!yaExistePalet)
+                                    lecturasGeneradas.Add(new LecturaResponseDto
                                     {
-                                        lecturasGeneradas.Add(new LecturaResponseDto
-                                        {
-                                            GuidID = Guid.Empty, // No se persiste, es dinámico
-                                            OrdenGuid = orden.GuidID,
-                                            CodigoAlmacen = stock.CodigoAlmacen,
-                                            CodigoUbicacion = stock.Ubicacion,
-                                            CodigoArticulo = stock.CodigoArticulo,
-                                            DescripcionArticulo = descripcionArticulo,
-                                            LotePartida = stock.Partida,
-                                            CantidadContada = null, // Pendiente de conteo
-                                            CantidadStock = palet.Cantidad, // Cantidad específica del palet
-                                            UsuarioCodigo = codigoOperario ?? "",
-                                            Fecha = DateTime.Now,
-                                            Comentario = null,
-                                            FechaCaducidad = stock.FechaCaducidad,
-                                            // Información específica del palet
-                                            PaletId = palet.PaletId,
-                                            CodigoPalet = palet.CodigoPalet,
-                                            CodigoGS1 = palet.CodigoGS1
-                                        });
-                                    }
+                                        GuidID = Guid.Empty, // No se persiste, es dinámico
+                                        OrdenGuid = orden.GuidID,
+                                        CodigoAlmacen = stock.CodigoAlmacen,
+                                        CodigoUbicacion = stock.Ubicacion,
+                                        CodigoArticulo = stock.CodigoArticulo,
+                                        DescripcionArticulo = descripcionArticulo,
+                                        LotePartida = stock.Partida,
+                                        CantidadContada = null, // Pendiente de conteo
+                                        CantidadStock = palet.Cantidad, // Cantidad específica del palet
+                                        UsuarioCodigo = codigoOperario ?? "",
+                                        Fecha = DateTime.Now,
+                                        Comentario = null,
+                                        FechaCaducidad = stock.FechaCaducidad,
+                                        // Información específica del palet
+                                        PaletId = palet.PaletId,
+                                        CodigoPalet = palet.CodigoPalet,
+                                        CodigoGS1 = palet.CodigoGS1
+                                    });
                                 }
                             }
-                            else
+
+                            // Generar lectura adicional para el remanente sin palet (si existe)
+                            var cantidadRestante = stock.UnidadSaldo - totalCantidadPalets;
+                            if (cantidadRestante > 0.0001m && !yaExisteLecturaSinPalet)
                             {
-                                // Si no hay palets, crear lectura normal (sin palet)
                                 lecturasGeneradas.Add(new LecturaResponseDto
                                 {
-                                    GuidID = Guid.Empty, // No se persiste, es dinámico
+                                    GuidID = Guid.Empty,
                                     OrdenGuid = orden.GuidID,
                                     CodigoAlmacen = stock.CodigoAlmacen,
                                     CodigoUbicacion = stock.Ubicacion,
                                     CodigoArticulo = stock.CodigoArticulo,
                                     DescripcionArticulo = descripcionArticulo,
                                     LotePartida = stock.Partida,
-                                    CantidadContada = null, // Pendiente de conteo
-                                    CantidadStock = stock.UnidadSaldo,
+                                    CantidadContada = null,
+                                    CantidadStock = cantidadRestante,
                                     UsuarioCodigo = codigoOperario ?? "",
                                     Fecha = DateTime.Now,
                                     Comentario = null,
                                     FechaCaducidad = stock.FechaCaducidad,
-                                    // Sin información de palet
                                     PaletId = null,
                                     CodigoPalet = null,
                                     CodigoGS1 = null
                                 });
                             }
+                        }
+                        else if (!yaExisteLecturaSinPalet)
+                        {
+                            // Si no hay palets, crear lectura normal (sin palet)
+                            lecturasGeneradas.Add(new LecturaResponseDto
+                            {
+                                GuidID = Guid.Empty, // No se persiste, es dinámico
+                                OrdenGuid = orden.GuidID,
+                                CodigoAlmacen = stock.CodigoAlmacen,
+                                CodigoUbicacion = stock.Ubicacion,
+                                CodigoArticulo = stock.CodigoArticulo,
+                                DescripcionArticulo = descripcionArticulo,
+                                LotePartida = stock.Partida,
+                                CantidadContada = null, // Pendiente de conteo
+                                CantidadStock = stock.UnidadSaldo,
+                                UsuarioCodigo = codigoOperario ?? "",
+                                Fecha = DateTime.Now,
+                                Comentario = null,
+                                FechaCaducidad = stock.FechaCaducidad,
+                                // Sin información de palet
+                                PaletId = null,
+                                CodigoPalet = null,
+                                CodigoGS1 = null
+                            });
                         }
                     }
                 }

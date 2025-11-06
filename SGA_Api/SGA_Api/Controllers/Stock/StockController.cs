@@ -363,7 +363,10 @@ namespace SGA_Api.Controllers.Stock
 					})
 					.ToListAsync();
 
-				var stockSuelto = item.Disponible - stockPaletizado.Sum(p => p.CantidadEnPalet);
+				// 🔷 CORREGIDO: Asegurar que el cálculo se hace con precisión completa
+				// Convertir explícitamente a decimal con precisión completa antes de la resta
+				var totalPaletizado = stockPaletizado.Select(p => (decimal)p.CantidadEnPalet).Sum();
+				var stockSuelto = (decimal)item.Disponible - totalPaletizado;
 
 				if (stockSuelto > 0)
 				{
@@ -669,7 +672,10 @@ namespace SGA_Api.Controllers.Stock
             })
             .ToListAsync();
 
-        var stockSuelto = item.Disponible - stockPaletizado.Sum(p => p.CantidadEnPalet);
+        // 🔷 CORREGIDO: Asegurar que el cálculo se hace con precisión completa
+        // Convertir explícitamente a decimal con precisión completa antes de la resta
+        var totalPaletizado = stockPaletizado.Select(p => (decimal)p.CantidadEnPalet).Sum();
+        var stockSuelto = (decimal)item.Disponible - totalPaletizado;
 
         // 🔷 Opción 1: Stock suelto (si hay)
         if (stockSuelto > 0)

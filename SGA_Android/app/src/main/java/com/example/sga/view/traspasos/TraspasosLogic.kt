@@ -11,6 +11,7 @@ import com.example.sga.data.dto.stock.ArticuloDto
 import com.example.sga.data.dto.stock.StockDisponibleDto
 import com.example.sga.data.dto.traspasos.CerrarPaletMobilityDto
 import com.example.sga.data.dto.traspasos.CompletarTraspasoDto
+import com.example.sga.data.dto.traspasos.ForzarVaciadoPaletDto
 import com.example.sga.data.dto.traspasos.LineaPaletCrearDto
 import com.example.sga.data.dto.traspasos.LineaPaletDto
 import com.example.sga.data.dto.traspasos.PaletCrearDto
@@ -21,6 +22,8 @@ import com.example.sga.data.dto.traspasos.TraspasoArticuloDto
 import com.example.sga.utils.SoundUtils
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoArticuloDto
 import com.example.sga.data.dto.traspasos.FinalizarTraspasoPaletDto
+import com.example.sga.data.dto.traspasos.ConflictoPaletResponse
+import com.google.gson.Gson
 import com.example.sga.data.dto.traspasos.MoverPaletDto
 import com.example.sga.data.dto.traspasos.MoverPaletResponse
 import com.example.sga.data.dto.traspasos.PaletMovibleDto
@@ -233,10 +236,10 @@ class TraspasosLogic {
                         android.util.Log.d("CERRAR_PALET_API", "✅ Respuesta exitosa del servidor")
                         android.util.Log.d("CERRAR_PALET_API", "📝 Mensaje: ${respuesta?.message}")
                         android.util.Log.d("CERRAR_PALET_API", "📦 Palet ID: ${respuesta?.paletId}")
-                        android.util.Log.d("CERRAR_PALET_API", "🔄 Traspasos ID: ${respuesta?.traspasosId}")
+                        android.util.Log.d("CERRAR_PALET_API", "🔄 Traspasos ID: ${respuesta?.traspasosIds}")
                         
                         // Obtener el ID del traspaso creado (no el paletId)
-                        val traspasoId = respuesta?.traspasosId?.firstOrNull()
+                        val traspasoId = respuesta?.traspasosIds?.firstOrNull()
 
                         if (traspasoId != null) {
                             android.util.Log.d("CERRAR_PALET_API", "✅ Devolviendo Traspaso ID: '$traspasoId'")
@@ -337,6 +340,37 @@ class TraspasosLogic {
                 }
 
                 override fun onFailure(call: Call<Void>, t: Throwable) {
+                    onError("Error de red: ${t.message}")
+                    SoundUtils.getInstance().playErrorSound()
+                }
+            })
+    }
+
+    fun forzarVaciadoPalet(
+        idPalet: String,
+        usuarioId: Int,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val dto = ForzarVaciadoPaletDto(usuarioId = usuarioId)
+        
+        ApiManager.traspasosApi.forzarVaciadoPalet(idPalet, dto)
+            .enqueue(object : Callback<Void> {
+                override fun onResponse(call: Call<Void>, response: Response<Void>) {
+                    if (response.isSuccessful) {
+                        Log.d("FORZAR_VACIADO", "✅ Palet vaciado correctamente")
+                        onSuccess()
+                        SoundUtils.getInstance().playSuccessSound()
+                    } else {
+                        val msg = response.errorBody()?.string() ?: "Error ${response.code()}"
+                        Log.e("FORZAR_VACIADO", "❌ Error: $msg")
+                        onError("No se pudo vaciar el palet: $msg")
+                        SoundUtils.getInstance().playErrorSound()
+                    }
+                }
+
+                override fun onFailure(call: Call<Void>, t: Throwable) {
+                    Log.e("FORZAR_VACIADO", "💥 Error de red: ${t.message}")
                     onError("Error de red: ${t.message}")
                     SoundUtils.getInstance().playErrorSound()
                 }
@@ -902,7 +936,7 @@ fun consultarStockConDescripcion(
 
     fun imprimirEtiquetaPalet(
         dto: LogImpresionDto,
-        onSuccess: () -> Unit,
+        onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         ApiManager.etiquetasApiService.insertarLogImpresion(dto)
@@ -912,15 +946,29 @@ fun consultarStockConDescripcion(
                     response: Response<LogImpresionDto>
                 ) {
                     if (response.isSuccessful) {
-                        onSuccess()
+                        val responseBody = response.body()
+                        val responseJson = if (responseBody != null) {
+                            // Convertir el objeto de respuesta a JSON
+                            val gson = Gson()
+                            gson.toJson(responseBody)
+                        } else {
+                            "✅ Impresión registrada correctamente (HTTP ${response.code()})"
+                        }
+                        onSuccess(responseJson)
                     } else {
-                        val error = response.errorBody()?.string() ?: "Error ${response.code()}"
-                        onError("Error al imprimir: $error")
+                        // Manejar diferentes tipos de errores según el código HTTP
+                        val errorBody = response.errorBody()?.string() ?: "Error ${response.code()}"
+                        val errorMessage = when (response.code()) {
+                            400 -> "❌ Error de validación (HTTP 400): $errorBody"
+                            500 -> "❌ Error del servidor (HTTP 500): $errorBody"
+                            else -> "❌ Error HTTP ${response.code()}: $errorBody"
+                        }
+                        onError(errorMessage)
                     }
                 }
 
                 override fun onFailure(call: Call<LogImpresionDto>, t: Throwable) {
-                    onError("Error de red: ${t.message}")
+                    onError("❌ Error de red: ${t.message}")
                 }
             })
     }
@@ -960,6 +1008,7 @@ fun consultarStockConDescripcion(
         id: String,
         dto: FinalizarTraspasoArticuloDto,
         onSuccess: () -> Unit,
+        onConflictoPalet: (ConflictoPaletResponse) -> Unit = {},
         onError: (String) -> Unit
     ) {
         ApiManager.traspasosApi.finalizarTraspasoArticulo(id, dto)
@@ -970,12 +1019,35 @@ fun consultarStockConDescripcion(
                 ) {
                     if (response.isSuccessful) {
                         onSuccess()
+                        SoundUtils.getInstance().playSuccessSound()
+                    } else if (response.code() == 409) {
+                        // Hay un palet en la ubicación destino, parsear opciones
+                        val errorBody = response.errorBody()?.string()
+                        Log.d("FINALIZAR_ARTICULO", "📦 409 Conflicto detectado: $errorBody")
+                        
+                        if (errorBody != null) {
+                            try {
+                                val gson = Gson()
+                                val conflicto = gson.fromJson(errorBody, ConflictoPaletResponse::class.java)
+                                onConflictoPalet(conflicto)
+                            } catch (e: Exception) {
+                                Log.e("FINALIZAR_ARTICULO", "❌ Error al parsear conflicto: ${e.message}")
+                                onError("Error al procesar respuesta del servidor")
+                                SoundUtils.getInstance().playErrorSound()
+                            }
+                        } else {
+                            onError("Error 409 sin detalles")
+                            SoundUtils.getInstance().playErrorSound()
+                        }
                     } else {
-                        onError("Error ${response.code()}: ${response.errorBody()?.string()}")
+                        val errorMsg = response.errorBody()?.string() ?: "Error ${response.code()}"
+                        onError("Error ${response.code()}: $errorMsg")
+                        SoundUtils.getInstance().playErrorSound()
                     }
                 }
                 override fun onFailure(call: retrofit2.Call<Void>, t: Throwable) {
                     onError("Error de red: ${t.message}")
+                    SoundUtils.getInstance().playErrorSound()
                 }
             })
     }
@@ -1180,7 +1252,7 @@ fun consultarStockConDescripcion(
         codigoEmpresa: Short,
         almacenDestino: String,
         ubicacionDestino: String,
-        onResult: (existe: Boolean, paletId: String?, cerrado: Boolean, aviso: String?) -> Unit,
+        onResult: (existe: Boolean, paletId: String?, cerrado: Boolean, aviso: String?, cantidadPalets: Int?, palets: List<PaletDto>?) -> Unit,
         onError: (String) -> Unit
     ) {
         ApiManager.traspasosApi
@@ -1194,7 +1266,7 @@ fun consultarStockConDescripcion(
                         onError("HTTP ${resp.code()}: ${resp.errorBody()?.string().orEmpty()}"); return
                     }
                     val b = resp.body() ?: PrecheckResp(false)
-                    onResult(b.existe, b.paletId, b.cerrado == true, b.aviso)
+                    onResult(b.existe, b.paletId, b.cerrado == true, b.aviso, b.cantidadPalets, b.palets)
                 }
                 override fun onFailure(call: retrofit2.Call<PrecheckResp>, t: Throwable) {
                     onError("Red: ${t.message}")

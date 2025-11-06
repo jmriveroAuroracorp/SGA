@@ -15,6 +15,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.time.LocalDate
+import kotlinx.coroutines.*
 
 class StockLogic(
     private val stockViewModel: StockViewModel,
@@ -44,26 +45,13 @@ class StockLogic(
             }
         }
 
-        // 🔍 LOG DE DEBUG - Parámetros enviados al backend
-        Log.d("STOCK_PARAMS", """
-            📡 Parámetros enviados al endpoint Stock/consulta-stock:
-            🏢 codigoEmpresa: $codigoEmpresa
-            📦 codigoArticulo: ${codigoArticulo.clean()}
-            📍 codigoUbicacion: ${codigoUbicacion.clean()}
-            🏬 codigoAlmacen: ${codigoAlmacen.clean()}
-            🎯 codigoCentro: ${codigoCentro.clean()}
-            🏭 almacen: ${almacen.clean()}
-            📋 partida: ${partida.clean()}
-            ═══════════════════════════════
-        """.trimIndent())
-
-        // 🔷 IMPORTANTE: codigoUbicacion NO se limpia con clean() para preservar "" (sin ubicar)
-        // Si es "", debe enviarse como "", no como null
-        val ubicacionFinal = codigoUbicacion?.trim()?.uppercase()
+        // ✅ OPTIMIZADO: Log simplificado de parámetros
+       
+        val ubicacionFinal = codigoUbicacion?.trim()?.uppercase() 
         
         ApiManager.stockApi.consultarStock(
             codigoEmpresa   = codigoEmpresa,
-            codigoUbicacion = ubicacionFinal,
+            codigoUbicacion = ubicacionFinal, 
             codigoAlmacen   = codigoAlmacen.clean(),
             codigoArticulo  = codigoArticulo.clean(),
             codigoCentro    = codigoCentro.clean(),
@@ -84,18 +72,7 @@ class StockLogic(
 
                 val listaInicial = response.body().orEmpty()
 
-                // 🔍 LOGS DE DEBUG - Stock recibido del backend
-                Log.d("STOCK_CONSULTA", """
-                    📡 Respuesta del backend:
-                    🎯 Total registros: ${listaInicial.size}
-                    📦 Almacenes encontrados: ${listaInicial.map { it.codigoAlmacen }.distinct()}
-                    
-                    📋 DETALLE DE STOCK:
-                    ${listaInicial.take(5).joinToString("\n") { stock ->
-                        "  • Art: ${stock.codigoArticulo} | Alm: ${stock.codigoAlmacen} | Disp: ${stock.disponible} | Ubi: ${stock.ubicacion}"
-                    }}${if (listaInicial.size > 5) "\n  ... y ${listaInicial.size - 5} más" else ""}
-                    ═══════════════════════════════
-                """.trimIndent())
+                // ✅ OPTIMIZADO: Logs simplificados para mejor rendimiento
 
                 if (listaInicial.isNotEmpty()) {
                     // Obtener descripciones para cada artículo individualmente
@@ -152,63 +129,67 @@ class StockLogic(
         onError: (String) -> Unit
     ) {
         val articulosUnicos = listaStock.map { it.codigoArticulo }.distinct()
-        val descripcionesMap = mutableMapOf<String, String>()
         
         if (articulosUnicos.isEmpty()) {
             onSuccess(listaStock.map { StockMapper.fromDto(it) })
             return
         }
 
-        // Función recursiva para procesar artículos secuencialmente
-        fun procesarArticulo(index: Int) {
-            if (index >= articulosUnicos.size) {
-                // Todos los artículos procesados, mapear resultados
-                val listaConDescripciones = listaStock.map { stockDto ->
-                    val descripcion = descripcionesMap[stockDto.codigoArticulo] ?: "Sin descripción"
-                    StockMapper.fromDto(stockDto.copy(descripcionArticulo = descripcion))
-                }
-                onSuccess(listaConDescripciones)
-                return
-            }
-
-            val codigoArticulo = articulosUnicos[index]
-            
-            ApiManager.stockApi.buscarArticulo(
-                codigoEmpresa = codigoEmpresa,
-                codigoArticulo = codigoArticulo,
-                codigoAlmacen = codigoAlmacen,
-                codigoCentro = codigoCentro,
-                almacen = almacen,
-                partida = partida
-            ).enqueue(object : Callback<List<ArticuloDto>> {
-                override fun onResponse(
-                    call: Call<List<ArticuloDto>>,
-                    response: Response<List<ArticuloDto>>
-                ) {
-                    val descripcion = if (response.isSuccessful) {
-                        response.body()?.firstOrNull()?.descripcion ?: "Sin descripción"
-                    } else {
-                        "Sin descripción"
+        // ✅ OPTIMIZADO: Procesar artículos en paralelo usando corrutinas
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val descripcionesMap = mutableMapOf<String, String>()
+                
+                // ✅ Crear llamadas paralelas para todos los artículos
+                val jobs = articulosUnicos.map { codigoArticulo ->
+                    async {
+                        try {
+                            val response = ApiManager.stockApi.buscarArticulo(
+                                codigoEmpresa = codigoEmpresa,
+                                codigoArticulo = codigoArticulo,
+                                codigoAlmacen = codigoAlmacen,
+                                codigoCentro = codigoCentro,
+                                almacen = almacen,
+                                partida = partida
+                            ).execute()
+                            
+                            val descripcion = if (response.isSuccessful) {
+                                response.body()?.firstOrNull()?.descripcion ?: "Sin descripción"
+                            } else {
+                                "Sin descripción"
+                            }
+                            
+                            codigoArticulo to descripcion
+                        } catch (e: Exception) {
+                            Log.w("STOCK_DESC", "Error obteniendo descripción para $codigoArticulo: ${e.message}")
+                            codigoArticulo to "Sin descripción"
+                        }
                     }
-                    descripcionesMap[codigoArticulo] = descripcion
-                    
-                    // Procesar el siguiente artículo
-                    procesarArticulo(index + 1)
                 }
-
-                override fun onFailure(call: Call<List<ArticuloDto>>, t: Throwable) {
-                    // En caso de error, usar descripción por defecto y continuar
-                    descripcionesMap[codigoArticulo] = "Sin descripción"
-                    Log.w("STOCK_DESC", "Error obteniendo descripción para $codigoArticulo: ${t.message}")
-                    
-                    // Procesar el siguiente artículo
-                    procesarArticulo(index + 1)
+                
+                // ✅ Esperar a que todas las llamadas se completen
+                val resultados = jobs.awaitAll()
+                
+                // ✅ Construir el mapa de descripciones
+                resultados.forEach { (codigo, descripcion) ->
+                    descripcionesMap[codigo] = descripcion
                 }
-            })
+                
+                // ✅ Mapear resultados finales en el hilo principal
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    val listaConDescripciones = listaStock.map { stockDto ->
+                        val descripcion = descripcionesMap[stockDto.codigoArticulo] ?: "Sin descripción"
+                        StockMapper.fromDto(stockDto.copy(descripcionArticulo = descripcion))
+                    }
+                    onSuccess(listaConDescripciones)
+                }
+                
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onError("Error procesando descripciones: ${e.message}")
+                }
+            }
         }
-
-        // Iniciar el procesamiento secuencial
-        procesarArticulo(0)
     }
 
     fun buscarArticuloPorEAN(
@@ -315,117 +296,13 @@ class StockLogic(
         })
     }
 
-/*fun procesarCodigoEscaneado(
-    code: String,
-    almacenSel: String?,
-    empresaId: Short,
-    onCodigoArticuloDetectado: (TextFieldValue) -> Unit,
-    onUbicacionDetectada: (TextFieldValue) -> Unit,
-    onError: (String) -> Unit,
-    lanzarConsulta: () -> Unit,
-    onMultipleArticulos: (List<ArticuloDto>) -> Unit
-) {
-    Log.d("ESCANEO", "📷 Código recibido: $code")
-    val trimmed = code.trim()
-
-    // ——— 1) Código EAN13 ———
-    if (trimmed.startsWith("010") && trimmed.length >= 20) {
-        val ean13 = trimmed.substring(3, 16)
-        Log.d("ESCANEO", "📦 EAN extraído: $ean13")
-
-        val ai15Index = trimmed.indexOf("15", startIndex = 16)
-        val ai10Index = trimmed.indexOf("10", startIndex = 16)
-
-        val fechaCaducidad = if (ai15Index != -1 && ai15Index + 8 <= trimmed.length) {
-            val fechaStr = trimmed.substring(ai15Index + 2, ai15Index + 8)
-            try {
-                LocalDate.parse("20${fechaStr.substring(0, 2)}-${fechaStr.substring(2, 4)}-${fechaStr.substring(4, 6)}")
-            } catch (_: Exception) { null }
-        } else null
-
-        val partida = if (ai10Index != -1 && ai10Index + 2 < trimmed.length) {
-            trimmed.substring(ai10Index + 2)
-        } else null
-
-        Log.d("ESCANEO", "📅 Fecha caducidad: $fechaCaducidad")
-        Log.d("ESCANEO", "🔖 Partida: $partida")
-
-        buscarArticuloPorEAN(
-            codigoEmpresa = empresaId,
-            ean13 = ean13,
-            codigoAlmacen = almacenSel.takeIf { it != "Todos" },
-            partida = partida,
-            onUnico = {
-                onCodigoArticuloDetectado(TextFieldValue(it))
-                lanzarConsulta()
-            },
-            onMultiple = onMultipleArticulos,
-            onError = { onError("❌ $it") }
-        )
-        return
-    }
-    // ——— 2) Ubicación con $ (p.ej. "PR$UB001013003004" o "213$UB001013003004") ———
-    if (trimmed.contains('$')) {
-        val parts = trimmed.split('$', limit = 2)
-        val (almacenEscaneado, ubicacionEscaneada) = when {
-            parts.size == 2 && parts[0].isNotBlank() -> parts[0] to parts[1]   // acepta PR, ALM01, 213, etc.
-            parts.size == 2 -> null to parts[1]
-            else -> null to trimmed.removePrefix("$")
-        }
-
-        Log.d("ESCANEO", "📍 Ubicación escaneada: $ubicacionEscaneada")
-        almacenEscaneado?.let { Log.d("ESCANEO", "🏷️ Almacén escaneado: $it") }
-
-        // Mantenemos el contrato: pasamos lo escaneado tal cual para que la UI lo procese
-        onUbicacionDetectada(TextFieldValue(trimmed))
-        lanzarConsulta()
-        return
-    }
-
-    // ——— ) Para el resto de casos, exigir almacén seleccionado ———
-    // Validar almacén solo si vamos a buscar por ubicación
-    val esArticulo = trimmed.length in 4..25 && trimmed.all { it.isLetterOrDigit() }
-    if (!esArticulo && (almacenSel.isNullOrBlank() || almacenSel == "Todos")) {
-        onError("⚠️ Selecciona un almacén para consultar por ubicación.")
-        return
-    }
-
-    // ——— 3) Código artículo directo ———
-    if (trimmed.length in 4..25 && trimmed.all { it.isLetterOrDigit() }) {
-        Log.d("ESCANEO", "🔍 Posible código de artículo: $trimmed")
-
-        ApiManager.stockApi.buscarArticulo(
-            codigoEmpresa = empresaId,
-            codigoArticulo = trimmed,
-            codigoAlmacen = almacenSel.takeIf { it != "Todos" }
-        ).enqueue(object : Callback<List<ArticuloDto>> {
-            override fun onResponse(call: Call<List<ArticuloDto>>, response: Response<List<ArticuloDto>>) {
-                val lista = response.body().orEmpty()
-
-                when (lista.size) {
-                    0 -> onError("No se encontró ningún artículo con ese código.")
-                    1 -> {
-                        onCodigoArticuloDetectado(TextFieldValue(lista.first().codigoArticulo))
-                        lanzarConsulta()
-                    }
-                    else -> onMultipleArticulos(lista)
-                }
-            }
-
-            override fun onFailure(call: Call<List<ArticuloDto>>, t: Throwable) {
-                onError("Error de red: ${t.message}")
-            }
-        })
-    } else {
-        onError("❌ Código no válido o formato no reconocido.")
-    }
-}*/
 fun procesarCodigoEscaneado(
     code: String,
     almacenSel: String?,
     empresaId: Short,
     onCodigoArticuloDetectado: (TextFieldValue) -> Unit,
     onUbicacionDetectada: (TextFieldValue) -> Unit,
+    onPaletDetectado: (com.example.sga.data.dto.traspasos.PaletDto) -> Unit,
     onError: (String) -> Unit,
     lanzarConsulta: () -> Unit,
     onMultipleArticulos: (List<ArticuloDto>) -> Unit
@@ -477,16 +354,7 @@ fun procesarCodigoEscaneado(
         return
     }
 
-/*    // ——— 2) Ubicación con $ (p.ej. "PR$UB001013003004" o "$UB001...") ———
-    if (trimmed.contains('$')) {
-        // Antes de tocar ubicación, VACIAMOS el artículo para evitar acumulaciones/foco pegado
-        onCodigoArticuloDetectado(TextFieldValue(""))
 
-        // Enviamos tal cual para que la UI lo procese (mantengo tu contrato actual)
-        onUbicacionDetectada(TextFieldValue(text = trimmed, selection = TextRange(trimmed.length)))
-        lanzarConsulta()
-        return
-    }*/
     // ——— 2) Ubicación con $ (ALM$UB…, ALM$, o $UB…) ———
     if (trimmed.contains('$')) {
         // Antes de tocar ubicación, VACIAMOS el artículo para evitar acumulaciones/foco pegado
@@ -544,7 +412,39 @@ fun procesarCodigoEscaneado(
         return
     }
 
-    // ——— 4) Código artículo directo ———
+    // ——— 4) SSCC (Serial Shipping Container Code) para palets ———
+    val ssccRegex = Regex("""^00(\d{18})""")
+    ssccRegex.find(trimmed)?.let { m ->
+        val gs1 = m.groupValues[1]
+        Log.d("ESCANEO", "📦 SSCC detectado: $gs1")
+
+        ApiManager.traspasosApi.obtenerPaletPorGS1(gs1)
+            .enqueue(object : Callback<com.example.sga.data.dto.traspasos.PaletDto> {
+                override fun onResponse(call: Call<com.example.sga.data.dto.traspasos.PaletDto>, response: Response<com.example.sga.data.dto.traspasos.PaletDto>) {
+                    if (response.isSuccessful) {
+                        val palet = response.body()
+                        if (palet != null) {
+                            onPaletDetectado(palet)
+                            SoundUtils.getInstance().playSuccessSound()
+                        } else {
+                            onError("No se encontró ningún palet con ese GS1.")
+                            SoundUtils.getInstance().playErrorSound()
+                        }
+                    } else {
+                        onError("Error HTTP al obtener palet: ${response.code()}")
+                        SoundUtils.getInstance().playErrorSound()
+                    }
+                }
+
+                override fun onFailure(call: Call<com.example.sga.data.dto.traspasos.PaletDto>, t: Throwable) {
+                    onError("Error de red al obtener palet: ${t.message}")
+                    SoundUtils.getInstance().playErrorSound()
+                }
+            })
+        return
+    }
+
+    // ——— 5) Código artículo directo ———
     val esArticulo = trimmed.length in 4..25 && trimmed.all { it.isLetterOrDigit() }
     if (esArticulo) {
         Log.d("ESCANEO", "🔍 Posible código de artículo: $trimmed")
@@ -580,6 +480,78 @@ fun procesarCodigoEscaneado(
     // ——— 5) Formato no reconocido ———
     onError("❌ Código no válido o formato no reconocido.")
 }
+
+    fun consultarStockPorPalet(
+        palet: com.example.sga.data.dto.traspasos.PaletDto,
+        codigoEmpresa: Short,
+        onSuccess: (List<com.example.sga.data.model.stock.Stock>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        stockViewModel.setCargando(true)
+        
+        // Obtener las líneas del palet
+        ApiManager.traspasosApi.obtenerLineasPalet(palet.id)
+            .enqueue(object : Callback<List<com.example.sga.data.dto.traspasos.LineaPaletDto>> {
+                override fun onResponse(
+                    call: Call<List<com.example.sga.data.dto.traspasos.LineaPaletDto>>,
+                    response: Response<List<com.example.sga.data.dto.traspasos.LineaPaletDto>>
+                ) {
+                    if (response.isSuccessful) {
+                        val lineas = response.body().orEmpty()
+                        Log.d("PALET_STOCK", "📦 Líneas del palet ${palet.codigoPalet}: ${lineas.size}")
+                        
+                        // Extraer información de ubicación del palet de las líneas para mostrar en la tarjeta
+                        val primeraLinea = lineas.firstOrNull()
+                        val codigoAlmacenPalet = primeraLinea?.codigoAlmacen ?: ""
+                        val ubicacionPalet = primeraLinea?.ubicacion ?: ""
+                        
+                        // Convertir líneas del palet a Stock - cada línea ya tiene su ubicación
+                        val stockDelPalet = lineas.map { linea ->
+                            com.example.sga.data.model.stock.Stock(
+                                codigoEmpresa = codigoEmpresa.toString(),
+                                codigoArticulo = linea.codigoArticulo,
+                                descripcionArticulo = linea.descripcion ?: "Sin descripción",
+                                codigoAlmacen = linea.codigoAlmacen ?: "",
+                                almacen = linea.codigoAlmacen ?: "", // Usar codigoAlmacen como almacen por ahora
+                                ubicacion = linea.ubicacion ?: "",
+                                partida = linea.lote ?: "",
+                                fechaCaducidad = linea.fechaCaducidad,
+                                unidadesSaldo = linea.cantidad,
+                                reservado = 0.0,
+                                disponible = linea.cantidad,
+                                tipoStock = "Paletizado",
+                                paletId = palet.id,
+                                codigoPalet = palet.codigoPalet,
+                                estadoPalet = palet.estado,
+                                ordenTrabajoId = palet.ordenTrabajoId
+                            )
+                        }
+                        
+                        stockViewModel.setResultado(stockDelPalet)
+                        stockViewModel.setError(null)
+                        stockViewModel.setCargando(false)
+                        onSuccess(stockDelPalet)
+                        SoundUtils.getInstance().playSuccessSound()
+                        
+                    } else {
+                        stockViewModel.setError("Error al obtener líneas del palet: ${response.code()}")
+                        stockViewModel.setCargando(false)
+                        onError("Error al obtener líneas del palet: ${response.code()}")
+                        SoundUtils.getInstance().playErrorSound()
+                    }
+                }
+
+                override fun onFailure(
+                    call: Call<List<com.example.sga.data.dto.traspasos.LineaPaletDto>>,
+                    t: Throwable
+                ) {
+                    stockViewModel.setError("Error de red al obtener líneas del palet: ${t.message}")
+                    stockViewModel.setCargando(false)
+                    onError("Error de red al obtener líneas del palet: ${t.message}")
+                    SoundUtils.getInstance().playErrorSound()
+                }
+            })
+    }
 
 }
 

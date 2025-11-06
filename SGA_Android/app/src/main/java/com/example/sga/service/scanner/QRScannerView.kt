@@ -38,9 +38,12 @@ fun QRScannerView(
             .also {
                 it.setAnalyzer(
                     ContextCompat.getMainExecutor(context),
-                    QRCodeAnalyzer { code ->
-                        onCodeScanned(code)
-                    }
+                    QRCodeAnalyzer(
+                        onQRCodeScanned = { code ->
+                            onCodeScanned(code)
+                        },
+                        scanDelayMillis = 1000L
+                    )
                 )
             }
 

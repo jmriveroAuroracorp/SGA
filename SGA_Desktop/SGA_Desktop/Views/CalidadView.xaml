@@ -298,7 +298,7 @@
                                                            FontSize="9"
                                                            HorizontalAlignment="Center"
                                                            Margin="0,0,0,3"/>
-                                                <TextBlock Text="{Binding CantidadDisponible, StringFormat=F4}"  
+                                                <TextBlock Text="{Binding CantidadDisponible, StringFormat='0.########'}"  
                                                            FontWeight="Bold" 
                                                            FontSize="18"
                                                            Foreground="White"

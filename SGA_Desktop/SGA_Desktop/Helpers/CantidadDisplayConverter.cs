@@ -25,14 +25,14 @@ namespace SGA_Desktop.Helpers
 
                 // Si hay cantidad contada, mostrarla formateada
                 if (cantidadContada.HasValue)
-                    return cantidadContada.Value.ToString("F4", CultureInfo.InvariantCulture);
+                    return DecimalFormatHelper.FormatearCantidad(cantidadContada.Value);
 
-                // Si es inventario inicializado a 0, mostrar 0.0000
+                // Si es inventario inicializado a 0, mostrar 0
                 if (esInicializadoACero)
-                    return "0.0000";
+                    return "0";
 
                 // Si es inventario normal, mostrar StockActual por defecto
-                return stockActual.ToString("F4", CultureInfo.InvariantCulture);
+                return DecimalFormatHelper.FormatearCantidad(stockActual);
             }
             catch
             {

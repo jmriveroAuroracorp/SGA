@@ -11,8 +11,15 @@ import retrofit2.converter.scalars.ScalarsConverterFactory
 import okhttp3.logging.HttpLoggingInterceptor
 
 object ApiManager {
-    private const val BASE_URL = "http://10.0.5.176:5234/api/"
-    //private const val BASE_URL = "http://localhost:5234/api/"
+    //API DEL SERVIDOR DESPLEGADO
+    private const val BASE_URL = "http://10.0.0.175:5234/api/"
+
+    //API DEL PC DE RIVE
+    //private const val BASE_URL = "http://10.0.5.175:5234/api/"
+
+    //API DEL PC DE FRAN
+    //private const val BASE_URL = "http://10.0.5.176:5234/api/"
+
     // Retrofit con interceptor, creado de forma dinámica
 
     private fun createRetrofit(sessionViewModel: SessionViewModel, onUnauthorized: () -> Unit): Retrofit {
