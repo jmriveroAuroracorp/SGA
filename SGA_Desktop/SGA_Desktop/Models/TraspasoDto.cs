@@ -51,7 +51,9 @@ namespace SGA_Desktop.Models
 			}
 		}
 		public string CodigoPrincipalAndEstado => $"{CodigoPrincipal} - {CodigoEstado}";
-
+		
+		// Propiedad para identificar la fuente del traspaso
+		public string Fuente { get; set; } = "SGA_Actual";
 
 	}
 

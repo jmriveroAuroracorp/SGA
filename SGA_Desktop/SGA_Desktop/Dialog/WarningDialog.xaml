@@ -48,6 +48,7 @@
                     Width="100"
                     HorizontalAlignment="Center"
                     Style="{StaticResource EstiloBotonPrincipal}"
+                    IsDefault="True"
                     Click="AcceptButton_Click"/>
         </StackPanel>
     </Border>

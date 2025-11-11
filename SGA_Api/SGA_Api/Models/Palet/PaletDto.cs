@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace SGA_Api.Models.Palet
 {
@@ -37,6 +38,11 @@ namespace SGA_Api.Models.Palet
 		public int? UsuarioUltimaActividadId { get; set; }
 		public string? UsuarioUltimaActividadNombre { get; set; }
 		public string? DescripcionUltimaActividad { get; set; } // Descripción detallada de la actividad
+
+		// 🔷 NUEVO: Información para palets pendientes de vaciado
+		public bool EsPendienteVaciado { get; set; }
+		public string? MensajePendienteVaciado { get; set; }
+		public List<LineaPendienteVaciadoDto> LineasPendientesVaciado { get; set; } = new();
 
 	}
 }

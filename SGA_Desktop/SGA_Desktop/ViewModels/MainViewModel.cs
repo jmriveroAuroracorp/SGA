@@ -165,6 +165,13 @@ namespace SGA_Desktop.ViewModels
 	}
 
 	[RelayCommand]
+	public void IrAHistorialTraspasos()
+	{
+		NavigationStore.Navigate("HistorialTraspasos");
+		CurrentHeader = "HISTORIAL DE TRASPASOS";
+	}
+
+	[RelayCommand]
 	public void IrACalidad()
 	{
 		NavigationStore.Navigate("Calidad");

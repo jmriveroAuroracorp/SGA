@@ -12,6 +12,7 @@ namespace SGA_Api.Data
         }
         public DbSet<AcumuladoStockUbicacion> AcumuladoStockUbicacion { get; set; }
 		public DbSet<Ubicaciones> Ubicaciones { get; set; }
+		public DbSet<MovimientoStockUbicacion> MovimientoStockUbicacion { get; set; }
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -27,6 +28,9 @@ namespace SGA_Api.Data
 		  .HasNoKey()
 		  .ToView("Ubicaciones");
 
+			// Configurar clave primaria compuesta para MovimientoStockUbicacion
+			modelBuilder.Entity<MovimientoStockUbicacion>()
+				.HasKey(m => new { m.CodigoEmpresa, m.MovPosicion });
 
 		}
     }

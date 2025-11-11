@@ -18,15 +18,21 @@ namespace SGA_Api.Controllers.Traspasos;
 public class TraspasosController : ControllerBase
 {
 	private readonly AuroraSgaDbContext _context;
+	private readonly StorageControlDbContext _storageContext;
+	private readonly SageDbContext _sageContext;
 	private readonly ILogger<TraspasosController> _logger;
 	private readonly IValidacionTraspasoService _validacionService;
 
 	public TraspasosController(
 		AuroraSgaDbContext context,
+		StorageControlDbContext storageContext,
+		SageDbContext sageContext,
 		ILogger<TraspasosController> logger,
 		IValidacionTraspasoService validacionService)
 	{
 		_context = context;
+		_storageContext = storageContext;
+		_sageContext = sageContext;
 		_logger = logger;
 		_validacionService = validacionService;
 	}
@@ -1494,14 +1500,16 @@ public class TraspasosController : ControllerBase
 			if (traspasoPendiente)
 				return BadRequest("No se puede mover el palet porque tiene un traspaso pendiente de completar.");
 
-			// 2. Buscar el último traspaso COMPLETADO para ese palet
+			// 2. Buscar el último traspaso COMPLETADO de tipo PALET para ese palet
 			var ultimoTraspaso = await _context.Traspasos
-				.Where(t => t.PaletId == dto.PaletId && t.CodigoEstado == "COMPLETADO")
+				.Where(t => t.PaletId == dto.PaletId
+					&& t.CodigoEstado == "COMPLETADO"
+					&& t.TipoTraspaso == "PALET")
 				.OrderByDescending(t => t.FechaFinalizacion)
 				.FirstOrDefaultAsync();
 
 			if (ultimoTraspaso == null)
-				return BadRequest("No hay traspasos completados para este palet.");
+				return BadRequest("No hay traspasos de palet completados para este palet.");
 
 			// 3. Soportar ambos flujos: desktop (todo de una) y mobility (dos fases)
 			// Si el cliente envía PENDIENTE_ERP, significa que quiere finalizar inmediatamente
@@ -2051,6 +2059,308 @@ public class TraspasosController : ControllerBase
 			{
 				Title = "Error interno del servidor",
 				Detail = "Error validando traspaso de artículo"
+			});
+		}
+	}
+
+	/// <summary>
+	/// Obtener traspasos históricos de AURORA (tabla MovimientoStock) agrupados por MovTraspaso
+	/// </summary>
+	[HttpGet("storagecontrol")]
+	public async Task<IActionResult> GetTraspasosStorageControl(
+		[FromQuery] DateTime? fechaDesde = null,
+		[FromQuery] DateTime? fechaHasta = null,
+		[FromQuery] string? almacenOrigen = null,
+		[FromQuery] string? almacenDestino = null,
+		[FromQuery] string? codigoArticulo = null,
+		[FromQuery] string? partida = null)
+	{
+		try
+		{
+			var guidEmpty = Guid.Empty;
+
+			_logger.LogInformation($"🔍 Buscando traspasos AURORA (MovimientoStock) - FechaDesde: {fechaDesde}, FechaHasta: {fechaHasta}, AlmacenOrigen: {almacenOrigen}, AlmacenDestino: {almacenDestino}");
+
+			// 1. Obtener TODOS los movimientos de tipo 1 (Entrada) y 2 (Salida) en el rango de fechas
+			// NOTA: En AURORA, MovTraspaso puede ser Guid.Empty, así que relacionamos por lógica de negocio
+			// IMPORTANTE: MovimientoStock está en la base de datos AURORA, no en AURORA_SGA, así que usamos _sageContext
+			// Aumentar timeout para consultas grandes
+			_sageContext.Database.SetCommandTimeout(120); // 2 minutos
+			
+			var query = _sageContext.MovimientoStock
+				.Where(m => m.TipoMovimiento == 1 || m.TipoMovimiento == 2);
+				// NOTA: Se quitó el filtro CodigoCanal == "0" para mostrar todos los traspasos
+				// Esto puede incluir movimientos que no forman traspasos completos (1 salida = 1 entrada)
+			
+			// Aplicar filtros de fecha (siempre requeridos para evitar cargar toda la tabla)
+			// Por defecto solo hoy si no se especifica
+			var fechaDesdeFiltro = fechaDesde ?? DateTime.Today;
+			var fechaHastaFiltro = fechaHasta ?? DateTime.Today.AddDays(1).AddSeconds(-1);
+			
+			query = query.Where(m => m.Fecha >= fechaDesdeFiltro && m.Fecha <= fechaHastaFiltro);
+			
+			// Aplicar filtros opcionales
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+				query = query.Where(m => m.CodigoArticulo == codigoArticulo);
+			
+			if (!string.IsNullOrWhiteSpace(partida))
+				query = query.Where(m => m.Partida == partida);
+			
+			var movimientos = await query.ToListAsync();
+
+			_logger.LogInformation($"📊 Movimientos encontrados: {movimientos.Count}");
+
+			// 2. Separar movimientos de salida y entrada
+			var movimientosSalida = movimientos.Where(m => m.TipoMovimiento == 2).ToList();
+			var movimientosEntrada = movimientos.Where(m => m.TipoMovimiento == 1).ToList();
+			
+			_logger.LogInformation($"📊 Movimientos Salida: {movimientosSalida.Count}, Entrada: {movimientosEntrada.Count}");
+
+			// 3. Relacionar movimientos por lógica de negocio: mismo artículo, misma cantidad, misma partida, fechas cercanas
+			// Usar AlmacenContrapartida si está disponible, sino relacionar por almacenes diferentes
+			var traspasosCompletos = new List<(Guid MovTraspaso, MovimientoStock Salida, MovimientoStock Entrada)>();
+			var movimientosProcesados = new HashSet<Guid>();
+			
+			foreach (var salida in movimientosSalida)
+			{
+				if (movimientosProcesados.Contains(salida.MovPosicion))
+					continue;
+				
+				// Aplicar filtro de almacén origen si se especifica
+				if (!string.IsNullOrWhiteSpace(almacenOrigen) && salida.CodigoAlmacen != almacenOrigen)
+					continue;
+				
+				// Buscar entrada que coincida
+				MovimientoStock? entrada = null;
+				
+				// Si AlmacenContrapartida está lleno, usarlo para encontrar la entrada
+				if (!string.IsNullOrWhiteSpace(salida.AlmacenContrapartida))
+				{
+					entrada = movimientosEntrada.FirstOrDefault(m => 
+						!movimientosProcesados.Contains(m.MovPosicion) &&
+						m.CodigoAlmacen == salida.AlmacenContrapartida &&
+						m.CodigoArticulo == salida.CodigoArticulo &&
+						m.Unidades == salida.Unidades &&
+						(m.Partida == salida.Partida || (string.IsNullOrWhiteSpace(m.Partida) && string.IsNullOrWhiteSpace(salida.Partida))) &&
+						Math.Abs((m.Fecha - salida.Fecha).TotalHours) <= 24);
+				}
+				else
+				{
+					// Si no hay AlmacenContrapartida, relacionar por lógica: mismo artículo, cantidad, partida, almacenes diferentes
+					entrada = movimientosEntrada.FirstOrDefault(m => 
+						!movimientosProcesados.Contains(m.MovPosicion) &&
+						m.CodigoAlmacen != salida.CodigoAlmacen && // Almacenes diferentes
+						m.CodigoArticulo == salida.CodigoArticulo &&
+						m.Unidades == salida.Unidades &&
+						(m.Partida == salida.Partida || (string.IsNullOrWhiteSpace(m.Partida) && string.IsNullOrWhiteSpace(salida.Partida))) &&
+						Math.Abs((m.Fecha - salida.Fecha).TotalHours) <= 24);
+				}
+				
+				// Aplicar filtro de almacén destino si se especifica
+				if (entrada != null && !string.IsNullOrWhiteSpace(almacenDestino))
+				{
+					if (entrada.CodigoAlmacen != almacenDestino)
+						entrada = null;
+				}
+				
+				if (entrada != null)
+				{
+					// Usar MovTraspaso de la salida si existe y no es Guid.Empty, sino generar uno nuevo
+					var movTraspaso = salida.MovTraspaso != guidEmpty ? salida.MovTraspaso : Guid.NewGuid();
+					traspasosCompletos.Add((movTraspaso, salida, entrada));
+					movimientosProcesados.Add(salida.MovPosicion);
+					movimientosProcesados.Add(entrada.MovPosicion);
+				}
+			}
+
+			_logger.LogInformation($"📦 Traspasos completos encontrados: {traspasosCompletos.Count}");
+
+			// 4. Identificar movimientos sin pareja (los que no están en movimientosProcesados)
+			var salidasSinPareja = movimientosSalida
+				.Where(s => !movimientosProcesados.Contains(s.MovPosicion))
+				.ToList();
+			
+			var entradasSinPareja = movimientosEntrada
+				.Where(e => !movimientosProcesados.Contains(e.MovPosicion))
+				.ToList();
+			
+			_logger.LogInformation($"📊 Movimientos sin pareja: {salidasSinPareja.Count} salidas, {entradasSinPareja.Count} entradas");
+
+			// 5. Obtener todas las descripciones de artículos en una sola consulta (optimización)
+			// Incluir también los movimientos sin pareja para obtener sus descripciones
+			var codigosArticulos = traspasosCompletos
+				.SelectMany(t => new[] { t.Salida, t.Entrada })
+				.Concat(salidasSinPareja)
+				.Concat(entradasSinPareja)
+				.Where(m => !string.IsNullOrWhiteSpace(m.CodigoArticulo))
+				.Select(m => new { m.CodigoEmpresa, m.CodigoArticulo })
+				.Distinct()
+				.ToList();
+
+			var descripcionesDict = new Dictionary<(short, string), string?>();
+			if (codigosArticulos.Any())
+			{
+				// Crear HashSet de tuplas para búsqueda eficiente O(1)
+				var codigosArticulosSet = codigosArticulos
+					.Select(c => (c.CodigoEmpresa, c.CodigoArticulo))
+					.ToHashSet();
+
+				// Obtener empresas únicas
+				var empresas = codigosArticulos.Select(c => c.CodigoEmpresa).Distinct().ToList();
+
+				// Cargar artículos haciendo consultas individuales por empresa (evita completamente OPENJSON)
+				var todosArticulos = new List<(short CodigoEmpresa, string CodigoArticulo, string? DescripcionArticulo)>();
+				
+				foreach (var empresa in empresas)
+				{
+					// Consulta simple con == (sin Contains, sin OPENJSON)
+					var articulosEmpresa = await _sageContext.Articulos
+						.Where(a => a.CodigoEmpresa == empresa)
+						.Select(a => new { a.CodigoEmpresa, a.CodigoArticulo, a.DescripcionArticulo })
+						.ToListAsync();
+					
+					todosArticulos.AddRange(articulosEmpresa.Select(a => (a.CodigoEmpresa, a.CodigoArticulo, a.DescripcionArticulo)));
+				}
+
+				// Filtrar en memoria usando HashSet para búsqueda eficiente O(1)
+				foreach (var art in todosArticulos)
+				{
+					if (codigosArticulosSet.Contains((art.CodigoEmpresa, art.CodigoArticulo)))
+					{
+						descripcionesDict[(art.CodigoEmpresa, art.CodigoArticulo)] = art.DescripcionArticulo;
+					}
+				}
+			}
+
+			// 6. Construir DTOs para traspasos completos
+			var resultado = new List<TraspasoStorageControlDto>();
+
+			foreach (var traspasoCompleto in traspasosCompletos)
+			{
+				var salida = traspasoCompleto.Salida;
+				var entrada = traspasoCompleto.Entrada;
+
+				// Obtener descripción del artículo del diccionario
+				string? descripcionArticulo = null;
+				if (!string.IsNullOrWhiteSpace(salida.CodigoArticulo))
+				{
+					var key = (salida.CodigoEmpresa, salida.CodigoArticulo);
+					descripcionesDict.TryGetValue(key, out descripcionArticulo);
+				}
+
+				var dto = new TraspasoStorageControlDto
+				{
+					MovTraspaso = traspasoCompleto.MovTraspaso,
+					CodigoArticulo = salida.CodigoArticulo,
+					DescripcionArticulo = descripcionArticulo,
+					Partida = salida.Partida,
+					FechaCaducidad = salida.FechaCaduca,
+					AlmacenOrigen = salida.CodigoAlmacen, // Origen: almacén de la salida
+					UbicacionOrigen = salida.Ubicacion, // Origen: ubicación de la salida
+					AlmacenDestino = entrada.CodigoAlmacen, // Destino: almacén de la entrada
+					UbicacionDestino = entrada.Ubicacion, // Destino: ubicación de la entrada
+					Cantidad = salida.Unidades,
+					Fecha = salida.Fecha,
+					FechaRegistro = salida.FechaRegistro,
+					Comentario = salida.Comentario,
+					CodigoEmpresa = salida.CodigoEmpresa,
+					Ejercicio = salida.Ejercicio,
+					EstadoMovimiento = null // Traspaso completo
+				};
+
+				resultado.Add(dto);
+			}
+
+			// 7. Agregar salidas sin pareja como registros individuales
+			foreach (var salida in salidasSinPareja)
+			{
+				// Aplicar filtro de almacén origen si se especifica
+				if (!string.IsNullOrWhiteSpace(almacenOrigen) && salida.CodigoAlmacen != almacenOrigen)
+					continue;
+
+				// Obtener descripción del artículo del diccionario
+				string? descripcionArticulo = null;
+				if (!string.IsNullOrWhiteSpace(salida.CodigoArticulo))
+				{
+					var key = (salida.CodigoEmpresa, salida.CodigoArticulo);
+					descripcionesDict.TryGetValue(key, out descripcionArticulo);
+				}
+
+				var dto = new TraspasoStorageControlDto
+				{
+					MovTraspaso = salida.MovTraspaso != guidEmpty ? salida.MovTraspaso : Guid.NewGuid(),
+					CodigoArticulo = salida.CodigoArticulo,
+					DescripcionArticulo = descripcionArticulo,
+					Partida = salida.Partida,
+					FechaCaducidad = salida.FechaCaduca,
+					AlmacenOrigen = salida.CodigoAlmacen,
+					UbicacionOrigen = salida.Ubicacion,
+					AlmacenDestino = null, // Sin destino porque no hay entrada
+					UbicacionDestino = null, // Sin destino porque no hay entrada
+					Cantidad = salida.Unidades,
+					Fecha = salida.Fecha,
+					FechaRegistro = salida.FechaRegistro,
+					Comentario = salida.Comentario,
+					CodigoEmpresa = salida.CodigoEmpresa,
+					Ejercicio = salida.Ejercicio,
+					EstadoMovimiento = "SIN_ENTRADA" // Salida sin entrada correspondiente
+				};
+
+				resultado.Add(dto);
+			}
+
+			// 8. Agregar entradas sin pareja como registros individuales
+			foreach (var entrada in entradasSinPareja)
+			{
+				// Aplicar filtro de almacén destino si se especifica
+				if (!string.IsNullOrWhiteSpace(almacenDestino) && entrada.CodigoAlmacen != almacenDestino)
+					continue;
+
+				// Obtener descripción del artículo del diccionario
+				string? descripcionArticulo = null;
+				if (!string.IsNullOrWhiteSpace(entrada.CodigoArticulo))
+				{
+					var key = (entrada.CodigoEmpresa, entrada.CodigoArticulo);
+					descripcionesDict.TryGetValue(key, out descripcionArticulo);
+				}
+
+				var dto = new TraspasoStorageControlDto
+				{
+					MovTraspaso = entrada.MovTraspaso != guidEmpty ? entrada.MovTraspaso : Guid.NewGuid(),
+					CodigoArticulo = entrada.CodigoArticulo,
+					DescripcionArticulo = descripcionArticulo,
+					Partida = entrada.Partida,
+					FechaCaducidad = entrada.FechaCaduca,
+					AlmacenOrigen = null, // Sin origen porque no hay salida
+					UbicacionOrigen = null, // Sin origen porque no hay salida
+					AlmacenDestino = entrada.CodigoAlmacen,
+					UbicacionDestino = entrada.Ubicacion,
+					Cantidad = entrada.Unidades,
+					Fecha = entrada.Fecha,
+					FechaRegistro = entrada.FechaRegistro,
+					Comentario = entrada.Comentario,
+					CodigoEmpresa = entrada.CodigoEmpresa,
+					Ejercicio = entrada.Ejercicio,
+					EstadoMovimiento = "SIN_SALIDA" // Entrada sin salida correspondiente
+				};
+
+				resultado.Add(dto);
+			}
+
+			// Ordenar por fecha descendente (usando FechaRegistro si está disponible, sino Fecha)
+			resultado = resultado.OrderByDescending(t => t.FechaRegistro ?? t.Fecha).ToList();
+
+			_logger.LogInformation($"✅ Traspasos finales: {resultado.Count}");
+
+			return Ok(resultado);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error obteniendo traspasos de StorageControl");
+			return StatusCode(500, new ProblemDetails
+			{
+				Title = "Error interno del servidor",
+				Detail = "Error obteniendo traspasos de StorageControl"
 			});
 		}
 	}

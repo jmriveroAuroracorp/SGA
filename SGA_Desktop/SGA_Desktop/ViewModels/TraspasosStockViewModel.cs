@@ -138,10 +138,19 @@ namespace SGA_Desktop.ViewModels
                 // Guardar el estado de expansión actual antes de refrescar
                 GuardarEstadosExpansion();
                 await BuscarStockAsync();
-                // Pequeño delay para asegurar que la UI se actualice
-                await Task.Delay(50);
-                // Restaurar el estado de expansión después de refrescar
-                RestaurarEstadosExpansion();
+                // Esperar a que la UI se actualice completamente
+                await Task.Delay(150);
+                // Restaurar el estado de expansión después de refrescar en el hilo de la UI
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    RestaurarEstadosExpansion();
+                });
+                // Forzar actualización adicional para asegurar que los expanders se abran
+                await Task.Delay(100);
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    RestaurarEstadosExpansion();
+                });
             }
         }
 
@@ -276,10 +285,19 @@ namespace SGA_Desktop.ViewModels
                 GuardarEstadosExpansion();
                 await BuscarStockAsync();
                 await CargarUltimosTraspasosAsync();
-                // Pequeño delay para asegurar que la UI se actualice
-                await Task.Delay(50);
-                // Restaurar el estado de expansión después de refrescar
-                RestaurarEstadosExpansion();
+                // Esperar a que la UI se actualice completamente
+                await Task.Delay(150);
+                // Restaurar el estado de expansión después de refrescar en el hilo de la UI
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    RestaurarEstadosExpansion();
+                });
+                // Forzar actualización adicional para asegurar que los expanders se abran
+                await Task.Delay(100);
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    RestaurarEstadosExpansion();
+                });
             }
             else
             {
@@ -331,10 +349,19 @@ namespace SGA_Desktop.ViewModels
                     GuardarEstadosExpansion();
                     await BuscarStockAsync();
                     await CargarUltimosTraspasosAsync();
-                    // Pequeño delay para asegurar que la UI se actualice
-                    await Task.Delay(50);
-                    // Restaurar el estado de expansión después de refrescar
-                    RestaurarEstadosExpansion();
+                    // Esperar a que la UI se actualice completamente
+                    await Task.Delay(150);
+                    // Restaurar el estado de expansión después de refrescar en el hilo de la UI
+                    Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        RestaurarEstadosExpansion();
+                    });
+                    // Forzar actualización adicional para asegurar que los expanders se abran
+                    await Task.Delay(100);
+                    Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        RestaurarEstadosExpansion();
+                    });
                 }
             };
             dlg.ShowDialog();
@@ -354,17 +381,6 @@ namespace SGA_Desktop.ViewModels
 			dlg.ShowDialog();
 		}
 
-		[RelayCommand]
-		public async Task VerHistorialAsync()
-		{
-			var vm = new TraspasoHistoricoDialogViewModel(_traspasosService);
-			var dlg = new TraspasoHistoricoDialog(vm);
-			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-					 ?? Application.Current.MainWindow;
-			if (owner != null && owner != dlg)
-				dlg.Owner = owner;
-			dlg.ShowDialog();
-		}
 
         //  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
         private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
@@ -406,15 +422,28 @@ namespace SGA_Desktop.ViewModels
         {
             foreach (var grupo in ArticulosConUbicaciones)
             {
+                // Intentar buscar por clave completa primero
                 var clave = $"{grupo.CodigoArticulo}_{grupo.DescripcionArticulo}";
                 if (_estadosExpansion.ContainsKey(clave))
                 {
                     grupo.IsExpanded = _estadosExpansion[clave];
                 }
+                else
+                {
+                    // Si no se encuentra, buscar solo por código de artículo
+                    var clavePorCodigo = _estadosExpansion.Keys.FirstOrDefault(k => k.StartsWith($"{grupo.CodigoArticulo}_"));
+                    if (clavePorCodigo != null && _estadosExpansion.ContainsKey(clavePorCodigo))
+                    {
+                        grupo.IsExpanded = _estadosExpansion[clavePorCodigo];
+                    }
+                }
             }
             
             // Forzar la actualización de la UI
             OnPropertyChanged(nameof(ArticulosConUbicaciones));
+            
+            // Los cambios en IsExpanded se notifican automáticamente gracias a [ObservableProperty]
+            // No es necesario llamar manualmente a OnPropertyChanged desde fuera de la clase
         }
 
         // 🔷 NUEVO: Método para cargar partidas disponibles del stock
@@ -645,8 +674,12 @@ namespace SGA_Desktop.ViewModels
         // 🔷 NUEVO: Método para filtrar resultados por almacén y partida sin hacer nueva búsqueda
         private void FiltrarResultadosPorAlmacen()
         {
-            // Guardar el estado de expansión antes de limpiar
-            GuardarEstadosExpansion();
+            // Guardar el estado de expansión antes de limpiar solo si no hay estados guardados previamente
+            // Esto evita sobrescribir estados guardados desde RefrescarAsync()
+            if (_estadosExpansion.Count == 0)
+            {
+                GuardarEstadosExpansion();
+            }
             
             // Limpiar resultados actuales
             ArticulosConUbicaciones.Clear();

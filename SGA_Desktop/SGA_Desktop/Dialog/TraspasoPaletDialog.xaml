@@ -83,25 +83,24 @@
                     <TextBlock Text="Destino del traspaso:" Style="{StaticResource LabelStyle}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
                     
                     <TextBlock Text="Almacén destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,5"/>
-                    <ComboBox ItemsSource="{Binding AlmacenesDestinoView}"
+                    <ComboBox ItemsSource="{Binding AlmacenesDestino}"
                               SelectedItem="{Binding AlmacenDestinoSeleccionado, Mode=TwoWay}"
                               DisplayMemberPath="DescripcionCombo"
                               Style="{StaticResource EstiloComboBox}"
                               Margin="0,0,0,15"
                               IsEditable="True"
-                              IsTextSearchEnabled="False"
-                              StaysOpenOnEdit="True"
-                              Text="{Binding FiltroAlmacenes, UpdateSourceTrigger=PropertyChanged}"
+                              IsTextSearchEnabled="True"
                               PreviewKeyDown="ComboBox_PreviewKeyDown"/>
                     
                     <TextBlock Text="Ubicación destino:" Style="{StaticResource LabelStyle}" Margin="0,0,0,5"/>
-                    <ComboBox ItemsSource="{Binding UbicacionesDestinoView}"
+                    <ComboBox ItemsSource="{Binding UbicacionesDestino}"
                               SelectedItem="{Binding UbicacionDestinoSeleccionada}"
                               DisplayMemberPath="Ubicacion"
                               Style="{StaticResource EstiloComboBox}"
                               Margin="0,0,0,15"
                               IsEditable="True"
-                              Text="{Binding FiltroUbicaciones, UpdateSourceTrigger=PropertyChanged}"
+                              IsTextSearchEnabled="True"
+                              IsEnabled="{Binding UbicacionesHabilitadas}"
                               PreviewKeyDown="ComboBox_PreviewKeyDown"/>
                     
                     <TextBlock Text="Comentario (opcional):" Style="{StaticResource LabelStyle}" Margin="0,0,0,5"/>

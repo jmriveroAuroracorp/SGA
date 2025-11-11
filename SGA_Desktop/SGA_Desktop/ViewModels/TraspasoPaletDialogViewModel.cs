@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Windows.Data;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
@@ -29,16 +28,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private AlmacenDto? almacenDestinoSeleccionado;
         public ObservableCollection<UbicacionDto> UbicacionesDestino { get; } = new();
         [ObservableProperty] private UbicacionDto? ubicacionDestinoSeleccionada;
-
-        // 🔷 NUEVO: Propiedades para búsqueda inteligente
-        [ObservableProperty] private string filtroAlmacenes = "";
-        [ObservableProperty] private bool isDropDownOpenAlmacenes = false;
-        [ObservableProperty] private string filtroUbicaciones = "";
-        [ObservableProperty] private bool isDropDownOpenUbicaciones = false;
-
-        // Vistas filtrables
-        public ICollectionView AlmacenesDestinoView { get; private set; } = null!;
-        public ICollectionView UbicacionesDestinoView { get; private set; } = null!;
+        [ObservableProperty] private bool ubicacionesHabilitadas = false;
 
         // Comandos
         public IRelayCommand BuscarPaletCommand { get; }
@@ -63,12 +53,6 @@ namespace SGA_Desktop.ViewModels
             SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
             MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
 
-            // Inicializar vistas filtrables
-            AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
-            AlmacenesDestinoView.Filter = FiltraAlmacenes;
-            UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
-            UbicacionesDestinoView.Filter = FiltraUbicaciones;
-
             _ = CargarAlmacenesDestinoAsync();
         }
 
@@ -80,12 +64,6 @@ namespace SGA_Desktop.ViewModels
             BuscarPaletCommand = new RelayCommand(BuscarPalets);
             SeleccionarPaletCommand = new RelayCommand<PaletMovibleDto>(SeleccionarPalet);
             MoverPaletCommand = new RelayCommand(MoverPalet, () => PuedeMoverPalet);
-
-            // Inicializar vistas filtrables
-            AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
-            AlmacenesDestinoView.Filter = FiltraAlmacenes;
-            UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
-            UbicacionesDestinoView.Filter = FiltraUbicaciones;
 
             // Precargar el palet seleccionado con datos básicos
             PaletSeleccionado = new PaletMovibleDto
@@ -147,29 +125,10 @@ namespace SGA_Desktop.ViewModels
                 
                 var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa.Value, centro, permisos);
                 
-                System.Diagnostics.Debug.WriteLine($"DEBUG: Se obtuvieron {almacenes.Count} almacenes del servicio");
-                
-                // Limpiar filtro ANTES de agregar elementos
-                FiltroAlmacenes = "";
-                
                 foreach (var a in almacenes)
                 {
                     AlmacenesDestino.Add(a);
-                    System.Diagnostics.Debug.WriteLine($"DEBUG: Agregado almacén {a.CodigoAlmacen} - {a.NombreAlmacen}");
                 }
-                
-                System.Diagnostics.Debug.WriteLine($"DEBUG: AlmacenesDestino tiene {AlmacenesDestino.Count} elementos");
-                System.Diagnostics.Debug.WriteLine($"DEBUG: FiltroAlmacenes = '{FiltroAlmacenes}'");
-                
-                // Forzar refresh de la vista y notificar cambios
-                AlmacenesDestinoView?.Refresh();
-                OnPropertyChanged(nameof(AlmacenesDestinoView));
-                OnPropertyChanged(nameof(AlmacenesDestino));
-                
-                System.Diagnostics.Debug.WriteLine($"DEBUG: Después de Refresh, AlmacenesDestinoView tiene {AlmacenesDestinoView?.Cast<object>().Count() ?? 0} elementos visibles");
-                
-                // NO seleccionar automáticamente el primer almacén - dejar en blanco
-                // AlmacenDestinoSeleccionado = AlmacenesDestino.FirstOrDefault();
             }
             catch (Exception ex)
             {
@@ -190,16 +149,13 @@ namespace SGA_Desktop.ViewModels
             
             if (value is not null)
             {
-                // Cuando se selecciona un almacén, limpiar el filtro para que el dropdown muestre todos
-                FiltroAlmacenes = "";
-                AlmacenesDestinoView?.Refresh();
+                UbicacionesHabilitadas = false;
                 _ = CargarUbicacionesParaAlmacenAsync(value.CodigoAlmacen);
             }
             else
             {
-                // Si se deselecciona, también limpiar el filtro
-                FiltroAlmacenes = "";
-                AlmacenesDestinoView?.Refresh();
+                UbicacionesDestino.Clear();
+                UbicacionesHabilitadas = false;
             }
         }
 
@@ -212,6 +168,8 @@ namespace SGA_Desktop.ViewModels
         private async Task CargarUbicacionesParaAlmacenAsync(string codigoAlmacen)
         {
             UbicacionesDestino.Clear();
+            UbicacionDestinoSeleccionada = null;
+            UbicacionesHabilitadas = false;
             var empresa = Helpers.SessionManager.EmpresaSeleccionada;
             if (!empresa.HasValue) return;
             try
@@ -224,13 +182,12 @@ namespace SGA_Desktop.ViewModels
                         Ubicacion = u.Ubicacion
                     });
 
-                // Refrescar la vista para que muestre todos los elementos
-                UbicacionesDestinoView?.Refresh();
-                OnPropertyChanged(nameof(UbicacionesDestinoView));
+                UbicacionesHabilitadas = UbicacionesDestino.Any();
             }
             catch
             {
                 // Manejo de error opcional
+                UbicacionesHabilitadas = false;
             }
         }
 
@@ -384,82 +341,6 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        // 🔷 NUEVO: Métodos para búsqueda inteligente de almacenes
-        private bool FiltraAlmacenes(object obj)
-        {
-            if (obj is not AlmacenDto almacen) return false;
-            if (string.IsNullOrEmpty(FiltroAlmacenes)) return true;
-            
-            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
-                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenes, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
-        }
-
-        partial void OnFiltroAlmacenesChanged(string value)
-        {
-            // Si el filtro está vacío o es null, mostrar todos los almacenes
-            if (string.IsNullOrEmpty(value))
-            {
-                AlmacenesDestinoView?.Refresh();
-            }
-            else
-            {
-                // Solo refrescar cuando hay un filtro activo
-                AlmacenesDestinoView?.Refresh();
-            }
-        }
-
-        [RelayCommand]
-        private void AbrirDropDownAlmacenes()
-        {
-            FiltroAlmacenes = ""; // Limpiar filtro para mostrar todo
-            IsDropDownOpenAlmacenes = true;
-        }
-
-        [RelayCommand]
-        private void CerrarDropDownAlmacenes()
-        {
-            IsDropDownOpenAlmacenes = false;
-        }
-
-        [RelayCommand]
-        private void LimpiarSeleccionAlmacenes()
-        {
-            AlmacenDestinoSeleccionado = null;
-            FiltroAlmacenes = ""; // Limpiar también el filtro de texto
-        }
-
-        // 🔷 NUEVO: Métodos para búsqueda inteligente de ubicaciones
-        private bool FiltraUbicaciones(object obj)
-        {
-            if (obj is not UbicacionDto ubicacion) return false;
-            if (string.IsNullOrEmpty(FiltroUbicaciones)) return true;
-            
-            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
-                .IndexOf(ubicacion.Ubicacion, FiltroUbicaciones, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
-        }
-
-        partial void OnFiltroUbicacionesChanged(string value)
-        {
-            UbicacionesDestinoView?.Refresh();
-        }
-
-        [RelayCommand]
-        private void AbrirDropDownUbicaciones()
-        {
-            IsDropDownOpenUbicaciones = true;
-        }
-
-        [RelayCommand]
-        private void CerrarDropDownUbicaciones()
-        {
-            IsDropDownOpenUbicaciones = false;
-        }
-
-        [RelayCommand]
-        private void LimpiarSeleccionUbicaciones()
-        {
-            UbicacionDestinoSeleccionada = null;
-            FiltroUbicaciones = ""; // Limpiar también el filtro de texto
-        }
+        // Métodos adicionales eliminados: los combos ahora muestran todas las opciones sin filtrado
     }
 } 

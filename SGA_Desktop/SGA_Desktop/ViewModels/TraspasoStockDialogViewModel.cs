@@ -9,7 +9,6 @@ using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
-using System.Windows.Data;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -26,20 +25,11 @@ namespace SGA_Desktop.ViewModels
         public decimal CantidadDisponible { get; set; }
         public ObservableCollection<AlmacenDto> AlmacenesDestino { get; set; }
         
-        // Vista filtrable para almacenes destino
-        public ICollectionView AlmacenesDestinoView { get; private set; }
-        
         [ObservableProperty]
         private AlmacenDto almacenDestinoSeleccionado;
         
         [ObservableProperty]
-        private string filtroAlmacenesDestino = "";
-        
-        [ObservableProperty]
-        private bool isDropDownOpenAlmacenes = false;
-        [ObservableProperty]
         private string cantidadATraspasarTexto;
-
         [ObservableProperty]
         private string comentariosTexto = "";
 
@@ -95,17 +85,8 @@ namespace SGA_Desktop.ViewModels
     [ObservableProperty]
     private ObservableCollection<UbicacionDto> ubicacionesDestino = new();
 
-    // Vista filtrable para ubicaciones destino
-    public ICollectionView UbicacionesDestinoView { get; private set; }
-
     [ObservableProperty]
     private UbicacionDto ubicacionDestinoSeleccionada;
-
-    [ObservableProperty]
-    private string filtroUbicacionesDestino = "";
-
-    [ObservableProperty]
-    private bool isDropDownOpenUbicaciones = false;
 
     // NUEVO: Propiedades para selección de palets
     [ObservableProperty]
@@ -115,7 +96,7 @@ namespace SGA_Desktop.ViewModels
     private PaletDisponibleDto paletDestinoSeleccionado;
 
     [ObservableProperty]
-    private bool mostrarSelectorPalets = false;
+    private bool selectorPaletsHabilitado;
 
     // NUEVO: Propiedades para opciones de paletización
     [ObservableProperty]
@@ -150,14 +131,6 @@ namespace SGA_Desktop.ViewModels
             foreach (var u in lista)
                 UbicacionesDestino.Add(u);
         }
-
-        // Inicializar la vista filtrable
-        UbicacionesDestinoView = CollectionViewSource.GetDefaultView(UbicacionesDestino);
-        UbicacionesDestinoView.Filter = FiltraUbicacionesDestino;
-        OnPropertyChanged(nameof(UbicacionesDestinoView));
-        
-        // Limpiar el filtro
-        FiltroUbicacionesDestino = "";
     }
 
     // NUEVO: Consultar palets disponibles en la ubicación destino
@@ -166,9 +139,9 @@ namespace SGA_Desktop.ViewModels
         // Limpiar lista anterior
         PaletsDisponibles.Clear();
         PaletDestinoSeleccionado = null;
-        MostrarSelectorPalets = false;
         MostrarOpcionesPalet = false;
         ResetearOpcionesPalet();
+        SelectorPaletsHabilitado = false;
 
         // Validar que tengamos almacén y ubicación destino
         if (AlmacenDestinoSeleccionado == null || UbicacionDestinoSeleccionada == null)
@@ -200,18 +173,18 @@ namespace SGA_Desktop.ViewModels
 
                 // NUEVO: Mostrar opciones de paletización
                 MostrarOpcionesPalet = true;
-                var primerPalet = PaletsDisponibles.First();
-                var estadoTxt = primerPalet.Cerrado ? "CERRADO" : "ABIERTO";
-                
-                if (resultado.CantidadPalets == 1)
+                if (resultado.CantidadPalets > 1)
                 {
-                    MensajeOpcionesPalet = $"Hay un palet {estadoTxt} en {AlmacenDestinoSeleccionado.CodigoAlmacen}-{UbicacionDestinoSeleccionada.Ubicacion} (Código: {primerPalet.CodigoPalet}). Elige una opción:";
+                    SelectorPaletsHabilitado = true;
+                    PaletDestinoSeleccionado = null;
                 }
                 else
                 {
-                    MensajeOpcionesPalet = $"Hay {resultado.CantidadPalets} palets en {AlmacenDestinoSeleccionado.CodigoAlmacen}-{UbicacionDestinoSeleccionada.Ubicacion}. Elige una opción:";
-                    MostrarSelectorPalets = true; // Mostrar selector para múltiples palets
+                    SelectorPaletsHabilitado = false;
+                    PaletDestinoSeleccionado = PaletsDisponibles.First();
                 }
+
+                ActualizarMensajeOpcionesPalet();
             }
         }
         catch (Exception ex)
@@ -227,6 +200,31 @@ namespace SGA_Desktop.ViewModels
         OpcionPaletizarSeleccionada = false;
         OpcionDejarSueltoSeleccionada = false;
         OpcionCancelarSeleccionada = false;
+        MensajeOpcionesPalet = "";
+    }
+
+    partial void OnPaletDestinoSeleccionadoChanged(PaletDisponibleDto value)
+    {
+        ActualizarMensajeOpcionesPalet();
+    }
+
+    private void ActualizarMensajeOpcionesPalet()
+    {
+        if (!PaletsDisponibles.Any() || AlmacenDestinoSeleccionado == null || UbicacionDestinoSeleccionada == null)
+        {
+            MensajeOpcionesPalet = "";
+            return;
+        }
+
+        if (PaletsDisponibles.Count > 1 && PaletDestinoSeleccionado == null)
+        {
+            MensajeOpcionesPalet = $"Hay {PaletsDisponibles.Count} palets en {AlmacenDestinoSeleccionado.CodigoAlmacen}-{UbicacionDestinoSeleccionada.Ubicacion}. Selecciona un palet y elige una opción:";
+            return;
+        }
+
+        var paletReferencia = PaletDestinoSeleccionado ?? PaletsDisponibles.First();
+        var estadoTxt = paletReferencia.Cerrado ? "CERRADO" : "ABIERTO";
+        MensajeOpcionesPalet = $"Hay un palet {estadoTxt} en {AlmacenDestinoSeleccionado.CodigoAlmacen}-{UbicacionDestinoSeleccionada.Ubicacion} (Código: {paletReferencia.CodigoPalet}). Elige una opción:";
     }
 
         public string CodigoArticulo { get; set; }
@@ -290,11 +288,6 @@ namespace SGA_Desktop.ViewModels
                 foreach (var a in almacenes)
                     AlmacenesDestino.Add(a);
                 OnPropertyChanged(nameof(AlmacenesDestino));
-                
-                // 🔷 NUEVO: Inicializar la vista filtrable después de cargar los datos
-                AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
-                AlmacenesDestinoView.Filter = FiltraAlmacenesDestino;
-                OnPropertyChanged(nameof(AlmacenesDestinoView));
             }
             catch (Exception ex)
             {
@@ -541,81 +534,6 @@ namespace SGA_Desktop.ViewModels
             dialog.ShowDialog();
         }
 
-
-        // Métodos para filtrado de almacenes destino
-        private bool FiltraAlmacenesDestino(object obj)
-        {
-            if (obj is not AlmacenDto almacen) return false;
-            if (string.IsNullOrEmpty(FiltroAlmacenesDestino)) return true;
-            
-            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
-                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesDestino, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
-        }
-        
-        // Método para manejar cambios en el filtro
-        partial void OnFiltroAlmacenesDestinoChanged(string value)
-        {
-            AlmacenesDestinoView?.Refresh();
-        }
-        
-    // Comandos para controlar dropdown de almacenes
-    [RelayCommand]
-    private void AbrirDropDownAlmacenes()
-    {
-        // Limpiar el filtro para permitir escribir desde cero
-        FiltroAlmacenesDestino = "";
-        IsDropDownOpenAlmacenes = true;
-    }
-    
-    [RelayCommand]
-    private void CerrarDropDownAlmacenes()
-    {
-        IsDropDownOpenAlmacenes = false;
-    }
-
-    [RelayCommand]
-    private void LimpiarSeleccionAlmacenesDestino()
-    {
-        AlmacenDestinoSeleccionado = null;
-    }
-
-    // Métodos para filtrado de ubicaciones destino
-    private bool FiltraUbicacionesDestino(object obj)
-    {
-        if (obj is not UbicacionDto ubicacion) return false;
-        if (string.IsNullOrEmpty(FiltroUbicacionesDestino)) return true;
-        
-        return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
-            .IndexOf(ubicacion.UbicacionMostrada, FiltroUbicacionesDestino, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
-    }
-    
-    // Método para manejar cambios en el filtro de ubicaciones
-    partial void OnFiltroUbicacionesDestinoChanged(string value)
-    {
-        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-        {
-            UbicacionesDestinoView?.Refresh();
-        }), System.Windows.Threading.DispatcherPriority.Background);
-    }
-    
-    // Comandos para controlar dropdown de ubicaciones
-    [RelayCommand]
-    private void AbrirDropDownUbicaciones()
-    {
-        IsDropDownOpenUbicaciones = true;
-    }
-    
-    [RelayCommand]
-    private void CerrarDropDownUbicaciones()
-    {
-        IsDropDownOpenUbicaciones = false;
-    }
-
-    [RelayCommand]
-    private void LimpiarSeleccionUbicacionesDestino()
-    {
-        UbicacionDestinoSeleccionada = null;
-    }
 
     // NUEVO: Comandos para opciones de paletización
     [RelayCommand]

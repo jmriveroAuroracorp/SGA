@@ -31,6 +31,10 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty] private string mensaje = "Listo";
 		[ObservableProperty] private bool cargando = false;
 		[ObservableProperty] private string? errorMessage;
+		[ObservableProperty] private bool mostrandoErrores;
+		[ObservableProperty] private bool hayErroresErp;
+		[ObservableProperty] private bool mostrandoPendientesVaciado;
+		[ObservableProperty] private bool hayPaletsPendientesVaciado;
 
 		// Propiedades de Paletización
 		[ObservableProperty] private PaletDto? paletSeleccionado;
@@ -47,6 +51,8 @@ namespace SGA_Desktop.ViewModels
         public IAsyncRelayCommand LoadPaletsCommand { get; }
         public IRelayCommand AbrirFiltrosCommand { get; }
         public IAsyncRelayCommand LoadLineasCommand { get; }
+        public IAsyncRelayCommand MostrarTraspasosErrorCommand { get; }
+        public IAsyncRelayCommand MostrarPaletsPendientesCommand { get; }
         public IAsyncRelayCommand CrearPaletCommand { get; }
         public IRelayCommand AbrirPaletLineasCommand { get; }
         public IRelayCommand<PaletDto> SeleccionarPaletCommand { get; }
@@ -56,6 +62,7 @@ namespace SGA_Desktop.ViewModels
         public IRelayCommand EliminarLineaSeleccionadaCommand { get; }
         public IAsyncRelayCommand FinalizarTraspasoCommand { get; }
         public IAsyncRelayCommand TraspasarPaletCommand { get; }
+        public IAsyncRelayCommand<PaletDto?> VaciarPaletPendienteCommand { get; }
         // Los comandos CerrarPaletCommand, ReabrirPaletCommand e ImprimirPaletCommand se generan automáticamente por [RelayCommand]
 
 	public TraspasosViewModel()
@@ -76,6 +83,9 @@ namespace SGA_Desktop.ViewModels
         AbrirFiltrosCommand = new RelayCommand(OpenFiltros);
         CrearPaletCommand = new AsyncRelayCommand(AbrirPaletCrearDialog);
         LoadLineasCommand = new AsyncRelayCommand(LoadLineasPaletAsync);
+        MostrarTraspasosErrorCommand = new AsyncRelayCommand(ToggleErroresAsync, () => MostrandoErrores || HayErroresErp);
+        MostrarPaletsPendientesCommand = new AsyncRelayCommand(TogglePendientesVaciadoAsync, () => MostrandoPendientesVaciado || HayPaletsPendientesVaciado);
+        VaciarPaletPendienteCommand = new AsyncRelayCommand<PaletDto?>(VaciarPaletPendienteAsync, CanVaciarPaletPendiente);
         AbrirPaletLineasCommand = new RelayCommand(AbrirPaletLineas, PuedeAbrirPaletLineas);
         SeleccionarPaletCommand = new RelayCommand<PaletDto>(SeleccionarPalet);
         CerrarContenidoCommand = new RelayCommand(CerrarContenido);
@@ -108,8 +118,54 @@ namespace SGA_Desktop.ViewModels
 			await Task.CompletedTask;
 		}
 
+		public string TextoBotonErrores => MostrandoErrores ? "← Ver palets" : "⚠️ Errores ERP";
+		public Visibility BotonErroresVisibility => HayErroresErp ? Visibility.Visible : Visibility.Collapsed;
+		public string TextoBotonPendientes => MostrandoPendientesVaciado ? "← Ver palets" : "⬛ Pendientes vaciar";
+		public Visibility BotonPendientesVisibility => HayPaletsPendientesVaciado ? Visibility.Visible : Visibility.Collapsed;
+
+		partial void OnMostrandoErroresChanged(bool value)
+		{
+			OnPropertyChanged(nameof(TextoBotonErrores));
+			RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+			MostrarTraspasosErrorCommand.NotifyCanExecuteChanged();
+			MostrarPaletsPendientesCommand.NotifyCanExecuteChanged();
+			OnPropertyChanged(nameof(BotonErroresVisibility));
+		}
+
+		partial void OnHayErroresErpChanged(bool value)
+		{
+			MostrarTraspasosErrorCommand.NotifyCanExecuteChanged();
+			OnPropertyChanged(nameof(BotonErroresVisibility));
+		}
+
+		partial void OnMostrandoPendientesVaciadoChanged(bool value)
+		{
+			OnPropertyChanged(nameof(TextoBotonPendientes));
+			MostrarPaletsPendientesCommand.NotifyCanExecuteChanged();
+			MostrarTraspasosErrorCommand.NotifyCanExecuteChanged();
+			OnPropertyChanged(nameof(BotonPendientesVisibility));
+		}
+
+		partial void OnHayPaletsPendientesVaciadoChanged(bool value)
+		{
+			MostrarPaletsPendientesCommand.NotifyCanExecuteChanged();
+			OnPropertyChanged(nameof(BotonPendientesVisibility));
+		}
+
 		private async Task LoadPaletsAsync()
 		{
+			if (MostrandoErrores)
+			{
+				await LoadTraspasosErrorAsync();
+				return;
+			}
+
+			if (MostrandoPendientesVaciado)
+			{
+				await LoadPaletsPendientesVaciadoAsync();
+				return;
+			}
+
 			try
 			{
 				Cargando = true;
@@ -127,6 +183,8 @@ namespace SGA_Desktop.ViewModels
 				PaletsView.Clear();
 				foreach (var p in lista)
 				{
+					p.ErrorErpMensaje = null;
+					p.TraspasoErrorId = null;
 					// Buscar información de traspaso para cualquier palet (cerrado o abierto)
 					// Solo los palets recién creados no tendrán esta información
 					var paletConTraspaso = paletsConTraspaso.FirstOrDefault(pt => pt.Id == p.Id);
@@ -157,6 +215,9 @@ namespace SGA_Desktop.ViewModels
 				
 				Mensaje = $"Se cargaron {PaletsView.Count} palets correctamente";
 				ErrorMessage = null;
+
+				await ActualizarIndicadorPendientesAsync();
+				await ActualizarIndicadorErroresAsync();
 			}
 			catch (Exception ex)
 			{
@@ -166,6 +227,50 @@ namespace SGA_Desktop.ViewModels
 			finally
 			{
 				Cargando = false;
+				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				VaciarPaletPendienteCommand.NotifyCanExecuteChanged();
+			}
+		}
+
+		private async Task ActualizarIndicadorPendientesAsync()
+		{
+			if (!SessionManager.EmpresaSeleccionada.HasValue)
+			{
+				HayPaletsPendientesVaciado = false;
+				return;
+			}
+
+			try
+			{
+				var empresa = SessionManager.EmpresaSeleccionada.Value;
+				var pendientes = await _paletService.ObtenerPaletsPendientesVaciadoAsync(empresa);
+				HayPaletsPendientesVaciado = pendientes.Any();
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Error comprobando palets pendientes de vaciar: {ex.Message}");
+				HayPaletsPendientesVaciado = false;
+			}
+		}
+
+		private async Task ActualizarIndicadorErroresAsync()
+		{
+			if (!SessionManager.EmpresaSeleccionada.HasValue)
+			{
+				HayErroresErp = false;
+				return;
+			}
+
+			try
+			{
+				var empresa = SessionManager.EmpresaSeleccionada.Value;
+				var errores = await _paletService.ObtenerTraspasosErrorErpAsync(empresa);
+				HayErroresErp = errores.Any();
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Error comprobando palets con ERROR ERP: {ex.Message}");
+				// No forzamos a false para evitar ocultar el botón si previamente sabíamos que había errores.
 			}
 		}
 
@@ -203,7 +308,9 @@ namespace SGA_Desktop.ViewModels
 					fechaHasta: f.FechaHasta,
 					usuarioApertura: f.UsuarioAperturaSeleccionado?.UsuarioId == 0 ? null : f.UsuarioAperturaSeleccionado?.UsuarioId,
 					usuarioCierre: f.UsuarioCierreSeleccionado?.UsuarioId == 0 ? null : f.UsuarioCierreSeleccionado?.UsuarioId,
-					almacen: f.Almacen);
+					almacen: f.Almacen,
+					tipoUltimaActividad: f.TipoUltimaActividadFiltro,
+					usuarioUltimaActividad: f.UsuarioUltimaActividadSeleccionado?.UsuarioId == 0 ? null : f.UsuarioUltimaActividadSeleccionado?.UsuarioId);
 
 				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
 				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
@@ -325,6 +432,316 @@ namespace SGA_Desktop.ViewModels
 				Mensaje = $"Palet {palet.Codigo} seleccionado";
 			}
 		}
+
+		private async Task ToggleErroresAsync()
+		{
+			if (MostrandoErrores)
+			{
+				MostrandoErrores = false;
+				await LoadPaletsAsync();
+			}
+			else
+			{
+				await LoadTraspasosErrorAsync();
+				if (HayErroresErp)
+				{
+					MostrandoErrores = true;
+				}
+			}
+		}
+
+		private async Task TogglePendientesVaciadoAsync()
+		{
+			if (MostrandoPendientesVaciado)
+			{
+				MostrandoPendientesVaciado = false;
+				await LoadPaletsAsync();
+			}
+			else
+			{
+				MostrandoErrores = false;
+				await LoadPaletsPendientesVaciadoAsync();
+				if (HayPaletsPendientesVaciado)
+				{
+					MostrandoPendientesVaciado = true;
+				}
+			}
+		}
+
+		private bool CanVaciarPaletPendiente(PaletDto? palet)
+			=> palet?.EsPendienteVaciado == true;
+
+		private async Task VaciarPaletPendienteAsync(PaletDto? palet)
+		{
+			if (palet == null || !palet.EsPendienteVaciado)
+				return;
+
+			var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
+			if (usuarioId <= 0)
+			{
+				new WarningDialog("Operario no identificado", "No se ha encontrado el operario actual para registrar el vaciado.").ShowDialog();
+				return;
+			}
+
+			var confirm = new ConfirmationDialog(
+				"Vaciar palet",
+				$"Se eliminarán las líneas definitivas del palet {palet.Codigo} y se marcará como vaciado.\n\n¿Quieres continuar?",
+				"\uE74D");
+
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				?? Application.Current.MainWindow;
+			if (owner != null && owner != confirm)
+				confirm.Owner = owner;
+
+			if (confirm.ShowDialog() != true)
+				return;
+
+			var (exito, mensaje) = await _paletService.VaciarPaletPendienteAsync(palet.Id, usuarioId);
+			if (!exito)
+			{
+				new WarningDialog("Error al vaciar", mensaje ?? "No se pudo vaciar el palet.").ShowDialog();
+				return;
+			}
+
+			new WarningDialog("Palet vaciado", $"El palet {palet.Codigo} se ha marcado como vaciado.", "\uE73E").ShowDialog();
+
+			ActualizarPaletComoVaciado(palet);
+
+			if (MostrandoPendientesVaciado)
+			{
+				PaletsView.Remove(palet);
+				if (!PaletsView.Any())
+				{
+					HayPaletsPendientesVaciado = false;
+					MostrandoPendientesVaciado = false;
+					Mensaje = "No quedan palets pendientes de vaciar.";
+				}
+				else
+				{
+					Mensaje = $"Palet {palet.Codigo} vaciado. Quedan {PaletsView.Count} pendientes.";
+				}
+			}
+			else
+			{
+				palet.EsPendienteVaciado = false;
+				palet.LineasPendientesVaciado.Clear();
+				palet.MensajePendienteVaciado = null;
+				Mensaje = $"Palet {palet.Codigo} vaciado correctamente.";
+			}
+
+			await ActualizarIndicadorPendientesAsync();
+			VaciarPaletPendienteCommand.NotifyCanExecuteChanged();
+			MostrarPaletsPendientesCommand.NotifyCanExecuteChanged();
+			MostrarTraspasosErrorCommand.NotifyCanExecuteChanged();
+		}
+
+		private static void ActualizarPaletComoVaciado(PaletDto palet)
+		{
+			palet.Estado = "Vaciado";
+			palet.IsVaciado = true;
+			palet.FechaVaciado = DateTime.Now;
+		}
+
+		private async Task LoadPaletsPendientesVaciadoAsync()
+		{
+			if (!SessionManager.EmpresaSeleccionada.HasValue)
+			{
+				ErrorMessage = "Selecciona una empresa para consultar palets pendientes.";
+				return;
+			}
+
+			try
+			{
+				ErrorMessage = null;
+				Cargando = true;
+				Mensaje = "Cargando palets pendientes de vaciar...";
+
+				var empresa = SessionManager.EmpresaSeleccionada.Value;
+				var pendientes = await _paletService.ObtenerPaletsPendientesVaciadoAsync(empresa);
+
+				PaletsView.Clear();
+				PaletSeleccionado = null;
+
+				if (!pendientes.Any())
+				{
+					HayPaletsPendientesVaciado = false;
+					Mensaje = "No hay palets pendientes de vaciar.";
+					return;
+				}
+
+				foreach (var pendiente in pendientes)
+				{
+					var palet = await _paletService.ObtenerPaletPorIdAsync(pendiente.PaletId);
+					if (palet == null)
+						continue;
+
+					if (palet.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) || palet.IsVaciado)
+						continue;
+
+					palet.EsPendienteVaciado = true;
+					palet.MensajePendienteVaciado = pendiente.Observacion ?? "Stock no encontrado en la ubicación registrada.";
+					palet.LineasPendientesVaciado = pendiente.Lineas ?? new List<LineaPendienteVaciadoDto>();
+					palet.TipoUltimaActividad ??= "PENDIENTE VACIADO";
+					if (!palet.FechaUltimaActividad.HasValue)
+						palet.FechaUltimaActividad = palet.FechaCierre ?? palet.FechaApertura;
+					if (string.IsNullOrWhiteSpace(palet.UsuarioUltimaActividadNombre))
+						palet.UsuarioUltimaActividadNombre = palet.UsuarioCierreNombre ?? palet.UsuarioAperturaNombre;
+					palet.DescripcionUltimaActividad = palet.MensajePendienteVaciado;
+
+					PaletsView.Add(palet);
+				}
+
+				HayPaletsPendientesVaciado = PaletsView.Any();
+				Mensaje = HayPaletsPendientesVaciado
+					? $"Se encontraron {PaletsView.Count} palets pendientes de vaciar."
+					: "No hay palets pendientes de vaciar.";
+
+				VaciarPaletPendienteCommand.NotifyCanExecuteChanged();
+			}
+			catch (Exception ex)
+			{
+				ErrorMessage = ex.Message;
+				Mensaje = "Error al cargar palets pendientes de vaciar";
+				HayPaletsPendientesVaciado = false;
+			}
+			finally
+			{
+				Cargando = false;
+				MostrarPaletsPendientesCommand.NotifyCanExecuteChanged();
+				VaciarPaletPendienteCommand.NotifyCanExecuteChanged();
+			}
+		}
+
+		private async Task LoadTraspasosErrorAsync()
+		{
+			if (!SessionManager.EmpresaSeleccionada.HasValue)
+			{
+				ErrorMessage = "Selecciona una empresa para consultar traspasos.";
+				return;
+			}
+
+			try
+			{
+				ErrorMessage = null;
+				Cargando = true;
+				Mensaje = "Cargando palets con ERROR ERP...";
+
+				var empresa = SessionManager.EmpresaSeleccionada.Value;
+				var errores = await _paletService.ObtenerTraspasosErrorErpAsync(empresa);
+				var todosTraspasos = await _traspasosService.ObtenerTraspasosAsync();
+
+				PaletsView.Clear();
+				PaletSeleccionado = null;
+
+				if (!errores.Any())
+				{
+					HayErroresErp = false;
+					Mensaje = "No hay palets con traspasos en ERROR ERP.";
+					RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+					return;
+				}
+
+				var vistos = new HashSet<Guid>();
+
+				foreach (var error in errores)
+				{
+					if (vistos.Contains(error.PaletId))
+						continue;
+
+					// Excluir palets de prueba con prefijo PAL25-000088
+					if (error.CodigoPalet?.StartsWith("PAL25-000088", StringComparison.OrdinalIgnoreCase) == true)
+						continue;
+
+					// Si existe un traspaso más reciente (con estado distinto a ERROR_ERP), el error ya fue relanzado/solucionado.
+					var tieneIntentoPosterior = todosTraspasos.Any(t =>
+						t.PaletId == error.PaletId &&
+						t.Id != error.TraspasoId &&
+						t.FechaInicio >= error.FechaInicio &&
+						!string.Equals(t.CodigoEstado, "ERROR_ERP", StringComparison.OrdinalIgnoreCase));
+
+					if (tieneIntentoPosterior)
+						continue;
+
+					var palet = await _paletService.ObtenerPaletPorIdAsync(error.PaletId);
+					if (palet == null)
+						continue;
+					if (palet.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) || palet.IsVaciado)
+						continue;
+
+					palet.ErrorErpMensaje = error.EstadoErp ?? error.Comentario ?? "Error reportado por ERP.";
+					palet.FechaUltimaActividad = error.FechaFinalizacion ?? error.FechaInicio;
+					palet.TipoUltimaActividad = "ERROR ERP";
+					palet.UsuarioUltimaActividadId = error.UsuarioFinalizacionId ?? error.UsuarioInicioId;
+					palet.UsuarioUltimaActividadNombre = error.UsuarioFinalizacionNombre ?? error.UsuarioInicioNombre;
+					palet.DescripcionUltimaActividad = error.EstadoErp ?? error.Comentario;
+					palet.TraspasoErrorId = error.TraspasoId;
+
+					PaletsView.Add(palet);
+					vistos.Add(palet.Id);
+				}
+
+				Mensaje = $"Se encontraron {PaletsView.Count} palets con traspasos en ERROR ERP.";
+				HayErroresErp = PaletsView.Any();
+				ErrorMessage = null;
+				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+
+				await ActualizarIndicadorPendientesAsync();
+			}
+			catch (Exception ex)
+			{
+				ErrorMessage = ex.Message;
+				Mensaje = "Error al cargar traspasos en ERROR ERP";
+			}
+			finally
+			{
+				Cargando = false;
+				MostrarTraspasosErrorCommand.NotifyCanExecuteChanged();
+				MostrarPaletsPendientesCommand.NotifyCanExecuteChanged();
+			}
+		}
+
+		[RelayCommand(CanExecute = nameof(CanRelanzarTraspasoError))]
+		private async Task RelanzarTraspasoErrorAsync(PaletDto? palet)
+		{
+			if (palet?.TraspasoErrorId == null)
+				return;
+
+			var usuarioId = SessionManager.UsuarioActual?.operario ?? 0;
+			if (usuarioId <= 0)
+			{
+				new WarningDialog("Usuario no válido", "No se encontró el operario actual para relanzar el traspaso.").ShowDialog();
+				return;
+			}
+
+			var confirm = new ConfirmationDialog(
+				"Relanzar traspaso",
+				$"Se relanzará el traspaso del palet {palet.Codigo}.\n\n¿Quieres continuar?");
+			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				?? Application.Current.MainWindow;
+			if (owner != null && owner != confirm)
+				confirm.Owner = owner;
+			if (confirm.ShowDialog() != true) return;
+
+			var request = new RelanzarTraspasoRequest
+			{
+				UsuarioId = usuarioId,
+				Comentario = string.IsNullOrWhiteSpace(palet.ErrorErpMensaje) ? "Relanzado desde escritorio" : palet.ErrorErpMensaje
+			};
+
+			var (exito, mensaje) = await _paletService.RelanzarTraspasoAsync(palet.TraspasoErrorId.Value, request);
+			if (!exito)
+			{
+				new WarningDialog("Error al relanzar", mensaje ?? "No se pudo relanzar el traspaso.").ShowDialog();
+				return;
+			}
+
+			new WarningDialog("Traspaso relanzado", "El traspaso se ha relanzado y volverá a procesarse.", "\uE930").ShowDialog();
+			Mensaje = $"Traspaso del palet {palet.Codigo} relanzado correctamente.";
+			await LoadTraspasosErrorAsync();
+		}
+
+		private bool CanRelanzarTraspasoError(PaletDto? palet)
+			=> MostrandoErrores && palet?.TraspasoErrorId != null;
 
 		private void CerrarContenido()
 		{

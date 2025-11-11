@@ -27,6 +27,7 @@ namespace SGA_Api.Data
         // Vista para los alérgenos de las etiquetas
 		public DbSet<VisArticulo> VisArticulos { get; set; } = null!;
 		public DbSet<AcumuladoStock> AcumuladoStock { get; set; } = null!;
+		public DbSet<MovimientoStock> MovimientoStock { get; set; }
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -157,6 +158,24 @@ namespace SGA_Api.Data
 			modelBuilder.Entity<VAuxiliarEmpleado>()
 				.ToTable("VAuxiliarEmpleado")
 				.HasKey(ve => new { ve.CodigoEmpresa, ve.CodigoEmpleado });
+
+			// Configuración para MovimientoStock
+			modelBuilder.Entity<MovimientoStock>(entity =>
+			{
+				entity.ToTable("MovimientoStock");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.Ejercicio, e.Periodo, e.Fecha, e.FechaRegistro, e.Serie, e.Documento, e.MovPosicion });
+				
+				// Configurar precisión decimal
+				entity.Property(e => e.Unidades).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.Precio).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.Importe).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.Unidades2_).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.FactorConversion_).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.ImporteCoste).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.UnidadEntrada).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.UnidadStock).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.PrecioMedio).HasColumnType("decimal(28,10)");
+			});
 
 		}
 	}

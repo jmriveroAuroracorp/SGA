@@ -1,0 +1,800 @@
+<Page x:Class="SGA_Desktop.Views.HistorialTraspasosView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:sys="clr-namespace:System;assembly=mscorlib"
+      xmlns:Helpers="clr-namespace:SGA_Desktop.Helpers"
+      xmlns:converters="clr-namespace:SGA_Desktop.Converters"
+      xmlns:models="clr-namespace:SGA_Desktop.Models"
+      xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+      Title="Historial de Traspasos"
+      Background="{StaticResource BrushFondo}">
+    
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Color claro basado en BrushPrincipal para pestañas no seleccionadas -->
+            <SolidColorBrush x:Key="BrushPrincipalClaro" Color="#0067C3" Opacity="0.15"/>
+            
+            <!-- 🚀 Converters para optimización de rendimiento -->
+            <converters:TipoTraspasoToColorConverter x:Key="TipoTraspasoToColorConverter"/>
+            <converters:TipoTraspasoToTextConverter x:Key="TipoTraspasoToTextConverter"/>
+            <converters:EstadoToColorConverter x:Key="EstadoToColorConverter"/>
+            <converters:EstadoToTextConverter x:Key="EstadoToTextConverter"/>
+            <converters:EstadoMovimientoToTextConverter x:Key="EstadoMovimientoToTextConverter"/>
+            
+            <!-- DataTemplate para TraspasoDto (SGA Actual) - CON BADGE -->
+            <DataTemplate DataType="{x:Type models:TraspasoDto}" x:Key="TraspasoDtoTemplate">
+                <Border Background="White"
+                        CornerRadius="6" 
+                        Padding="12" 
+                        BorderThickness="1" 
+                        BorderBrush="{StaticResource BrushIntermedio}"
+                        Cursor="Hand">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.1"/>
+                    </Border.Effect>
+                    
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Badge -->
+                            <RowDefinition Height="Auto"/> <!-- Primera fila: Información principal -->
+                            <RowDefinition Height="Auto"/> <!-- Segunda fila: Información secundaria -->
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Badge de fuente (solo visible en pestaña combinada) -->
+                        <Border Grid.Row="0" 
+                                HorizontalAlignment="Right" 
+                                Background="#3498DB" 
+                                CornerRadius="10" 
+                                Padding="6,2,6,2" 
+                                Margin="0,0,0,6"
+                                Visibility="{Binding Fuente, Converter={StaticResource StringToVisibilityConverter}}">
+                            <TextBlock Text="Aurora SGA" 
+                                       FontSize="10" 
+                                       FontWeight="Bold" 
+                                       Foreground="White"/>
+                        </Border>
+                        
+                        <!-- Primera fila: Fecha, Artículo, Descripción, Tipo, Estado, Cantidad -->
+                        <Grid Grid.Row="1" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Fecha -->
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="FECHA" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding FechaInicio, StringFormat=dd/MM/yyyy HH:mm}" 
+                                           FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Artículo -->
+                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="ARTÍCULO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding CodigoArticulo}" FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Descripción -->
+                            <StackPanel Grid.Column="2" Margin="6,0,0,0">
+                                <TextBlock Text="DESCRIPCIÓN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding DescripcionArticulo}" FontSize="12" 
+                                           Foreground="Black" TextWrapping="Wrap" 
+                                           FontWeight="Medium" MaxHeight="36" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            
+                            <!-- Lote -->
+                            <StackPanel Grid.Column="3" Margin="6,0,0,0">
+                                <TextBlock Text="LOTE" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}">
+                                    <TextBlock.Text>
+                                        <PriorityBinding>
+                                            <Binding Path="Partida"/>
+                                            <Binding Path="LineasPalet[0].Lote"/>
+                                        </PriorityBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Caducidad -->
+                            <StackPanel Grid.Column="4" Margin="6,0,0,0">
+                                <TextBlock Text="CADUCIDAD" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}">
+                                    <TextBlock.Text>
+                                        <PriorityBinding>
+                                            <Binding Path="FechaCaducidad" StringFormat="{}{0:dd/MM/yyyy}"/>
+                                            <Binding Path="LineasPalet[0].FechaCaducidad" StringFormat="{}{0:dd/MM/yyyy}"/>
+                                        </PriorityBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Tipo de Traspaso -->
+                            <StackPanel Grid.Column="5" Margin="6,0,0,0">
+                                <TextBlock Text="TIPO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <Border CornerRadius="6" Padding="6,3" HorizontalAlignment="Center" 
+                                        Background="{Binding TipoTraspaso, Converter={StaticResource TipoTraspasoToColorConverter}}">
+                                    <TextBlock FontSize="9" FontWeight="Bold" 
+                                               HorizontalAlignment="Center" Foreground="White"
+                                               Text="{Binding TipoTraspaso, Converter={StaticResource TipoTraspasoToTextConverter}}"/>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Estado -->
+                            <StackPanel Grid.Column="6" Margin="6,0,0,0">
+                                <TextBlock Text="ESTADO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <Border CornerRadius="6" Padding="6,3" HorizontalAlignment="Center" 
+                                        Background="{Binding CodigoEstado, Converter={StaticResource EstadoToColorConverter}}">
+                                    <TextBlock FontSize="9" FontWeight="Bold" 
+                                               HorizontalAlignment="Center" Foreground="White"
+                                               Text="{Binding CodigoEstado, Converter={StaticResource EstadoToTextConverter}}"/>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Cantidad -->
+                            <StackPanel Grid.Column="7" Margin="6,0,0,0">
+                                <TextBlock Text="CANTIDAD" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Cantidad, StringFormat='0.########'}" FontSize="13" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                        <!-- Segunda fila: Origen, Destino, Palet, Usuario, Observaciones -->
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                        
+                            <!-- Origen -->
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="ORIGEN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding AlmacenOrigen}" FontSize="12" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                <TextBlock Text="{Binding UbicacionOrigen}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium"/>
+                            </StackPanel>
+                            
+                            <!-- Destino -->
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                <TextBlock Text="DESTINO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding AlmacenDestino}" FontSize="12" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                                <TextBlock Text="{Binding UbicacionDestino}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium"/>
+                            </StackPanel>
+                            
+                            <!-- Palet -->
+                            <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                <TextBlock Text="PALET" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <TextBlock FontSize="11" FontWeight="Bold" 
+                                           HorizontalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Sin paletizar"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CodigoPalet}" Value="{x:Null}">
+                                                    <Setter Property="Text" Value="Sin paletizar"/>
+                                                    <Setter Property="Foreground" Value="#6C757D"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CodigoPalet}" Value="">
+                                                    <Setter Property="Text" Value="Sin paletizar"/>
+                                                    <Setter Property="Foreground" Value="#6C757D"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CodigoPalet}" Value="NULL">
+                                                    <Setter Property="Text" Value="Sin paletizar"/>
+                                                    <Setter Property="Foreground" Value="#6C757D"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="{}{0}">
+                                            <Binding Path="CodigoPalet"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                            
+                            <!-- Usuario -->
+                            <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                                <TextBlock Text="USUARIO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding UsuarioInicioNombre}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium" 
+                                           TextWrapping="Wrap" MaxHeight="24" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            
+                            <!-- Observaciones -->
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="OBSERVACIONES" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock FontSize="11" Foreground="Black" FontWeight="Medium" 
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Sin observaciones"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Comentarios}" Value="{x:Null}">
+                                                    <Setter Property="Text" Value="Sin observaciones"/>
+                                                    <Setter Property="Foreground" Value="#6C757D"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Comentarios}" Value="">
+                                                    <Setter Property="Text" Value="Sin observaciones"/>
+                                                    <Setter Property="Foreground" Value="#6C757D"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                    <TextBlock.Text>
+                                        <Binding Path="Comentarios"/>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+            
+            <!-- DataTemplate para TraspasoStorageControlDto (SAGE) - CON BADGE -->
+            <DataTemplate DataType="{x:Type models:TraspasoStorageControlDto}" x:Key="TraspasoStorageControlDtoTemplate">
+                <Border Background="White"
+                        CornerRadius="6" 
+                        Padding="12" 
+                        BorderThickness="1" 
+                        BorderBrush="{StaticResource BrushIntermedio}"
+                        Cursor="Hand">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.1"/>
+                    </Border.Effect>
+                    
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Badges -->
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Badges: Fuente (SAGE) y Estado (SIN_ENTRADA/SIN_SALIDA) -->
+                        <StackPanel Grid.Row="0" 
+                                    Orientation="Horizontal" 
+                                    HorizontalAlignment="Right" 
+                                    Margin="0,0,0,6">
+                            <!-- Badge de estado (SIN_ENTRADA o SIN_SALIDA) -->
+                            <Border Background="#E74C3C" 
+                                    CornerRadius="10" 
+                                    Padding="6,2,6,2" 
+                                    Margin="0,0,4,0"
+                                    Visibility="{Binding EstadoMovimiento, Converter={StaticResource StringToVisibilityConverter}}">
+                                <TextBlock Text="{Binding EstadoMovimiento, Converter={StaticResource EstadoMovimientoToTextConverter}}" 
+                                           FontSize="10" 
+                                           FontWeight="Bold" 
+                                           Foreground="White"/>
+                            </Border>
+                            
+                            <!-- Badge de fuente (solo visible en pestaña combinada) -->
+                            <Border Background="#95A5A6" 
+                                    CornerRadius="10" 
+                                    Padding="6,2,6,2"
+                                    Visibility="{Binding Fuente, Converter={StaticResource StringToVisibilityConverter}}">
+                                <TextBlock Text="SAGE" 
+                                           FontSize="10" 
+                                           FontWeight="Bold" 
+                                           Foreground="White"/>
+                            </Border>
+                        </StackPanel>
+                        
+                        <!-- Primera fila: Fecha, Artículo, Descripción, Lote, Caducidad, Cantidad -->
+                        <Grid Grid.Row="1" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Fecha -->
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="FECHA" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding FechaRegistro, StringFormat=dd/MM/yyyy HH:mm}" 
+                                           FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Artículo -->
+                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="ARTÍCULO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding CodigoArticulo}" FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Descripción -->
+                            <StackPanel Grid.Column="2" Margin="6,0,0,0">
+                                <TextBlock Text="DESCRIPCIÓN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding DescripcionArticulo}" FontSize="12" 
+                                           Foreground="Black" TextWrapping="Wrap" 
+                                           FontWeight="Medium" MaxHeight="36" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            
+                            <!-- Lote -->
+                            <StackPanel Grid.Column="3" Margin="6,0,0,0">
+                                <TextBlock Text="LOTE" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding Partida}" FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+
+                            <!-- Caducidad -->
+                            <StackPanel Grid.Column="4" Margin="6,0,0,0">
+                                <TextBlock Text="CADUCIDAD" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding FechaCaducidad, StringFormat={}{0:dd/MM/yyyy}}" 
+                                           FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Cantidad -->
+                            <StackPanel Grid.Column="5" Margin="6,0,0,0">
+                                <TextBlock Text="CANTIDAD" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Cantidad, StringFormat='0.########'}" FontSize="13" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" 
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                        <!-- Segunda fila: Origen, Destino, Comentario -->
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                        
+                            <!-- Origen -->
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="ORIGEN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock FontSize="12" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
+                                    <TextBlock.Text>
+                                        <Binding Path="AlmacenOrigen" TargetNullValue="Sin origen"/>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock Text="{Binding UbicacionOrigen}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium"/>
+                            </StackPanel>
+                            
+                            <!-- Destino -->
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                <TextBlock Text="DESTINO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock FontSize="12" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}">
+                                    <TextBlock.Text>
+                                        <Binding Path="AlmacenDestino" TargetNullValue="Sin destino"/>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock Text="{Binding UbicacionDestino}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium"/>
+                            </StackPanel>
+                            
+                            <!-- Comentario -->
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="COMENTARIO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding Comentario}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium" 
+                                           TextWrapping="Wrap" MaxHeight="24" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+            
+            <!-- Converter para mostrar/ocultar badge según si Fuente está definida -->
+            <Helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            
+            <!-- Template Selector para la pestaña combinada -->
+            <Helpers:TraspasoCombinadoTemplateSelector x:Key="TraspasoCombinadoTemplateSelector">
+                <Helpers:TraspasoCombinadoTemplateSelector.TraspasoDtoTemplate>
+                    <StaticResource ResourceKey="TraspasoDtoTemplate"/>
+                </Helpers:TraspasoCombinadoTemplateSelector.TraspasoDtoTemplate>
+                <Helpers:TraspasoCombinadoTemplateSelector.TraspasoStorageControlDtoTemplate>
+                    <StaticResource ResourceKey="TraspasoStorageControlDtoTemplate"/>
+                </Helpers:TraspasoCombinadoTemplateSelector.TraspasoStorageControlDtoTemplate>
+            </Helpers:TraspasoCombinadoTemplateSelector>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Botones de pestañas -->
+            <RowDefinition Height="*"/> <!-- Contenido -->
+        </Grid.RowDefinitions>
+
+        <!-- BOTONES DE PESTAÑAS -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="📋 Aurora SGA"
+                    Command="{Binding CambiarASgaActualCommand}"
+                    Width="200"
+                    Height="28"
+                    Margin="0,0,5,0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="{StaticResource BrushPrincipalClaro}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoSgaActual}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            
+            <Button Content="📦 SAGE"
+                    Command="{Binding CambiarAStorageControlCommand}"
+                    Width="220"
+                    Height="28"
+                    Margin="0,0,5,0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="{StaticResource BrushPrincipalClaro}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoStorageControl}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            
+            <Button Content="🔀 Combinado"
+                    Command="{Binding CambiarACombinadoCommand}"
+                    Width="180"
+                    Height="28">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="{StaticResource BrushPrincipalClaro}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoCombinado}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+
+        <!-- CONTENIDO DE TRASPASOS SGA ACTUAL -->
+        <Border Grid.Row="1" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Visibility="{Binding MostrandoSgaActual, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Botones de acción -->
+                    <RowDefinition Height="Auto"/> <!-- Indicador de carga -->
+                    <RowDefinition Height="*"/> <!-- Lista de traspasos -->
+                </Grid.RowDefinitions>
+
+                <!-- Botones de acción -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,16">
+                    <Button Content="🔍 Filtros" 
+                            Command="{Binding AbrirFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            Width="120" Height="36" Margin="0,0,8,0"/>
+                    <Button Content="🔄 Recargar" 
+                            Command="{Binding AplicarFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            Width="120" Height="36" Margin="0,0,8,0"/>
+                    <Button Content="🧹 Limpiar" 
+                            Command="{Binding LimpiarFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}" 
+                            Width="100" Height="36"/>
+                </StackPanel>
+
+                <!-- Indicador de carga -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                    <TextBlock Text="Cargando..." 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontWeight="Bold" 
+                               Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                </StackPanel>
+
+                <!-- Historial de traspasos con formato de cards -->
+                <GroupBox Header="Historial de Traspasos" Grid.Row="2" Margin="0,0,0,16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Contador de resultados -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,20,10">
+                    <TextBlock Text="{Binding Traspasos.Count, StringFormat='{}{0} traspasos encontrados'}" 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontWeight="Bold" 
+                               FontSize="12"/>
+                </StackPanel>
+                
+                <!-- Lista de traspasos - OPTIMIZADO con ListBox virtualizado -->
+                <ListBox Grid.Row="1" 
+                         ItemsSource="{Binding Traspasos}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Margin="15,0,15,15"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Focusable="False">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <ContentPresenter />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Margin" Value="0,0,0,8"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="IsSelected" Value="False"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <StaticResource ResourceKey="TraspasoDtoTemplate"/>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                </Grid>
+            </GroupBox>
+        </Grid>
+        </Border>
+
+        <!-- CONTENIDO DE TRASPASOS STORAGECONTROL -->
+        <Border Grid.Row="1" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Visibility="{Binding MostrandoStorageControl, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Botones de acción -->
+                    <RowDefinition Height="Auto"/> <!-- Indicador de carga -->
+                    <RowDefinition Height="*"/> <!-- Lista de traspasos -->
+                </Grid.RowDefinitions>
+
+                <!-- Botones de acción -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,16">
+                    <Button Content="🔍 Filtros" 
+                            Command="{Binding AbrirFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            Width="120" Height="36" Margin="0,0,8,0"/>
+                    <Button Content="🔄 Recargar" 
+                            Command="{Binding AplicarFiltrosStorageControlCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            Width="120" Height="36" Margin="0,0,8,0"/>
+                    <Button Content="🧹 Limpiar" 
+                            Command="{Binding LimpiarFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}" 
+                            Width="100" Height="36"/>
+                </StackPanel>
+
+                <!-- Indicador de carga -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                    <TextBlock Text="Cargando..." 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontWeight="Bold" 
+                               Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                </StackPanel>
+
+                <!-- Historial de traspasos StorageControl -->
+                <GroupBox Header="Historial de Traspasos SAGE" Grid.Row="2" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Contador de resultados -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,20,10">
+                            <TextBlock Text="{Binding TraspasosStorageControl.Count, StringFormat='{}{0} traspasos encontrados'}" 
+                                       Foreground="{StaticResource BrushPrincipal}" 
+                                       FontWeight="Bold" 
+                                       FontSize="12"/>
+                        </StackPanel>
+                        
+                        <!-- Lista de traspasos StorageControl -->
+                        <ListBox Grid.Row="1" 
+                                 ItemsSource="{Binding TraspasosStorageControl}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 Margin="15,0,15,15"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Focusable="False">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <ContentPresenter />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Setter Property="Margin" Value="0,0,0,8"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="IsSelected" Value="False"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <StaticResource ResourceKey="TraspasoStorageControlDtoTemplate"/>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+        </Border>
+        
+        <!-- CONTENIDO DE TRASPASOS COMBINADOS -->
+        <Border Grid.Row="1" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Visibility="{Binding MostrandoCombinado, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Botones de acción -->
+                    <RowDefinition Height="Auto"/> <!-- Indicador de carga -->
+                    <RowDefinition Height="*"/> <!-- Lista de traspasos -->
+                </Grid.RowDefinitions>
+
+                <!-- Botones de acción -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,16">
+                    <Button Content="🔍 Filtros" 
+                            Command="{Binding AbrirFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            Width="120" Height="36" Margin="0,0,8,0"/>
+                    <Button Content="🔄 Recargar" 
+                            Command="{Binding AplicarFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}" 
+                            Width="120" Height="36" Margin="0,0,8,0"/>
+                    <Button Content="🧹 Limpiar" 
+                            Command="{Binding LimpiarFiltrosCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}" 
+                            Width="100" Height="36"/>
+                </StackPanel>
+
+                <!-- Indicador de carga -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                    <TextBlock Text="Cargando..." 
+                               Foreground="{StaticResource BrushPrincipal}" 
+                               FontWeight="Bold" 
+                               Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                </StackPanel>
+
+                <!-- Historial de traspasos combinados -->
+                <GroupBox Header="Historial de Traspasos Combinados" Grid.Row="2" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Contador de resultados -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,20,10">
+                            <TextBlock Text="{Binding TraspasosCombinados.Count, StringFormat='{}{0} traspasos encontrados'}" 
+                                       Foreground="{StaticResource BrushPrincipal}" 
+                                       FontWeight="Bold" 
+                                       FontSize="12"/>
+                        </StackPanel>
+                        
+                        <!-- Lista de traspasos combinados -->
+                        <ListBox Grid.Row="1" 
+                                 ItemsSource="{Binding TraspasosCombinados}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 Margin="15,0,15,15"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Focusable="False">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <ContentPresenter />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Setter Property="Margin" Value="0,0,0,8"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="IsSelected" Value="False"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplateSelector>
+                                <StaticResource ResourceKey="TraspasoCombinadoTemplateSelector"/>
+                            </ListBox.ItemTemplateSelector>
+                        </ListBox>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>
+

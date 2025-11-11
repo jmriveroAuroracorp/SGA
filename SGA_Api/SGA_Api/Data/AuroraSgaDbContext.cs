@@ -43,6 +43,7 @@ namespace SGA_Api.Data
 		public DbSet<TempPaletLinea> TempPaletLineas { get; set; }
 		public DbSet<LogPalet> LogPalet { get; set; } = null!;
 		public DbSet<StockDisponible> StockDisponible => Set<StockDisponible>();
+		public DbSet<MovimientoStock> MovimientoStock { get; set; }
 		public DbSet<Traspaso> Traspasos { get; set; }
 		public DbSet<EstadoTraspaso> TipoEstadosTraspaso { get; set; }
 		public DbSet<InventarioCabecera> InventarioCabecera { get; set; }
@@ -669,7 +670,23 @@ namespace SGA_Api.Data
 				entity.Property(e => e.NivelJerarquico).HasColumnName("NivelJerarquico");
 			});
 
-
+			// Configuración para MovimientoStock
+			modelBuilder.Entity<MovimientoStock>(entity =>
+			{
+				entity.ToTable("MovimientoStock");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.Ejercicio, e.Periodo, e.Fecha, e.FechaRegistro, e.Serie, e.Documento, e.MovPosicion });
+				
+				// Configurar precisión decimal
+				entity.Property(e => e.Unidades).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.Precio).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.Importe).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.Unidades2_).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.FactorConversion_).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.ImporteCoste).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.UnidadEntrada).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.UnidadStock).HasColumnType("decimal(28,10)");
+				entity.Property(e => e.PrecioMedio).HasColumnType("decimal(28,10)");
+			});
 
         }
     }

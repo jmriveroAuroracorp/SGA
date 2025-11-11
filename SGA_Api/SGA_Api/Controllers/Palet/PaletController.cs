@@ -7,6 +7,7 @@ using SGA_Api.Models.Palet;
 using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.UsuarioConf;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using Microsoft.Extensions.Logging;
@@ -83,6 +84,8 @@ public class PaletController : ControllerBase
 		[FromQuery] int? usuarioCierre = null,
 		[FromQuery] bool sinCierre = false,
 		[FromQuery] string? almacen = null,
+		[FromQuery] string? tipoUltimaActividad = null,
+		[FromQuery] int? usuarioUltimaActividad = null,
 		[FromQuery] int limite = 50)
 	{
 		var nombreDict = await _auroraSgaContext.vUsuariosConNombre
@@ -171,6 +174,17 @@ public class PaletController : ControllerBase
 				palet.UsuarioCierreNombre = nombreC;
 		}
 
+		// 🔷 NUEVO: Filtrar por última actividad (después de calcularla)
+		if (!string.IsNullOrWhiteSpace(tipoUltimaActividad))
+		{
+			lista = lista.Where(p => p.TipoUltimaActividad == tipoUltimaActividad).ToList();
+		}
+
+		if (usuarioUltimaActividad.HasValue)
+		{
+			lista = lista.Where(p => p.UsuarioUltimaActividadId == usuarioUltimaActividad).ToList();
+		}
+
 		// 🔷 NUEVO: Ordenar por fecha de última actividad (más reciente primero)
 		var resultado = lista
 			.OrderByDescending(p => p.FechaUltimaActividad ?? p.FechaApertura) // Si no hay última actividad, usar fecha de apertura
@@ -180,6 +194,8 @@ public class PaletController : ControllerBase
 		// 🔷 LÓGICA MEJORADA: Solo aplicar límite si NO hay filtros aplicados
 		bool hayFiltrosAplicados = !string.IsNullOrWhiteSpace(codigo) ||
 								   !string.IsNullOrWhiteSpace(estado) ||
+								   !string.IsNullOrWhiteSpace(tipoUltimaActividad) ||
+								   usuarioUltimaActividad.HasValue ||
 								   !string.IsNullOrWhiteSpace(tipoPaletCodigo) ||
 								   fechaApertura.HasValue ||
 								   fechaCierre.HasValue ||
@@ -308,28 +324,38 @@ public class PaletController : ControllerBase
 
 			foreach (var palet in palets)
 			{
-				// Determinar la última actividad con lógica mejorada
+				// Determinar la última actividad considerando el estado del palet y comparando fechas
 				var actividades = new List<(string tipo, DateTime fecha, int? usuarioId, string descripcion)>();
 
-				// Actividad de apertura
-				actividades.Add(("APERTURA", palet.FechaApertura, palet.UsuarioAperturaId, 
-					$"Palet abierto por {nombreDict.GetValueOrDefault(palet.UsuarioAperturaId ?? 0, "Usuario desconocido")}"));
+				// 🔷 LÓGICA CORREGIDA: Agregar todas las actividades relevantes y comparar fechas
+				// Si el palet está cerrado, la última actividad debe ser CIERRE o TRASPASO (la más reciente), nunca APERTURA
+				// Si el palet está abierto, la última actividad puede ser APERTURA o TRASPASO (la más reciente)
 
-				// 🔷 LÓGICA MEJORADA: Si existe traspaso, siempre tiene prioridad sobre cierre
+				bool esCerrado = palet.Estado?.Equals("Cerrado", StringComparison.OrdinalIgnoreCase) == true;
+
+				// Agregar traspaso si existe
 				if (ultimoTraspasoPorPalet.TryGetValue(palet.Id, out var ultimoTraspaso))
 				{
-					// Si hay traspaso, esa es la última actividad (cerrar + ubicar = traspaso)
-					actividades.Add(("TRASPASO", ultimoTraspaso.FechaFinalizacion ?? DateTime.MinValue, ultimoTraspaso.UsuarioFinalizacionId,
+					var fechaTraspaso = ultimoTraspaso.FechaFinalizacion ?? DateTime.MinValue;
+					actividades.Add(("TRASPASO", fechaTraspaso, ultimoTraspaso.UsuarioFinalizacionId,
 						$"Traspasado a {ultimoTraspaso.AlmacenDestino} - {ultimoTraspaso.UbicacionDestino} por {nombreDict.GetValueOrDefault(ultimoTraspaso.UsuarioFinalizacionId ?? 0, "Usuario desconocido")}"));
 				}
-				else if (palet.FechaCierre.HasValue)
+
+				// Agregar cierre si el palet está cerrado
+				if (esCerrado && palet.FechaCierre.HasValue)
 				{
-					// Solo mostrar cierre si NO hay traspaso (palet cerrado pero no ubicado)
 					actividades.Add(("CIERRE", palet.FechaCierre.Value, palet.UsuarioCierreId,
 						$"Palet cerrado por {nombreDict.GetValueOrDefault(palet.UsuarioCierreId ?? 0, "Usuario desconocido")}"));
 				}
 
-				// Obtener la actividad más reciente
+				// Agregar apertura solo si el palet está abierto (y no hay otras actividades más recientes)
+				if (!esCerrado)
+				{
+					actividades.Add(("APERTURA", palet.FechaApertura, palet.UsuarioAperturaId, 
+						$"Palet abierto por {nombreDict.GetValueOrDefault(palet.UsuarioAperturaId ?? 0, "Usuario desconocido")}"));
+				}
+
+				// Obtener la actividad más reciente comparando todas las fechas
 				if (actividades.Any())
 				{
 					var ultimaActividad = actividades.OrderByDescending(a => a.fecha).First();
@@ -389,105 +415,6 @@ public class PaletController : ControllerBase
 	}
 
 	#endregion
-
-	//#region GET: Por Id
-	//[HttpGet("{id:guid}", Name = "GetPaletById")]
-	//public async Task<ActionResult<PaletDto>> GetPaletById(Guid id)
-	//{
-	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
-	//	if (palet == null) return NotFound();
-
-	//	var nombreDict = await _auroraSgaContext.vUsuariosConNombre
-	//		.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
-
-	//	var dto = new PaletDto
-	//	{
-	//		Id = palet.Id,
-	//		CodigoEmpresa = palet.CodigoEmpresa,
-	//		Codigo = palet.Codigo,
-	//		Estado = palet.Estado,
-	//		TipoPaletCodigo = palet.TipoPaletCodigo,
-	//		FechaApertura = palet.FechaApertura,
-	//		FechaCierre = palet.FechaCierre,
-	//		UsuarioAperturaId = palet.UsuarioAperturaId,
-	//		UsuarioCierreId = palet.UsuarioCierreId,
-	//		Altura = palet.Altura,
-	//		Peso = palet.Peso,
-	//		EtiquetaGenerada = palet.EtiquetaGenerada,
-	//		IsVaciado = palet.IsVaciado,
-	//		FechaVaciado = palet.FechaVaciado,
-	//		OrdenTrabajoId = palet.OrdenTrabajoId
-	//	};
-
-	//	if (dto.UsuarioAperturaId.HasValue && nombreDict.TryGetValue(dto.UsuarioAperturaId.Value, out var nombreA))
-	//		dto.UsuarioAperturaNombre = nombreA;
-
-	//	if (dto.UsuarioCierreId.HasValue && nombreDict.TryGetValue(dto.UsuarioCierreId.Value, out var nombreC))
-	//		dto.UsuarioCierreNombre = nombreC;
-
-	//	return Ok(dto);
-	//}
-
-	//#endregion
-
-	//#region POST: Crear palet
-	//[HttpPost]
-	//public async Task<ActionResult<PaletDto>> CrearPalet([FromBody] PaletCrearDto dto)
-	//{
-	//	try
-	//	{
-	//		var pCanal = new SqlParameter("@Canal", SqlDbType.VarChar, 10) { Value = "" };
-	//		var pSerie = new SqlParameter("@Serie", SqlDbType.Int) { Value = 0 };
-	//		var pCodigoEmpresa = new SqlParameter("@CodigoEmpresa", SqlDbType.SmallInt) { Value = dto.CodigoEmpresa };
-	//		var pEstado = new SqlParameter("@Estado", SqlDbType.NVarChar, 50) { Value = "Abierto" };
-	//		var pTipoPaletCodigo = new SqlParameter("@TipoPaletCodigo", SqlDbType.NVarChar, 10) { Value = (object)dto.TipoPaletCodigo ?? DBNull.Value };
-	//		var pUsuarioAperturaId = new SqlParameter("@UsuarioAperturaId", SqlDbType.Int) { Value = dto.UsuarioAperturaId };
-	//		var pOrdenTrabajoId = new SqlParameter("@OrdenTrabajoId", SqlDbType.VarChar, 50) { Value = string.IsNullOrWhiteSpace(dto.OrdenTrabajoId) ? "" : dto.OrdenTrabajoId! };
-	//		var pNuevoCodigo = new SqlParameter("@NuevoCodigo", SqlDbType.VarChar, 20) { Direction = ParameterDirection.Output };
-
-	//		await _auroraSgaContext.Database.ExecuteSqlRawAsync(
-	//			"EXEC dbo.CrearPalet @Canal, @Serie, @CodigoEmpresa, @Estado, @TipoPaletCodigo, @UsuarioAperturaId, @OrdenTrabajoId, @NuevoCodigo OUTPUT",
-	//			pCanal, pSerie, pCodigoEmpresa, pEstado, pTipoPaletCodigo, pUsuarioAperturaId, pOrdenTrabajoId, pNuevoCodigo);
-
-	//		var codigoGenerado = (string)pNuevoCodigo.Value!;
-	//		var palet = await _auroraSgaContext.Palets.SingleAsync(x => x.Codigo == codigoGenerado);
-	//		_auroraSgaContext.LogPalet.Add(new LogPalet
-	//		{
-	//			PaletId = palet.Id,
-	//			Fecha = DateTime.Now,
-	//			IdUsuario = dto.UsuarioAperturaId,
-	//			Accion = "Crear",
-	//			Detalle = $"Palet creado por el usuario: {dto.UsuarioAperturaId}"
-	//		});
-
-	//		var resultado = new PaletDto
-	//		{
-	//			Id = palet.Id,
-	//			CodigoEmpresa = palet.CodigoEmpresa,
-	//			Codigo = palet.Codigo,
-	//			Estado = palet.Estado,
-	//			TipoPaletCodigo = palet.TipoPaletCodigo,
-	//			FechaApertura = palet.FechaApertura,
-	//			FechaCierre = palet.FechaCierre,
-	//			UsuarioAperturaId = palet.UsuarioAperturaId,
-	//			UsuarioCierreId = palet.UsuarioCierreId,
-	//			OrdenTrabajoId = palet.OrdenTrabajoId,
-	//			Altura = palet.Altura,
-	//			Peso = palet.Peso,
-	//			EtiquetaGenerada = palet.EtiquetaGenerada,
-	//			IsVaciado = palet.IsVaciado,
-	//			FechaVaciado = palet.FechaVaciado
-	//		};
-
-	//		await _auroraSgaContext.SaveChangesAsync();
-	//		return CreatedAtRoute("GetPaletById", new { id = palet.Id }, resultado);
-	//	}
-	//	catch (Exception ex)
-	//	{
-	//		return Problem(detail: ex.ToString(), statusCode: 500, title: "Error creando palet");
-	//	}
-	//}
-	//#endregion
 
 	#region POST: Crear palet
 	[HttpPost]
@@ -579,9 +506,6 @@ public class PaletController : ControllerBase
 		int resto = suma % 10;
 		return resto == 0 ? 0 : 10 - resto;
 	}
-
-
-
 
 	#region POST: Añadir línea a palet
 	[HttpPost("{id}/lineas")]
@@ -734,8 +658,6 @@ public class PaletController : ControllerBase
 		}
 	}
 	#endregion
-
-
 
 	#region GET: Líneas de un palet
 	[HttpGet("{id}/lineas")]
@@ -1192,179 +1114,6 @@ public class PaletController : ControllerBase
 
 	#endregion
 
-
-	//#region POST: Cerrar palet
-	//[HttpPost("{id}/cerrar")]
-	//public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
-	//{
-	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
-	//	if (palet == null)
-	//		return NotFound("Palet no encontrado");
-
-	//	if (palet.Estado == "Cerrado")
-	//		return BadRequest("El palet ya está cerrado.");
-
-	//	palet.Estado = "Cerrado";
-	//	palet.FechaCierre = DateTime.Now;
-	//	palet.UsuarioCierreId = usuarioId;
-
-	//	_auroraSgaContext.LogPalet.Add(new LogPalet
-	//	{
-	//		PaletId = palet.Id,
-	//		Fecha = DateTime.Now,
-	//		IdUsuario = usuarioId,
-	//		Accion = "Cerrar",
-	//		Detalle = "Palet Cerrado por el usuario: " + usuarioId
-	//	});
-
-
-	//	_auroraSgaContext.Palets.Update(palet);
-	//	await _auroraSgaContext.SaveChangesAsync();
-
-	//	return Ok(new { message = $"Palet {palet.Codigo} cerrado correctamente." });
-	//}
-	//#endregion
-	//#region POST: Cerrar palet
-	//[HttpPost("{id}/cerrar")]
-	//public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
-	//{
-	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
-	//	if (palet == null)
-	//		return NotFound("Palet no encontrado");
-
-	//	if (palet.Estado == "Cerrado")
-	//		return BadRequest("El palet ya está cerrado.");
-
-	//	// 🔷 Validamos que tenga al menos una línea
-	//	bool tieneLineas = await _auroraSgaContext.TempPaletLineas
-	//		.AnyAsync(l => l.PaletId == id);
-
-	//	if (!tieneLineas)
-	//		return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
-
-	//	// 🔷 Cerramos el palet
-	//	palet.Estado = "Cerrado";
-	//	palet.FechaCierre = DateTime.Now;
-	//	palet.UsuarioCierreId = usuarioId;
-
-	//	_auroraSgaContext.LogPalet.Add(new LogPalet
-	//	{
-	//		PaletId = palet.Id,
-	//		Fecha = DateTime.Now,
-	//		IdUsuario = usuarioId,
-	//		Accion = "Cerrar",
-	//		Detalle = "Palet Cerrado por el usuario: " + usuarioId
-	//	});
-
-	//	// 🔷 Creamos el traspaso mínimo
-	//	var traspaso = new Traspaso
-	//	{
-	//		PaletId = palet.Id,
-	//		CodigoEstado = "PENDIENTE"
-	//	};
-
-	//	_auroraSgaContext.Traspasos.Add(traspaso);
-
-	//	await _auroraSgaContext.SaveChangesAsync();
-
-	//	return Ok(new
-	//	{
-	//		message = $"Palet {palet.Codigo} cerrado correctamente y traspaso creado.",
-	//		traspasoId = traspaso.Id
-	//	});
-	//}
-	//#endregion
-
-
-
-	//#region POST: Reabrir palet
-	//[HttpPost("{id}/reabrir")]
-	//public async Task<IActionResult> ReabrirPalet(Guid id, [FromQuery] int usuarioId)
-	//{
-	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
-	//	if (palet == null)
-	//		return NotFound("Palet no encontrado");
-
-	//	if (palet.Estado == "Abierto")
-	//		return BadRequest("El palet ya está abierto.");
-
-	//	palet.Estado = "Abierto";
-	//	palet.FechaApertura = DateTime.Now;  // 👈 nueva fecha de apertura
-	//	palet.UsuarioAperturaId = usuarioId;
-	//	palet.FechaCierre = null;
-	//	palet.UsuarioCierreId = null;
-
-	//	_auroraSgaContext.LogPalet.Add(new LogPalet
-	//	{
-	//		PaletId = palet.Id,
-	//		Fecha = DateTime.Now,
-	//		IdUsuario = usuarioId,
-	//		Accion = "Reabrir",
-	//		Detalle = "Palet reabierto por el usuario: " + usuarioId
-	//	});
-
-	//	_auroraSgaContext.Palets.Update(palet);
-	//	await _auroraSgaContext.SaveChangesAsync();
-
-	//	return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente." });
-	//}
-	//#endregion
-
-	//#region POST: Cerrar palet
-	//[HttpPost("{id}/cerrar")]
-	//public async Task<IActionResult> CerrarPalet(Guid id, [FromQuery] int usuarioId)
-	//{
-	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
-	//	if (palet == null)
-	//		return NotFound("Palet no encontrado");
-
-	//	if (palet.Estado == "Cerrado")
-	//		return BadRequest("El palet ya está cerrado.");
-
-	//	// 🔷 Validamos que tenga al menos una línea
-	//	bool tieneLineas = await _auroraSgaContext.TempPaletLineas
-	//		.AnyAsync(l => l.PaletId == id);
-
-	//	if (!tieneLineas)
-	//		return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
-
-	//	// 🔷 Cerramos el palet
-	//	palet.Estado = "Cerrado";
-	//	palet.FechaCierre = DateTime.Now;
-	//	palet.UsuarioCierreId = usuarioId;
-
-	//	_auroraSgaContext.LogPalet.Add(new LogPalet
-	//	{
-	//		PaletId = palet.Id,
-	//		Fecha = DateTime.Now,
-	//		IdUsuario = usuarioId,
-	//		Accion = "Cerrar",
-	//		Detalle = "Palet Cerrado por el usuario: " + usuarioId
-	//	});
-
-	//	// 🔷 Creamos el traspaso mínimo
-	//	var traspaso = new Traspaso
-	//	{
-	//		PaletId = palet.Id,
-	//		CodigoEstado = "PENDIENTE",
-	//		FechaInicio = DateTime.Now,
-	//		UsuarioInicioId = usuarioId,
-	//		 AlmacenOrigen = "N/A",
-	//		AlmacenDestino = "N/A"
-	//	};
-
-	//	_auroraSgaContext.Traspasos.Add(traspaso);
-
-	//	await _auroraSgaContext.SaveChangesAsync();
-
-	//	return Ok(new
-	//	{
-	//		message = $"Palet {palet.Codigo} cerrado correctamente y traspaso creado.",
-	//		traspasoId = traspaso.Id
-	//	});
-	//}
-	//#endregion
-
 	[HttpPost("{id}/cerrar")]
 	public async Task<IActionResult> CerrarPalet(Guid id, [FromBody] CerrarPaletDto dto)
 	{
@@ -1515,7 +1264,7 @@ public class PaletController : ControllerBase
 	/// <summary>
 	/// Aplica la lógica de inventario cuando se cierra un palet
 	/// </summary>
-	private async Task AplicarLogicaInventarioAlCerrarPaletAsync(Guid paletId, short codigoEmpresa)
+		private async Task AplicarLogicaInventarioAlCerrarPaletAsync(Guid paletId, short codigoEmpresa)
 	{
 		try
 		{
@@ -1603,62 +1352,7 @@ public class PaletController : ControllerBase
 		}
 	}
 
-
-
 	#region POST: Reabrir palet
-	//[HttpPost("{id}/reabrir")]
-	//public async Task<IActionResult> ReabrirPalet(Guid id, [FromQuery] int usuarioId)
-	//{
-	//	var palet = await _auroraSgaContext.Palets.FindAsync(id);
-	//	if (palet == null)
-	//		return NotFound("Palet no encontrado");
-
-	//	if (palet.Estado == "Abierto")
-	//		return BadRequest("El palet ya está abierto.");
-
-	//	palet.Estado = "Abierto";
-	//	palet.FechaApertura = DateTime.Now;  // 👈 nueva fecha de apertura
-	//	palet.UsuarioAperturaId = usuarioId;
-	//	palet.FechaCierre = null;
-	//	palet.UsuarioCierreId = null;
-
-	//	_auroraSgaContext.LogPalet.Add(new LogPalet
-	//	{
-	//		PaletId = palet.Id,
-	//		Fecha = DateTime.Now,
-	//		IdUsuario = usuarioId,
-	//		Accion = "Reabrir",
-	//		Detalle = "Palet reabierto por el usuario: " + usuarioId
-	//	});
-
-	//	// 🔷 Busca el traspaso pendiente y márcalo como CANCELADO
-	//	var traspaso = await _auroraSgaContext.Traspasos
-	//		.Where(t => t.PaletId == id && t.CodigoEstado == "PENDIENTE")
-	//		.FirstOrDefaultAsync();
-
-	//	if (traspaso != null)
-	//	{
-	//		traspaso.CodigoEstado = "CANCELADO";
-	//		traspaso.FechaFinalizacion = DateTime.Now;
-	//		traspaso.UsuarioFinalizacionId = usuarioId;
-	//		traspaso.UbicacionDestino = "N/A";
-	//		_auroraSgaContext.Traspasos.Update(traspaso);
-
-	//		_auroraSgaContext.LogPalet.Add(new LogPalet
-	//		{
-	//			PaletId = palet.Id,
-	//			Fecha = DateTime.Now,
-	//			IdUsuario = usuarioId,
-	//			Accion = "CancelarTraspaso",
-	//			Detalle = $"Traspaso {traspaso.Id} cancelado al reabrir el palet"
-	//		});
-	//	}
-
-	//	_auroraSgaContext.Palets.Update(palet);
-	//	await _auroraSgaContext.SaveChangesAsync();
-
-	//	return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente. Traspaso pendiente cancelado." });
-	//}
 	[HttpPost("{id}/reabrir")]
 	public async Task<IActionResult> ReabrirPalet(Guid id, [FromQuery] int usuarioId)
 	{
@@ -1716,7 +1410,6 @@ public class PaletController : ControllerBase
 
 		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente. Traspaso pendiente cancelado." });
 	}
-
 
 	#endregion
 
@@ -2079,6 +1772,37 @@ public class PaletController : ControllerBase
     return Ok(new { estado = "NINGUNO" });
 }
 
+public class TraspasoErrorDto
+{
+	public Guid TraspasoId { get; set; }
+	public Guid PaletId { get; set; }
+	public string? CodigoPalet { get; set; }
+	public string? CodigoArticulo { get; set; }
+	public decimal Cantidad { get; set; }
+	public string? AlmacenOrigen { get; set; }
+	public string? UbicacionOrigen { get; set; }
+	public string? AlmacenDestino { get; set; }
+	public string? UbicacionDestino { get; set; }
+	public DateTime FechaInicio { get; set; }
+	public DateTime? FechaFinalizacion { get; set; }
+	public string CodigoEstado { get; set; } = string.Empty;
+	public string? Comentario { get; set; }
+	public string? EstadoErp { get; set; }
+	public int UsuarioInicioId { get; set; }
+	public string? UsuarioInicioNombre { get; set; }
+	public int? UsuarioFinalizacionId { get; set; }
+	public string? UsuarioFinalizacionNombre { get; set; }
+	public short CodigoEmpresa { get; set; }
+	public DateTime? FechaCaducidad { get; set; }
+	public string? Partida { get; set; }
+}
+
+public class RelanzarTraspasoDto
+{
+	public int UsuarioId { get; set; }
+	public string? Comentario { get; set; }
+}
+
 	[HttpPost("{id}/marcar-vaciado")]
 	public async Task<IActionResult> MarcarVaciado(Guid id, [FromQuery] int usuarioId, [FromQuery] bool forzar = false)
 	{
@@ -2088,7 +1812,7 @@ public class PaletController : ControllerBase
 		if (string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El palet ya está marcado como Vaciado.");
 
-		// si no es “forzar”, comprobamos que no queden líneas
+		// si no es "forzar", comprobamos que no queden líneas
 		var quedanLineas = await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
 		if (quedanLineas && !forzar)
 			return BadRequest("El palet aún tiene líneas. No se puede marcar Vaciado.");
@@ -2119,13 +1843,12 @@ public class PaletController : ControllerBase
 	public async Task<IActionResult> MarcarVaciadosSinLineas([FromQuery] int? usuarioId = null)
 	{
 		var fechaActual = DateTime.Now;
-		
-		// Buscar palets que no tienen líneas temporales ni definitivas
+
 		var paletsSinLineas = await (
 			from p in _auroraSgaContext.Palets
 			where !_auroraSgaContext.TempPaletLineas.Any(tpl => tpl.PaletId == p.Id)
 				&& !_auroraSgaContext.PaletLineas.Any(pl => pl.PaletId == p.Id)
-				&& p.Estado != "Vaciado" // Solo actualizar los que aún no están vaciados
+				&& p.Estado != "Vaciado"
 			select p
 		).ToListAsync();
 
@@ -2140,14 +1863,13 @@ public class PaletController : ControllerBase
 			palet.Estado = "Vaciado";
 			palet.FechaVaciado = fechaActual;
 			palet.IsVaciado = true;
-			
+
 			if (usuarioId.HasValue)
 			{
 				palet.UsuarioVaciadoId = usuarioId.Value;
 				palet.UsuarioCierreId = usuarioId.Value;
 			}
-			
-			// Si no tiene fecha de cierre, la establecemos
+
 			if (!palet.FechaCierre.HasValue)
 			{
 				palet.FechaCierre = fechaActual;
@@ -2155,7 +1877,6 @@ public class PaletController : ControllerBase
 
 			_auroraSgaContext.Palets.Update(palet);
 
-			// Registrar en log si hay usuario
 			if (usuarioId.HasValue)
 			{
 				_auroraSgaContext.LogPalet.Add(new LogPalet
@@ -2175,46 +1896,398 @@ public class PaletController : ControllerBase
 
 		_logger.LogInformation($"Se marcaron {cantidadActualizados} palets como vaciados automáticamente.");
 
-		return Ok(new 
-		{ 
+		return Ok(new
+		{
 			message = $"Se marcaron {cantidadActualizados} palet(s) como vaciados.",
 			cantidad = cantidadActualizados,
 			palets = paletsSinLineas.Select(p => new { p.Id, p.Codigo, p.Estado })
 		});
 	}
 
+	#region GET: Palets pendientes de vaciado
+	[HttpGet("pendientes-vaciado")]
+	public async Task<ActionResult<List<PaletPendienteVaciadoDto>>> GetPaletsPendientesVaciado([FromQuery] short? codigoEmpresa = null)
+	{
+		var lineasQuery =
+			from p in _auroraSgaContext.Palets.AsNoTracking()
+			join pl in _auroraSgaContext.PaletLineas.AsNoTracking() on p.Id equals pl.PaletId
+			where !p.IsVaciado
+				  && p.Estado != "Vaciado"
+				  && pl.Cantidad > 0
+			select new LineaPendienteRaw
+			{
+				PaletId = p.Id,
+				CodigoPalet = p.Codigo,
+				CodigoEmpresa = p.CodigoEmpresa,
+				LineaId = pl.Id,
+				CodigoArticulo = pl.CodigoArticulo,
+				DescripcionArticulo = pl.DescripcionArticulo,
+				Cantidad = pl.Cantidad,
+				CodigoAlmacen = pl.CodigoAlmacen,
+				Ubicacion = pl.Ubicacion,
+				Lote = pl.Lote,
+				FechaCaducidad = pl.FechaCaducidad
+			};
 
-	//// Para mostrar el detalle en la consulta de stock
-	//[HttpGet("detalle-palet")]
-	//public async Task<ActionResult<List<PaletDetalleDto>>> GetDetallePalet(
-	//	short codigoEmpresa,
-	//	string codigoArticulo,
-	//	string codigoAlmacen,
-	//	string ubicacion,
-	//	string partida)
-	//{
-	//	var detalle = await _auroraSgaContext.PaletLineas
-	//		.Include(l => l.Palet)
-	//		.Where(l =>
-	//			l.CodigoEmpresa == codigoEmpresa &&
-	//			l.CodigoArticulo == codigoArticulo &&
-	//			l.CodigoAlmacen == codigoAlmacen &&
-	//			l.Ubicacion == ubicacion &&
-	//			l.Lote == partida &&
-	//			(l.Palet.Estado == "Abierto" || l.Palet.Estado == "Cerrado") // 👈 filtro
-	//		)
-	//		.OrderByDescending(l => l.Palet.FechaApertura) // 👈 opcional
-	//		.Select(l => new PaletDetalleDto
-	//		{
-	//			PaletId = l.PaletId,
-	//			CodigoPalet = l.Palet.Codigo,
-	//			EstadoPalet = l.Palet.Estado,
-	//			Cantidad = l.Cantidad
-	//		})
-	//		.ToListAsync();
+		if (codigoEmpresa.HasValue && codigoEmpresa.Value > 0)
+		{
+			lineasQuery = lineasQuery.Where(x => x.CodigoEmpresa == codigoEmpresa.Value);
+		}
 
-	//	return detalle;
-	//}
+		var lineas = await lineasQuery.ToListAsync();
+
+		if (!lineas.Any())
+		{
+			return Ok(new List<PaletPendienteVaciadoDto>());
+		}
+
+		var empresas = lineas.Select(l => l.CodigoEmpresa).Distinct().ToList();
+		var articulos = lineas.Select(l => l.CodigoArticulo).Distinct().ToList();
+		var almacenes = lineas.Select(l => l.CodigoAlmacen).Distinct().ToList();
+
+		var stock = await _auroraSgaContext.StockDisponible.AsNoTracking()
+			.Where(sd => empresas.Contains(sd.CodigoEmpresa)
+						 && articulos.Contains(sd.CodigoArticulo)
+						 && almacenes.Contains(sd.CodigoAlmacen))
+			.ToListAsync();
+
+		var stockLookup = stock
+			.GroupBy(sd => BuildStockKey(sd.CodigoEmpresa, sd.CodigoArticulo, sd.CodigoAlmacen, sd.Ubicacion, sd.Partida))
+			.ToDictionary(g => g.Key, g => g.Sum(x => x.Disponible));
+
+		const decimal tolerance = 0.000001m;
+		var lineasAfectadas = new List<LineaPendienteRaw>();
+
+		foreach (var linea in lineas)
+		{
+			var key = BuildStockKey(linea.CodigoEmpresa, linea.CodigoArticulo, linea.CodigoAlmacen, linea.Ubicacion, linea.Lote);
+			stockLookup.TryGetValue(key, out var disponible);
+
+			if (disponible + tolerance < linea.Cantidad)
+			{
+				linea.StockDisponible = disponible;
+				linea.Faltante = Math.Max(linea.Cantidad - disponible, 0m);
+				lineasAfectadas.Add(linea);
+			}
+		}
+
+		if (!lineasAfectadas.Any())
+		{
+			return Ok(new List<PaletPendienteVaciadoDto>());
+		}
+
+		var resultado = lineasAfectadas
+			.GroupBy(l => new { l.PaletId, l.CodigoPalet, l.CodigoEmpresa })
+			.Select(g => new PaletPendienteVaciadoDto
+			{
+				PaletId = g.Key.PaletId,
+				CodigoPalet = g.Key.CodigoPalet,
+				CodigoEmpresa = g.Key.CodigoEmpresa,
+				Observacion = "Stock no encontrado en la ubicación registrada.",
+				Lineas = g.Select(l => new LineaPendienteVaciadoDto
+				{
+					LineaId = l.LineaId,
+					CodigoArticulo = l.CodigoArticulo,
+					DescripcionArticulo = l.DescripcionArticulo,
+					CantidadRegistrada = l.Cantidad,
+					CantidadDisponible = l.StockDisponible,
+					CantidadFaltante = l.Faltante,
+					CodigoAlmacen = l.CodigoAlmacen,
+					Ubicacion = l.Ubicacion ?? string.Empty,
+					Lote = l.Lote,
+					FechaCaducidad = l.FechaCaducidad
+				}).ToList()
+			})
+			.OrderByDescending(p => p.Lineas.Count)
+			.ThenBy(p => p.CodigoPalet)
+			.ToList();
+
+		return Ok(resultado);
+	}
+
+	private static string BuildStockKey(short codigoEmpresa, string codigoArticulo, string codigoAlmacen, string? ubicacion, string? partida)
+	{
+		return $"{codigoEmpresa}|{Normalize(codigoArticulo)}|{Normalize(codigoAlmacen)}|{Normalize(ubicacion)}|{Normalize(partida)}";
+	}
+
+	private static string Normalize(string? value)
+	{
+		return string.IsNullOrWhiteSpace(value)
+			? string.Empty
+			: value.Trim().ToUpperInvariant();
+	}
+
+	private class LineaPendienteRaw
+	{
+		public Guid PaletId { get; set; }
+		public string CodigoPalet { get; set; } = string.Empty;
+		public short CodigoEmpresa { get; set; }
+		public Guid LineaId { get; set; }
+		public string CodigoArticulo { get; set; } = string.Empty;
+		public string? DescripcionArticulo { get; set; }
+		public decimal Cantidad { get; set; }
+		public string CodigoAlmacen { get; set; } = string.Empty;
+		public string? Ubicacion { get; set; }
+		public string? Lote { get; set; }
+		public DateTime? FechaCaducidad { get; set; }
+		public decimal StockDisponible { get; set; }
+		public decimal Faltante { get; set; }
+	}
+	#endregion
+
+	#region GET: Traspasos PALET con ERROR_ERP
+	[HttpGet("traspasos/error-erp")]
+	public async Task<ActionResult<List<TraspasoErrorDto>>> GetTraspasosErrorErp([FromQuery] short? codigoEmpresa = null)
+	{
+		var usuariosDict = await _auroraSgaContext.vUsuariosConNombre
+			.ToDictionaryAsync(u => u.UsuarioId, u => u.NombreOperario);
+
+		var query = _auroraSgaContext.Traspasos
+			.Where(t => t.TipoTraspaso == "PALET" && t.CodigoEstado == "ERROR_ERP");
+
+		if (codigoEmpresa.HasValue && codigoEmpresa.Value > 0)
+		{
+			query = query.Where(t => t.CodigoEmpresa == codigoEmpresa.Value);
+		}
+
+		var traspasos = await query
+			.OrderByDescending(t => t.FechaInicio)
+			.ToListAsync();
+
+		var resultado = traspasos.Select(t =>
+		{
+			usuariosDict.TryGetValue(t.UsuarioInicioId, out var usuarioInicioNombre);
+			string? usuarioFinNombre = null;
+			if (t.UsuarioFinalizacionId.HasValue)
+			{
+				usuariosDict.TryGetValue(t.UsuarioFinalizacionId.Value, out usuarioFinNombre);
+			}
+
+			return new TraspasoErrorDto
+			{
+				TraspasoId = t.Id,
+				PaletId = t.PaletId,
+				CodigoPalet = t.CodigoPalet,
+				CodigoArticulo = t.CodigoArticulo,
+				Cantidad = t.Cantidad ?? 0m,
+				AlmacenOrigen = t.AlmacenOrigen,
+				UbicacionOrigen = t.UbicacionOrigen,
+				AlmacenDestino = t.AlmacenDestino,
+				UbicacionDestino = t.UbicacionDestino,
+				FechaInicio = t.FechaInicio,
+				FechaFinalizacion = t.FechaFinalizacion,
+				CodigoEstado = t.CodigoEstado,
+				Comentario = t.Comentario,
+				EstadoErp = t.EstadoErp,
+				UsuarioInicioId = t.UsuarioInicioId,
+				UsuarioInicioNombre = usuarioInicioNombre,
+				UsuarioFinalizacionId = t.UsuarioFinalizacionId,
+				UsuarioFinalizacionNombre = usuarioFinNombre,
+				CodigoEmpresa = t.CodigoEmpresa,
+				FechaCaducidad = t.FechaCaducidad,
+				Partida = t.Partida
+			};
+		}).ToList();
+
+		return Ok(resultado);
+	}
+	#endregion
+
+	#region POST: Relanzar traspaso ERROR_ERP
+	[HttpPost("traspasos/{traspasoId:guid}/relanzar")]
+	public async Task<IActionResult> RelanzarTraspaso(Guid traspasoId, [FromBody] RelanzarTraspasoDto dto)
+	{
+		if (dto == null || dto.UsuarioId <= 0)
+		{
+			return BadRequest("Debe indicar el usuario que relanza el traspaso.");
+		}
+
+		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync();
+
+		var traspasoError = await _auroraSgaContext.Traspasos
+			.FirstOrDefaultAsync(t => t.Id == traspasoId && t.CodigoEstado == "ERROR_ERP" && t.TipoTraspaso == "PALET");
+
+		if (traspasoError == null)
+		{
+			return NotFound("El traspaso no existe o no está en estado ERROR_ERP.");
+		}
+
+		var traspasosDelPalet = await _auroraSgaContext.Traspasos
+			.Where(t => t.PaletId == traspasoError.PaletId &&
+						 t.CodigoEstado == "ERROR_ERP" &&
+						 t.TipoTraspaso == "PALET")
+			.OrderBy(t => t.FechaInicio)
+			.ToListAsync();
+
+		var relanzados = new List<Guid>();
+		var advertencias = new List<string>();
+
+		foreach (var traspaso in traspasosDelPalet)
+		{
+			try
+			{
+				var nuevoId = await RelanzarTraspasoIndividualAsync(traspaso, dto);
+				if (nuevoId.HasValue)
+					relanzados.Add(nuevoId.Value);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error al relanzar traspaso {TraspasoId}", traspaso.Id);
+				advertencias.Add($"Traspaso {traspaso.Id}: {ex.Message}");
+			}
+		}
+
+		await transaction.CommitAsync();
+
+		return Ok(new
+		{
+			message = $"Relanzados {relanzados.Count} traspasos para el palet {traspasoError.CodigoPalet}.",
+			traspasosRelanzados = relanzados,
+			advertencias
+		});
+	}
+	#endregion
+
+	private async Task<Guid?> RelanzarTraspasoIndividualAsync(Traspaso traspasoError, RelanzarTraspasoDto dto)
+	{
+		var tempLineas = await _auroraSgaContext.TempPaletLineas
+			.Where(tpl => tpl.TraspasoId == traspasoError.Id)
+			.ToListAsync();
+
+		if (!tempLineas.Any())
+		{
+			throw new InvalidOperationException($"No se encontraron líneas temporales asociadas al traspaso en error {traspasoError.Id}.");
+		}
+
+		var marcaRelanzado = $"Relanzado: {DateTime.Now:yyyy-MM-dd HH:mm}";
+		var comentarioFinal = marcaRelanzado.Length > 500 ? marcaRelanzado.Substring(0, 500) : marcaRelanzado;
+
+		var nuevoTraspaso = new Traspaso
+		{
+			Id = Guid.NewGuid(),
+			PaletId = traspasoError.PaletId,
+			CodigoPalet = traspasoError.CodigoPalet,
+			TipoTraspaso = traspasoError.TipoTraspaso,
+			CodigoEstado = "PENDIENTE_ERP",
+			FechaInicio = DateTime.Now,
+			UsuarioInicioId = dto.UsuarioId,
+			AlmacenOrigen = traspasoError.AlmacenOrigen,
+			UbicacionOrigen = traspasoError.UbicacionOrigen,
+			AlmacenDestino = traspasoError.AlmacenDestino,
+			UbicacionDestino = traspasoError.UbicacionDestino,
+			FechaFinalizacion = null,
+			UsuarioFinalizacionId = null,
+			CodigoArticulo = traspasoError.CodigoArticulo,
+			Cantidad = traspasoError.Cantidad,
+			Partida = traspasoError.Partida,
+			FechaCaducidad = traspasoError.FechaCaducidad,
+			CodigoEmpresa = traspasoError.CodigoEmpresa,
+			Comentario = comentarioFinal,
+			EstadoErp = null,
+			EsNotificado = false,
+			MovPosicionOrigen = traspasoError.MovPosicionOrigen,
+			MovPosicionDestino = traspasoError.MovPosicionDestino
+		};
+
+		_auroraSgaContext.Traspasos.Add(nuevoTraspaso);
+
+		foreach (var temp in tempLineas)
+		{
+			temp.TraspasoId = nuevoTraspaso.Id;
+			temp.Procesada = false;
+			_auroraSgaContext.TempPaletLineas.Update(temp);
+		}
+
+		var detalleRelanzado = $"Traspaso relanzado. Original: {traspasoError.Id}, Nuevo: {nuevoTraspaso.Id}";
+
+		_auroraSgaContext.LogPalet.Add(new LogPalet
+		{
+			PaletId = traspasoError.PaletId,
+			Fecha = DateTime.Now,
+			IdUsuario = dto.UsuarioId,
+			Accion = "RelanzarTraspaso",
+			Detalle = $"{detalleRelanzado} | {marcaRelanzado}"
+		});
+
+		await _auroraSgaContext.SaveChangesAsync();
+
+		return nuevoTraspaso.Id;
+	}
+
+	#region POST: Vaciar palet pendiente
+	[HttpPost("{id}/vaciar-pendiente")]
+	public async Task<IActionResult> VaciarPaletPendiente(Guid id, [FromBody] ForzarVaciadoPaletDto dto)
+	{
+		if (dto == null || dto.UsuarioId <= 0)
+		{
+			return BadRequest("Debe indicar el usuario que realiza el vaciado.");
+		}
+
+		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync();
+		try
+		{
+			var palet = await _auroraSgaContext.Palets
+				.FirstOrDefaultAsync(p => p.Id == id);
+
+			if (palet == null)
+				return NotFound("Palet no encontrado.");
+
+			if (string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
+				return BadRequest("El palet ya está vaciado.");
+
+			var fechaActual = DateTime.Now;
+
+			var lineas = await _auroraSgaContext.PaletLineas
+				.Where(pl => pl.PaletId == id)
+				.ToListAsync();
+
+			if (lineas.Any())
+			{
+				_auroraSgaContext.PaletLineas.RemoveRange(lineas);
+			}
+
+			palet.Estado = "Vaciado";
+			palet.IsVaciado = true;
+			palet.FechaVaciado = fechaActual;
+			palet.UsuarioVaciadoId = dto.UsuarioId;
+
+			if (!palet.FechaCierre.HasValue)
+			{
+				palet.FechaCierre = fechaActual;
+				palet.UsuarioCierreId = dto.UsuarioId;
+			}
+
+			_auroraSgaContext.Palets.Update(palet);
+
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
+				PaletId = palet.Id,
+				Fecha = fechaActual,
+				IdUsuario = dto.UsuarioId,
+				Accion = "VaciarPendiente",
+				Detalle = "Palet vaciado manualmente desde la pantalla de pendientes de vaciar."
+			});
+
+			await _auroraSgaContext.SaveChangesAsync();
+			await transaction.CommitAsync();
+
+			return Ok(new
+			{
+				message = $"Palet {palet.Codigo} vaciado correctamente.",
+				paletId = palet.Id,
+				codigoPalet = palet.Codigo,
+				estado = palet.Estado,
+				fechaVaciado = palet.FechaVaciado
+			});
+		}
+		catch (Exception ex)
+		{
+			await transaction.RollbackAsync();
+			_logger.LogError(ex, "Error al vaciar manualmente el palet {PaletId}", id);
+			return StatusCode(500, $"Error al vaciar el palet: {ex.Message}");
+		}
+	}
+	#endregion
 
 	#region POST: Forzar vaciado de palet
 	[HttpPost("{id}/forzar-vaciado")]

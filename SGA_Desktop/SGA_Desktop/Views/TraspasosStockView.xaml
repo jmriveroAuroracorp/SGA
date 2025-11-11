@@ -78,12 +78,6 @@
                                Orientation="Horizontal" 
                                HorizontalAlignment="Right"
                                VerticalAlignment="Center">
-                        <Button Content="Ver Histórico"
-                                Width="140" 
-                                Height="36" 
-                                Margin="0,0,8,0"
-                                Style="{StaticResource EstiloBotonPrincipal}"
-                                Command="{Binding VerHistorialCommand}"/>
                         <Button Content="Traspaso múltiple"
                                 Width="140" 
                                 Height="36" 
@@ -261,13 +255,13 @@
                                                                                 <!-- Fila 1: Almacén, Ubicación, Lote y Caducidad -->
                                                                                 <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6">
                                                                                     <TextBlock Text="Almacén:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
-                                                                                    <TextBlock Text="{Binding CodigoAlmacen}" Margin="4,0,20,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="{Binding CodigoAlmacen}" Margin="4,0,20,0" FontSize="14"/>
                                                                                     <TextBlock Text="Ubicación:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
-                                                                                    <TextBlock Text="{Binding Ubicacion}" Margin="4,0,20,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="{Binding Ubicacion}" Margin="4,0,20,0" FontSize="14"/>
                                                                                     <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
-                                                                                    <TextBlock Text="{Binding Partida}" Margin="4,0,20,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="{Binding Partida}" Margin="4,0,20,0" FontSize="14"/>
                                                                                     <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" FontSize="14"/>
-                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="4,0,0,0" FontSize="14" FontWeight="Bold"/>
+                                                                                    <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="4,0,0,0" FontSize="14"/>
                                                                                 </StackPanel>
 
                                                                                 <!-- Fila 2: Palet (si es paletizado) -->
@@ -310,7 +304,6 @@
                                                                                     <TextBlock Text="{Binding Reservado, StringFormat='0.######'}" 
                                                                                                Margin="4,0,0,0" 
                                                                                                FontSize="14"
-                                                                                               FontWeight="Bold"
                                                                                                Visibility="{Binding Reservado, Converter={StaticResource ZeroToCollapsedConverter}}"/>
                                                                                 </StackPanel>
 

@@ -266,6 +266,45 @@ namespace SGA_Desktop.Services
 			}
 		}
 
+		/// <summary>
+		/// Obtener traspasos de StorageControl con filtros
+		/// </summary>
+		public async Task<List<TraspasoStorageControlDto>> ObtenerTraspasosStorageControlAsync(
+			DateTime? fechaDesde = null,
+			DateTime? fechaHasta = null,
+			string? almacenOrigen = null,
+			string? almacenDestino = null,
+			string? codigoArticulo = null,
+			string? partida = null)
+		{
+			var query = new List<string>();
+			
+			if (fechaDesde.HasValue)
+				query.Add($"fechaDesde={fechaDesde:yyyy-MM-dd}");
+			if (fechaHasta.HasValue)
+				query.Add($"fechaHasta={fechaHasta:yyyy-MM-dd}");
+			if (!string.IsNullOrWhiteSpace(almacenOrigen))
+				query.Add($"almacenOrigen={Uri.EscapeDataString(almacenOrigen)}");
+			if (!string.IsNullOrWhiteSpace(almacenDestino))
+				query.Add($"almacenDestino={Uri.EscapeDataString(almacenDestino)}");
+			if (!string.IsNullOrWhiteSpace(codigoArticulo))
+				query.Add($"codigoArticulo={Uri.EscapeDataString(codigoArticulo)}");
+			if (!string.IsNullOrWhiteSpace(partida))
+				query.Add($"partida={Uri.EscapeDataString(partida)}");
+
+			var url = "traspasos/storagecontrol";
+			if (query.Count > 0)
+				url += "?" + string.Join("&", query);
+
+			var resp = await _httpClient.GetAsync(url);
+			if (!resp.IsSuccessStatusCode)
+				return new List<TraspasoStorageControlDto>();
+
+			var text = await resp.Content.ReadAsStringAsync();
+			return JsonSerializer.Deserialize<List<TraspasoStorageControlDto>>(text,
+				new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new List<TraspasoStorageControlDto>();
+		}
+
 
 	}
 

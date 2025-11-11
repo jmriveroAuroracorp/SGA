@@ -34,17 +34,27 @@ namespace SGA_Desktop.ViewModels
 			= new ObservableCollection<UsuarioConNombre>();
 		public ObservableCollection<UsuarioConNombre> UsuariosCierreDisponibles { get; }
 			= new ObservableCollection<UsuarioConNombre>();
+		public ObservableCollection<UsuarioConNombre> UsuariosUltimaActividadDisponibles { get; }
+			= new ObservableCollection<UsuarioConNombre>();
 		[ObservableProperty] private UsuarioConNombre? _usuarioAperturaSeleccionado;
 		[ObservableProperty] private UsuarioConNombre? _usuarioCierreSeleccionado;
+		[ObservableProperty] private UsuarioConNombre? _usuarioUltimaActividadSeleccionado;
+		
+		// 🔷 NUEVO: Filtros de última actividad
+		public ObservableCollection<string> TiposUltimaActividadDisponibles { get; }
+			= new ObservableCollection<string>();
+		[ObservableProperty] private string? _tipoUltimaActividadSeleccionado;
 		
 		// Propiedades para filtrado inteligente de usuarios
 		[ObservableProperty] private string _filtroUsuarioApertura = "";
 		[ObservableProperty] private string _filtroUsuarioCierre = "";
+		[ObservableProperty] private string _filtroUsuarioUltimaActividad = "";
 		[ObservableProperty] private bool _isDropDownOpenUsuarioApertura = false;
 		[ObservableProperty] private bool _isDropDownOpenUsuarioCierre = false;
+		[ObservableProperty] private bool _isDropDownOpenUsuarioUltimaActividad = false;
 		public ICollectionView UsuariosAperturaView { get; private set; }
 		public ICollectionView UsuariosCierreView { get; private set; }
-
+		public ICollectionView UsuariosUltimaActividadView { get; private set; }
 		// ▶️ Otros filtros
 		[ObservableProperty] private string? _codigo;
 		[ObservableProperty] private string? _mensajeValidacionCodigo;
@@ -54,6 +64,7 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty] private DateTime? _fechaHasta;
 		[ObservableProperty] private int? _usuarioApertura;
 		[ObservableProperty] private int? _usuarioCierre;
+		[ObservableProperty] private int? _usuarioUltimaActividad;
 		[ObservableProperty] private string? _almacen;
 		[ObservableProperty] private string _filtroAlmacenes = "";
 		[ObservableProperty] private bool _isDropDownOpenAlmacenes = false;
@@ -76,7 +87,9 @@ namespace SGA_Desktop.ViewModels
 		public IRelayCommand AbrirDropDownUsuarioCierreCommand { get; }
 		public IRelayCommand CerrarDropDownUsuarioCierreCommand { get; }
 		public IRelayCommand LimpiarSeleccionUsuarioCierreCommand { get; }
-
+		public IRelayCommand AbrirDropDownUsuarioUltimaActividadCommand { get; }
+		public IRelayCommand CerrarDropDownUsuarioUltimaActividadCommand { get; }
+		public IRelayCommand LimpiarSeleccionUsuarioUltimaActividadCommand { get; }
 		public PaletFilterDialogViewModel(PaletService paletService)
 		{
 			_paletService = paletService;
@@ -151,6 +164,24 @@ namespace SGA_Desktop.ViewModels
 			{
 				// No necesitamos limpiar selección aquí, solo actualizar el filtro
 			});
+			
+			// Inicializar comandos para dropdown de usuario última actividad
+			AbrirDropDownUsuarioUltimaActividadCommand = new RelayCommand(() =>
+			{
+				FiltroUsuarioUltimaActividad = "";
+				IsDropDownOpenUsuarioUltimaActividad = true;
+			});
+			
+			CerrarDropDownUsuarioUltimaActividadCommand = new RelayCommand(() =>
+			{
+				IsDropDownOpenUsuarioUltimaActividad = false;
+			});
+			
+			LimpiarSeleccionUsuarioUltimaActividadCommand = new RelayCommand(() =>
+			{
+				// No necesitamos limpiar selección aquí, solo actualizar el filtro
+			});
+
 		}
 
 		/// <summary>
@@ -199,6 +230,18 @@ namespace SGA_Desktop.ViewModels
 		
 		// 4) Carga TODOS los usuarios del sistema (no solo los de palets filtrados)
 		await CargarUsuariosCompletosAsync();
+		
+		// 5) Carga tipos de última actividad
+		await Application.Current.Dispatcher.InvokeAsync(() =>
+		{
+			TiposUltimaActividadDisponibles.Clear();
+			TiposUltimaActividadDisponibles.Add("-- Todos los tipos --");
+			TiposUltimaActividadDisponibles.Add("TRASPASO");
+			TiposUltimaActividadDisponibles.Add("APERTURA");
+			TiposUltimaActividadDisponibles.Add("CIERRE");
+			TipoUltimaActividadSeleccionado = TiposUltimaActividadDisponibles[0];
+		});
+
 		}
 
 	/// <summary>
@@ -219,6 +262,7 @@ namespace SGA_Desktop.ViewModels
 				UsuariosDisponibles.Clear();
 				UsuariosAperturaDisponibles.Clear();
 				UsuariosCierreDisponibles.Clear();
+				UsuariosUltimaActividadDisponibles.Clear();
 				
 				// Crear el elemento "sin filtro"
 				var sinFiltro = new UsuarioConNombre
@@ -231,6 +275,7 @@ namespace SGA_Desktop.ViewModels
 				UsuariosDisponibles.Add(sinFiltro);
 				UsuariosAperturaDisponibles.Add(sinFiltro);
 				UsuariosCierreDisponibles.Add(sinFiltro);
+				UsuariosUltimaActividadDisponibles.Add(sinFiltro);
 				
 				// Agregar todos los operarios con permisos de traspasos a todas las colecciones
 				foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
@@ -244,6 +289,7 @@ namespace SGA_Desktop.ViewModels
 					UsuariosDisponibles.Add(usuario);
 					UsuariosAperturaDisponibles.Add(usuario);
 					UsuariosCierreDisponibles.Add(usuario);
+					UsuariosUltimaActividadDisponibles.Add(usuario);
 				}
 				
 				System.Diagnostics.Debug.WriteLine($"🔷 Operarios con permisos de traspasos cargados: {operarios.Count}");
@@ -256,6 +302,10 @@ namespace SGA_Desktop.ViewModels
 				UsuariosCierreView = System.Windows.Data.CollectionViewSource.GetDefaultView(UsuariosCierreDisponibles);
 				UsuariosCierreView.Filter = FiltraUsuariosCierre;
 				OnPropertyChanged(nameof(UsuariosCierreView));
+				
+				UsuariosUltimaActividadView = System.Windows.Data.CollectionViewSource.GetDefaultView(UsuariosUltimaActividadDisponibles);
+				UsuariosUltimaActividadView.Filter = FiltraUsuariosUltimaActividad;
+				OnPropertyChanged(nameof(UsuariosUltimaActividadView));
 			});
 		}
 		catch (Exception ex)
@@ -344,6 +394,16 @@ namespace SGA_Desktop.ViewModels
 				.IndexOf(usuario.NombreOperario, FiltroUsuarioCierre, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 		}
 		
+		// Método para filtrado de usuarios última actividad
+		private bool FiltraUsuariosUltimaActividad(object obj)
+		{
+			if (obj is not UsuarioConNombre usuario) return false;
+			if (string.IsNullOrEmpty(FiltroUsuarioUltimaActividad)) return true;
+			
+			return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+				.IndexOf(usuario.NombreOperario, FiltroUsuarioUltimaActividad, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+		}
+		
 		// Método para manejar cambios en el filtro de almacenes
 		partial void OnFiltroAlmacenesChanged(string value)
 		{
@@ -360,6 +420,12 @@ namespace SGA_Desktop.ViewModels
 		partial void OnFiltroUsuarioCierreChanged(string value)
 		{
 			UsuariosCierreView?.Refresh();
+		}
+		
+		// Método para manejar cambios en el filtro de usuarios última actividad
+		partial void OnFiltroUsuarioUltimaActividadChanged(string value)
+		{
+			UsuariosUltimaActividadView?.Refresh();
 		}
 		
 		// Método para manejar cambios en el almacén seleccionado
@@ -382,6 +448,17 @@ namespace SGA_Desktop.ViewModels
 			IsDropDownOpenUsuarioCierre = false;
 		}
 		
+		// Método para manejar cambios en el usuario última actividad seleccionado
+		partial void OnUsuarioUltimaActividadSeleccionadoChanged(UsuarioConNombre value)
+		{
+			UsuarioUltimaActividad = value?.UsuarioId;
+			IsDropDownOpenUsuarioUltimaActividad = false;
+		}
+
+		// Propiedad pública para obtener el tipo de última actividad (null si es "-- Todos los tipos --")
+		public string? TipoUltimaActividadFiltro => 
+			TipoUltimaActividadSeleccionado == "-- Todos los tipos --" ? null : TipoUltimaActividadSeleccionado;
+		
 		// Método para validar el código cuando cambie
 		partial void OnCodigoChanged(string value)
 		{
@@ -398,10 +475,33 @@ namespace SGA_Desktop.ViewModels
 		// Método para centrar diálogos
 		private void ShowCenteredDialog(WarningDialog dialog)
 		{
-			// Configurar el owner para centrar el diálogo
-			var mainWindow = Application.Current.Windows.OfType<Window>()
+			ConfigureDialogOwner(dialog);
+			dialog.ShowDialog();
+		}
+
+		private void ShowWarningMessage(string title, string message, string iconGlyph = "\uE814")
+		{
+			ShowCenteredDialog(new WarningDialog(title, message, iconGlyph));
+		}
+
+		private void ShowInfoDialog(string title, string message)
+		{
+			ShowCenteredDialog(new WarningDialog(title, message, "\uE930"));
+		}
+
+		private bool ShowConfirmationDialog(string title, string message)
+		{
+			var dialog = new ConfirmationDialog(title, message);
+			ConfigureDialogOwner(dialog);
+			return dialog.ShowDialog() == true;
+		}
+
+		private void ConfigureDialogOwner(Window dialog)
+		{
+			var mainWindow = Application.Current.Windows
+				.OfType<Window>()
 				.FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
-			
+
 			if (mainWindow != null && mainWindow != dialog)
 			{
 				dialog.Owner = mainWindow;
@@ -409,11 +509,8 @@ namespace SGA_Desktop.ViewModels
 			}
 			else
 			{
-				// Si no hay ventana principal, centrar en pantalla
 				dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 			}
-				
-			dialog.ShowDialog();
 		}
 
 	}

@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Notificaciones;
+using SGA_Api.Models.Traspasos;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 
@@ -13,6 +14,7 @@ namespace SGA_Api.Services
 		private readonly TimeSpan _intervalo = TimeSpan.FromSeconds(5); // Se ejecuta cada 0.5 segundos para detectar cambios muy r�pidos
 		private bool _enEjecucion = false;
 		private readonly bool _soloProcesarPendientes;
+		private DateTime _ultimaLimpiezaDiariaSinLineas = DateTime.MinValue;
 		
 		// Diccionario para almacenar estados anteriores de traspasos (para detectar cambios)
 		private readonly Dictionary<Guid, string> _estadosAnterioresTraspasos = new();
@@ -222,6 +224,9 @@ namespace SGA_Api.Services
 				_enEjecucion = true;
 				try
 				{
+					var permitirLimpiezaDiariaSinLineas = DebeEjecutarLimpiezaDiariaSinLineas();
+					var seRealizoLimpiezaDiariaSinLineas = false;
+
 					using (var scope = _serviceProvider.CreateScope())
 					{
 						var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
@@ -252,6 +257,8 @@ namespace SGA_Api.Services
 				
 				// NUEVO: También procesar palets con traspasos completados recientes (PALET y ARTICULO)
 				var hace1Hora = DateTime.Now.AddHours(-1);
+				var hace24Horas = DateTime.Now.AddHours(-24);
+
 				var paletIdsConTraspasos = await dbContext.Traspasos
 					.Where(t => (t.TipoTraspaso == "PALET" || t.TipoTraspaso == "ARTICULO") && 
 								t.CodigoEstado == "COMPLETADO" && 
@@ -316,6 +323,11 @@ namespace SGA_Api.Services
 							   !todosPaletIdsConTemporales.Contains(p.Id) &&
 							   !todosPaletIdsConDefinitivas.Contains(p.Id) &&
 							   p.Estado != "Vaciado" && p.Estado.ToUpper() != "VACIADO" &&
+							   (
+								   (p.FechaCierre != null && p.FechaCierre >= hace24Horas) ||
+								   (p.FechaVaciado != null && p.FechaVaciado >= hace24Horas) ||
+								   p.FechaApertura >= hace24Horas
+							   ) &&
 							   // NO procesar palets recién creados (abiertos con menos de 1 hora)
 							   !(p.Estado == "Abierto" && p.FechaApertura >= hace1Hora))
 					.Select(p => p.Id)
@@ -340,6 +352,7 @@ namespace SGA_Api.Services
 								.Where(l => l.PaletId == paletId && l.Procesada == false)
 								.OrderBy(l => l.FechaAgregado)
 								.ToListAsync();
+							var paletTuvoTemporalesPendientes = tempsPendientes.Count > 0;
 
 					foreach (var temp in tempsPendientes)
 					{
@@ -364,15 +377,12 @@ namespace SGA_Api.Services
 						
 					// 2.2) Si el traspaso tiene ERROR_ERP, ELIMINAR la temporal (no procesarla)
 					// Esto limpia las líneas negativas cuando el traspaso falla
-					if (traspaso.CodigoEstado == "ERROR_ERP")
-					{
-						logger.LogWarning("⚠️ Temporal {TempId} asociada a traspaso con ERROR_ERP ({TraspasoId}). Se ELIMINA para mantener consistencia.", 
-							temp.Id, temp.TraspasoId);
-						// Eliminar la línea temporal para revertir el efecto del traspaso fallido
-						dbContext.TempPaletLineas.Remove(temp);
-						await dbContext.SaveChangesAsync();
-						continue;
-					}
+                    if (traspaso.CodigoEstado == "ERROR_ERP")
+                    {
+                        logger.LogWarning("⚠️ Temporal {TempId} asociada a traspaso con ERROR_ERP ({TraspasoId}). Se mantiene pendiente para revisión.",
+                            temp.Id, temp.TraspasoId);
+                        continue;
+                    }
 							
 						// 2.1) Si falta DescripcionArticulo, intentar recuperarla
 						if (string.IsNullOrWhiteSpace(temp.DescripcionArticulo))
@@ -573,6 +583,16 @@ namespace SGA_Api.Services
 								dbContext.PaletLineas.Update(linea);
 							}
 						}
+
+						var esDestinoPulmon = await EsUbicacionPulmonAsync(
+							dbContext,
+							ultimoTraspasoPalet.AlmacenDestino,
+							ultimoTraspasoPalet.UbicacionDestino);
+
+						if (esDestinoPulmon)
+						{
+							await VaciarPaletPorDestinoPulmonAsync(dbContext, paletId, ultimoTraspasoPalet, logger);
+						}
 					}
 
 							// 5) Marcar VAC�ADO SOLO cuando:
@@ -589,50 +609,81 @@ namespace SGA_Api.Services
 							// Si no quedan temporales ni definitivas, marcar como vaciado directamente
 							if (!quedanTemporales && !quedanDefinitivas)
 							{
-								var palet = await dbContext.Palets.FindAsync(paletId);
-								if (palet != null && palet.Estado != "Vaciado" && palet.Estado.ToUpper() != "VACIADO")
+								var paletConActividadReciente =
+									paletTuvoTemporalesPendientes ||
+									paletIdsConTraspasos.Contains(paletId) ||
+									paletIdsParaVaciado.Contains(paletId);
+
+								var puedeAplicarLimpiezaSinLineas = paletConActividadReciente || permitirLimpiezaDiariaSinLineas;
+
+								if (puedeAplicarLimpiezaSinLineas)
 								{
-									palet.Estado = "Vaciado";
-									palet.FechaVaciado = DateTime.Now;
-
-									// intenta registrar el usuario delltimo delta negativo o del último traspaso
-									var ultNeg = await dbContext.TempPaletLineas
-										.Where(x => x.PaletId == paletId && x.Cantidad < 0 && x.Procesada == true)
-										.OrderByDescending(x => x.FechaAgregado)
-										.FirstOrDefaultAsync();
-
-									// Si no hay temporal negativa, buscar el usuario del último traspaso completado
-									if (ultNeg == null)
+									var palet = await dbContext.Palets.FindAsync(paletId);
+									if (palet != null && palet.Estado != "Vaciado" && palet.Estado.ToUpper() != "VACIADO")
 									{
-										var ultimoTraspaso = await dbContext.Traspasos
-											.Where(t => t.PaletId == paletId && t.CodigoEstado == "COMPLETADO")
-											.OrderByDescending(t => t.FechaFinalizacion)
-											.FirstOrDefaultAsync();
-										
-										if (ultimoTraspaso != null)
+										var fechaReferencia = palet.FechaCierre
+											?? palet.FechaVaciado
+											?? palet.FechaApertura;
+
+										if (fechaReferencia < hace24Horas)
 										{
-											palet.UsuarioVaciadoId = ultimoTraspaso.UsuarioFinalizacionId ?? palet.UsuarioVaciadoId;
+											puedeAplicarLimpiezaSinLineas = false;
+											logger.LogDebug("ℹ️ Palet {PaletId} sin líneas excluido de la limpieza diaria por antigüedad (última actividad {FechaReferencia}).", paletId, fechaReferencia);
+										}
+
+										if (paletConActividadReciente || puedeAplicarLimpiezaSinLineas)
+										{
+											if (!paletConActividadReciente)
+											{
+												seRealizoLimpiezaDiariaSinLineas = true;
+											}
+											palet.Estado = "Vaciado";
+											palet.FechaVaciado = DateTime.Now;
+
+											// intenta registrar el usuario delltimo delta negativo o del último traspaso
+											var ultNeg = await dbContext.TempPaletLineas
+												.Where(x => x.PaletId == paletId && x.Cantidad < 0 && x.Procesada == true)
+												.OrderByDescending(x => x.FechaAgregado)
+												.FirstOrDefaultAsync();
+
+											// Si no hay temporal negativa, buscar el usuario del último traspaso completado
+											if (ultNeg == null)
+											{
+												var ultimoTraspaso = await dbContext.Traspasos
+													.Where(t => t.PaletId == paletId && t.CodigoEstado == "COMPLETADO")
+													.OrderByDescending(t => t.FechaFinalizacion)
+													.FirstOrDefaultAsync();
+												
+												if (ultimoTraspaso != null)
+												{
+													palet.UsuarioVaciadoId = ultimoTraspaso.UsuarioFinalizacionId ?? palet.UsuarioVaciadoId;
+												}
+											}
+											else
+											{
+												palet.UsuarioVaciadoId = ultNeg.UsuarioId;
+											}
+
+											// opcional: cierra tambin
+											palet.FechaCierre = palet.FechaCierre ?? DateTime.Now;
+											palet.UsuarioCierreId = palet.UsuarioCierreId ?? palet.UsuarioVaciadoId;
+
+											dbContext.Palets.Update(palet);
+
+											dbContext.LogPalet.Add(new LogPalet
+											{
+												PaletId = palet.Id,
+												Fecha = DateTime.Now,
+												IdUsuario = palet.UsuarioVaciadoId ?? 0,
+												Accion = "Vaciado",
+												Detalle = "Marcado vaciado tras consolidación: sin líneas temporales ni definitivas."
+											});
 										}
 									}
-									else
-									{
-										palet.UsuarioVaciadoId = ultNeg.UsuarioId;
-									}
-
-									// opcional: cierra tambin
-									palet.FechaCierre = palet.FechaCierre ?? DateTime.Now;
-									palet.UsuarioCierreId = palet.UsuarioCierreId ?? palet.UsuarioVaciadoId;
-
-									dbContext.Palets.Update(palet);
-
-									dbContext.LogPalet.Add(new LogPalet
-									{
-										PaletId = palet.Id,
-										Fecha = DateTime.Now,
-										IdUsuario = palet.UsuarioVaciadoId ?? 0,
-										Accion = "Vaciado",
-										Detalle = "Marcado vaciado tras consolidación: sin líneas temporales ni definitivas."
-									});
+								}
+								else
+								{
+									logger.LogDebug("ℹ️ Limpieza diaria de palets sin líneas ya ejecutada hoy. PaletId={PaletId} se omite hasta la próxima ventana diaria.", paletId);
 								}
 							}
 							// 🔷 NUEVO: Si hay temporales PENDIENTES (procesadas o no) que suman 0 y no hay definitivas, también vaciar
@@ -1037,6 +1088,11 @@ namespace SGA_Api.Services
 							//	dbContext.PaletLineas.Update(principal);
 							//}
 							//await dbContext.SaveChangesAsync(); // <-- Guardar los cambios de la unificaci�n
+						}
+
+						if (permitirLimpiezaDiariaSinLineas && seRealizoLimpiezaDiariaSinLineas)
+						{
+							RegistrarLimpiezaDiariaSinLineas();
 						}
 					}
 				}
@@ -1464,6 +1520,105 @@ namespace SGA_Api.Services
 		}
 	}
 	
+	private async Task<bool> EsUbicacionPulmonAsync(
+		AuroraSgaDbContext dbContext,
+		string? almacenDestino,
+		string? ubicacionDestino)
+	{
+		if (string.IsNullOrWhiteSpace(almacenDestino))
+		{
+			return false;
+		}
+
+		var almacenNormalizado = almacenDestino.Trim().ToUpper();
+		var ubicacionNormalizada = (ubicacionDestino ?? string.Empty).Trim().ToUpper();
+
+		var descripcionTipo = await dbContext.Ubicaciones_Configuracion
+			.Where(u =>
+				(u.CodigoAlmacen ?? string.Empty).Trim().ToUpper() == almacenNormalizado &&
+				(u.Ubicacion ?? string.Empty).Trim().ToUpper() == ubicacionNormalizada)
+			.Join(
+				dbContext.TipoUbicaciones,
+				u => u.TipoUbicacionId,
+				t => t.TipoUbicacionId,
+				(u, t) => t.Descripcion)
+			.FirstOrDefaultAsync();
+
+		return string.Equals(descripcionTipo?.Trim(), "PULMON", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private async Task VaciarPaletPorDestinoPulmonAsync(
+		AuroraSgaDbContext dbContext,
+		Guid paletId,
+		Traspaso ultimoTraspasoPalet,
+		ILogger<TraspasoFinalizacionBackgroundService> logger)
+	{
+		var palet = await dbContext.Palets.FindAsync(paletId);
+		if (palet == null)
+		{
+			logger.LogWarning("⚠️ No se encontró el palet {PaletId} para vaciar tras destino Pulmón.", paletId);
+			return;
+		}
+
+		if (string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
+		{
+			return;
+		}
+
+		var lineasDefinitivas = await dbContext.PaletLineas
+			.Where(l => l.PaletId == paletId)
+			.ToListAsync();
+
+		if (lineasDefinitivas.Any())
+		{
+			dbContext.PaletLineas.RemoveRange(lineasDefinitivas);
+			logger.LogInformation("🗑️ Eliminadas {Cantidad} líneas definitivas de palet {PaletId} por llegada a Pulmón.", lineasDefinitivas.Count, paletId);
+		}
+
+		var temporalesPendientes = await dbContext.TempPaletLineas
+			.Where(l => l.PaletId == paletId && l.Procesada == false)
+			.ToListAsync();
+
+		foreach (var temporal in temporalesPendientes)
+		{
+			temporal.Procesada = true;
+			dbContext.TempPaletLineas.Update(temporal);
+		}
+
+		if (temporalesPendientes.Any())
+		{
+			logger.LogInformation("✅ Marcadas {Cantidad} temporales como procesadas para palet {PaletId} tras vaciado en Pulmón.", temporalesPendientes.Count, paletId);
+		}
+
+		var usuarioVaciadoId = ultimoTraspasoPalet.UsuarioFinalizacionId ?? ultimoTraspasoPalet.UsuarioInicioId;
+
+		palet.Estado = "Vaciado";
+		palet.IsVaciado = true;
+		palet.FechaVaciado = DateTime.Now;
+		palet.UsuarioVaciadoId = usuarioVaciadoId > 0 ? usuarioVaciadoId : palet.UsuarioVaciadoId;
+
+		if (!palet.FechaCierre.HasValue)
+		{
+			palet.FechaCierre = DateTime.Now;
+		}
+
+		if (palet.UsuarioVaciadoId.HasValue)
+		{
+			palet.UsuarioCierreId = palet.UsuarioCierreId ?? palet.UsuarioVaciadoId;
+		}
+
+		dbContext.Palets.Update(palet);
+
+		dbContext.LogPalet.Add(new LogPalet
+		{
+			PaletId = palet.Id,
+			Fecha = DateTime.Now,
+			IdUsuario = palet.UsuarioVaciadoId ?? 0,
+			Accion = "Vaciado",
+			Detalle = $"Vaciado automático por llegada a ubicación Pulmón {ultimoTraspasoPalet.AlmacenDestino}-{ultimoTraspasoPalet.UbicacionDestino}."
+		});
+	}
+
 	/// <summary>
 	/// Intenta obtener la descripción de un artículo desde múltiples fuentes
 	/// </summary>
@@ -1521,6 +1676,16 @@ namespace SGA_Api.Services
 			logger.LogWarning(ex, "⚠️ Error al intentar recuperar descripción para artículo {CodigoArticulo}", codigoArticulo);
 			return null;
 		}
+	}
+
+	private bool DebeEjecutarLimpiezaDiariaSinLineas()
+	{
+		return _ultimaLimpiezaDiariaSinLineas.Date < DateTime.Now.Date;
+	}
+
+	private void RegistrarLimpiezaDiariaSinLineas()
+	{
+		_ultimaLimpiezaDiariaSinLineas = DateTime.Now;
 	}
 }
 }

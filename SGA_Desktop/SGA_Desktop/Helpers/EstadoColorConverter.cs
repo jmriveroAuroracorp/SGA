@@ -28,6 +28,7 @@ namespace SGA_Desktop.Helpers
 					"APERTURA" => Brushes.Green,
 					"CIERRE" => Brushes.Red,
 					"TRASPASO" => Brushes.DodgerBlue,
+					"ERROR ERP" => Brushes.DarkRed,
 					_ => Brushes.Black
 				};
 			}

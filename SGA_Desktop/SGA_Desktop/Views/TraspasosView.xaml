@@ -60,6 +60,52 @@
                 <StackPanel Grid.Column="1" 
                             Orientation="Horizontal"
                             HorizontalAlignment="Right">
+                    <Button Content="{Binding TextoBotonErrores}"
+                            Command="{Binding MostrarTraspasosErrorCommand}"
+                            Width="140"
+                            Height="35"
+                            Margin="0,0,10,0"
+                            Visibility="{Binding BotonErroresVisibility}"
+                            ToolTip="{Binding TextoBotonErrores}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
+                                <Setter Property="Background" Value="#D7263D"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderBrush" Value="#D7263D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MostrandoErrores}" Value="True">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="{Binding TextoBotonPendientes}"
+                            Command="{Binding MostrarPaletsPendientesCommand}"
+                            Width="170"
+                            Height="35"
+                            Margin="0,0,10,0"
+                            Visibility="{Binding BotonPendientesVisibility}"
+                            ToolTip="{Binding TextoBotonPendientes}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
+                                <Setter Property="Background" Value="#1F1F1F"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderBrush" Value="#1F1F1F"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MostrandoPendientesVaciado}" Value="True">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="Foreground" Value="#1F1F1F"/>
+                                        <Setter Property="BorderBrush" Value="#1F1F1F"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button Content="🔍 Filtros"
                             Command="{Binding AbrirFiltrosCommand}"
                             Width="100"
@@ -213,6 +259,61 @@
 
                                         <!-- Contenido principal -->
                                         <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                            <!-- Mensaje de error ERP -->
+                                            <Border Background="#FFE5E9"
+                                                    BorderBrush="#D7263D"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="8"
+                                                    Margin="0,0,0,8"
+                                                    Visibility="{Binding ErrorErpMensaje, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding ErrorErpMensaje}"
+                                                           Foreground="#D7263D"
+                                                           FontWeight="Bold"
+                                                           TextWrapping="Wrap"/>
+                                            </Border>
+
+                                            <Border Background="#1B1F23"
+                                                    BorderBrush="#1B1F23"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="8"
+                                                    Margin="0,0,0,8"
+                                                    Visibility="{Binding MensajePendienteVaciado, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Border.ToolTip>
+                                                    <ToolTip>
+                                                        <StackPanel>
+                                                            <TextBlock Text="Detalle de líneas sin stock" FontWeight="Bold"/>
+                                                            <ItemsControl ItemsSource="{Binding LineasPendientesVaciado}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <TextBlock FontSize="11" Foreground="#333" TextWrapping="Wrap">
+                                                                            <Run Text="{Binding CodigoArticulo}"/>
+                                                                            <Run Text=" · "/>
+                                                                            <Run Text="{Binding CodigoAlmacen}"/>
+                                                                            <Run Text="/"/>
+                                                                            <Run Text="{Binding Ubicacion}"/>
+                                                                            <Run Text=" · Faltan "/>
+                                                                            <Run Text="{Binding CantidadFaltante, StringFormat={}{0:F2}}"/>
+                                                                        </TextBlock>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </ToolTip>
+                                                </Border.ToolTip>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding MensajePendienteVaciado}"
+                                                               Foreground="White"
+                                                               FontWeight="Bold"
+                                                               TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding LineasPendientesVaciado.Count, StringFormat='Líneas afectadas: {0}'}"
+                                                               Foreground="#E0E0E0"
+                                                               FontSize="11"
+                                                               Margin="0,4,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+
                                             <!-- Fecha de apertura -->
                                             <Grid Margin="0,0,0,8">
                                                 <Grid.ColumnDefinitions>
@@ -419,6 +520,9 @@
                                                                             <DataTrigger Binding="{Binding TipoUltimaActividad}" Value="TRASPASO">
                                                                                 <Setter Property="Text" Value="🚚"/>
                                                                             </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding TipoUltimaActividad}" Value="ERROR ERP">
+                                                                                <Setter Property="Text" Value="⚠️"/>
+                                                                            </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </TextBlock.Style>
@@ -436,34 +540,42 @@
                                                     </Grid>
 
                                                     <!-- Fecha y usuario de última actividad -->
-                                                    <Grid Grid.Row="1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="*"/>
-                                                        </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Row="1">
+                                                        <!-- Fecha -->
+                                                        <Grid Margin="0,0,0,4">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
 
-                                                        <TextBlock Grid.Column="0" Text="📅 Fecha: "
-                                                                   FontWeight="SemiBold"
-                                                                   FontSize="10"
-                                                                   Foreground="#7F8C8D"/>
-                                                        <TextBlock Grid.Column="1" Text="{Binding FechaUltimaActividad, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
-                                                                   FontWeight="Bold"
-                                                                   FontSize="10"
-                                                                   Foreground="#34495E"/>
+                                                            <TextBlock Grid.Column="0" Text="📅 Fecha: "
+                                                                       FontWeight="SemiBold"
+                                                                       FontSize="10"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding FechaUltimaActividad, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"
+                                                                       FontWeight="Bold"
+                                                                       FontSize="10"
+                                                                       Foreground="#34495E"/>
+                                                        </Grid>
 
-                                                        <TextBlock Grid.Column="2" Text="👤 Usuario: "
-                                                                   FontWeight="SemiBold"
-                                                                   FontSize="10"
-                                                                   Foreground="#7F8C8D"
-                                                                   Margin="10,0,0,0"/>
-                                                        <TextBlock Grid.Column="3" Text="{Binding UsuarioUltimaActividadNombre}"
-                                                                   FontWeight="Bold"
-                                                                   FontSize="10"
-                                                                   Foreground="#34495E"
-                                                                   TextTrimming="CharacterEllipsis"/>
-                                                    </Grid>
+                                                        <!-- Usuario -->
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Grid.Column="0" Text="👤 Usuario: "
+                                                                       FontWeight="SemiBold"
+                                                                       FontSize="10"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding UsuarioUltimaActividadNombre}"
+                                                                       FontWeight="Bold"
+                                                                       FontSize="10"
+                                                                       Foreground="#34495E"
+                                                                       TextWrapping="Wrap"/>
+                                                        </Grid>
+                                                    </StackPanel>
                                                 </Grid>
                                             </Border>
                                         </StackPanel>
@@ -479,6 +591,56 @@
                                                     FontSize="10"
                                                     FontWeight="Medium"
                                                     Margin="0,0,2,0"/>
+
+                                            <Button Content="🗑️ Vaciar"
+                                                    Command="{Binding DataContext.VaciarPaletPendienteCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}"
+                                                    Width="80"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Setter Property="Background" Value="#1B1F23"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="BorderBrush" Value="#1B1F23"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+
+                                            <Button Content="🔁 Relanzar"
+                                                    Command="{Binding DataContext.RelanzarTraspasoErrorCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}"
+                                                    Width="90"
+                                                    Height="30"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Margin="0,0,2,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
+                                                        <Setter Property="Background" Value="#D7263D"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="BorderBrush" Value="#D7263D"/>
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding TraspasoErrorId}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+
                                             <Button Content="📦 Añadir"
                                                     Click="AbrirPaletLineas_Click"
                                                     Tag="{Binding}"
@@ -489,16 +651,22 @@
                                                     Margin="0,0,2,0">
                                                 <Button.Style>
                                                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
-                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding TraspasoErrorId}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
                                                             <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            <!-- Botón Cerrar (visible cuando estado = Abierto) -->
+
                                             <Button Content="🔒 Cerrar"
                                                     Click="CerrarPalet_Click"
                                                     Tag="{Binding}"
@@ -509,17 +677,23 @@
                                                     Margin="0,0,2,0">
                                                 <Button.Style>
                                                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
-                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding Estado}" Value="Abierto"/>
+                                                                    <Condition Binding="{Binding TraspasoErrorId}" Value="{x:Null}"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </MultiDataTrigger>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            
-                                            <!-- Botón Abrir (visible cuando estado = Cerrado) -->
+
                                             <Button Content="🔓 Abrir"
                                                     Click="ReabrirPalet_Click"
                                                     Tag="{Binding}"
@@ -532,15 +706,21 @@
                                                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
                                                         <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding Estado}" Value="Cerrado"/>
+                                                                    <Condition Binding="{Binding TraspasoErrorId}" Value="{x:Null}"/>
+                                                                </MultiDataTrigger.Conditions>
                                                                 <Setter Property="Visibility" Value="Visible"/>
+                                                            </MultiDataTrigger>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            
-                                            <!-- Botón Traspasar (visible cuando estado = Cerrado) -->
+
                                             <Button Content="🚚 Traspasar"
                                                     Click="TraspasarPalet_Click"
                                                     Tag="{Binding}"
@@ -553,21 +733,42 @@
                                                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
                                                         <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="Cerrado">
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding Estado}" Value="Cerrado"/>
+                                                                    <Condition Binding="{Binding TraspasoErrorId}" Value="{x:Null}"/>
+                                                                </MultiDataTrigger.Conditions>
                                                                 <Setter Property="Visibility" Value="Visible"/>
+                                                            </MultiDataTrigger>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
+
                                             <Button Content="🖨️ Imprimir"
                                                     Click="ImprimirPalet_Click"
                                                     Tag="{Binding}"
-                                                    Style="{StaticResource EstiloBotonSecundario}"
                                                     Width="70"
                                                     Height="30"
                                                     FontSize="10"
-                                                    FontWeight="Medium"/>
+                                                    FontWeight="Medium">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding TraspasoErrorId}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding EsPendienteVaciado}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
                                 </Border>

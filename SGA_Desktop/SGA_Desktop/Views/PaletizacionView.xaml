@@ -45,6 +45,21 @@
                  <StackPanel Grid.Column="1"
                              Orientation="Horizontal"
                              HorizontalAlignment="Right">
+                <Button Content="⚠️ Errores ERP"
+                        Command="{Binding MostrarTraspasosErrorCommand}"
+                        Width="140"
+                        Height="35"
+                        Margin="0,0,10,0"
+                        ToolTip="Ver traspasos con ERROR ERP">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonPrincipal}">
+                            <Setter Property="Background" Value="#D7263D"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="BorderBrush" Value="#D7263D"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                        </Style>
+                    </Button.Style>
+                </Button>
                 <Button Content="🔍 Filtros"
                         Command="{Binding AbrirFiltrosCommand}"
                              Width="100"

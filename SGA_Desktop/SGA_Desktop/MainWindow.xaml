@@ -250,6 +250,10 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"/>
                     <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosPalet}" -->
+                    <Button Content="Historial de Traspasos"
+                    Command="{Binding IrAHistorialTraspasosCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"/>
                     <!--<Button Content="Inventario" …/>-->
                     <Button Content="Etiquetas"
                     Command="{Binding IrAEtiquetasCommand}"

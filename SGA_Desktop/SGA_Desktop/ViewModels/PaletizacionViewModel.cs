@@ -22,9 +22,9 @@ namespace SGA_Desktop.ViewModels
 
 	[ObservableProperty] private string? errorMessage;
 	[ObservableProperty] private string mensaje = "Listo";
-	[ObservableProperty] private bool cargando = false;
-	[ObservableProperty]
-	private LineaPaletDto? lineaSeleccionada;
+		[ObservableProperty] private bool cargando = false;
+		[ObservableProperty]
+		private LineaPaletDto? lineaSeleccionada;
 		partial void OnLineaSeleccionadaChanged(LineaPaletDto? value)
 		{
 			EliminarLineaSeleccionadaCommand.NotifyCanExecuteChanged();
@@ -50,6 +50,7 @@ namespace SGA_Desktop.ViewModels
 		public IAsyncRelayCommand LoadPaletsCommand { get; }
 		public IRelayCommand AbrirFiltrosCommand { get; }
 		public IAsyncRelayCommand LoadLineasCommand { get; }
+		public IAsyncRelayCommand MostrarTraspasosErrorCommand { get; }
 	public IRelayCommand CrearPaletCommand { get; }
 	public IRelayCommand AbrirPaletLineasCommand { get; }
 	public IRelayCommand<PaletDto> SeleccionarPaletCommand { get; }
@@ -70,6 +71,7 @@ namespace SGA_Desktop.ViewModels
 			AbrirFiltrosCommand = new RelayCommand(OpenFiltros);
 			CrearPaletCommand = new RelayCommand(AbrirPaletCrearDialog);
 			LoadLineasCommand = new AsyncRelayCommand(LoadLineasPaletAsync);
+			MostrarTraspasosErrorCommand = new AsyncRelayCommand(MostrarTraspasosErrorAsync);
 			AbrirPaletLineasCommand = new RelayCommand(AbrirPaletLineas, PuedeAbrirPaletLineas);
 			SeleccionarPaletCommand = new RelayCommand<PaletDto>(SeleccionarPalet);
 			CerrarContenidoCommand = new RelayCommand(CerrarContenido);
@@ -92,12 +94,11 @@ namespace SGA_Desktop.ViewModels
 		// Para diseño en XAML
 		public PaletizacionViewModel() : this(new PaletService()) { }
 
-		private async Task InitializeAsync()
+	private async Task InitializeAsync()
 		{
 			// Limpia la grilla al cambiar de empresa
 			SessionManager.EmpresaCambiada += (s, e) => PaletsView.Clear();
 
-			// Espacio para precargar otros datos si hiciera falta
 			await Task.CompletedTask;
 		}
 
@@ -141,6 +142,26 @@ namespace SGA_Desktop.ViewModels
 	{
 		PaletSeleccionado = null;
 		Mensaje = "Contenido cerrado";
+	}
+
+	private async Task MostrarTraspasosErrorAsync()
+	{
+		var vm = new PaletErroresDialogViewModel(_paletService);
+		await vm.InitializeAsync();
+
+		var dlg = new PaletErroresDialog
+		{
+			DataContext = vm
+		};
+
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+		{
+			dlg.Owner = owner;
+		}
+
+		dlg.ShowDialog();
 	}
 
 	private void VerPaletSeleccionado()

@@ -15,6 +15,55 @@ namespace SGA_Desktop.Services
 	{
 		public PaletService() : base() { }
 
+		public async Task<List<TraspasoErrorDto>> ObtenerTraspasosErrorErpAsync(short codigoEmpresa)
+		{
+			var uri = $"palet/traspasos/error-erp?codigoEmpresa={codigoEmpresa}";
+			return await _httpClient.GetFromJsonAsync<List<TraspasoErrorDto>>(uri)
+				?? new List<TraspasoErrorDto>();
+		}
+
+		public async Task<List<PaletPendienteVaciadoDto>> ObtenerPaletsPendientesVaciadoAsync(short codigoEmpresa)
+		{
+			var uri = $"palet/pendientes-vaciado?codigoEmpresa={codigoEmpresa}";
+			return await _httpClient.GetFromJsonAsync<List<PaletPendienteVaciadoDto>>(uri)
+				?? new List<PaletPendienteVaciadoDto>();
+		}
+
+		public async Task<(bool exito, string? mensaje)> RelanzarTraspasoAsync(Guid traspasoId, RelanzarTraspasoRequest request)
+		{
+			var resp = await _httpClient.PostAsJsonAsync($"palet/traspasos/{traspasoId}/relanzar", request);
+			if (resp.IsSuccessStatusCode)
+			{
+				return (true, null);
+			}
+
+			var mensaje = await resp.Content.ReadAsStringAsync();
+			if (string.IsNullOrWhiteSpace(mensaje))
+			{
+				mensaje = "No se pudo relanzar el traspaso.";
+			}
+
+			return (false, mensaje);
+		}
+
+		public async Task<(bool exito, string? mensaje)> VaciarPaletPendienteAsync(Guid paletId, int usuarioId)
+		{
+			var payload = new { UsuarioId = usuarioId };
+			var resp = await _httpClient.PostAsJsonAsync($"palet/{paletId}/vaciar-pendiente", payload);
+			if (resp.IsSuccessStatusCode)
+			{
+				return (true, null);
+			}
+
+			var mensaje = await resp.Content.ReadAsStringAsync();
+			if (string.IsNullOrWhiteSpace(mensaje))
+			{
+				mensaje = "No se pudo vaciar el palet.";
+			}
+
+			return (false, mensaje);
+		}
+
 		public async Task<List<TipoPaletDto>> ObtenerTiposPaletAsync()
 		{
 			return await _httpClient
@@ -40,7 +89,9 @@ namespace SGA_Desktop.Services
 		int? usuarioApertura = null,
 		int? usuarioCierre = null,
 		bool sinCierre = false,
-		string? almacen = null
+		string? almacen = null,
+		string? tipoUltimaActividad = null,
+		int? usuarioUltimaActividad = null
 	)
 		{
 			var query = new List<string> { $"codigoEmpresa={codigoEmpresa}" };
@@ -56,6 +107,8 @@ namespace SGA_Desktop.Services
 			if (usuarioCierre.HasValue) query.Add($"usuarioCierre={usuarioCierre}");
 			if (sinCierre) query.Add("sinCierre=true");
 			if (!string.IsNullOrWhiteSpace(almacen)) query.Add($"almacen={almacen}");
+			if (!string.IsNullOrWhiteSpace(tipoUltimaActividad)) query.Add($"tipoUltimaActividad={tipoUltimaActividad}");
+			if (usuarioUltimaActividad.HasValue) query.Add($"usuarioUltimaActividad={usuarioUltimaActividad}");
 
 			var uri = "palet/filtros?" + string.Join("&", query);
 			return await _httpClient.GetFromJsonAsync<List<PaletDto>>(uri)

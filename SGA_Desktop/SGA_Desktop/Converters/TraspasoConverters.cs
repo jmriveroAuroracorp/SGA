@@ -108,4 +108,29 @@ namespace SGA_Desktop.Converters
             throw new NotImplementedException();
         }
     }
+
+    /// <summary>
+    /// Convierte el estado del movimiento (SIN_ENTRADA/SIN_SALIDA) a texto legible
+    /// </summary>
+    public class EstadoMovimientoToTextConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is string estado)
+            {
+                return estado switch
+                {
+                    "SIN_ENTRADA" => "SIN ENTRADA",
+                    "SIN_SALIDA" => "SIN SALIDA",
+                    _ => estado
+                };
+            }
+            return value?.ToString() ?? "";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
