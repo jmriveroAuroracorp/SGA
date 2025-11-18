@@ -311,7 +311,10 @@ namespace SGA_Desktop.ViewModels
                 
                 // Crear y mostrar el diálogo de edición
                 var editarDialog = new EditarOrdenTraspasoDialog(editarViewModel);
-                editarDialog.Owner = Application.Current.MainWindow;
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != editarDialog)
+                    editarDialog.Owner = owner;
                 editarDialog.ShowDialog();
                 
                 // Recargar las órdenes después de cerrar el diálogo

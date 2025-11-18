@@ -7,6 +7,7 @@ using SGA_Api.Logic;
 using SGA_Api.Middleware;
 using SGA_Api.Services;
 using System.IO;
+using System.Runtime.ExceptionServices;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.SetMinimumLevel(LogLevel.Debug); // Cambiar a Debug para ver TODO
+
+// Agregar filtro para suprimir ObjectDisposedException del contenedor de DI durante el shutdown
+builder.Logging.AddFilter((category, logLevel) =>
+{
+    // Si el mensaje contiene ObjectDisposedException y DependencyInjection, no lo mostramos
+    // Esto se aplicará a los logs, pero Visual Studio seguirá mostrando FirstChanceException
+    return true; // Permitimos todos los logs, el filtro real está en los manejadores de excepciones
+});
 
 // Agregamos el DbContext de SAGE
 builder.Services.AddDbContext<SageDbContext>(options =>
@@ -92,6 +101,7 @@ builder.Services.AddScoped<IOrdenTraspasoService, OrdenTraspasoService>();
 builder.Services.AddScoped<INotificacionesTraspasosService, NotificacionesTraspasosService>();
 builder.Services.AddScoped<INotificacionesConteosService, NotificacionesConteosService>();
 builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
+builder.Services.AddScoped<INotificacionesUnificadasService, NotificacionesUnificadasService>();
 builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
 builder.Services.AddScoped<ICalidadService, CalidadService>();
 builder.Services.AddScoped<IValidacionTraspasoService, ValidacionTraspasoService>();
@@ -110,6 +120,13 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod(); 
     });
 });
+
+// Configurar el host para que espere a que los servicios se detengan correctamente
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.ShutdownTimeout = TimeSpan.FromSeconds(10); // Dar tiempo para que los servicios se detengan
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -144,4 +161,102 @@ app.MapHub<NotificacionesTraspasosHub>("/notificacionesTraspasosHub");
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("🚀 SGA API iniciada correctamente - Logs funcionando!");
 
-app.Run();
+// Variable para rastrear si la aplicación se está cerrando
+var isShuttingDown = false;
+
+// Configurar shutdown graceful
+var hostApplicationLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+hostApplicationLifetime.ApplicationStopping.Register(() =>
+{
+    isShuttingDown = true;
+    logger.LogInformation("🛑 Iniciando cierre ordenado de la aplicación...");
+});
+
+// Manejar FirstChanceException - Visual Studio las muestra automáticamente en modo debug
+// No podemos suprimirlas completamente, pero podemos registrarlas como información
+AppDomain.CurrentDomain.FirstChanceException += (sender, e) =>
+{
+    if (isShuttingDown && e.Exception is ObjectDisposedException disposedEx)
+    {
+        // Verificar si es del contenedor de DI (las que queremos ignorar)
+        var isFromDI = disposedEx.Source?.Contains("Microsoft.Extensions.DependencyInjection") == true ||
+                       disposedEx.StackTrace?.Contains("Microsoft.Extensions.DependencyInjection") == true ||
+                       disposedEx.StackTrace?.Contains("ServiceProvider") == true;
+        
+        if (isFromDI)
+        {
+            // Estas excepciones son normales durante el shutdown
+            // Visual Studio las mostrará, pero no afectan la funcionalidad
+            // No hacemos nada aquí, solo las identificamos
+        }
+    }
+};
+
+// Suprimir excepciones no observadas de ObjectDisposedException durante el shutdown
+TaskScheduler.UnobservedTaskException += (sender, e) =>
+{
+    if (isShuttingDown)
+    {
+        var aggregateException = e.Exception;
+        if (aggregateException != null)
+        {
+            // Verificar si alguna de las excepciones internas es ObjectDisposedException
+            var hasObjectDisposed = aggregateException.InnerExceptions
+                .Any(ex => ex is ObjectDisposedException disposedEx &&
+                          (disposedEx.Source?.Contains("Microsoft.Extensions.DependencyInjection") == true ||
+                           disposedEx.StackTrace?.Contains("Microsoft.Extensions.DependencyInjection") == true ||
+                           disposedEx.StackTrace?.Contains("ServiceProvider") == true));
+            
+            if (hasObjectDisposed)
+            {
+                e.SetObserved(); // Marcar como observada para evitar que se propague
+                return;
+            }
+        }
+    }
+    
+    // También verificar InnerException
+    if (e.Exception?.InnerException is ObjectDisposedException disposedInner)
+    {
+        var isFromDI = disposedInner.Source?.Contains("Microsoft.Extensions.DependencyInjection") == true ||
+                       disposedInner.StackTrace?.Contains("Microsoft.Extensions.DependencyInjection") == true ||
+                       disposedInner.StackTrace?.Contains("ServiceProvider") == true;
+        
+        if (isFromDI)
+        {
+            e.SetObserved();
+        }
+    }
+};
+
+// Manejar excepciones no manejadas - aunque ObjectDisposedException normalmente no llega aquí
+AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+{
+    if (isShuttingDown && e.ExceptionObject is ObjectDisposedException)
+    {
+        // Durante el shutdown, estas excepciones son esperadas
+        // No hacer nada, solo evitar que se propague más
+    }
+};
+
+// Ejecutar la aplicación de forma asíncrona para permitir shutdown graceful
+try
+{
+    await app.RunAsync();
+}
+catch (ObjectDisposedException)
+{
+    // Ignorar ObjectDisposedException durante el cierre - es normal
+    logger.LogInformation("✅ Aplicación cerrada correctamente");
+}
+catch (Exception ex)
+{
+    // Solo registrar errores que no sean ObjectDisposedException
+    if (ex is not ObjectDisposedException && 
+        (ex.InnerException == null || ex.InnerException is not ObjectDisposedException))
+    {
+        logger.LogError(ex, "❌ Error al cerrar la aplicación");
+        throw;
+    }
+    logger.LogInformation("✅ Aplicación cerrada correctamente");
+}

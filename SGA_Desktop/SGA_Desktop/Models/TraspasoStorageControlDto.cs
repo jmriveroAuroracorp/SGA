@@ -22,6 +22,8 @@ namespace SGA_Desktop.Models
         
         public short CodigoEmpresa { get; set; }
         public short? Ejercicio { get; set; }
+
+        public string? CodigoPalet { get; set; }
         
         // Propiedad para identificar la fuente del traspaso
         public string Fuente { get; set; } = "SAGE";

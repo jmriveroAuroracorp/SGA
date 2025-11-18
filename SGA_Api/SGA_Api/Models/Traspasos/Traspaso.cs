@@ -46,6 +46,9 @@ namespace SGA_Api.Models.Traspasos
 
 	public bool? EsNotificado { get; set; } = false;
 
+	[Column(TypeName = "varchar(20)")]
+	public string? OrigenTraspaso { get; set; }
+
 
 		// Opcional: navegación a Palet y Estado
 		// public Palet Palet { get; set; }

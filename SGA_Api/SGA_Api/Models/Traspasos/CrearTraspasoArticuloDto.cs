@@ -37,5 +37,15 @@ namespace SGA_Api.Models.Traspasos
 		/// Si se especifica, se usará este palet para crear la línea negativa.
 		/// </summary>
 		public Guid? PaletIdOrigen { get; set; }
+
+		/// <summary>
+		/// Si true, confirma agregar el artículo al palet existente
+		/// </summary>
+		public bool? ConfirmarAgregarAPalet { get; set; }
+
+		/// <summary>
+		/// Si true, deja el material suelto en la ubicación (sin paletizar)
+		/// </summary>
+		public bool? DejarSuelto { get; set; }
 	}
 } 

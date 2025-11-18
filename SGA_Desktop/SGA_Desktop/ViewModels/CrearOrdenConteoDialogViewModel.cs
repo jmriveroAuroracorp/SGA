@@ -9,10 +9,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -47,11 +49,11 @@ namespace SGA_Desktop.ViewModels
             // Inicializar colecciones
             PrioridadesDisponibles = new ObservableCollection<PrioridadItem>
             {
-                new() { Valor = 1, Texto = "1 - Muy Baja" },
-                new() { Valor = 2, Texto = "2 - Baja" },
-                new() { Valor = 3, Texto = "3 - Normal" },
-                new() { Valor = 4, Texto = "4 - Alta" },
-                new() { Valor = 5, Texto = "5 - Muy Alta" }
+                new() { Valor = 1, Texto = "1 - Muy Baja", Nombre = "Muy Baja" },
+                new() { Valor = 2, Texto = "2 - Baja", Nombre = "Baja" },
+                new() { Valor = 3, Texto = "3 - Normal", Nombre = "Normal" },
+                new() { Valor = 4, Texto = "4 - Alta", Nombre = "Alta" },
+                new() { Valor = 5, Texto = "5 - Muy Alta", Nombre = "Muy Alta" }
             };
 
             VisibilidadesDisponibles = new ObservableCollection<VisibilidadItem>
@@ -62,6 +64,10 @@ namespace SGA_Desktop.ViewModels
 
             AlmacenesDisponibles = new ObservableCollection<AlmacenDto>();
             OperariosDisponibles = new ObservableCollection<OperariosAccesoDto>();
+
+            // Inicializar ICollectionView para filtrado de operarios (aunque la colección esté vacía)
+            OperariosView = CollectionViewSource.GetDefaultView(OperariosDisponibles);
+            OperariosView.Filter = FiltraOperario;
 
             // Valores por defecto
             EsConteoUbicacion = true; // Por defecto, conteo por ubicación
@@ -84,6 +90,9 @@ namespace SGA_Desktop.ViewModels
         public ObservableCollection<VisibilidadItem> VisibilidadesDisponibles { get; }
         public ObservableCollection<AlmacenDto> AlmacenesDisponibles { get; }
         public ObservableCollection<OperariosAccesoDto> OperariosDisponibles { get; }
+        
+        // Vista filtrada para operarios
+        public ICollectionView OperariosView { get; private set; } = null!;
 
         [ObservableProperty]
         private string titulo = string.Empty;
@@ -109,6 +118,13 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private DateTime? fechaPlan;
+        
+        // Propiedades para filtrado de operarios
+        [ObservableProperty]
+        private string filtroOperarios = string.Empty;
+        
+        [ObservableProperty]
+        private bool isDropDownOpenOperarios = false;
 
         [ObservableProperty]
         private string comentario = string.Empty;
@@ -177,6 +193,9 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private ArticuloResumenDto? articuloSeleccionado;
 
+        [ObservableProperty]
+        private bool articuloTieneStockVirtual = true; // Indica si el artículo tiene stock virtual registrado
+
         // Estados
         [ObservableProperty]
         private bool isCargando = false;
@@ -199,6 +218,7 @@ namespace SGA_Desktop.ViewModels
         // Visibilidad para búsqueda de artículos
         public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
+        public bool MostrarAdvertenciaSinStock => MostrarInfoArticulo && !ArticuloTieneStockVirtual;
         #endregion
 
         #region Commands
@@ -218,6 +238,13 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
+                if (AlmacenSeleccionado == null)
+                {
+                    var warningDialog = new WarningDialog("Error de validación", "Selecciona un almacén antes de crear la orden.");
+                    warningDialog.ShowDialog();
+                    return;
+                }
+
                 // Crear el DTO
                 var dto = new CrearOrdenConteoDto
                 {
@@ -232,7 +259,7 @@ namespace SGA_Desktop.ViewModels
                     CreadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString() ?? "ADMIN",
                     Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
                     CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
-                    CodigoAlmacen = EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null, // Solo para conteos por ubicación
+                    CodigoAlmacen = AlmacenSeleccionado?.CodigoAlmacen,
                     Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim()
                 };
 
@@ -306,7 +333,7 @@ namespace SGA_Desktop.ViewModels
                     resultados = await _stockService.ObtenerPorArticuloAsync(
                         empresa,
                         codigoArticulo: terminoBusqueda,
-                        codigoAlmacen: EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null
+                        codigoAlmacen: AlmacenSeleccionado?.CodigoAlmacen
                     );
                 }
 
@@ -319,7 +346,7 @@ namespace SGA_Desktop.ViewModels
                     resultados = await _stockService.ObtenerPorArticuloAsync(
                         empresa,
                         codigoArticulo: null,
-                        codigoAlmacen: EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null,
+                        codigoAlmacen: AlmacenSeleccionado?.CodigoAlmacen,
                         descripcion: terminoBusqueda
                     );
                 }
@@ -345,43 +372,71 @@ namespace SGA_Desktop.ViewModels
                 {
                     ArticuloSeleccionado = ArticulosEncontrados.First();
                     CodigoArticulo = ArticuloSeleccionado.CodigoArticulo;
+                    ArticuloTieneStockVirtual = true; // Tiene stock porque se encontró en la búsqueda
                     var mensaje = $"✓ Encontrado por {tipoBusqueda}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
                     var successDialog = new WarningDialog("Artículo encontrado", mensaje);
                     successDialog.ShowDialog();
                 }
                 else if (ArticulosEncontrados.Count > 1)
                 {
+                    ArticuloTieneStockVirtual = true; // Tiene stock porque se encontraron resultados
                     var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}.\nSelecciona uno de la lista desplegable.";
                     var infoDialog = new WarningDialog("Múltiples resultados", mensaje);
                     infoDialog.ShowDialog();
                 }
                 else
                 {
-                    var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por {tipoBusqueda}";
-                    if (EsConteoUbicacion && AlmacenSeleccionado != null)
+                    // Si no encuentra resultados pero parece un código de artículo, permitir usarlo directamente
+                    // (puede haber stock físico aunque no esté registrado virtualmente)
+                    bool pareceCodigo = terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" ");
+                    
+                    if (pareceCodigo)
                     {
-                        mensaje += $" en el almacén {AlmacenSeleccionado.CodigoAlmacen}";
+                        // Permitir usar el código directamente aunque no haya stock virtual
+                        ArticuloSeleccionado = new ArticuloResumenDto
+                        {
+                            CodigoArticulo = terminoBusqueda,
+                            DescripcionArticulo = "Artículo sin stock virtual registrado"
+                        };
+                        CodigoArticulo = terminoBusqueda;
+                        ArticuloTieneStockVirtual = false; // NO tiene stock virtual
+                        
+                        var mensaje = $"⚠️ No se encontró stock virtual para el código '{terminoBusqueda}'";
+                        if (AlmacenSeleccionado != null)
+                        {
+                            var nombreAlmacen = !string.IsNullOrWhiteSpace(AlmacenSeleccionado.NombreAlmacen) 
+                                ? $" ({AlmacenSeleccionado.NombreAlmacen})" 
+                                : "";
+                            mensaje += $" en el almacén {AlmacenSeleccionado.CodigoAlmacen}{nombreAlmacen}";
+                        }
+                        mensaje += ".\n\n";
+                        mensaje += "✅ Se permitirá crear el conteo igualmente, ya que puede haber stock físico aunque no esté registrado virtualmente.\n\n";
+                        mensaje += "💡 El conteo servirá para verificar y ajustar el stock real.";
+                        
+                        var infoDialog = new WarningDialog("Artículo sin stock virtual", mensaje);
+                        infoDialog.ShowDialog();
                     }
                     else
                     {
-                        mensaje += " en ningún almacén";
+                        ArticuloTieneStockVirtual = true; // Resetear si no es un código válido
+                        // Si parece una descripción, mostrar mensaje informativo
+                        var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por descripción";
+                        if (AlmacenSeleccionado != null)
+                        {
+                            var nombreAlmacen = !string.IsNullOrWhiteSpace(AlmacenSeleccionado.NombreAlmacen) 
+                                ? $" ({AlmacenSeleccionado.NombreAlmacen})" 
+                                : "";
+                            mensaje += $" en el almacén {AlmacenSeleccionado.CodigoAlmacen}{nombreAlmacen}";
+                        }
+                        mensaje += ".\n\n";
+                        mensaje += "💡 Sugerencias:\n";
+                        mensaje += "• Intenta buscar por código exacto del artículo\n";
+                        mensaje += "• Verifica que has escrito correctamente la descripción\n";
+                        mensaje += "• Puedes escribir el código del artículo directamente en el campo de búsqueda";
+                        
+                        var warningDialog = new WarningDialog("Sin resultados", mensaje);
+                        warningDialog.ShowDialog();
                     }
-                    mensaje += ".\n\n";
-                    
-                    mensaje += "💡 Consejos:\n";
-                    mensaje += "• Para buscar por código: introduce el código exacto (ej: 10000)\n";
-                    mensaje += "• Para buscar por descripción: introduce parte de la descripción (ej: azúcar)\n";
-                    if (EsConteoUbicacion)
-                    {
-                        mensaje += "• Verifica que el artículo tiene stock en este almacén";
-                    }
-                    else
-                    {
-                        mensaje += "• Verifica que el artículo tiene stock en algún almacén";
-                    }
-                    
-                    var warningDialog = new WarningDialog("Sin resultados", mensaje);
-                    warningDialog.ShowDialog();
                 }
 
                 // Notificar cambios en visibilidad
@@ -467,6 +522,9 @@ namespace SGA_Desktop.ViewModels
                 {
                     OperariosDisponibles.Add(operario);
                 }
+
+                // La vista ya está inicializada en el constructor, solo refrescar
+                OperariosView?.Refresh();
 
                 // Seleccionar el operario actual si está en la lista
                 var operarioActual = SessionManager.UsuarioActual?.operario;
@@ -579,8 +637,8 @@ namespace SGA_Desktop.ViewModels
             {
                 var filtros = new Dictionary<string, object>();
 
-                // Solo agregar almacén si es conteo por ubicación
-                if (EsConteoUbicacion && AlmacenSeleccionado != null)
+                // Incluir siempre el almacén si se ha seleccionado, independientemente del modo
+                if (AlmacenSeleccionado != null)
                 {
                     filtros["almacen"] = AlmacenSeleccionado.CodigoAlmacen;
                 }
@@ -684,14 +742,27 @@ namespace SGA_Desktop.ViewModels
             if (value != null)
             {
                 CodigoArticulo = value.CodigoArticulo;
+                // Si se selecciona de la lista de encontrados, tiene stock virtual
+                // Si la descripción indica que no tiene stock, mantenerlo en false
+                if (value.DescripcionArticulo != "Artículo sin stock virtual registrado")
+                {
+                    ArticuloTieneStockVirtual = true;
+                }
             }
             OnPropertyChanged(nameof(MostrarInfoArticulo));
+            OnPropertyChanged(nameof(MostrarAdvertenciaSinStock));
         }
 
         partial void OnArticulosEncontradosChanged(ObservableCollection<ArticuloResumenDto> value)
         {
             OnPropertyChanged(nameof(MostrarListaArticulos));
         }
+
+        partial void OnArticuloTieneStockVirtualChanged(bool value)
+        {
+            OnPropertyChanged(nameof(MostrarAdvertenciaSinStock));
+        }
+
 
         partial void OnAlmacenSeleccionadoChanged(AlmacenDto? value)
         {
@@ -813,6 +884,47 @@ namespace SGA_Desktop.ViewModels
                 }
             }
         }
+
+        // Métodos para filtrado de operarios
+        partial void OnFiltroOperariosChanged(string value)
+        {
+            OperariosView?.Refresh(); // Actualiza el filtrado al teclear
+        }
+
+        private bool FiltraOperario(object obj)
+        {
+            if (string.IsNullOrWhiteSpace(FiltroOperarios)) return true;
+            if (obj is not OperariosAccesoDto operario) return false;
+
+            // Búsqueda acento-insensible, sin mayúsc/minúsc, en cualquier parte del texto
+            var compare = CultureInfo.CurrentCulture.CompareInfo;
+            var options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
+
+            bool contiene(string s) =>
+                !string.IsNullOrEmpty(s) &&
+                compare.IndexOf(s, FiltroOperarios, options) >= 0;
+
+            return contiene(operario.NombreOperario) || contiene(operario.NombreCompleto);
+        }
+
+        [RelayCommand]
+        private void AbrirDropDownOperarios()
+        {
+            FiltroOperarios = ""; // Limpiar el filtro para permitir escribir desde cero
+            IsDropDownOpenOperarios = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownOperarios()
+        {
+            IsDropDownOpenOperarios = false;
+        }
+
+        [RelayCommand]
+        private void LimpiarSeleccionOperarios()
+        {
+            OperarioSeleccionado = null;
+        }
         #endregion
     }
 
@@ -821,6 +933,7 @@ namespace SGA_Desktop.ViewModels
     {
         public byte Valor { get; set; }
         public string Texto { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty; // Solo el nombre sin el número
     }
 
     // Clase auxiliar para visibilidades

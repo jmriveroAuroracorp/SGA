@@ -9,7 +9,9 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Collections.Generic;
 using SGA_Api.Models.Stock;
+using SGA_Api.Models.Registro;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SGA_Api.Controllers.Traspasos;
 
@@ -22,19 +24,22 @@ public class TraspasosController : ControllerBase
 	private readonly SageDbContext _sageContext;
 	private readonly ILogger<TraspasosController> _logger;
 	private readonly IValidacionTraspasoService _validacionService;
+	private readonly IServiceProvider _serviceProvider;
 
 	public TraspasosController(
 		AuroraSgaDbContext context,
 		StorageControlDbContext storageContext,
 		SageDbContext sageContext,
 		ILogger<TraspasosController> logger,
-		IValidacionTraspasoService validacionService)
+		IValidacionTraspasoService validacionService,
+		IServiceProvider serviceProvider)
 	{
 		_context = context;
 		_storageContext = storageContext;
 		_sageContext = sageContext;
 		_logger = logger;
 		_validacionService = validacionService;
+		_serviceProvider = serviceProvider;
 	}
 
 	/// <summary>
@@ -65,11 +70,19 @@ public class TraspasosController : ControllerBase
 				CodigoPalet = dto.CodigoPalet,
 				FechaInicio = DateTime.Now, // Siempre usar la hora del servidor/API
 				CodigoEstado = "PENDIENTE",
-				EsNotificado = false
+				EsNotificado = false,
+				OrigenTraspaso = "AuroraSGA"
 			};
 
 			_context.Traspasos.Add(traspaso);
 			await _context.SaveChangesAsync();
+
+			var detalleCreacion = $"TraspasoId={traspaso.Id}, PaletId={traspaso.PaletId}, UsuarioInicio={traspaso.UsuarioInicioId}, AlmacenOrigen={traspaso.AlmacenOrigen}, UbicacionOrigen={traspaso.UbicacionOrigen}";
+			RegistrarEventoTraspasoAsync(
+				"TRASPASO_CREACION",
+				"TraspasosController/CrearTraspaso",
+				"Traspaso de palet creado",
+				detalleCreacion);
 
 			return Ok(new { message = "Traspaso creado correctamente", traspaso.Id, traspaso.CodigoEstado });
 		}
@@ -102,6 +115,13 @@ public class TraspasosController : ControllerBase
 		traspaso.CodigoEstado = "COMPLETADO";
 
 		await _context.SaveChangesAsync();
+
+		var detalleFinalizacion = $"TraspasoId={traspaso.Id}, PaletId={traspaso.PaletId}, UsuarioFinalizacion={traspaso.UsuarioFinalizacionId}, AlmacenDestino={traspaso.AlmacenDestino}, UbicacionDestino={traspaso.UbicacionDestino}";
+		RegistrarEventoTraspasoAsync(
+			"TRASPASO_FINALIZACION",
+			"TraspasosController/FinalizarTraspaso",
+			"Traspaso de palet finalizado",
+			detalleFinalizacion);
 
 		// COMENTADO: La finalización la hace un servicio externo, no este Controller
 		// La notificación se envía desde TraspasoFinalizacionBackgroundService.cs
@@ -242,6 +262,24 @@ public class TraspasosController : ControllerBase
 			FechaCaducidad = traspaso.FechaCaducidad
 		};
 
+		if (string.Equals(dto.TipoTraspaso, "PALET", StringComparison.OrdinalIgnoreCase))
+		{
+			var paletInfo = await _context.Palets
+				.Where(p => p.Id == traspaso.PaletId)
+				.Select(p => new { p.OrdenTrabajoId })
+				.FirstOrDefaultAsync();
+
+			if (paletInfo != null)
+			{
+				dto.OrdenTrabajoId = paletInfo.OrdenTrabajoId;
+
+				if (!string.IsNullOrWhiteSpace(paletInfo.OrdenTrabajoId))
+				{
+					dto.Comentarios = paletInfo.OrdenTrabajoId;
+				}
+			}
+		}
+
 		if (dto.UsuarioInicioId > 0 && nombreDict.TryGetValue(dto.UsuarioInicioId, out var nombreInicio))
 			dto.UsuarioInicioNombre = nombreInicio;
 
@@ -315,19 +353,29 @@ public class TraspasosController : ControllerBase
 		[FromQuery] string? codigoPalet = null,
 		[FromQuery] string? almacenOrigen = null,
 		[FromQuery] string? almacenDestino = null,
-		[FromQuery] int? limite = 1000)
+		[FromQuery] int? limite = null) // Si es null, usar límite dinámico basado en filtros
 	{
 		var q = _context.Traspasos.AsQueryable();
-		if (paletId.HasValue)
-			q = q.Where(t => t.PaletId == paletId.Value);
-		if (!string.IsNullOrWhiteSpace(codigoEstado))
-			q = q.Where(t => t.CodigoEstado == codigoEstado);
+		
+		// 🚀 OPTIMIZACIÓN: Aplicar filtro de usuario PRIMERO si existe
+		// Esto permite que SQL Server use índices de usuario y reduzca significativamente el conjunto de datos
+		// antes de aplicar otros filtros más costosos
+		if (usuarioId.HasValue)
+		{
+			q = q.Where(t => t.UsuarioInicioId == usuarioId.Value || t.UsuarioFinalizacionId == usuarioId.Value);
+		}
+		
+		// Filtros de fecha (aplicar después del usuario para optimizar)
 		if (fechaDesde.HasValue)
 			q = q.Where(t => t.FechaInicio >= fechaDesde.Value);
 		if (fechaHasta.HasValue)
 			q = q.Where(t => t.FechaInicio <= fechaHasta.Value.AddDays(1).AddSeconds(-1)); // Incluir todo el día hasta 23:59:59
-		if (usuarioId.HasValue)
-			q = q.Where(t => t.UsuarioInicioId == usuarioId.Value || t.UsuarioFinalizacionId == usuarioId.Value);
+		
+		// Otros filtros
+		if (paletId.HasValue)
+			q = q.Where(t => t.PaletId == paletId.Value);
+		if (!string.IsNullOrWhiteSpace(codigoEstado))
+			q = q.Where(t => t.CodigoEstado == codigoEstado);
 		if (!string.IsNullOrWhiteSpace(codigoPalet))
 			q = q.Where(t => t.CodigoPalet.Contains(codigoPalet));
 		if (!string.IsNullOrWhiteSpace(almacenOrigen))
@@ -335,10 +383,32 @@ public class TraspasosController : ControllerBase
 		if (!string.IsNullOrWhiteSpace(almacenDestino))
 			q = q.Where(t => t.AlmacenDestino == almacenDestino);
 
+		// 🚀 Calcular límite dinámico si no se especificó
+		// Si hay filtro de usuario, aumentar el límite porque el filtro reduce significativamente los resultados
+		// Si hay un rango de fechas amplio, también aumentar el límite
+		int limiteFinal = limite ?? 5000; // Límite más alto por defecto
+		if (usuarioId.HasValue)
+		{
+			// Cuando se filtra por usuario, los resultados ya están filtrados, así que podemos permitir más
+			limiteFinal = Math.Max(limiteFinal, 10000);
+		}
+		else if (fechaDesde.HasValue && fechaHasta.HasValue)
+		{
+			var diasRango = (fechaHasta.Value.Date - fechaDesde.Value.Date).Days + 1;
+			if (diasRango > 7)
+			{
+				limiteFinal = Math.Max(limiteFinal, 10000); // 10,000 para rangos grandes sin filtro de usuario
+			}
+			else if (diasRango > 3)
+			{
+				limiteFinal = Math.Max(limiteFinal, 5000); // 5,000 para rangos medianos
+			}
+		}
+
 		var nombreDict = await _context.vUsuariosConNombre
 			.ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
 
-		// 🚀 OPTIMIZACIÓN: Obtener todos los datos en una sola consulta con JOINs
+		// 🚀 OPTIMIZACIÓN: Obtener todos los datos en una sola consulta sin subconsultas N+1
 		var lista = await q.OrderByDescending(t => t.FechaInicio)
 			.Select(t => new TraspasoDto
 			{
@@ -359,16 +429,29 @@ public class TraspasosController : ControllerBase
 				Cantidad = t.Cantidad,
 				Comentarios = t.Comentario,
 				Partida = t.Partida,
-				FechaCaducidad = t.FechaCaducidad,
-				DescripcionArticulo = _context.StockDisponible
-					.Where(s => s.CodigoArticulo == t.CodigoArticulo)
-					.Select(s => s.DescripcionArticulo)
-					.FirstOrDefault()
+				FechaCaducidad = t.FechaCaducidad
 			})
-			.Take(limite ?? 1000) // 🚀 Límite configurable para evitar cargas masivas
+			.Take(limiteFinal) // 🚀 Límite dinámico basado en filtros
 			.ToListAsync();
 
-		// 🚀 OPTIMIZACIÓN: Resolver nombres de usuarios en memoria (ya cargados)
+		// 🚀 OPTIMIZACIÓN: Cargar descripciones de artículos en una sola consulta
+		var codigosArticulos = lista
+			.Where(t => !string.IsNullOrWhiteSpace(t.CodigoArticulo))
+			.Select(t => t.CodigoArticulo!)
+			.Distinct()
+			.ToList();
+
+		var descripcionesDict = new Dictionary<string, string>();
+		if (codigosArticulos.Any())
+		{
+			descripcionesDict = await _context.StockDisponible
+				.Where(s => codigosArticulos.Contains(s.CodigoArticulo))
+				.GroupBy(s => s.CodigoArticulo)
+				.Select(g => new { CodigoArticulo = g.Key, DescripcionArticulo = g.First().DescripcionArticulo })
+				.ToDictionaryAsync(x => x.CodigoArticulo, x => x.DescripcionArticulo);
+		}
+
+		// 🚀 OPTIMIZACIÓN: Resolver nombres de usuarios y descripciones en memoria (ya cargados)
 		foreach (var traspaso in lista)
 		{
 			if (traspaso.UsuarioInicioId > 0 && nombreDict.TryGetValue(traspaso.UsuarioInicioId, out var nombreInicio))
@@ -376,12 +459,32 @@ public class TraspasosController : ControllerBase
 
 			if (traspaso.UsuarioFinalizacionId.HasValue && nombreDict.TryGetValue(traspaso.UsuarioFinalizacionId.Value, out var nombreFinalizacion))
 				traspaso.UsuarioFinalizacionNombre = nombreFinalizacion;
+
+			if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo) && descripcionesDict.TryGetValue(traspaso.CodigoArticulo, out var descripcion))
+				traspaso.DescripcionArticulo = descripcion;
 		}
 
-		// 🚀 OPTIMIZACIÓN: Cargar líneas de palets en una sola consulta (solo si hay palets)
+		// 🚀 OPTIMIZACIÓN: Cargar datos de palets en una sola consulta (solo si hay palets)
 		var paletIds = lista.Where(t => t.PaletId != Guid.Empty).Select(t => t.PaletId).Distinct().ToList();
 		if (paletIds.Any())
 		{
+			var paletOrdenDict = await _context.Palets
+				.Where(p => paletIds.Contains(p.Id))
+				.Select(p => new { p.Id, p.OrdenTrabajoId })
+				.ToDictionaryAsync(p => p.Id, p => p.OrdenTrabajoId);
+
+			foreach (var traspaso in lista.Where(t => string.Equals(t.TipoTraspaso, "PALET", StringComparison.OrdinalIgnoreCase)))
+			{
+				if (paletOrdenDict.TryGetValue(traspaso.PaletId, out var ordenTrabajoId))
+				{
+					traspaso.OrdenTrabajoId = ordenTrabajoId;
+					if (!string.IsNullOrWhiteSpace(ordenTrabajoId))
+					{
+						traspaso.Comentarios = ordenTrabajoId;
+					}
+				}
+			}
+
 			var lineasPalets = await _context.PaletLineas
 				.Where(pl => paletIds.Contains(pl.PaletId))
 				.Select(pl => new LineaPaletDto
@@ -449,6 +552,27 @@ public class TraspasosController : ControllerBase
 				FechaCaducidad = t.FechaCaducidad
 			})
 			.ToListAsync();
+
+		var paletIds = lista.Where(t => t.PaletId != Guid.Empty).Select(t => t.PaletId).Distinct().ToList();
+		if (paletIds.Any())
+		{
+			var paletOrdenDict = await _context.Palets
+				.Where(p => paletIds.Contains(p.Id))
+				.Select(p => new { p.Id, p.OrdenTrabajoId })
+				.ToDictionaryAsync(p => p.Id, p => p.OrdenTrabajoId);
+
+			foreach (var traspaso in lista.Where(t => string.Equals(t.TipoTraspaso, "PALET", StringComparison.OrdinalIgnoreCase)))
+			{
+				if (paletOrdenDict.TryGetValue(traspaso.PaletId, out var ordenTrabajoId))
+				{
+					traspaso.OrdenTrabajoId = ordenTrabajoId;
+					if (!string.IsNullOrWhiteSpace(ordenTrabajoId))
+					{
+						traspaso.Comentarios = ordenTrabajoId;
+					}
+				}
+			}
+		}
 
 		foreach (var traspaso in lista)
 		{
@@ -743,8 +867,15 @@ public class TraspasosController : ControllerBase
 			Guid? paletIdDestino = null;
 			string codigoPaletDestino = null;
 
-			// OPCIÓN 1: Usuario especificó manualmente el palet destino
-			if (dto.PaletIdDestino.HasValue)
+			// 🔷 CORREGIDO: Verificar primero si el usuario eligió dejar suelto
+			// Si DejarSuelto == true, NO buscar palets y NO agregar al palet
+			if (dto.DejarSuelto == true)
+			{
+				// Dejar suelto: no hacer nada, paletIdDestino queda null
+				_logger.LogInformation($"✅ Usuario eligió dejar suelto. No se buscará palet destino.");
+			}
+			// OPCIÓN 1: Usuario especificó manualmente el palet destino (y confirmó agregar a palet)
+			else if (dto.ConfirmarAgregarAPalet == true && dto.PaletIdDestino.HasValue)
 			{
 				var paletSeleccionado = await _context.Palets.FindAsync(dto.PaletIdDestino.Value);
 				if (paletSeleccionado != null && paletSeleccionado.CodigoEmpresa == dto.CodigoEmpresa)
@@ -773,7 +904,7 @@ public class TraspasosController : ControllerBase
 					}
 				}
 			}
-			// OPCIÓN 2: Búsqueda automática (lógica original)
+			// OPCIÓN 2: Búsqueda automática (lógica original) - solo si NO se eligió dejar suelto
 			else if (!string.IsNullOrWhiteSpace(dto.AlmacenDestino) && !string.IsNullOrWhiteSpace(dto.UbicacionDestino))
 			{
 				// Buscar palets abiertos en la ubicación destino
@@ -882,7 +1013,8 @@ public class TraspasosController : ControllerBase
 				CodigoEmpresa = dto.CodigoEmpresa,
 				PaletId = paletIdOrigen ?? Guid.Empty, // ASOCIA EL PALET DE ORIGEN SI EXISTE
 				CodigoPalet = codigoPaletOrigen, // OPCIONAL, para trazabilidad
-				Comentario = dto.Comentario
+				Comentario = dto.Comentario,
+				OrigenTraspaso = "AuroraSGA"
 			};
 
 			_context.Traspasos.Add(traspaso);
@@ -1016,7 +1148,15 @@ public class TraspasosController : ControllerBase
 			}
 			else
 			{
-				paletInfo = "No se ha detectado ningún palet en la ubicación destino. El stock queda sin asociar a palet.";
+				// 🔷 CORREGIDO: Mensaje específico cuando el usuario eligió dejar suelto
+				if (dto.DejarSuelto == true)
+				{
+					paletInfo = "El artículo se ha dejado suelto en la ubicación destino (sin paletizar).";
+				}
+				else
+				{
+					paletInfo = "No se ha detectado ningún palet en la ubicación destino. El stock queda sin asociar a palet.";
+				}
 			}
 
 			// 🔷 Guardar todos los cambios juntos al final de la transacción
@@ -1024,6 +1164,13 @@ public class TraspasosController : ControllerBase
 			await transaction.CommitAsync();
 			
 			_logger.LogInformation($"✅ Traspaso {traspaso.Id} creado correctamente con todas sus líneas temporales");
+			
+			var detalleArticuloCreacion = $"TraspasoId={traspaso.Id}, Articulo={dto.CodigoArticulo}, Cantidad={dto.Cantidad}, AlmacenOrigen={dto.AlmacenOrigen}, UbicacionOrigen={dto.UbicacionOrigen}, AlmacenDestino={(dto.Finalizar ?? true ? dto.AlmacenDestino : "Pendiente")}, PaletOrigen={(paletIdOrigen?.ToString() ?? "Suelto")}, PaletDestino={(paletIdDestino?.ToString() ?? "SinPalet")}, Finalizar={(dto.Finalizar ?? true)}";
+			RegistrarEventoTraspasoAsync(
+				"TRASPASO_ARTICULO_CREACION",
+				"TraspasosController/CrearTraspasoArticulo",
+				"Traspaso de artículo creado",
+				detalleArticuloCreacion);
 			
 			return Ok(new { message = "Traspaso de artículo creado correctamente", traspaso.Id, traspaso.CodigoEstado, paletInfo });
 		}
@@ -1393,6 +1540,46 @@ public class TraspasosController : ControllerBase
 		await _context.SaveChangesAsync();
 		await tx.CommitAsync();
 
+		var detalleFinalArticulo = $"TraspasoId={traspaso.Id}, Articulo={traspaso.CodigoArticulo}, Cantidad={traspaso.Cantidad}, AlmacenDestino={almDestino}, UbicacionDestino={ubiDestino}, PaletDestino={(paletDestinoId?.ToString() ?? (dto.DejarSuelto == true ? "Suelto" : "SinPalet"))}, DejarSuelto={dto.DejarSuelto}, ConfirmarPalet={dto.ConfirmarAgregarAPalet}";
+		RegistrarEventoTraspasoAsync(
+			"TRASPASO_ARTICULO_FINALIZACION",
+			"TraspasosController/FinalizarTraspasoArticulo",
+			"Traspaso de artículo finalizado",
+			detalleFinalArticulo);
+
+		// Enviar notificación cuando el traspaso pasa a PENDIENTE_ERP
+		try
+		{
+			using var scope = _serviceProvider.CreateScope();
+			var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+			
+			var estadoAnterior = "PENDIENTE"; // Estado antes de finalizar
+			var estadoActual = traspaso.CodigoEstado; // PENDIENTE_ERP
+			var usuarioId = traspaso.UsuarioInicioId > 0 ? traspaso.UsuarioInicioId : dto.UsuarioId;
+			
+			if (usuarioId > 0)
+			{
+				var ubicacionOrigen = traspaso.UbicacionOrigen ?? "SinUbicar";
+				var ubicacionDestinoFinal = ubiDestino ?? "SinUbicar";
+				var informacionAdicional = $"Ubicación: {traspaso.AlmacenOrigen}-{ubicacionOrigen} - {almDestino}-{ubicacionDestinoFinal}\nCantidad: {traspaso.Cantidad:F4}";
+				
+				await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+					usuarioId,
+					"TRASPASO",
+					"Traspaso en Proceso",
+					$"Traspaso de artículo {traspaso.CodigoArticulo} procesándose\n{informacionAdicional}",
+					traspaso.Id,
+					estadoAnterior,
+					estadoActual,
+					"info");
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error al enviar notificación de traspaso finalizado {TraspasoId}", traspaso.Id);
+			// No fallar la operación si falla la notificación
+		}
+
 		return Ok(new
 		{
 			message = "Traspaso de artículo finalizado correctamente",
@@ -1532,6 +1719,10 @@ public class TraspasosController : ControllerBase
 
 			var traspasosCreados = new List<Guid>();
 
+			var comentarioOrden = !string.IsNullOrWhiteSpace(palet.OrdenTrabajoId)
+				? palet.OrdenTrabajoId
+				: dto.Comentario;
+
 			foreach (var linea in lineas)
 			{
 				var traspasoArticulo = new Traspaso
@@ -1554,8 +1745,9 @@ public class TraspasosController : ControllerBase
 					Cantidad = linea.Cantidad,
 					Partida = linea.Lote,
 					FechaCaducidad = linea.FechaCaducidad,
-					Comentario = dto.Comentario, // Comentarios del usuario para el palet
-					EsNotificado = false // SIEMPRE false para que el BackgroundService lo procese
+					Comentario = comentarioOrden, // Incluir OrdenTrabajoId del palet o comentario del usuario
+					EsNotificado = false, // SIEMPRE false para que el BackgroundService lo procese
+					OrigenTraspaso = "AuroraSGA"
 				};
 				_context.Traspasos.Add(traspasoArticulo);
 				traspasosCreados.Add(traspasoArticulo.Id);
@@ -1569,6 +1761,13 @@ public class TraspasosController : ControllerBase
 			}
 
 			await _context.SaveChangesAsync();
+
+			var detalleMoverPalet = $"PaletId={dto.PaletId}, CodigoPalet={dto.CodigoPalet}, AlmacenOrigen={ultimoTraspaso.AlmacenDestino}, UbicacionOrigen={ultimoTraspaso.UbicacionDestino}, AlmacenDestino={dto.AlmacenDestino}, UbicacionDestino={dto.UbicacionDestino}, TraspasosCreados={traspasosCreados.Count}, EstadoFinal={dto.CodigoEstado}, UsuarioId={dto.UsuarioId}";
+			RegistrarEventoTraspasoAsync(
+				"TRASPASO_PALET_MOVIMIENTO",
+				"TraspasosController/MoverPalet",
+				esFinalizado ? "Movimiento de palet completado" : "Movimiento de palet iniciado",
+				detalleMoverPalet);
 
 			return Ok(new { message = esFinalizado ? "Traspasos de palet creados y finalizados correctamente" : "Traspasos de palet creados correctamente", traspasosIds = traspasosCreados });
 		}
@@ -1778,6 +1977,13 @@ public class TraspasosController : ControllerBase
 		}
 
 		await _context.SaveChangesAsync();
+
+		var detalleFinalPalet = $"PaletId={paletId}, TraspasosActualizados={traspasosPalet.Count}, UsuarioFinalizacion={dto.UsuarioFinalizacionId}, Destino={dto.AlmacenDestino}-{dto.UbicacionDestino}";
+		RegistrarEventoTraspasoAsync(
+			"TRASPASO_PALET_FINALIZACION",
+			"TraspasosController/FinalizarTraspasoPaletPorPaletId",
+			"Finalización masiva de traspasos de palet",
+			detalleFinalPalet);
 
 		return Ok(new
 		{
@@ -2043,7 +2249,8 @@ public class TraspasosController : ControllerBase
 				request.CodigoArticulo,
 				request.AlmacenDestino,
 				request.UbicacionDestino,
-				request.CodigoEmpresa);
+				request.CodigoEmpresa,
+				request.Partida);
 
 			_logger.LogInformation("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
 				resultado.EsValido, resultado.MotivoBloqueo);
@@ -2362,6 +2569,120 @@ public class TraspasosController : ControllerBase
 				Title = "Error interno del servidor",
 				Detail = "Error obteniendo traspasos de StorageControl"
 			});
+		}
+	}
+
+	private void RegistrarEventoTraspasoAsync(string tipoEvento, string origen, string descripcion, string? detalle = null)
+	{
+		try
+		{
+			string? token = null;
+			try
+			{
+				if (Request?.Headers != null &&
+					Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+					authHeader.ToString().StartsWith("Bearer "))
+				{
+					token = authHeader.ToString().Substring("Bearer ".Length).Trim();
+					_logger.LogInformation("✅ Token capturado para evento de traspaso: {Origen}", origen);
+				}
+				else
+				{
+					_logger.LogWarning("⚠️ No se encontró header Authorization para evento de traspaso: {Origen}", origen);
+				}
+			}
+			catch (ObjectDisposedException)
+			{
+				_logger.LogWarning("⚠️ Request ya fue liberado, no se puede registrar evento de traspaso: {Origen}", origen);
+				return;
+			}
+
+			if (string.IsNullOrWhiteSpace(token))
+			{
+				_logger.LogWarning("⚠️ No se pudo obtener el token para registrar evento de traspaso: {Origen}", origen);
+				return;
+			}
+
+			var tokenCapturado = token;
+			var tipoEventoCapturado = tipoEvento;
+			var origenCapturado = origen;
+			var descripcionCapturada = descripcion;
+			var detalleCapturado = detalle;
+
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					if (_serviceProvider == null)
+						return;
+
+					IServiceScope? scope = null;
+					try
+					{
+						scope = _serviceProvider.CreateScope();
+					}
+					catch (ObjectDisposedException)
+					{
+						return;
+					}
+
+					using (scope)
+					{
+						var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+						var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraspasosController>>();
+
+						var dispositivo = await dbContext.Dispositivos
+							.FirstOrDefaultAsync(d => d.SessionToken == tokenCapturado && d.Activo == -1);
+
+						if (dispositivo == null)
+						{
+							logger.LogWarning("⚠️ Dispositivo no encontrado para token al registrar evento de traspaso: {Origen}", origenCapturado);
+							return;
+						}
+
+						var logEvento = new LogEvento
+						{
+							Fecha = DateTime.Now,
+							IdUsuario = dispositivo.IdUsuario,
+							IdDispositivo = dispositivo.Id,
+							Tipo = tipoEventoCapturado,
+							Origen = origenCapturado,
+							Descripcion = descripcionCapturada,
+							Detalle = detalleCapturado
+						};
+
+						dbContext.LogEventos.Add(logEvento);
+						await dbContext.SaveChangesAsync();
+
+						logger.LogInformation("✅ Evento de traspaso registrado: {Origen}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}",
+							origenCapturado, dispositivo.IdUsuario, dispositivo.Id);
+					}
+				}
+				catch (ObjectDisposedException)
+				{
+					return;
+				}
+				catch (Exception ex)
+				{
+					try
+					{
+						if (_serviceProvider != null)
+						{
+							using var scope = _serviceProvider.CreateScope();
+							var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraspasosController>>();
+							logger.LogError(ex, "❌ Error al registrar evento de traspaso: {Origen}", origenCapturado);
+						}
+					}
+					catch
+					{
+						// Ignorar errores secundarios de logging
+					}
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "❌ Error al capturar token para evento de traspaso: {Origen}", origen);
 		}
 	}
 }

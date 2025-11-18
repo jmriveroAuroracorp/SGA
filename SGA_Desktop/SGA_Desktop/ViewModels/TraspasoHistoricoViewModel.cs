@@ -28,6 +28,8 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private DateTime? fechaDesde;
         [ObservableProperty] private DateTime? fechaHasta;
         [ObservableProperty] private string codigoArticulo = "";
+        [ObservableProperty] private string codigoPalet = "";
+        [ObservableProperty] private string filtroObservaciones = "";
         [ObservableProperty] private AlmacenDto? almacenOrigenSeleccionado;
         [ObservableProperty] private AlmacenDto? almacenDestinoSeleccionado;
         [ObservableProperty] private EstadoTraspasoDto? estadoSeleccionado;
@@ -293,9 +295,16 @@ namespace SGA_Desktop.ViewModels
                     estadoFiltro = null; // No filtrar por estado
                 }
                 
+                var codigoPaletFiltro = !string.IsNullOrWhiteSpace(CodigoPalet) && CodigoPalet.Trim().Length >= 3
+                    ? CodigoPalet.Trim()
+                    : null;
+                var observacionesFiltro = !string.IsNullOrWhiteSpace(FiltroObservaciones) && FiltroObservaciones.Trim().Length >= 5
+                    ? FiltroObservaciones.Trim()
+                    : null;
+
                 var traspasos = await _traspasosService.ObtenerTraspasosFiltradosAsync(
                     estado: estadoFiltro,
-                    codigoPalet: null, // No filtramos por palet en este caso
+                    codigoPalet: codigoPaletFiltro,
                     almacenOrigen: AlmacenOrigenSeleccionado?.CodigoAlmacen,
                     almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
                     fechaInicioDesde: fechaDesde.Date, // Solo la fecha, hora 00:00:00
@@ -317,6 +326,44 @@ namespace SGA_Desktop.ViewModels
                 
                 // Aplicar filtros adicionales (artículo y operario)
                 var traspasosFiltradosFinal = traspasosFiltrados;
+                
+                if (codigoPaletFiltro != null)
+                {
+                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t =>
+                        !string.IsNullOrWhiteSpace(t.CodigoPalet) &&
+                        t.CodigoPalet.Contains(codigoPaletFiltro, StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+
+                    System.Diagnostics.Debug.WriteLine($"Después del filtro de palet: {traspasosFiltradosFinal.Count} traspasos");
+                }
+                else if (!string.IsNullOrWhiteSpace(CodigoPalet))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Filtro de palet ignorado: se necesitan al menos 3 caracteres (actual: {CodigoPalet.Trim().Length})");
+                }
+
+                if (observacionesFiltro != null)
+                {
+                    var observacionesFiltroNormalizado = NormalizarIdentificadorOrden(observacionesFiltro);
+
+                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t =>
+                    {
+                        bool coincideComentario = !string.IsNullOrWhiteSpace(t.Comentarios) &&
+                            (t.Comentarios.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                             NormalizarIdentificadorOrden(t.Comentarios).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
+
+                        bool coincideOrdenTrabajo = !string.IsNullOrWhiteSpace(t.OrdenTrabajoId) &&
+                            (t.OrdenTrabajoId.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                             NormalizarIdentificadorOrden(t.OrdenTrabajoId).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
+
+                        return coincideComentario || coincideOrdenTrabajo;
+                    }).ToList();
+
+                    System.Diagnostics.Debug.WriteLine($"Después del filtro de observaciones: {traspasosFiltradosFinal.Count}");
+                }
+                else if (!string.IsNullOrWhiteSpace(FiltroObservaciones))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Filtro de observaciones ignorado: se necesitan al menos 5 caracteres (actual: {FiltroObservaciones.Trim().Length})");
+                }
                 
                 // Filtro por código de artículo
                 if (!string.IsNullOrWhiteSpace(CodigoArticulo))
@@ -399,6 +446,9 @@ namespace SGA_Desktop.ViewModels
 
         private async Task AplicarFiltrosAsync()
         {
+            if (!ValidarFiltroObservacionesMinimo())
+                return;
+
             // Aplicar filtros a ambas pestañas
             await CargarTraspasosAsync(); // SGA Actual
             
@@ -420,6 +470,8 @@ namespace SGA_Desktop.ViewModels
             FechaDesde = DateTime.Today; // Fecha de hoy
             FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
             CodigoArticulo = "";
+            CodigoPalet = "";
+            FiltroObservaciones = "";
             OperarioSeleccionado = null;
             AlmacenOrigenSeleccionado = null;
             AlmacenDestinoSeleccionado = null;
@@ -679,6 +731,13 @@ namespace SGA_Desktop.ViewModels
                 var fechaDesde = FechaDesde ?? DateTime.Today;
                 var fechaHasta = FechaHasta ?? DateTime.Today;
                 
+                var codigoPaletFiltro = !string.IsNullOrWhiteSpace(CodigoPalet) && CodigoPalet.Trim().Length >= 3
+                    ? CodigoPalet.Trim()
+                    : null;
+                var observacionesFiltro = !string.IsNullOrWhiteSpace(FiltroObservaciones) && FiltroObservaciones.Trim().Length >= 5
+                    ? FiltroObservaciones.Trim()
+                    : null;
+
                 var traspasos = await _traspasosService.ObtenerTraspasosStorageControlAsync(
                     fechaDesde: fechaDesde.Date,
                     fechaHasta: fechaHasta.Date,
@@ -704,6 +763,37 @@ namespace SGA_Desktop.ViewModels
                 System.Diagnostics.Debug.WriteLine($"[StorageControl] Traspasos después del filtro de almacenes: {traspasosFiltrados.Count}");
                 System.Diagnostics.Debug.WriteLine($"[StorageControl] Traspasos descartados por filtro de almacenes: {traspasosDescartados}");
 
+                if (codigoPaletFiltro != null)
+                {
+                    traspasosFiltrados = traspasosFiltrados.Where(t =>
+                        !string.IsNullOrWhiteSpace(t.CodigoPalet) &&
+                        t.CodigoPalet.Contains(codigoPaletFiltro, StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+
+                    System.Diagnostics.Debug.WriteLine($"[StorageControl] Después del filtro de palet: {traspasosFiltrados.Count}");
+                }
+                else if (!string.IsNullOrWhiteSpace(CodigoPalet))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[StorageControl] Filtro de palet ignorado: se necesitan al menos 3 caracteres (actual: {CodigoPalet.Trim().Length})");
+                }
+
+                if (observacionesFiltro != null)
+                {
+                    var observacionesFiltroNormalizado = NormalizarIdentificadorOrden(observacionesFiltro);
+
+                    traspasosFiltrados = traspasosFiltrados.Where(t =>
+                        !string.IsNullOrWhiteSpace(t.Comentario) &&
+                        (t.Comentario.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                         NormalizarIdentificadorOrden(t.Comentario).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase))
+                    ).ToList();
+
+                    System.Diagnostics.Debug.WriteLine($"[StorageControl] Después del filtro de observaciones: {traspasosFiltrados.Count}");
+                }
+                else if (!string.IsNullOrWhiteSpace(FiltroObservaciones))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[StorageControl] Filtro de observaciones ignorado: se necesitan al menos 5 caracteres (actual: {FiltroObservaciones.Trim().Length})");
+                }
+
                 foreach (var traspaso in traspasosFiltrados.OrderByDescending(t => t.FechaRegistro ?? t.Fecha))
                 {
                     TraspasosStorageControl.Add(traspaso);
@@ -727,7 +817,49 @@ namespace SGA_Desktop.ViewModels
 
         private async Task AplicarFiltrosStorageControlAsync()
         {
+            if (!ValidarFiltroObservacionesMinimo())
+                return;
+
             await CargarTraspasosStorageControlAsync();
+        }
+
+        private bool ValidarFiltroObservacionesMinimo()
+        {
+            if (!string.IsNullOrWhiteSpace(FiltroObservaciones) && FiltroObservaciones.Trim().Length < 5)
+            {
+                MostrarWarningDialog("Filtro de observaciones", "Introduce al menos 5 caracteres para filtrar por observaciones.");
+                return false;
+            }
+
+            return true;
+        }
+
+        private void MostrarWarningDialog(string title, string message, string iconGlyph = "\uE7BA")
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var dialog = new WarningDialog(title, message, iconGlyph);
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                if (owner != null && owner != dialog)
+                {
+                    dialog.Owner = owner;
+                }
+                dialog.ShowDialog();
+            });
+        }
+
+        private static string NormalizarIdentificadorOrden(string valor)
+        {
+            if (string.IsNullOrWhiteSpace(valor))
+                return string.Empty;
+
+            var builder = new System.Text.StringBuilder(valor.Length);
+            foreach (var ch in valor)
+            {
+                if (char.IsLetterOrDigit(ch))
+                    builder.Append(char.ToUpperInvariant(ch));
+            }
+            return builder.ToString();
         }
     }
 }

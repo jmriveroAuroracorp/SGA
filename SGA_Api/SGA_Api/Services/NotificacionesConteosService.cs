@@ -21,19 +21,16 @@ namespace SGA_Api.Services
     /// </summary>
     public class NotificacionesConteosService : INotificacionesConteosService
     {
-        private readonly INotificacionesTraspasosService _notificacionesService;
-        private readonly INotificacionesService _notificacionesBdService;
+        private readonly INotificacionesUnificadasService _notificacionesUnificadas;
         private readonly AuroraSgaDbContext _context;
         private readonly ILogger<NotificacionesConteosService> _logger;
 
         public NotificacionesConteosService(
-            INotificacionesTraspasosService notificacionesService,
-            INotificacionesService notificacionesBdService,
+            INotificacionesUnificadasService notificacionesUnificadas,
             AuroraSgaDbContext context,
             ILogger<NotificacionesConteosService> logger)
         {
-            _notificacionesService = notificacionesService;
-            _notificacionesBdService = notificacionesBdService;
+            _notificacionesUnificadas = notificacionesUnificadas;
             _context = context;
             _logger = logger;
         }
@@ -141,13 +138,16 @@ namespace SGA_Api.Services
             };
             mensaje += $"\nPrioridad: {nivelPrioridad} ({prioridad}/5)";
 
-                // 1. Enviar por SignalR a operarios, supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("OPERARIO", "Nueva Orden de Conteo", mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", "Nueva Orden de Conteo", mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("ADMIN", "Nueva Orden de Conteo", mensaje, "info");
-
-                // 2. Guardar en la base de datos para usuarios con rol OPERARIO, SUPERVISOR y ADMIN
-                await GuardarNotificacionEnBdAsync("ORDEN_CREADA", ordenId, "Nueva Orden de Conteo", mensaje, new[] { "OPERARIO", "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "OPERARIO", "SUPERVISOR", "ADMIN" },
+                    "ORDEN_CREADA",
+                    "Nueva Orden de Conteo",
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "info");
 
                 _logger.LogInformation("Notificación de orden creada enviada para orden {OrdenId}", ordenId);
             }
@@ -172,12 +172,16 @@ namespace SGA_Api.Services
                     mensaje += $"\nSupervisor responsable: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "info");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("OPERARIO_ASIGNADO", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "OPERARIO_ASIGNADO",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "info");
 
                 _logger.LogInformation("Notificación de operario asignado enviada para orden {OrdenId}", ordenId);
             }
@@ -202,12 +206,16 @@ namespace SGA_Api.Services
                     mensaje += $"\nSupervisor responsable: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "info");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("ORDEN_INICIADA", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "ORDEN_INICIADA",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "info");
 
                 _logger.LogInformation("Notificación de orden iniciada enviada para orden {OrdenId}", ordenId);
             }
@@ -232,12 +240,16 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "success");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "success");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("ORDEN_COMPLETADA", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "ORDEN_COMPLETADA",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "success");
 
                 _logger.LogInformation("Notificación de orden completada enviada para orden {OrdenId}", ordenId);
             }
@@ -267,12 +279,16 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "info");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("ORDEN_CERRADA", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "ORDEN_CERRADA",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "info");
 
                 _logger.LogInformation("Notificación de orden cerrada enviada para orden {OrdenId}", ordenId);
             }
@@ -297,12 +313,16 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "info");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("LECTURA_CREADA", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "LECTURA_CREADA",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "info");
 
                 _logger.LogInformation("Notificación de lectura creada enviada para orden {OrdenId}", ordenId);
             }
@@ -327,12 +347,16 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "warning");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "warning");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("LINEA_REASIGNADA", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "LINEA_REASIGNADA",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "warning");
 
                 _logger.LogInformation("Notificación de línea reasignada enviada para orden {OrdenId}", ordenId);
             }
@@ -357,12 +381,16 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "info");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "info");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("APROBADOR_ACTUALIZADO", resultadoId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "APROBADOR_ACTUALIZADO",
+                    titulo,
+                    mensaje,
+                    resultadoId,
+                    null,
+                    null,
+                    "info");
 
                 _logger.LogInformation("Notificación de aprobador actualizado enviada para resultado {ResultadoId}", resultadoId);
             }
@@ -379,14 +407,24 @@ namespace SGA_Api.Services
         {
             try
             {
-                // Notificar a administradores con prioridad alta
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "error");
+                var roles = new List<string> { "ADMIN" };
                 
                 // También notificar a supervisores si es relevante
                 if (tipoEvento.Contains("CONTEOS") || tipoEvento.Contains("INVENTARIO"))
                 {
-                    await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "warning");
+                    roles.Add("SUPERVISOR");
                 }
+
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    roles.ToArray(),
+                    tipoEvento,
+                    titulo,
+                    mensaje,
+                    null,
+                    null,
+                    null,
+                    roles.Contains("SUPERVISOR") ? "warning" : "error");
 
                 _logger.LogInformation("Notificación de evento crítico enviada: {TipoEvento}", tipoEvento);
             }
@@ -411,12 +449,16 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "warning");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "warning");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("ORDEN_CANCELADA", ordenId, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "ORDEN_CANCELADA",
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    null,
+                    null,
+                    "warning");
 
                 _logger.LogInformation("Notificación de orden cancelada enviada para orden {OrdenId}", ordenId);
             }
@@ -441,64 +483,22 @@ namespace SGA_Api.Services
                     mensaje += $" - Supervisor: {supervisorCodigo}";
                 }
 
-                // Notificar a supervisores y administradores con prioridad alta
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, "warning");
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, "info");
-
-                // Guardar en la base de datos
-                await GuardarNotificacionEnBdAsync("CONTEO_SUPERVISION", resultadoGuid, titulo, mensaje, new[] { "SUPERVISOR", "ADMIN" });
+                // Crear y enviar notificación unificada (BD + SignalR)
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "SUPERVISOR", "ADMIN" },
+                    "CONTEO_SUPERVISION",
+                    titulo,
+                    mensaje,
+                    resultadoGuid,
+                    null,
+                    null,
+                    "warning");
 
                 _logger.LogInformation("Notificación de conteo en supervisión enviada para resultado {ResultadoGuid}", resultadoGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al enviar notificación de conteo en supervisión para {ResultadoGuid}", resultadoGuid);
-            }
-        }
-
-        /// <summary>
-        /// Guarda una notificación en la base de datos para usuarios con roles específicos
-        /// </summary>
-        private async Task GuardarNotificacionEnBdAsync(string tipoEvento, Guid procesoId, string titulo, string mensaje, string[] roles)
-        {
-            try
-            {
-                // Obtener IDs de usuarios con los roles especificados
-                var usuarioIds = await _context.Usuarios
-                    .Where(u => u.IdRol.HasValue && (
-                        (u.IdRol == 3 && roles.Contains("OPERARIO")) ||
-                        (u.IdRol == 10 && roles.Contains("OPERARIO")) ||
-                        (u.IdRol == 20 && roles.Contains("SUPERVISOR")) ||
-                        (u.IdRol == 30 && roles.Contains("ADMIN"))
-                    ))
-                    .Select(u => u.IdUsuario)
-                    .ToListAsync();
-
-                if (usuarioIds.Any())
-                {
-                    var crearDto = new CrearNotificacionDto
-                    {
-                        CodigoEmpresa = 1, // Por defecto
-                        TipoNotificacion = tipoEvento,
-                        ProcesoId = procesoId,
-                        Titulo = titulo,
-                        Mensaje = mensaje,
-                        EsGrupal = true,
-                        GrupoDestino = string.Join(",", roles),
-                        UsuarioIds = usuarioIds
-                    };
-
-                    await _notificacionesBdService.CrearNotificacionAsync(crearDto);
-                    _logger.LogInformation("✅ Notificación guardada en BD para {Cantidad} usuarios con roles {Roles}", usuarioIds.Count, string.Join(",", roles));
-                }
-                else
-                {
-                    _logger.LogWarning("⚠️ No se encontraron usuarios con roles {Roles}", string.Join(",", roles));
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Error al guardar notificación en BD: {TipoEvento}", tipoEvento);
             }
         }
 
@@ -580,14 +580,17 @@ namespace SGA_Api.Services
                 // Determinar el tipo de notificación y mensaje según el cambio de estado
                 var (titulo, mensaje, tipoVisual) = DeterminarNotificacionCambioEstado(estadoAnterior, estadoNuevo, nombresUsuarios);
                 
-                // 1. Enviar por SignalR a operarios, supervisores y administradores
-                await _notificacionesService.NotificarRolAsync("OPERARIO", titulo, mensaje, tipoVisual);
-                await _notificacionesService.NotificarRolAsync("SUPERVISOR", titulo, mensaje, tipoVisual);
-                await _notificacionesService.NotificarRolAsync("ADMIN", titulo, mensaje, tipoVisual);
-
-                // 2. Guardar en la base de datos
+                // Crear y enviar notificación unificada (BD + SignalR)
                 var tipoEvento = $"ESTADO_{estadoNuevo.ToUpper()}";
-                await GuardarNotificacionEnBdAsync(tipoEvento, ordenId, titulo, mensaje, new[] { "OPERARIO", "SUPERVISOR", "ADMIN" });
+                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
+                    new[] { "OPERARIO", "SUPERVISOR", "ADMIN" },
+                    tipoEvento,
+                    titulo,
+                    mensaje,
+                    ordenId,
+                    estadoAnterior,
+                    estadoNuevo,
+                    tipoVisual);
 
                 _logger.LogInformation("Notificación de cambio de estado enviada para orden {OrdenId}: {EstadoAnterior} → {EstadoNuevo}", 
                     ordenId, estadoAnterior, estadoNuevo);

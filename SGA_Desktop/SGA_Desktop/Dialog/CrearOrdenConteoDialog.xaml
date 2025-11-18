@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
         xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="CREAR ORDEN DE CONTEO"
         Width="800"
         Height="650"
@@ -116,7 +117,7 @@
                             <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,10">
                                 <TextBlock Text="Prioridad" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding PrioridadesDisponibles}"
-                                          DisplayMemberPath="Texto"
+                                          DisplayMemberPath="Nombre"
                                           SelectedItem="{Binding PrioridadSeleccionada}"
                                           Height="35"
                                           FontSize="14"
@@ -124,29 +125,69 @@
                             </StackPanel>
 
                             <!-- Almacén -->
-                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10"
-                                       Visibility="{Binding MostrarConteoUbicacion, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10">
                                 <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
                                           DisplayMemberPath="DescripcionCombo"
                                           SelectedItem="{Binding AlmacenSeleccionado}"
                                           Height="35"
                                           FontSize="14"
-                                          Padding="8"/>
+                                          Padding="8"
+                                          IsEditable="True"/>
                             </StackPanel>
 
                             <!-- Operario -->
                             <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,10">
                                 <TextBlock Text="Operario Asignado *" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <ComboBox ItemsSource="{Binding OperariosDisponibles}"
-                                          DisplayMemberPath="NombreCompleto"
+                                <ComboBox ItemsSource="{Binding OperariosView}"
+                                          DisplayMemberPath="NombreOperario"
                                           SelectedItem="{Binding OperarioSeleccionado}"
+                                          Text="{Binding FiltroOperarios, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsDropDownOpen="{Binding IsDropDownOpenOperarios}"
                                           Height="35"
                                           FontSize="14"
-                                          Padding="8"/>
+                                          Padding="8"
+                                          IsEditable="True"
+                                          IsTextSearchEnabled="False"
+                                          StaysOpenOnEdit="True"
+                                          MaxDropDownHeight="200">
+                                    <i:Interaction.Triggers>
+                                        <i:EventTrigger EventName="SelectionChanged">
+                                            <i:InvokeCommandAction Command="{Binding CerrarDropDownOperariosCommand}"/>
+                                        </i:EventTrigger>
+                                        <i:EventTrigger EventName="GotFocus">
+                                            <i:InvokeCommandAction Command="{Binding AbrirDropDownOperariosCommand}"/>
+                                        </i:EventTrigger>
+                                        <i:EventTrigger EventName="TextChanged">
+                                            <i:InvokeCommandAction Command="{Binding LimpiarSeleccionOperariosCommand}"/>
+                                        </i:EventTrigger>
+                                    </i:Interaction.Triggers>
+                                </ComboBox>
                             </StackPanel>
 
 
+
+                            <!-- Visibilidad -->
+                            <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                                <TextBlock Text="Visibilidad" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <ComboBox ItemsSource="{Binding VisibilidadesDisponibles}"
+                                          SelectedItem="{Binding VisibilidadSeleccionada}"
+                                          DisplayMemberPath="Texto"
+                                          Height="35"
+                                          FontSize="14"
+                                          Padding="8"
+                                          MinWidth="200">
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem">
+                                            <Setter Property="ToolTip">
+                                                <Setter.Value>
+                                                    <ToolTip Content="{Binding Descripcion}"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+                                </ComboBox>
+                            </StackPanel>
 
                             <!-- Fecha -->
                             <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,0">
@@ -342,13 +383,14 @@
                             <StackPanel Grid.Row="4" Grid.ColumnSpan="4" Margin="0,0,0,10"
                                        Visibility="{Binding MostrarConteoArticulo, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Buscar Artículo" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <TextBlock Text="ℹ️ Se buscará el artículo en todos los almacenes donde tenga stock" 
+                                <TextBlock Text="ℹ️ Busca el artículo por código o descripción. Si no hay stock virtual, se permitirá crear el conteo igualmente (puede haber stock físico no registrado)." 
                                            FontSize="12" 
                                            Foreground="#6C757D" 
                                            FontStyle="Italic" 
-                                           Margin="0,0,0,10"/>
+                                           Margin="0,0,0,10"
+                                           TextWrapping="Wrap"/>
                                 
-                                <!-- Campo de búsqueda con botón -->
+                                <!-- Campo de búsqueda -->
                                 <Grid Margin="0,0,0,10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -397,7 +439,8 @@
                                         BorderBrush="#DEE2E6"
                                         BorderThickness="1"
                                         CornerRadius="4"
-                                        Padding="10">
+                                        Padding="10"
+                                        Margin="0,0,0,10">
                                     <StackPanel>
                                         <TextBlock Text="✅ Artículo seleccionado:" FontWeight="Bold" Foreground="#198754" Margin="0,0,0,5"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
@@ -408,6 +451,28 @@
                                             <TextBlock Text="Descripción: " FontWeight="Bold"/>
                                             <TextBlock Text="{Binding ArticuloSeleccionado.DescripcionArticulo}" TextWrapping="Wrap"/>
                                         </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Advertencia cuando NO hay stock virtual -->
+                                <Border Visibility="{Binding MostrarAdvertenciaSinStock, Converter={StaticResource BoolToVis}}"
+                                        Background="#FFF3CD"
+                                        BorderBrush="#FFC107"
+                                        BorderThickness="2"
+                                        CornerRadius="4"
+                                        Padding="12"
+                                        Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                            <TextBlock Text="⚠️" FontSize="18" Margin="0,0,8,0"/>
+                                            <TextBlock Text="ADVERTENCIA: Sin Stock Virtual" FontWeight="Bold" Foreground="#856404" FontSize="13"/>
+                                        </StackPanel>
+                                        <TextBlock TextWrapping="Wrap" Foreground="#856404" FontSize="12" LineHeight="18">
+                                            <Run Text="Este artículo no tiene stock virtual registrado en el sistema." FontWeight="Bold"/>
+                                            <LineBreak/>
+                                            <LineBreak/>
+                                            <Run Text="El operario que realice el conteo tendrá que crear el registro manualmente cuando encuentre stock físico."/>
+                                        </TextBlock>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

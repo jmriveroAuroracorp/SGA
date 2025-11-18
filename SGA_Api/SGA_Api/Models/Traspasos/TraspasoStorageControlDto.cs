@@ -27,6 +27,8 @@ namespace SGA_Api.Models.Traspasos
         /// Indica si el movimiento no tiene pareja: "SIN_ENTRADA" (salida sin entrada), "SIN_SALIDA" (entrada sin salida), o null (traspaso completo)
         /// </summary>
         public string? EstadoMovimiento { get; set; }
+
+        public string? CodigoPalet { get; set; }
     }
 }
 

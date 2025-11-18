@@ -428,7 +428,7 @@
                                                                      Foreground="Gray" Margin="0,0,0,3"/>
                                                           <TextBlock Text="{Binding UsuarioInicioNombre}" FontSize="11" 
                                                                    Foreground="Black" FontWeight="Medium" 
-                                                                   TextWrapping="Wrap" MaxHeight="24" TextTrimming="CharacterEllipsis"/>
+                                                                   TextWrapping="Wrap"/>
                                                  </StackPanel>
                                                  
                                                     <!-- Observaciones -->

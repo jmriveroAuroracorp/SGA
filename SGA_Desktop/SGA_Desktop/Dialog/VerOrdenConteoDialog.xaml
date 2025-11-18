@@ -4,7 +4,7 @@
         xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
         Title="Ver Orden de Conteo" 
         Height="800" 
-        Width="1200"
+        Width="1300"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -280,8 +280,9 @@
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="120"/>
-                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="150"/>
                                                 <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="80"/>
                                                 <ColumnDefinition Width="120"/>
                                                 <ColumnDefinition Width="100"/>
@@ -291,14 +292,15 @@
                                             </Grid.ColumnDefinitions>
                                             
                                             <TextBlock Grid.Column="0" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
-                                            <TextBlock Grid.Column="1" Text="Descripción" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
-                                            <TextBlock Grid.Column="2" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                            <TextBlock Grid.Column="3" Text="Lote" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                            <TextBlock Grid.Column="4" Text="Palet" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                            <TextBlock Grid.Column="5" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                            <TextBlock Grid.Column="6" Text="Contado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                            <TextBlock Grid.Column="7" Text="Diferencia" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
-                                            <TextBlock Grid.Column="8" Text="Estado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Fecha lectura" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="Descripción" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
+                                            <TextBlock Grid.Column="4" Text="Lote" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="5" Text="Palet" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="7" Text="Contado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="8" Text="Diferencia" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="9" Text="Estado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
                                         </Grid>
                                     </Border>
 
@@ -322,8 +324,9 @@
                                                         <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="120"/>
-                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="150"/>
                                                             <ColumnDefinition Width="100"/>
+                                                            <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="80"/>
                                                             <ColumnDefinition Width="120"/>
                                                             <ColumnDefinition Width="100"/>
@@ -340,26 +343,36 @@
                                                                        Foreground="{StaticResource BrushPrincipal}"
                                                                        VerticalAlignment="Center"/>
                                                             
+                                                        <!-- Fecha -->
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding FechaDisplay}"
+                                                                   FontSize="12"
+                                                                   Foreground="#444"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                            
+                                                            <!-- Artículo -->
+                                                        <TextBlock Grid.Column="2" 
+                                                                       Text="{Binding CodigoArticulo}" 
+                                                                       FontSize="12" 
+                                                                       FontWeight="Bold"
+                                                                       Foreground="{StaticResource BrushPrincipal}"
+                                                                       VerticalAlignment="Center"
+                                                                       HorizontalAlignment="Center"/>
+                                                            
                                                         <!-- Descripción -->
-                                                        <TextBlock Grid.Column="1" 
+                                                        <TextBlock Grid.Column="3" 
                                                                    Text="{Binding DescripcionArticulo}" 
                                                                    FontSize="12" 
                                                                    Foreground="Black"
                                                                    TextWrapping="NoWrap"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center"
-                                                                   Margin="8,0"/>
-                                                            
-                                                            <!-- Artículo -->
-                                                            <TextBlock Grid.Column="2" 
-                                                                       Text="{Binding CodigoArticulo}" 
-                                                                       FontSize="12" 
-                                                                       Foreground="Black"
-                                                                       VerticalAlignment="Center"
-                                                                       HorizontalAlignment="Center"/>
+                                                                   Margin="8,0"
+                                                                   ToolTipService.ToolTip="{Binding DescripcionArticulo}"/>
                                                             
                                                             <!-- Lote -->
-                                                            <TextBlock Grid.Column="3" 
+                                                        <TextBlock Grid.Column="4" 
                                                                        Text="{Binding LotePartida}" 
                                                                        FontSize="12" 
                                                                        Foreground="Black"
@@ -367,7 +380,7 @@
                                                                        HorizontalAlignment="Center"/>
                                                             
                                                             <!-- Palet -->
-                                                            <TextBlock Grid.Column="4" 
+                                                        <TextBlock Grid.Column="5" 
                                                                        Text="{Binding PaletDisplay}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"
@@ -389,7 +402,7 @@
                                                             </TextBlock>
                                                             
                                                             <!-- Stock -->
-                                                            <TextBlock Grid.Column="5" 
+                                                            <TextBlock Grid.Column="6" 
                                                                        Text="{Binding CantidadStock, StringFormat='0.########'}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"
@@ -398,7 +411,7 @@
                                                                        HorizontalAlignment="Center"/>
                                                             
                                                             <!-- Contado -->
-                                                            <TextBlock Grid.Column="6" 
+                                                            <TextBlock Grid.Column="7" 
                                                                        Text="{Binding CantidadContada, StringFormat='0.########'}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"
@@ -407,7 +420,7 @@
                                                                        HorizontalAlignment="Center"/>
                                                             
                                                             <!-- Diferencia -->
-                                                            <TextBlock Grid.Column="7" 
+                                                            <TextBlock Grid.Column="8" 
                                                                        Text="{Binding DiferenciaFormateada}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"
@@ -429,7 +442,7 @@
                                                             </TextBlock>
                                                             
                                                             <!-- Estado -->
-                                                            <TextBlock Grid.Column="8" 
+                                                            <TextBlock Grid.Column="9" 
                                                                        Text="{Binding EstadoTexto}" 
                                                                        FontSize="12" 
                                                                        FontWeight="Bold"

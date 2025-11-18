@@ -83,31 +83,50 @@ namespace SGA_Desktop.Services
 				?? new List<EstadoTraspasoDto>();
 		}
 
-		public async Task<List<TraspasoDto>> ObtenerTraspasosFiltradosAsync(
+	public async Task<List<TraspasoDto>> ObtenerTraspasosFiltradosAsync(
 	string? estado,
 	string? codigoPalet,
 	string? almacenOrigen,
 	string? almacenDestino,
 	DateTime? fechaInicioDesde,
 	DateTime? fechaInicioHasta,
-	int limite = 500) // 🚀 Límite por defecto más razonable
-		{
-			var query = new List<string>();
-			if (!string.IsNullOrWhiteSpace(estado))
-				query.Add($"codigoEstado={estado}");
-			if (!string.IsNullOrWhiteSpace(codigoPalet))
-				query.Add($"codigoPalet={codigoPalet}");
-			if (!string.IsNullOrWhiteSpace(almacenOrigen))
-				query.Add($"almacenOrigen={almacenOrigen}");
-			if (!string.IsNullOrWhiteSpace(almacenDestino))
-				query.Add($"almacenDestino={almacenDestino}");
-			if (fechaInicioDesde.HasValue)
-				query.Add($"fechaDesde={fechaInicioDesde:yyyy-MM-dd}");
-			if (fechaInicioHasta.HasValue)
-				query.Add($"fechaHasta={fechaInicioHasta:yyyy-MM-dd}"); // API ahora maneja el fin de día automáticamente
+	int? usuarioId = null,
+	int? limite = null) // Si es null, la API usará un límite más alto automáticamente
+	{
+		var query = new List<string>();
+		if (!string.IsNullOrWhiteSpace(estado))
+			query.Add($"codigoEstado={estado}");
+		if (!string.IsNullOrWhiteSpace(codigoPalet))
+			query.Add($"codigoPalet={codigoPalet}");
+		if (!string.IsNullOrWhiteSpace(almacenOrigen))
+			query.Add($"almacenOrigen={almacenOrigen}");
+		if (!string.IsNullOrWhiteSpace(almacenDestino))
+			query.Add($"almacenDestino={almacenDestino}");
+		if (fechaInicioDesde.HasValue)
+			query.Add($"fechaDesde={fechaInicioDesde:yyyy-MM-dd}");
+		if (fechaInicioHasta.HasValue)
+			query.Add($"fechaHasta={fechaInicioHasta:yyyy-MM-dd}"); // API ahora maneja el fin de día automáticamente
+		if (usuarioId.HasValue && usuarioId.Value > 0)
+			query.Add($"usuarioId={usuarioId.Value}");
 
-			// 🚀 Agregar límite para optimizar rendimiento
-			query.Add($"limite={limite}");
+		// 🚀 Calcular límite dinámico basado en el rango de fechas
+		// Si hay un rango de fechas amplio, aumentar el límite para evitar cortar resultados
+		int limiteFinal = limite ?? 5000; // Límite más alto por defecto cuando hay rango de fechas
+		if (fechaInicioDesde.HasValue && fechaInicioHasta.HasValue)
+		{
+			var diasRango = (fechaInicioHasta.Value - fechaInicioDesde.Value).Days + 1;
+			// Si el rango es de más de 7 días, aumentar el límite significativamente
+			if (diasRango > 7)
+			{
+				limiteFinal = Math.Max(limiteFinal, 10000); // 10,000 para rangos grandes
+			}
+			else if (diasRango > 3)
+			{
+				limiteFinal = Math.Max(limiteFinal, 5000); // 5,000 para rangos medianos
+			}
+		}
+		
+		query.Add($"limite={limiteFinal}");
 
 			var url = "traspasos";
 			if (query.Count > 0)

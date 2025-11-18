@@ -4,6 +4,8 @@ using SGA_Api.Data;
 using SGA_Api.Models.Stock;
 using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Palet;
+using SGA_Api.Models.Registro;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,14 +25,16 @@ namespace SGA_Api.Controllers.Inventario
         private readonly StorageControlDbContext _storageContext;
         private readonly SageDbContext _sageDbContext;
         private readonly ILogger<InventarioController> _logger;
+        private readonly IServiceProvider _serviceProvider;
 
 
-        public InventarioController(AuroraSgaDbContext context, StorageControlDbContext storageContext, SageDbContext sageDbContext, ILogger<InventarioController> logger)
+        public InventarioController(AuroraSgaDbContext context, StorageControlDbContext storageContext, SageDbContext sageDbContext, ILogger<InventarioController> logger, IServiceProvider serviceProvider)
         {
             _context = context;
             _storageContext = storageContext;
             _sageDbContext = sageDbContext;
             _logger = logger;
+            _serviceProvider = serviceProvider;
         }
 
         /// <summary>
@@ -264,6 +268,13 @@ namespace SGA_Api.Controllers.Inventario
                 var resultadoGeneracion = await GenerarLineasTemporalesInterno(inventario.IdInventario, dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales, dto.CodigoArticuloFiltro, dto.ArticuloDesde, dto.ArticuloHasta);
                     if (resultadoGeneracion.Exito)
                     {
+                        var detalleCreacion = $"IdInventario={inventario.IdInventario}, CodigoInventario={inventario.CodigoInventario}, TipoInventario={inventario.TipoInventario}, Almacenes={string.Join(",", almacenesAIncluir)}, LineasGeneradas={resultadoGeneracion.LineasGeneradas}, UsuarioCreacion={dto.UsuarioCreacionId}";
+                        RegistrarEventoInventarioAsync(
+                            "INVENTARIO_CREACION",
+                            "InventarioController/CrearInventario",
+                            "Inventario creado correctamente",
+                            detalleCreacion);
+                        
                         return Ok(new { 
                             Id = inventario.IdInventario, 
                             Mensaje = "Inventario creado correctamente",
@@ -623,6 +634,14 @@ namespace SGA_Api.Controllers.Inventario
 
                 // Guardar todos los cambios (ajustes + cierre)
                 await _context.SaveChangesAsync();
+
+                var ajustesCount = await _context.InventarioAjustes.CountAsync(a => a.IdInventario == idInventario);
+                var detalleCierre = $"IdInventario={idInventario}, CodigoInventario={inventario.CodigoInventario}, AjustesGenerados={ajustesCount}, UsuarioCierre={inventario.UsuarioCierreId}";
+                RegistrarEventoInventarioAsync(
+                    "INVENTARIO_CIERRE",
+                    "InventarioController/CerrarInventario",
+                    "Inventario cerrado con ajustes generados",
+                    detalleCierre);
 
                 return Ok(new { Mensaje = "Inventario cerrado correctamente con ajustes generados" });
             }
@@ -1540,6 +1559,13 @@ namespace SGA_Api.Controllers.Inventario
                 await _context.SaveChangesAsync();
 
                 _logger.LogInformation($"Inventario {idInventario} consolidado exitosamente. {lineasTemp.Count} líneas procesadas, {lineasConDiferencias.Count} con diferencias");
+
+                var detalleConsolidacion = $"IdInventario={idInventario}, CodigoInventario={inventario.CodigoInventario}, LineasConsolidadas={lineasTemp.Count}, LineasConDiferencias={lineasConDiferencias.Count}, UsuarioValidacion={usuarioValidacionId}";
+                RegistrarEventoInventarioAsync(
+                    "INVENTARIO_CONSOLIDACION",
+                    "InventarioController/ConsolidarInventarioInteligente",
+                    "Inventario consolidado correctamente",
+                    detalleConsolidacion);
 
                 return Ok(new { 
                     mensaje = "Inventario consolidado correctamente",
@@ -2988,6 +3014,121 @@ namespace SGA_Api.Controllers.Inventario
             {
                 _logger.LogError(ex, "Error al aplicar ajustes del inventario {IdInventario}", idInventario);
                 return Problem(detail: ex.ToString(), statusCode: 500, title: "Error aplicando ajustes");
+            }
+        }
+
+        /// <summary>
+        /// Registra un evento de inventario en log_eventos
+        /// </summary>
+        private void RegistrarEventoInventarioAsync(string tipoEvento, string origen, string descripcion, string? detalle = null)
+        {
+            try
+            {
+                string? token = null;
+                try
+                {
+                    if (Request?.Headers != null && Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+                        authHeader.ToString().StartsWith("Bearer "))
+                    {
+                        token = authHeader.ToString().Substring("Bearer ".Length).Trim();
+                        _logger.LogInformation("✅ Token capturado para evento de inventario: {Origen}", origen);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("⚠️ No se encontró header Authorization para evento de inventario: {Origen}", origen);
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                    _logger.LogWarning("⚠️ Request ya fue liberado, no se puede registrar evento de inventario: {Origen}", origen);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    _logger.LogWarning("⚠️ No se pudo obtener el token para registrar evento de inventario: {Origen}", origen);
+                    return;
+                }
+
+                var tokenCapturado = token;
+                var tipoEventoCapturado = tipoEvento;
+                var origenCapturado = origen;
+                var descripcionCapturada = descripcion;
+                var detalleCapturado = detalle;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (_serviceProvider == null)
+                            return;
+
+                        IServiceScope? scope = null;
+                        try
+                        {
+                            scope = _serviceProvider.CreateScope();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            return;
+                        }
+
+                        using (scope)
+                        {
+                            var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<InventarioController>>();
+
+                            var dispositivo = await dbContext.Dispositivos
+                                .FirstOrDefaultAsync(d => d.SessionToken == tokenCapturado && d.Activo == -1);
+
+                            if (dispositivo == null)
+                            {
+                                logger.LogWarning("⚠️ Dispositivo no encontrado para token al registrar evento de inventario: {Origen}", origenCapturado);
+                                return;
+                            }
+
+                            var logEvento = new LogEvento
+                            {
+                                Fecha = DateTime.Now,
+                                IdUsuario = dispositivo.IdUsuario,
+                                IdDispositivo = dispositivo.Id,
+                                Tipo = tipoEventoCapturado,
+                                Origen = origenCapturado,
+                                Descripcion = descripcionCapturada,
+                                Detalle = detalleCapturado
+                            };
+
+                            dbContext.LogEventos.Add(logEvento);
+                            await dbContext.SaveChangesAsync();
+                            
+                            logger.LogInformation("✅ Evento de inventario registrado: {Origen}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}", 
+                                origenCapturado, dispositivo.IdUsuario, dispositivo.Id);
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            if (_serviceProvider != null)
+                            {
+                                using var scope = _serviceProvider.CreateScope();
+                                var logger = scope.ServiceProvider.GetRequiredService<ILogger<InventarioController>>();
+                                logger.LogError(ex, "❌ Error al registrar evento de inventario: {Origen}", origenCapturado);
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error al capturar token para evento de inventario: {Origen}", origen);
             }
         }
 

@@ -158,6 +158,21 @@ namespace SGA_Api.Services
                 orden.Prioridad = dto.Prioridad;
                 orden.FechaPlan = dto.FechaPlan;
                 orden.Comentario = dto.Comentario;
+                orden.Visibilidad = dto.Visibilidad ?? "VISIBLE";
+                orden.CodigoOperario = dto.CodigoOperario;
+                
+                // Si se asigna un operario, actualizar estado y fecha de asignación
+                if (!string.IsNullOrEmpty(dto.CodigoOperario) && string.IsNullOrEmpty(orden.CodigoOperario))
+                {
+                    orden.Estado = "ASIGNADO";
+                    orden.FechaAsignacion = DateTime.Now;
+                }
+                // Si se quita el operario, cambiar a PLANIFICADO
+                else if (string.IsNullOrEmpty(dto.CodigoOperario) && !string.IsNullOrEmpty(orden.CodigoOperario))
+                {
+                    orden.Estado = "PLANIFICADO";
+                    orden.FechaAsignacion = null;
+                }
 
                 // Actualizar filtros
                 orden.FiltrosJson = dto.FiltrosJson;

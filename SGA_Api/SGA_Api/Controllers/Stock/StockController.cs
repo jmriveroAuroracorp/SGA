@@ -4,6 +4,9 @@ using SGA_Api.Data;
 using SGA_Api.Models.Almacen;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Stock;
+using SGA_Api.Models.Registro;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace SGA_Api.Controllers.Stock
 {
@@ -14,12 +17,16 @@ namespace SGA_Api.Controllers.Stock
 		private readonly SageDbContext _sageContext;
 		private readonly StorageControlDbContext _storageContext;
 		private readonly AuroraSgaDbContext _auroraSgaContext;
+		private readonly IServiceProvider _serviceProvider;
+		private readonly ILogger<StockController> _logger;
 
-		public StockController(SageDbContext sageContext, StorageControlDbContext storageContext, AuroraSgaDbContext auroraSgaContext)
+		public StockController(SageDbContext sageContext, StorageControlDbContext storageContext, AuroraSgaDbContext auroraSgaContext, IServiceProvider serviceProvider, ILogger<StockController> logger)
 		{
 			_sageContext = sageContext;
 			_storageContext = storageContext;
 			_auroraSgaContext = auroraSgaContext;
+			_serviceProvider = serviceProvider;
+			_logger = logger;
 		}
 
 		//// 1.a) Buscar por artículo (+ opcional partida + opcional almacén + opcional ubicación)
@@ -158,7 +165,23 @@ namespace SGA_Api.Controllers.Stock
 				q = q.Where(a => a.Ubicacion == codigoUbicacion);
 
 			var datos = await q.ToListAsync();
-			return Ok(ProjectToDto(datos));
+			var resultado = ProjectToDto(datos);
+			
+			// Registrar evento de consulta (después de preparar la respuesta para no bloquear)
+			var detalleConsulta = $"Empresa={codigoEmpresa}";
+			if (!string.IsNullOrWhiteSpace(codigoArticulo)) detalleConsulta += $", Articulo={codigoArticulo}";
+			if (!string.IsNullOrWhiteSpace(descripcion)) detalleConsulta += $", Descripcion={descripcion}";
+			if (!string.IsNullOrWhiteSpace(partida)) detalleConsulta += $", Partida={partida}";
+			if (!string.IsNullOrWhiteSpace(codigoAlmacen)) detalleConsulta += $", Almacen={codigoAlmacen}";
+			if (!string.IsNullOrWhiteSpace(codigoUbicacion)) detalleConsulta += $", Ubicacion={codigoUbicacion}";
+			detalleConsulta += $", Resultados={resultado.Count}";
+			
+			RegistrarEventoConsultaStockAsync(
+				"StockController/PorArticulo",
+				$"Consulta de stock por artículo{(string.IsNullOrWhiteSpace(codigoArticulo) ? " (por descripción)" : "")}",
+				detalleConsulta);
+			
+			return Ok(resultado);
 		}
 
 
@@ -210,6 +233,26 @@ namespace SGA_Api.Controllers.Stock
 
 			var datos = await query.ToListAsync();
 			var resultado = ProjectToDto(datos);
+
+			// Registrar evento de consulta
+			var detalleConsulta = $"Empresa={codigoEmpresa}, Almacen={codigoAlmacen}";
+			if (tieneParametroUbicacion)
+			{
+				if (string.IsNullOrWhiteSpace(codigoUbicacion))
+					detalleConsulta += ", Ubicacion=(sin ubicar)";
+				else
+					detalleConsulta += $", Ubicacion={codigoUbicacion}";
+			}
+			else
+			{
+				detalleConsulta += ", Ubicacion=(todo el almacén)";
+			}
+			detalleConsulta += $", IncluirStockCero={incluirStockCero}, Resultados={datos.Count}";
+			
+			RegistrarEventoConsultaStockAsync(
+				"StockController/PorUbicacion",
+				"Consulta de stock por ubicación",
+				detalleConsulta);
 
 			return Ok(resultado);
 		}
@@ -413,6 +456,19 @@ namespace SGA_Api.Controllers.Stock
 				}
 			}
 
+			// Registrar evento de consulta
+			var detalleConsulta = $"Empresa={codigoEmpresa}";
+			if (flujoUbicacion) detalleConsulta += $", Almacen={codigoAlmacen}";
+			if (flujoArticulo) detalleConsulta += $", Articulo={codigoArticulo}";
+			if (!string.IsNullOrWhiteSpace(codigoUbicacion)) detalleConsulta += $", Ubicacion={codigoUbicacion}";
+			if (!string.IsNullOrWhiteSpace(partida)) detalleConsulta += $", Partida={partida}";
+			detalleConsulta += $", Resultados={resultado.Count}";
+			
+			RegistrarEventoConsultaStockAsync(
+				"StockController/ConsultarStock",
+				"Consulta de stock (avanzada)",
+				detalleConsulta);
+
 			return Ok(resultado);
 		}
 
@@ -434,10 +490,32 @@ namespace SGA_Api.Controllers.Stock
 		{
 			// 1. búsquedas directas (sin cambios) ------------
 			if (!string.IsNullOrWhiteSpace(codigoAlternativo))
-				return await BuscarPorAlternativo(codigoAlternativo);
+			{
+				var lista = await BuscarPorAlternativo(codigoAlternativo);
+				
+				// Registrar evento de consulta (solo una vez desde el endpoint público)
+				var detalleConsulta = $"CodigoAlternativo={codigoAlternativo}, Resultados={lista.Count}";
+				RegistrarEventoConsultaStockAsync(
+					"StockController/BuscarArticulo",
+					"Búsqueda de artículo por código alternativo",
+					detalleConsulta);
+				
+				return Ok(lista);
+			}
 
 			if (!string.IsNullOrWhiteSpace(codigoArticulo))
-				return await BuscarPorCodigo(codigoArticulo);
+			{
+				var lista = await BuscarPorCodigo(codigoArticulo);
+				
+				// Registrar evento de consulta (solo una vez desde el endpoint público)
+				var detalleConsulta = $"CodigoArticulo={codigoArticulo}, Resultados={lista.Count}";
+				RegistrarEventoConsultaStockAsync(
+					"StockController/BuscarArticulo",
+					"Búsqueda de artículo por código",
+					detalleConsulta);
+				
+				return Ok(lista);
+			}
 
 			// 2. descripción + stock -------------------------
 			if (!string.IsNullOrWhiteSpace(descripcion))
@@ -488,13 +566,25 @@ namespace SGA_Api.Controllers.Stock
 					.Where(a => codigosSet.Contains(a.CodigoArticulo))
 					.ToList();
 
+				// Registrar evento de consulta
+				var detalleConsulta = $"Empresa={codigoEmpresa}, Descripcion={descripcion}";
+				if (!string.IsNullOrWhiteSpace(partida)) detalleConsulta += $", Partida={partida}";
+				if (!string.IsNullOrWhiteSpace(codigoAlmacen)) detalleConsulta += $", Almacen={codigoAlmacen}";
+				if (!string.IsNullOrWhiteSpace(codigoUbicacion)) detalleConsulta += $", Ubicacion={codigoUbicacion}";
+				detalleConsulta += $", Resultados={resultado.Count}";
+				
+				RegistrarEventoConsultaStockAsync(
+					"StockController/BuscarArticulo",
+					"Búsqueda de artículo por descripción",
+					detalleConsulta);
+
 				return Ok(resultado);
 			}
 
 			return BadRequest("Debe especificar algún criterio de búsqueda.");
 
 			// --- helpers privados ---------------------------
-			async Task<IActionResult> BuscarPorAlternativo(string alt)
+			async Task<List<ArticuloDto>> BuscarPorAlternativo(string alt)
 			{
 				var lista = await _sageContext.Articulos
 					.Where(a =>
@@ -510,10 +600,12 @@ namespace SGA_Api.Controllers.Stock
 						CodigoAlternativo = a.CodigoAlternativo
 					})
 					.ToListAsync();
-				return Ok(lista);
+
+				// No registrar log aquí, se registra en el método público BuscarArticulo
+				return lista;
 			}
 
-			async Task<IActionResult> BuscarPorCodigo(string cod)
+			async Task<List<ArticuloDto>> BuscarPorCodigo(string cod)
 			{
 				var lista = await _sageContext.Articulos
 					.Where(a => a.CodigoArticulo == cod)
@@ -524,7 +616,9 @@ namespace SGA_Api.Controllers.Stock
 						CodigoAlternativo = a.CodigoAlternativo
 					})
 					.ToListAsync();
-				return Ok(lista);
+
+				// No registrar log aquí, se registra en el método público BuscarArticulo
+				return lista;
 			}
 		}
 
@@ -735,11 +829,31 @@ namespace SGA_Api.Controllers.Stock
                 MotivoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("motivoBloqueo")?.GetValue(bloqueoInfo)?.ToString(),
                 FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?
             });
-        }
-    }
+			}
+		}
 
-    return Ok(resultado);
-}
+		// Registrar evento de consulta
+		var detalleConsulta = $"Empresa={codigoEmpresa}";
+		if (!string.IsNullOrWhiteSpace(codigoArticulo)) detalleConsulta += $", Articulo={codigoArticulo}";
+		if (!string.IsNullOrWhiteSpace(descripcion)) detalleConsulta += $", Descripcion={descripcion}";
+		if (!string.IsNullOrWhiteSpace(partida)) detalleConsulta += $", Partida={partida}";
+		if (!string.IsNullOrWhiteSpace(codigoAlmacen)) detalleConsulta += $", Almacen={codigoAlmacen}";
+		if (tieneParametroUbicacion)
+		{
+			if (string.IsNullOrWhiteSpace(codigoUbicacion))
+				detalleConsulta += ", Ubicacion=(sin ubicar)";
+			else
+				detalleConsulta += $", Ubicacion={codigoUbicacion}";
+		}
+		detalleConsulta += $", Resultados={resultado.Count}";
+		
+		RegistrarEventoConsultaStockAsync(
+			"StockController/PorArticuloDisponible",
+			"Consulta de stock disponible",
+			detalleConsulta);
+
+		return Ok(resultado);
+	}
 
 
 		/// <summary>
@@ -799,6 +913,129 @@ namespace SGA_Api.Controllers.Stock
 				.ToListAsync();
 
 			return articulos;
+		}
+
+		/// <summary>
+		/// Registra un evento de consulta de stock en log_eventos
+		/// </summary>
+		private void RegistrarEventoConsultaStockAsync(string tipoConsulta, string descripcion, string? detalle = null)
+		{
+			try
+			{
+				// Capturar el token ANTES de cualquier operación asíncrona (Request se libera después de la respuesta)
+				string? token = null;
+				try
+				{
+					if (Request?.Headers != null && Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+						authHeader.ToString().StartsWith("Bearer "))
+					{
+						token = authHeader.ToString().Substring("Bearer ".Length).Trim();
+						_logger.LogInformation("✅ Token capturado para evento: {TipoConsulta}", tipoConsulta);
+					}
+					else
+					{
+						_logger.LogWarning("⚠️ No se encontró header Authorization para evento: {TipoConsulta}", tipoConsulta);
+					}
+				}
+				catch (ObjectDisposedException)
+				{
+					_logger.LogWarning("⚠️ Request ya fue liberado, no se puede registrar evento: {TipoConsulta}", tipoConsulta);
+					return;
+				}
+
+				if (string.IsNullOrWhiteSpace(token))
+				{
+					_logger.LogWarning("⚠️ No se pudo obtener el token para registrar evento de consulta stock: {TipoConsulta}", tipoConsulta);
+					return; // No hay token, no registramos evento
+				}
+
+				// Capturar variables locales para usar en el Task.Run
+				var tokenCapturado = token;
+				var tipoConsultaCapturado = tipoConsulta;
+				var descripcionCapturada = descripcion;
+				var detalleCapturado = detalle;
+
+				// Ejecutar en background sin bloquear la respuesta
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						// Verificar si el servicio provider está disponible (puede estar liberado durante el cierre)
+						if (_serviceProvider == null)
+							return;
+
+						// Crear un scope para obtener un nuevo DbContext (thread-safe)
+						IServiceScope? scope = null;
+						try
+						{
+							scope = _serviceProvider.CreateScope();
+						}
+						catch (ObjectDisposedException)
+						{
+							// La aplicación se está cerrando, ignorar silenciosamente
+							return;
+						}
+
+						using (scope)
+						{
+							var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+							var logger = scope.ServiceProvider.GetRequiredService<ILogger<StockController>>();
+
+							var dispositivo = await dbContext.Dispositivos
+								.FirstOrDefaultAsync(d => d.SessionToken == tokenCapturado && d.Activo == -1);
+
+							if (dispositivo == null)
+							{
+								logger.LogWarning("⚠️ Dispositivo no encontrado para token al registrar evento: {TipoConsulta}", tipoConsultaCapturado);
+								return; // Dispositivo no encontrado, no registramos evento
+							}
+
+							var logEvento = new LogEvento
+							{
+								Fecha = DateTime.Now,
+								IdUsuario = dispositivo.IdUsuario,
+								IdDispositivo = dispositivo.Id,
+								Tipo = "CONSULTA_STOCK",
+								Origen = tipoConsultaCapturado,
+								Descripcion = descripcionCapturada,
+								Detalle = detalleCapturado
+							};
+
+							dbContext.LogEventos.Add(logEvento);
+							await dbContext.SaveChangesAsync();
+							
+							logger.LogInformation("✅ Evento de consulta stock registrado: {TipoConsulta}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}", 
+								tipoConsultaCapturado, dispositivo.IdUsuario, dispositivo.Id);
+						}
+					}
+					catch (ObjectDisposedException)
+					{
+						// La aplicación se está cerrando, ignorar silenciosamente
+						return;
+					}
+					catch (Exception ex)
+					{
+						// Loggear el error solo si el logger está disponible
+						try
+						{
+							if (_serviceProvider != null)
+							{
+								using var scope = _serviceProvider.CreateScope();
+								var logger = scope.ServiceProvider.GetRequiredService<ILogger<StockController>>();
+								logger.LogError(ex, "❌ Error al registrar evento de consulta stock: {TipoConsulta}", tipoConsultaCapturado);
+							}
+						}
+						catch
+						{
+							// Si no se puede loggear, ignorar silenciosamente
+						}
+					}
+				});
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "❌ Error al capturar token para evento de consulta stock: {TipoConsulta}", tipoConsulta);
+			}
 		}
 
 		// Helper para obtener almacenes autorizados (individuales + centro logístico)

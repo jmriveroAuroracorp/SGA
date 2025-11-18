@@ -9,6 +9,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using System.Linq;
+using SGA_Desktop.Dialog;
 
 namespace SGA_Desktop
 {
@@ -25,27 +27,55 @@ namespace SGA_Desktop
 
 			AppDomain.CurrentDomain.UnhandledException += (s, e) =>
 			{
-				// No mostrar MessageBox si la aplicación se está cerrando
-				if (!Helpers.SessionManager.IsClosing)
-				{
-					MessageBox.Show(e.ExceptionObject.ToString(), "Error global");
-				}
+				if (Helpers.SessionManager.IsClosing) return;
+
+				var mensaje = e.ExceptionObject?.ToString() ?? "Error desconocido";
+				MostrarWarningGlobal("Error global", mensaje);
 			};
 			this.DispatcherUnhandledException += (s, e) =>
 			{
-				// No mostrar MessageBox si la aplicación se está cerrando
-				if (!Helpers.SessionManager.IsClosing)
-				{
-					MessageBox.Show(e.Exception.ToString(), "Error de UI");
-				}
+				if (Helpers.SessionManager.IsClosing) return;
+
+				var mensaje = e.Exception?.Message ?? "Se produjo un error inesperado.";
+				MostrarWarningGlobal("Error de UI", mensaje);
 				e.Handled = true;
 			};
+
 
 			// Suscribirse a eventos del sistema para cerrar la aplicación por seguridad
 			SystemEvents.PowerModeChanged += OnPowerModeChanged;
 			SystemEvents.SessionSwitch += OnSessionSwitch;
 
 			// NotificacionesManager se inicializará después del login
+		}
+
+		private void MostrarWarningGlobal(string titulo, string mensaje)
+		{
+			void Mostrar()
+			{
+				if (Helpers.SessionManager.IsClosing) return;
+
+				var owner = Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+							?? Current?.MainWindow;
+
+				const string errorGlyph = "\uE783"; // ícono de error (Cancel)
+				var dialog = new WarningDialog(titulo, mensaje, errorGlyph);
+				if (owner != null && owner != dialog)
+				{
+					dialog.Owner = owner;
+				}
+
+				dialog.ShowDialog();
+			}
+
+			if (Current?.Dispatcher?.CheckAccess() == true)
+			{
+				Mostrar();
+			}
+			else
+			{
+				Current?.Dispatcher?.Invoke(Mostrar);
+			}
 		}
 
 		/// <summary>

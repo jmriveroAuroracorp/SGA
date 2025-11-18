@@ -18,5 +18,9 @@ namespace SGA_Desktop.Models
         
         [JsonPropertyName("codigoEmpresa")]
         public short CodigoEmpresa { get; set; }
+        
+        // 🔷 NUEVO: Partida/Lote para validar bloqueo específico
+        [JsonPropertyName("partida")]
+        public string? Partida { get; set; }
     }
 }

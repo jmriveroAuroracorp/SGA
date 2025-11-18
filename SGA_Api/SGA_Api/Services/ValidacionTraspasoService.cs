@@ -25,21 +25,31 @@ namespace SGA_Api.Services
             string codigoArticulo, 
             string almacenDestino,
             string ubicacionDestino,
-            short codigoEmpresa)
+            short codigoEmpresa,
+            string? partida = null)
         {
             try
             {
                 // 1. Verificar si artículo está bloqueado por calidad
-                var bloqueo = await _auroraSgaContext.BloqueosCalidad
+                // 🔷 CORREGIDO: Validar por artículo + partida (como se guarda el bloqueo)
+                var query = _auroraSgaContext.BloqueosCalidad
                     .Where(b => b.CodigoEmpresa == codigoEmpresa && 
                                b.CodigoArticulo == codigoArticulo && 
-                               b.Bloqueado)
+                               b.Bloqueado);
+
+                // Si se proporciona partida, filtrar también por partida
+                if (!string.IsNullOrWhiteSpace(partida))
+                {
+                    query = query.Where(b => b.LotePartida == partida);
+                }
+
+                var bloqueo = await query
                     .OrderByDescending(b => b.FechaBloqueo)
                     .FirstOrDefaultAsync();
 
                 if (bloqueo == null)
                 {
-                    // Artículo no está bloqueado, permitir traspaso
+                    // Artículo (y partida si se especificó) no está bloqueado, permitir traspaso
                     return ValidacionTraspasoResult.Valido();
                 }
 
@@ -65,8 +75,12 @@ namespace SGA_Api.Services
                 
                 if (esPulmon)
                 {
+                    // 🔷 MEJORADO: Incluir partida en el mensaje si se validó por partida específica
+                    var mensajePartida = !string.IsNullOrWhiteSpace(partida) 
+                        ? $" (partida {partida})" 
+                        : "";
                     return ValidacionTraspasoResult.Bloqueado(
-                        $"No se puede traspasar el artículo {codigoArticulo} a ubicación PULMÓN. El artículo está bloqueado por calidad.");
+                        $"No se puede traspasar el artículo {codigoArticulo}{mensajePartida} a ubicación PULMÓN. El artículo está bloqueado por calidad.");
                 }
 
                 // Artículo bloqueado pero destino no es Pulmón, permitir traspaso

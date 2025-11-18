@@ -1194,7 +1194,8 @@ namespace SGA_Desktop.ViewModels
 				CodigoArticulo = dto.CodigoArticulo,
 				AlmacenDestino = dto.AlmacenDestino,
 				UbicacionDestino = dto.UbicacionDestino,
-				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+				Partida = dto.Partida // 🔷 NUEVO: Incluir partida para validación específica
 			};
 
 			var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);

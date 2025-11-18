@@ -96,11 +96,16 @@
                     <!-- Partida -->
                     <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                         <TextBlock Text="Partida" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <TextBox Width="120"
-                         Style="{StaticResource EstiloCajaTexto}"
-                         Text="{Binding FiltroPartida, Mode=TwoWay}"
-                         IsEnabled="{Binding CanEnableInputs}"
-                         KeyDown="TextBox_KeyDown"/>
+                        <ComboBox Width="140"
+                          Style="{StaticResource EstiloComboBox}"
+                          ItemsSource="{Binding PartidasDisponibles}"
+                          SelectedItem="{Binding FiltroPartida, Mode=TwoWay}"
+                          IsEnabled="{Binding CanEnableInputs}"
+                          IsEditable="True"
+                          Text="{Binding FiltroPartida, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                          StaysOpenOnEdit="True"
+                          IsTextSearchEnabled="True"
+                          KeyDown="TextBox_KeyDown"/>
                     </StackPanel>
 
                     <!-- Almacén -->

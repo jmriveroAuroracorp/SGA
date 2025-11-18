@@ -327,6 +327,7 @@ namespace SGA_Api.Data
                 ent.Property(t => t.MovPosicionDestino).HasColumnName("MovPosicionDestino");
 				ent.Property(t => t.Comentario).HasColumnName("Comentario");
 				ent.Property(t => t.EstadoErp).HasColumnName("EstadoErp");
+				ent.Property(t => t.OrigenTraspaso).HasColumnName("OrigenTraspaso").HasColumnType("varchar(20)");
 			});
 
             // Configuración de entidades de Inventario

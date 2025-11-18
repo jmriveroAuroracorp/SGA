@@ -272,13 +272,22 @@ namespace SGA_Desktop.ViewModels
                     estadoFiltro = null; // No filtrar por estado
                 }
                 
+                // Determinar el usuarioId para el filtro (si hay operario seleccionado)
+                int? usuarioIdFiltro = null;
+                if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
+                {
+                    usuarioIdFiltro = OperarioSeleccionado.Operario;
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Filtrando por operario en API: {usuarioIdFiltro}");
+                }
+                
                 var traspasos = await _traspasosService.ObtenerTraspasosFiltradosAsync(
                     estado: estadoFiltro,
                     codigoPalet: null, // No filtramos por palet en este caso
                     almacenOrigen: AlmacenOrigenSeleccionado?.CodigoAlmacen,
                     almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
                     fechaInicioDesde: fechaDesde.Date, // Solo la fecha, hora 00:00:00
-                    fechaInicioHasta: fechaHasta.Date // Solo la fecha, la API se encarga de incluir todo el día
+                    fechaInicioHasta: fechaHasta.Date, // Solo la fecha, la API se encarga de incluir todo el día
+                    usuarioId: usuarioIdFiltro
                 );
 
                 System.Diagnostics.Debug.WriteLine($"API devolvió {traspasos.Count} traspasos");
@@ -308,32 +317,23 @@ namespace SGA_Desktop.ViewModels
                     System.Diagnostics.Debug.WriteLine($"Después del filtro de artículo: {traspasosFiltradosFinal.Count} traspasos");
                 }
                 
-                // Filtro por operario seleccionado
+                // El filtro de operario ya se aplica en la API mediante el parámetro usuarioId
+                // Mantenemos este código como respaldo por si la API no filtra correctamente
                 if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Aplicando filtro de operario: {OperarioSeleccionado.Operario}");
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] OperarioSeleccionado.Operario tipo: {OperarioSeleccionado.Operario.GetType()}");
-                    
-                    // Log de los usuarios que tienen los traspasos antes del filtro
-                    var usuariosEnTraspasos = traspasosFiltradosFinal.Select(t => t.UsuarioInicioId).Distinct().Take(10).ToList();
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Usuarios en traspasos (primeros 10): {string.Join(", ", usuariosEnTraspasos)}");
-                    
-                    // Log de tipos de datos para debugging
-                    if (traspasosFiltradosFinal.Any())
-                    {
-                        var primerTraspaso = traspasosFiltradosFinal.First();
-                        System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Primer traspaso UsuarioInicioId: {primerTraspaso.UsuarioInicioId} (tipo: {primerTraspaso.UsuarioInicioId.GetType()})");
-                    }
-                    
-                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
-                        t.UsuarioInicioId == OperarioSeleccionado.Operario
+                    // Verificar que el filtro de la API funcionó correctamente
+                    var traspasosSinFiltroOperario = traspasosFiltradosFinal.Where(t => 
+                        t.UsuarioInicioId == OperarioSeleccionado.Operario || 
+                        (t.UsuarioFinalizacionId.HasValue && t.UsuarioFinalizacionId == OperarioSeleccionado.Operario)
                     ).ToList();
                     
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Después del filtro de operario: {traspasosFiltradosFinal.Count} traspasos");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] No se aplica filtro de operario (OperarioSeleccionado: {OperarioSeleccionado?.Operario})");
+                    if (traspasosSinFiltroOperario.Count != traspasosFiltradosFinal.Count)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Advertencia: La API no filtró correctamente por operario. Aplicando filtro en memoria.");
+                        traspasosFiltradosFinal = traspasosSinFiltroOperario;
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Traspasos después del filtro de operario: {traspasosFiltradosFinal.Count}");
                 }
 
                 // Resolver nombres de operarios

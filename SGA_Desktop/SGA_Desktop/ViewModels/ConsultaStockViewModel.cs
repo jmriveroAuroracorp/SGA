@@ -36,6 +36,8 @@ namespace SGA_Desktop.ViewModels
 		private AlmacenDto? almacenArticuloPorDefecto;
 		private AlmacenDto? almacenUbicacionPorDefecto;
 		private Dictionary<string, bool> _estadosExpansion = new();
+		private List<StockDto> _resultadosArticuloBase = new();
+		private List<StockDisponibleDto> _stockDisponibleArticuloBase = new();
 
 		#endregion
 
@@ -92,6 +94,7 @@ namespace SGA_Desktop.ViewModels
 	public ObservableCollection<ArticuloResumenDto> ArticulosUnicos { get; } = new();
 	public ObservableCollection<StockDto> StockFiltrado { get; } = new();
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
+	public ObservableCollection<string> PartidasDisponibles { get; } = new();
 	
 	// 🔷 NUEVO: Colección para artículos agrupados con expanders
 	public ObservableCollection<ArticuloStockGroup> ArticulosConUbicaciones { get; } = new();
@@ -336,6 +339,7 @@ namespace SGA_Desktop.ViewModels
 		partial void OnFiltroPartidaChanged(string oldValue, string newValue)
 		{
 			OnPropertyChanged(nameof(CanClearFilters));
+			AplicarFiltroPartidaArticulo();
 		}
 
 		partial void OnFiltroUbicacionChanged(string oldValue, string newValue)
@@ -381,6 +385,10 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(PaletFiltersVisibility));
 			OnPropertyChanged(nameof(MostrarResultadosUbicacion));
 			OnPropertyChanged(nameof(ResultadosActivos));
+			if (newValue)
+				AplicarFiltroPartidaArticulo();
+			else
+				PartidasDisponibles.Clear();
 		}
 
 
@@ -404,6 +412,10 @@ namespace SGA_Desktop.ViewModels
 				FiltroUbicacion = "";
 				
 				// 🔷 CORREGIDO: NO recrear vistas aquí, SwitchMode() ya llama a LoadUbicacionesAsync()
+			}
+			else
+			{
+				PartidasDisponibles.Clear();
 			}
 			OnPropertyChanged(nameof(BuscarCommand));
 			OnPropertyChanged(nameof(CanRefresh));
@@ -447,6 +459,10 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(MostrarResultadosUbicacion));
 			OnPropertyChanged(nameof(ResultadosActivos));
 			OnPropertyChanged(nameof(CodigoPaletHabilitado)); // 🔷 NUEVO: Notificar cambio en habilitación del código de palet
+			if (newValue)
+			{
+				PartidasDisponibles.Clear();
+			}
 		}
 
 		partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? oldValue, ArticuloResumenDto? newValue)
@@ -524,6 +540,9 @@ namespace SGA_Desktop.ViewModels
 			ResultadosStockPorPalet.Clear();
 			StockFiltrado.Clear();
 			ArticulosConUbicaciones.Clear();
+			PartidasDisponibles.Clear();
+			_resultadosArticuloBase.Clear();
+			_stockDisponibleArticuloBase.Clear();
 			ArticuloMostrado = string.Empty;
 			
 			// Notificar cambios
@@ -554,6 +573,7 @@ namespace SGA_Desktop.ViewModels
 				}
 
 				// Limpiar estados previos
+			FiltroPartida = string.Empty;
 				ArticulosUnicos.Clear();
 				StockFiltrado.Clear();
 				ArticulosConUbicaciones.Clear();
@@ -582,7 +602,6 @@ namespace SGA_Desktop.ViewModels
 					lista = await _stockService.ObtenerPorArticuloAsync(
 						SessionManager.EmpresaSeleccionada!.Value,
 						codigoArticulo: null,
-						partida: string.IsNullOrWhiteSpace(FiltroPartida) ? null : FiltroPartida,
 						codigoAlmacen: almacenParam,
 						codigoUbicacion: ubicParam,
 						descripcion: FiltroArticulo
@@ -593,20 +612,17 @@ namespace SGA_Desktop.ViewModels
 				var almacenesAutorizados = ObtenerAlmacenesAutorizados();
 				lista = lista.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
 
-				// 4) Guardar todo el stock filtrado para detalle
-				ResultadosStock.Clear();
-				foreach (var s in lista)
-					ResultadosStock.Add(s);
+				_resultadosArticuloBase = lista.ToList();
 
 				// 5) 🔷 NUEVA LÓGICA: Consultar bloqueos de calidad
-				var codigosArticulos = lista.Select(s => s.CodigoArticulo).Distinct().ToList();
+				var codigosArticulos = _resultadosArticuloBase.Select(s => s.CodigoArticulo).Distinct().ToList();
 				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
 					SessionManager.EmpresaSeleccionada!.Value, 
 					codigosArticulos);
 
 				// 6) 🔷 NUEVA LÓGICA: Agrupar en artículos con expanders (como TraspasosStockViewModel)
 				// Convertir StockDto a StockDisponibleDto para compatibilidad
-				var stockDisponible = lista.Select(s => 
+				var stockDisponible = _resultadosArticuloBase.Select(s => 
 				{
 					var bloqueo = bloqueosCalidad.GetValueOrDefault(s.CodigoArticulo);
 					return new StockDisponibleDto
@@ -631,44 +647,16 @@ namespace SGA_Desktop.ViewModels
 						FechaBloqueoCalidad = bloqueo?.FechaBloqueo
 					};
 				}).ToList();
-				
-				var grupos = stockDisponible
-					.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
-					.Select(g => new ArticuloStockGroup
-					{
-						CodigoArticulo = g.Key.CodigoArticulo,
-						DescripcionArticulo = g.Key.DescripcionArticulo,
-						Ubicaciones = new ObservableCollection<StockDisponibleDto>(
-							g.OrderBy(x => x.CodigoAlmacen)
-							  .ThenBy(x => x.Ubicacion)
-							  .ToList()),
-						// 🔷 NUEVO: Expandir automáticamente cuando se busca por código
-						IsExpanded = !_busquedaPorDescripcion
-					})
-					.OrderBy(a => a.CodigoArticulo)
-					.ToList();
+				_stockDisponibleArticuloBase = stockDisponible;
 
-				// 6) 🔷 NUEVO: Siempre mostrar con expanders (como TraspasosStockViewModel)
-				ArticulosConUbicaciones.Clear();
-				foreach (var grupo in grupos)
-					ArticulosConUbicaciones.Add(grupo);
+				ActualizarPartidasDisponibles();
 
-				// 7) 🔷 NUEVO: También llenar StockFiltrado para compatibilidad
-				StockFiltrado.Clear();
-				foreach (var s in lista)
-					StockFiltrado.Add(s);
-
-				// 7) Actualizar visibilidades
-				OnPropertyChanged(nameof(ArticuloMostrado));
-				OnPropertyChanged(nameof(ArticulosUnicosVisibility));
-				OnPropertyChanged(nameof(ListViewVisibility));
-				OnPropertyChanged(nameof(CanRefresh));
-				OnPropertyChanged(nameof(CanExportExcel));
+				AplicarFiltroPartidaArticulo();
 
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show(ex.Message, "Error al consultar por artículo", MessageBoxButton.OK, MessageBoxImage.Error);
+				new WarningDialog("Error al consultar por artículo", ex.Message, "\uE783").ShowDialog();
 			}
 		}
 
@@ -1566,6 +1554,106 @@ namespace SGA_Desktop.ViewModels
 			return (almacenParam, ubicParam);
 		}
 
+		private void ActualizarPartidasDisponibles()
+		{
+			PartidasDisponibles.Clear();
+
+			if (!_resultadosArticuloBase.Any())
+				return;
+
+			var partidas = _resultadosArticuloBase
+				.Select(r => r.Partida)
+				.Where(p => !string.IsNullOrWhiteSpace(p))
+				.Distinct()
+				.OrderBy(p => p);
+
+			foreach (var partida in partidas)
+			{
+				PartidasDisponibles.Add(partida);
+			}
+
+			if (!string.IsNullOrWhiteSpace(FiltroPartida) && !PartidasDisponibles.Contains(FiltroPartida))
+			{
+				FiltroPartida = string.Empty;
+			}
+		}
+
+		private void AplicarFiltroPartidaArticulo()
+		{
+			if (!IsArticleMode)
+			{
+				return;
+			}
+
+			if (!_resultadosArticuloBase.Any())
+			{
+				ResultadosStock.Clear();
+				StockFiltrado.Clear();
+				ArticulosConUbicaciones.Clear();
+				ArticuloMostrado = string.Empty;
+				OnPropertyChanged(nameof(ArticuloMostrado));
+				OnPropertyChanged(nameof(ArticulosUnicosVisibility));
+				OnPropertyChanged(nameof(ListViewVisibility));
+				OnPropertyChanged(nameof(CanRefresh));
+				OnPropertyChanged(nameof(CanExportExcel));
+				return;
+			}
+
+			IEnumerable<StockDto> listaFiltrada = _resultadosArticuloBase;
+			IEnumerable<StockDisponibleDto> stockFiltrado = _stockDisponibleArticuloBase;
+
+			if (!string.IsNullOrWhiteSpace(FiltroPartida))
+			{
+				listaFiltrada = listaFiltrada.Where(s =>
+					string.Equals(s.Partida, FiltroPartida, StringComparison.OrdinalIgnoreCase));
+
+				stockFiltrado = stockFiltrado.Where(s =>
+					string.Equals(s.Partida, FiltroPartida, StringComparison.OrdinalIgnoreCase));
+			}
+
+			var listaMaterializada = listaFiltrada.ToList();
+			var stockMaterializado = stockFiltrado.ToList();
+
+			ResultadosStock.Clear();
+			foreach (var item in listaMaterializada)
+				ResultadosStock.Add(item);
+
+			StockFiltrado.Clear();
+			foreach (var item in listaMaterializada)
+				StockFiltrado.Add(item);
+
+			var grupos = ConstruirGruposArticulo(stockMaterializado);
+			ArticulosConUbicaciones.Clear();
+			foreach (var grupo in grupos)
+				ArticulosConUbicaciones.Add(grupo);
+
+			ArticuloMostrado = listaMaterializada.FirstOrDefault()?.DescripcionArticulo ?? string.Empty;
+
+			OnPropertyChanged(nameof(ArticuloMostrado));
+			OnPropertyChanged(nameof(ArticulosUnicosVisibility));
+			OnPropertyChanged(nameof(ListViewVisibility));
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanExportExcel));
+		}
+
+		private List<ArticuloStockGroup> ConstruirGruposArticulo(IEnumerable<StockDisponibleDto> stock)
+		{
+			return stock
+				.GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
+				.Select(g => new ArticuloStockGroup
+				{
+					CodigoArticulo = g.Key.CodigoArticulo,
+					DescripcionArticulo = g.Key.DescripcionArticulo,
+					Ubicaciones = new ObservableCollection<StockDisponibleDto>(
+						g.OrderBy(x => x.CodigoAlmacen)
+						 .ThenBy(x => x.Ubicacion)
+						 .ToList()),
+					IsExpanded = !_busquedaPorDescripcion
+				})
+				.OrderBy(a => a.CodigoArticulo)
+				.ToList();
+		}
+
 
 		private void LlenarResultados(List<StockDto> lista, bool filterByPermissions)
 		{
@@ -1640,6 +1728,7 @@ namespace SGA_Desktop.ViewModels
 
 				ResultadosStockPorUbicacion.Clear();
 				filtrada.ForEach(x => ResultadosStockPorUbicacion.Add(x));
+				PartidasDisponibles.Clear();
 			}
 			else if (IsPaletMode)
 			{
@@ -1648,6 +1737,7 @@ namespace SGA_Desktop.ViewModels
 
 				ResultadosStockPorPalet.Clear();
 				filtrada.ForEach(x => ResultadosStockPorPalet.Add(x));
+				PartidasDisponibles.Clear();
 			}
 			
 			// Notificar cambios en las propiedades calculadas

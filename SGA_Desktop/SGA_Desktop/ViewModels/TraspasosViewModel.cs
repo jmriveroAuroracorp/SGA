@@ -442,6 +442,7 @@ namespace SGA_Desktop.ViewModels
 			}
 			else
 			{
+				MostrandoPendientesVaciado = false;
 				await LoadTraspasosErrorAsync();
 				if (HayErroresErp)
 				{
@@ -630,6 +631,12 @@ namespace SGA_Desktop.ViewModels
 				var errores = await _paletService.ObtenerTraspasosErrorErpAsync(empresa);
 				var todosTraspasos = await _traspasosService.ObtenerTraspasosAsync();
 
+				// Obtener información de ubicación para los palets
+				var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync();
+				
+				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
+				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+
 				PaletsView.Clear();
 				PaletSeleccionado = null;
 
@@ -666,6 +673,25 @@ namespace SGA_Desktop.ViewModels
 					if (palet == null)
 						continue;
 					if (palet.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) || palet.IsVaciado)
+						continue;
+
+					// Buscar información de ubicación si existe
+					var paletConUbicacion = paletsConUbicacion.FirstOrDefault(pt => pt.Id == palet.Id);
+					if (paletConUbicacion != null)
+					{
+						palet.AlmacenOrigen = paletConUbicacion.AlmacenOrigen;
+						palet.UbicacionOrigen = paletConUbicacion.UbicacionOrigen;
+						palet.FechaUltimoTraspaso = paletConUbicacion.FechaUltimoTraspaso;
+						palet.UsuarioUltimoTraspaso = paletConUbicacion.UsuarioUltimoTraspaso;
+					}
+
+					// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
+					// (después de obtener la información de ubicación)
+					// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
+					bool puedeVerPalet = string.IsNullOrEmpty(palet.AlmacenOrigen) || 
+										almacenesPermitidos.Contains(palet.AlmacenOrigen);
+					
+					if (!puedeVerPalet)
 						continue;
 
 					palet.ErrorErpMensaje = error.EstadoErp ?? error.Comentario ?? "Error reportado por ERP.";

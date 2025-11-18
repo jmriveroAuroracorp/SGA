@@ -6,11 +6,13 @@ using SGA_Api.Data;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.UsuarioConf;
+using SGA_Api.Models.Registro;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SGA_Api.Controllers.Palet;
 
@@ -22,17 +24,20 @@ public class PaletController : ControllerBase
 	private readonly SageDbContext _sageContext;
 	private readonly StorageControlDbContext _storageContext;
 	private readonly ILogger<PaletController> _logger;
+	private readonly IServiceProvider _serviceProvider;
 
 	public PaletController(
 		AuroraSgaDbContext auroraSgaContext,
 		SageDbContext sageContext,
 		StorageControlDbContext storageContext,
-		ILogger<PaletController> logger)
+		ILogger<PaletController> logger,
+		IServiceProvider serviceProvider)
 	{
 		_auroraSgaContext = auroraSgaContext;
 		_sageContext = sageContext;
 		_storageContext = storageContext;
 		_logger = logger;
+		_serviceProvider = serviceProvider;
 	}
 
 	#region GET: Catálogo de tipos
@@ -707,6 +712,12 @@ public class PaletController : ControllerBase
 			})
 			.ToListAsync();
 
+		// Obtener información del palet para el registro de eventos
+		var palet = await _auroraSgaContext.Palets
+			.Where(p => p.Id == id)
+			.Select(p => new { p.Codigo, p.CodigoEmpresa })
+			.FirstOrDefaultAsync();
+
 		// Unir y agrupar consolidando cantidades (SOLO VISUAL - BD mantiene líneas individuales para trazabilidad)
 		// Agrupa por {Artículo, Lote, Fecha} sin ubicación para mostrar total consolidado al usuario
 		var lineas = definitivas.Concat(temporales)
@@ -743,6 +754,16 @@ public class PaletController : ControllerBase
 
 		// 🔷 NUEVO: Consultar bloqueos de calidad para las líneas
 		await ConsultarBloqueosCalidadLineasAsync(lineas);
+
+		// Registrar evento de consulta de stock (consulta de líneas de palet)
+		if (palet != null)
+		{
+			var detalleConsulta = $"Empresa={palet.CodigoEmpresa}, PaletId={id}, CodigoPalet={palet.Codigo}, Lineas={lineas.Count}";
+			RegistrarEventoConsultaStockAsync(
+				"PaletController/GetLineasPalet",
+				$"Consulta de líneas de palet {palet.Codigo}",
+				detalleConsulta);
+		}
 
 		return Ok(lineas);
 	}
@@ -1240,6 +1261,7 @@ public class PaletController : ControllerBase
 				Partida = linea.Lote,
 				FechaCaducidad = linea.FechaCaducidad,
 				Comentario = dto.Comentario,
+				OrigenTraspaso = "AuroraSGA"
 			};
 			_auroraSgaContext.Traspasos.Add(traspasoArticulo);
 			traspasosCreados.Add(traspasoArticulo.Id);
@@ -1282,7 +1304,7 @@ public class PaletController : ControllerBase
 			{
 				pl.CodigoArticulo,
 				pl.CodigoAlmacen,
-				pl.Ubicacion,
+				Ubicacion = NormalizarUbicacion(pl.Ubicacion),
 				pl.Cantidad,
 				pl.Lote
 			}).ToList();
@@ -1291,7 +1313,7 @@ public class PaletController : ControllerBase
 			{
 				tpl.CodigoArticulo,
 				tpl.CodigoAlmacen,
-				tpl.Ubicacion,
+				Ubicacion = NormalizarUbicacion(tpl.Ubicacion),
 				tpl.Cantidad,
 				tpl.Lote
 			}));
@@ -1303,8 +1325,8 @@ public class PaletController : ControllerBase
 
 			foreach (var grupo in lineasPorUbicacion)
 			{
-				var ubicacion = grupo.Key.Ubicacion;
-				var esUbicacionNormal = ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase);
+				var ubicacion = grupo.Key.Ubicacion ?? string.Empty;
+				var esUbicacionNormal = !string.IsNullOrEmpty(ubicacion) && ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase);
 
 				// Buscar líneas de inventario temporales para esta ubicación
 				var lineasInventario = await _auroraSgaContext.InventarioLineasTemp
@@ -1328,7 +1350,7 @@ public class PaletController : ControllerBase
 								// Buscar la línea real del palet para modificarla
 								var lineaPaletReal = lineasPalet.FirstOrDefault(pl => 
 									pl.CodigoArticulo == lineaInventario.CodigoArticulo && 
-									pl.Ubicacion == ubicacion);
+										NormalizarUbicacion(pl.Ubicacion) == ubicacion);
 								
 								if (lineaPaletReal != null)
 								{
@@ -1519,15 +1541,29 @@ public class PaletController : ControllerBase
 	
 	foreach (var def in lineasDefinitivas)
 	{
+		var ubicacionDef = NormalizarUbicacion(def.Ubicacion);
+
 		// Buscar si hay una línea temporal para este mismo artículo/lote
-		var tempExistente = lineasTemporalesExistentes.FirstOrDefault(t => 
-			t.CodigoArticulo == def.CodigoArticulo && 
-			t.Lote == def.Lote);
+		var tempExistente = lineasTemporalesExistentes.FirstOrDefault(t =>
+			t.CodigoArticulo == def.CodigoArticulo &&
+			t.Lote == def.Lote &&
+			string.Equals((t.CodigoAlmacen ?? string.Empty).Trim(), (def.CodigoAlmacen ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase) &&
+			NormalizarUbicacion(t.Ubicacion) == ubicacionDef);
 		
 		if (tempExistente != null)
 		{
-			// Si la cantidad temporal es MENOR que la definitiva, significa que estamos SACANDO material del palet
-			if (tempExistente.Cantidad < def.Cantidad)
+			// Si la temporal es MENOR que la definitiva, puede ser:
+			// 1. Movimiento parcial REAL: se está sacando material del palet (cambió ubicación o está en ubicación vacía vs ubicación real)
+			// 2. Solo añadiendo material: se añadió material nuevo pero la temporal tiene menos porque solo registra lo nuevo
+			// Solo generamos negativo si la temporal tiene una ubicación REAL diferente a la definitiva, 
+			// lo que indica un movimiento parcial real, no solo añadir material
+			var ubicacionTemp = NormalizarUbicacion(tempExistente.Ubicacion);
+			var esMovimientoParcialReal = !string.IsNullOrEmpty(ubicacionDef) && 
+				!string.IsNullOrEmpty(ubicacionTemp) && 
+				ubicacionDef != ubicacionTemp &&
+				tempExistente.Cantidad < def.Cantidad;
+			
+			if (esMovimientoParcialReal)
 			{
 				var diferencia = def.Cantidad - tempExistente.Cantidad;
 				
@@ -1543,7 +1579,7 @@ public class PaletController : ControllerBase
 					Lote = def.Lote,
 					FechaCaducidad = def.FechaCaducidad,
 					CodigoAlmacen = def.CodigoAlmacen, // UBICACIÓN ORIGEN
-					Ubicacion = def.Ubicacion, // UBICACIÓN ORIGEN
+					Ubicacion = ubicacionDef, // UBICACIÓN ORIGEN
 					UsuarioId = dto.UsuarioId,
 					FechaAgregado = DateTime.Now,
 					Observaciones = "Delta negativo por movimiento parcial de palet",
@@ -1553,6 +1589,36 @@ public class PaletController : ControllerBase
 				};
 				_auroraSgaContext.TempPaletLineas.Add(tempNegativa);
 				_logger.LogInformation($"✅ Creada línea temporal NEGATIVA: Articulo={def.CodigoArticulo}, Cantidad={tempNegativa.Cantidad}, Ubicacion={def.CodigoAlmacen}-{def.Ubicacion}");
+			}
+			else if (tempExistente.Cantidad >= def.Cantidad)
+			{
+				// La temporal tiene más o igual cantidad: se añadió material, usar la temporal (ya incluye todo)
+				_logger.LogInformation($"ℹ️ CerrarPaletMobility: Temporal >= Definitiva, usando temporal (añadido material). Articulo={def.CodigoArticulo}, Temporal={tempExistente.Cantidad}, Definitiva={def.Cantidad}");
+			}
+			else
+			{
+				// La temporal es menor pero están en la misma ubicación (o ambas vacías): 
+				// probablemente solo añadió material nuevo, heredar la definitiva y la temporal se sumará después
+				_logger.LogInformation($"ℹ️ CerrarPaletMobility: Temporal < Definitiva pero misma ubicación, heredando definitiva. Articulo={def.CodigoArticulo}, Temporal={tempExistente.Cantidad}, Definitiva={def.Cantidad}");
+				var temp = new TempPaletLinea
+				{
+					PaletId = def.PaletId,
+					CodigoEmpresa = def.CodigoEmpresa,
+					CodigoArticulo = def.CodigoArticulo,
+					DescripcionArticulo = def.DescripcionArticulo,
+					Cantidad = def.Cantidad,
+					UnidadMedida = def.UnidadMedida,
+					Lote = def.Lote,
+					FechaCaducidad = def.FechaCaducidad,
+					CodigoAlmacen = def.CodigoAlmacen,
+					Ubicacion = ubicacionDef,
+					UsuarioId = def.UsuarioId,
+					FechaAgregado = DateTime.Now,
+					Observaciones = def.Observaciones,
+					Procesada = false,
+					EsHeredada = true // Marcar como heredada
+				};
+				_auroraSgaContext.TempPaletLineas.Add(temp);
 			}
 		}
 		else
@@ -1571,7 +1637,7 @@ public class PaletController : ControllerBase
 				Lote = def.Lote,
 				FechaCaducidad = def.FechaCaducidad,
 				CodigoAlmacen = def.CodigoAlmacen,
-				Ubicacion = def.Ubicacion,
+					Ubicacion = ubicacionDef,
 				UsuarioId = def.UsuarioId,
 				FechaAgregado = DateTime.Now,
 				Observaciones = def.Observaciones,
@@ -1607,6 +1673,11 @@ public class PaletController : ControllerBase
 	var traspasosCreados = new List<Guid>();
 	foreach (var linea in lineasTemporales)
 	{
+		var codigoAlmacenLinea = (linea.CodigoAlmacen ?? string.Empty).Trim();
+		var ubicacionLinea = NormalizarUbicacion(linea.Ubicacion);
+		linea.CodigoAlmacen = codigoAlmacenLinea;
+		linea.Ubicacion = ubicacionLinea;
+
 		var traspaso = new Traspaso
 		{
 			Id = Guid.NewGuid(),
@@ -1616,15 +1687,16 @@ public class PaletController : ControllerBase
 			CodigoEstado = "PENDIENTE",
 			FechaInicio = DateTime.Now,
 			UsuarioInicioId = dto.UsuarioId,
-			AlmacenOrigen = linea.CodigoAlmacen,
+			AlmacenOrigen = codigoAlmacenLinea,
 			CodigoEmpresa = linea.CodigoEmpresa,
 			CodigoArticulo = linea.CodigoArticulo,
-			UbicacionOrigen = linea.Ubicacion,
+			UbicacionOrigen = ubicacionLinea,
 			Cantidad = linea.Cantidad,
 			Partida = linea.Lote,
 			FechaCaducidad = linea.FechaCaducidad,
 			Comentario = dto.Comentario,
-			EsNotificado = false
+			EsNotificado = false,
+			OrigenTraspaso = "AuroraSGA"
 		};
 		_auroraSgaContext.Traspasos.Add(traspaso);
 		traspasosCreados.Add(traspaso.Id);
@@ -1640,8 +1712,8 @@ public class PaletController : ControllerBase
 				tpl.PaletId != id && // Diferente palet (el origen)
 				tpl.CodigoArticulo == linea.CodigoArticulo &&
 				tpl.Lote == linea.Lote &&
-				tpl.CodigoAlmacen == linea.CodigoAlmacen &&
-				tpl.Ubicacion == linea.Ubicacion &&
+				tpl.CodigoAlmacen == codigoAlmacenLinea &&
+				tpl.Ubicacion == ubicacionLinea &&
 				tpl.Procesada == false &&
 				tpl.TraspasoId == null && // Sin traspaso asignado aún
 				tpl.Cantidad < 0 && // Solo líneas NEGATIVAS
@@ -2002,7 +2074,139 @@ public class RelanzarTraspasoDto
 			.ThenBy(p => p.CodigoPalet)
 			.ToList();
 
+		// Registrar evento de consulta de stock
+		var detalleConsulta = codigoEmpresa.HasValue ? $"Empresa={codigoEmpresa.Value}" : "Empresa=(todas)";
+		detalleConsulta += $", PaletsConsultados={lineasAfectadas.Select(l => l.PaletId).Distinct().Count()}, LineasAfectadas={lineasAfectadas.Count}, Resultados={resultado.Count}";
+		
+		RegistrarEventoConsultaStockAsync(
+			"PaletController/GetPaletsPendientesVaciado",
+			"Consulta de stock para palets pendientes de vaciado",
+			detalleConsulta);
+
 		return Ok(resultado);
+	}
+
+	/// <summary>
+	/// Registra un evento de consulta de stock en log_eventos
+	/// </summary>
+	private void RegistrarEventoConsultaStockAsync(string tipoConsulta, string descripcion, string? detalle = null)
+	{
+		try
+		{
+			// Capturar el token ANTES de cualquier operación asíncrona (Request se libera después de la respuesta)
+			string? token = null;
+			try
+			{
+				if (Request?.Headers != null && Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+					authHeader.ToString().StartsWith("Bearer "))
+				{
+					token = authHeader.ToString().Substring("Bearer ".Length).Trim();
+					_logger.LogInformation("✅ Token capturado para evento: {TipoConsulta}", tipoConsulta);
+				}
+				else
+				{
+					_logger.LogWarning("⚠️ No se encontró header Authorization para evento: {TipoConsulta}", tipoConsulta);
+				}
+			}
+			catch (ObjectDisposedException)
+			{
+				_logger.LogWarning("⚠️ Request ya fue liberado, no se puede registrar evento: {TipoConsulta}", tipoConsulta);
+				return;
+			}
+
+			if (string.IsNullOrWhiteSpace(token))
+			{
+				_logger.LogWarning("⚠️ No se pudo obtener el token para registrar evento de consulta stock: {TipoConsulta}", tipoConsulta);
+				return; // No hay token, no registramos evento
+			}
+
+			// Capturar variables locales para usar en el Task.Run
+			var tokenCapturado = token;
+			var tipoConsultaCapturado = tipoConsulta;
+			var descripcionCapturada = descripcion;
+			var detalleCapturado = detalle;
+
+			// Ejecutar en background sin bloquear la respuesta
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					// Verificar si el servicio provider está disponible (puede estar liberado durante el cierre)
+					if (_serviceProvider == null)
+						return;
+
+					// Crear un scope para obtener un nuevo DbContext (thread-safe)
+					IServiceScope? scope = null;
+					try
+					{
+						scope = _serviceProvider.CreateScope();
+					}
+					catch (ObjectDisposedException)
+					{
+						// La aplicación se está cerrando, ignorar silenciosamente
+						return;
+					}
+
+					using (scope)
+					{
+						var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+						var logger = scope.ServiceProvider.GetRequiredService<ILogger<PaletController>>();
+
+						var dispositivo = await dbContext.Dispositivos
+							.FirstOrDefaultAsync(d => d.SessionToken == tokenCapturado && d.Activo == -1);
+
+						if (dispositivo == null)
+						{
+							logger.LogWarning("⚠️ Dispositivo no encontrado para token al registrar evento: {TipoConsulta}", tipoConsultaCapturado);
+							return; // Dispositivo no encontrado, no registramos evento
+						}
+
+						var logEvento = new LogEvento
+						{
+							Fecha = DateTime.Now,
+							IdUsuario = dispositivo.IdUsuario,
+							IdDispositivo = dispositivo.Id,
+							Tipo = "CONSULTA_STOCK",
+							Origen = tipoConsultaCapturado,
+							Descripcion = descripcionCapturada,
+							Detalle = detalleCapturado
+						};
+
+						dbContext.LogEventos.Add(logEvento);
+						await dbContext.SaveChangesAsync();
+						
+						logger.LogInformation("✅ Evento de consulta stock registrado: {TipoConsulta}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}", 
+							tipoConsultaCapturado, dispositivo.IdUsuario, dispositivo.Id);
+					}
+				}
+				catch (ObjectDisposedException)
+				{
+					// La aplicación se está cerrando, ignorar silenciosamente
+					return;
+				}
+				catch (Exception ex)
+				{
+					// Loggear el error solo si el logger está disponible
+					try
+					{
+						if (_serviceProvider != null)
+						{
+							using var scope = _serviceProvider.CreateScope();
+							var logger = scope.ServiceProvider.GetRequiredService<ILogger<PaletController>>();
+							logger.LogError(ex, "❌ Error al registrar evento de consulta stock: {TipoConsulta}", tipoConsultaCapturado);
+						}
+					}
+					catch
+					{
+						// Si no se puede loggear, ignorar silenciosamente
+					}
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "❌ Error al capturar token para evento de consulta stock: {TipoConsulta}", tipoConsulta);
+		}
 	}
 
 	private static string BuildStockKey(short codigoEmpresa, string codigoArticulo, string codigoAlmacen, string? ubicacion, string? partida)
@@ -2150,14 +2354,41 @@ public class RelanzarTraspasoDto
 
 	private async Task<Guid?> RelanzarTraspasoIndividualAsync(Traspaso traspasoError, RelanzarTraspasoDto dto)
 	{
-		var tempLineas = await _auroraSgaContext.TempPaletLineas
-			.Where(tpl => tpl.TraspasoId == traspasoError.Id)
-			.ToListAsync();
+		// Buscar línea definitiva del palet (estado real actual)
+		var paletLineaDefinitiva = await _auroraSgaContext.PaletLineas
+			.Where(pl => pl.PaletId == traspasoError.PaletId &&
+						 pl.CodigoArticulo == traspasoError.CodigoArticulo &&
+						 (pl.Lote == traspasoError.Partida || (pl.Lote == null && traspasoError.Partida == null)))
+			.FirstOrDefaultAsync();
 
-		if (!tempLineas.Any())
+		if (paletLineaDefinitiva == null)
 		{
-			throw new InvalidOperationException($"No se encontraron líneas temporales asociadas al traspaso en error {traspasoError.Id}.");
+			throw new InvalidOperationException($"No se encontró línea definitiva para el artículo {traspasoError.CodigoArticulo} del traspaso en error {traspasoError.Id}.");
 		}
+
+		// Siempre crear una nueva línea temporal basada en la línea definitiva
+		// Esto evita problemas de concurrencia con líneas temporales que puedan haber sido procesadas
+		var tempLinea = new TempPaletLinea
+		{
+			Id = Guid.NewGuid(),
+			PaletId = paletLineaDefinitiva.PaletId,
+			CodigoEmpresa = paletLineaDefinitiva.CodigoEmpresa,
+			CodigoArticulo = paletLineaDefinitiva.CodigoArticulo,
+			DescripcionArticulo = paletLineaDefinitiva.DescripcionArticulo,
+			Cantidad = paletLineaDefinitiva.Cantidad,
+			UnidadMedida = paletLineaDefinitiva.UnidadMedida,
+			Lote = paletLineaDefinitiva.Lote,
+			FechaCaducidad = paletLineaDefinitiva.FechaCaducidad,
+			CodigoAlmacen = traspasoError.AlmacenOrigen, // Usar el almacén origen del traspaso en error
+			Ubicacion = traspasoError.UbicacionOrigen ?? paletLineaDefinitiva.Ubicacion ?? "", // Usar ubicación origen o la de la línea definitiva
+			UsuarioId = dto.UsuarioId,
+			FechaAgregado = DateTime.Now,
+			Observaciones = $"Creada para relanzar traspaso {traspasoError.Id}",
+			Procesada = false,
+			TraspasoId = null, // Se asignará después
+			EsHeredada = true
+		};
+		_auroraSgaContext.TempPaletLineas.Add(tempLinea);
 
 		var marcaRelanzado = $"Relanzado: {DateTime.Now:yyyy-MM-dd HH:mm}";
 		var comentarioFinal = marcaRelanzado.Length > 500 ? marcaRelanzado.Substring(0, 500) : marcaRelanzado;
@@ -2186,17 +2417,24 @@ public class RelanzarTraspasoDto
 			EstadoErp = null,
 			EsNotificado = false,
 			MovPosicionOrigen = traspasoError.MovPosicionOrigen,
-			MovPosicionDestino = traspasoError.MovPosicionDestino
+			MovPosicionDestino = traspasoError.MovPosicionDestino,
+			OrigenTraspaso = "AuroraSGA"
 		};
 
 		_auroraSgaContext.Traspasos.Add(nuevoTraspaso);
 
-		foreach (var temp in tempLineas)
+		var paletLineasAsociadas = await _auroraSgaContext.PaletLineas
+			.Where(pl => pl.TraspasoId == traspasoError.Id)
+			.ToListAsync();
+
+		if (paletLineasAsociadas.Any())
 		{
-			temp.TraspasoId = nuevoTraspaso.Id;
-			temp.Procesada = false;
-			_auroraSgaContext.TempPaletLineas.Update(temp);
+			_auroraSgaContext.PaletLineas.RemoveRange(paletLineasAsociadas);
 		}
+
+		// Asociar la línea temporal al nuevo traspaso (ya está en el contexto como Added)
+		tempLinea.TraspasoId = nuevoTraspaso.Id;
+		tempLinea.Procesada = false;
 
 		var detalleRelanzado = $"Traspaso relanzado. Original: {traspasoError.Id}, Nuevo: {nuevoTraspaso.Id}";
 
@@ -2212,6 +2450,11 @@ public class RelanzarTraspasoDto
 		await _auroraSgaContext.SaveChangesAsync();
 
 		return nuevoTraspaso.Id;
+	}
+
+	private static string NormalizarUbicacion(string? ubicacion)
+	{
+		return string.IsNullOrWhiteSpace(ubicacion) ? string.Empty : ubicacion.Trim();
 	}
 
 	#region POST: Vaciar palet pendiente

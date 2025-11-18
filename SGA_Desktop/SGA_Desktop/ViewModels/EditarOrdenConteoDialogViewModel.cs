@@ -5,10 +5,13 @@ using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using SGA_Desktop.Helpers;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Text.Json;
 using System.Diagnostics;
 using System.Linq;
+using System.Globalization;
+using System.Windows.Data;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -45,6 +48,13 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private OperariosAccesoDto? operarioSeleccionado;
 
+        // Propiedades para filtrado de operarios
+        [ObservableProperty]
+        private string filtroOperarios = string.Empty;
+        
+        [ObservableProperty]
+        private bool isDropDownOpenOperarios = false;
+
         [ObservableProperty]
         private DateTime? fechaPlan;
 
@@ -71,6 +81,16 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private bool usarUbicacionDirecta = false;
 
+        // Propiedades para controlar el estado de los ComboBox
+        [ObservableProperty]
+        private bool estanteriaHabilitada = true;
+
+        [ObservableProperty]
+        private bool alturaHabilitada = true;
+
+        [ObservableProperty]
+        private bool posicionHabilitada = true;
+
         // Propiedad calculada para mostrar/ocultar filtros secuenciales
         public bool MostrarFiltrosSecuenciales => !UsarUbicacionDirecta;
         #endregion
@@ -87,6 +107,9 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private ArticuloResumenDto? articuloSeleccionado;
+
+        [ObservableProperty]
+        private bool articuloTieneStockVirtual = true;
         #endregion
 
         #region Propiedades de estado
@@ -116,6 +139,9 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private ObservableCollection<OperariosAccesoDto> operariosDisponibles = new();
 
+        // Vista filtrada para operarios
+        public ICollectionView OperariosView { get; private set; } = null!;
+
         [ObservableProperty]
         private ObservableCollection<object> pasillosDisponibles = new();
 
@@ -137,6 +163,7 @@ namespace SGA_Desktop.ViewModels
         public bool MostrarConteoArticulo => !EsConteoUbicacion;
         public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
+        public bool MostrarAdvertenciaSinStock => MostrarInfoArticulo && !ArticuloTieneStockVirtual;
         #endregion
 
         #region Constructor
@@ -156,6 +183,11 @@ namespace SGA_Desktop.ViewModels
             // Inicializar colecciones
             InicializarPrioridades();
             InicializarVisibilidades();
+            
+            // Inicializar ICollectionView para filtrado de operarios
+            OperariosView = CollectionViewSource.GetDefaultView(OperariosDisponibles);
+            OperariosView.Filter = FiltraOperario;
+            
             _ = CargarDatosInicialesAsync();
         }
 
@@ -361,12 +393,16 @@ namespace SGA_Desktop.ViewModels
                 {
                     OperariosDisponibles.Add(operario);
                 }
+                
+                // Refrescar la vista filtrada
+                OperariosView?.Refresh();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error cargando operarios: {ex.Message}");
                 // En caso de error, dejar la lista vacía
                 OperariosDisponibles.Clear();
+                OperariosView?.Refresh();
             }
         }
         #endregion
@@ -509,6 +545,9 @@ namespace SGA_Desktop.ViewModels
                         Posicion = posicionValor;
                     }
                 }
+
+                // Actualizar el estado de habilitación después de cargar los filtros
+                ActualizarEstadoFiltros();
             }
             catch (Exception ex)
             {
@@ -552,6 +591,9 @@ namespace SGA_Desktop.ViewModels
 
                 foreach (var posicion in rangos.Posiciones ?? new List<int>())
                     PosicionesDisponibles.Add(posicion);
+
+                // Actualizar el estado de habilitación después de cargar los rangos
+                ActualizarEstadoFiltros();
 
                 // NO establecer valores por defecto - los filtros son opcionales
                 // El usuario puede seleccionar solo los filtros que necesite
@@ -621,6 +663,25 @@ namespace SGA_Desktop.ViewModels
                 {
                     ArticuloSeleccionado = ArticulosEncontrados.First();
                     CodigoArticulo = ArticuloSeleccionado.CodigoArticulo;
+                    ArticuloTieneStockVirtual = true; // Tiene stock porque se encontró en la búsqueda
+                }
+                else if (ArticulosEncontrados.Count > 0)
+                {
+                    ArticuloTieneStockVirtual = true; // Tiene stock porque se encontraron resultados
+                }
+                else
+                {
+                    // Si no se encontraron resultados pero se proporcionó un código, permitir crear sin stock virtual
+                    if (!string.IsNullOrWhiteSpace(codigoArticulo))
+                    {
+                        ArticuloSeleccionado = new ArticuloResumenDto
+                        {
+                            CodigoArticulo = codigoArticulo,
+                            DescripcionArticulo = "Artículo sin stock virtual registrado"
+                        };
+                        CodigoArticulo = codigoArticulo;
+                        ArticuloTieneStockVirtual = false; // NO tiene stock virtual
+                    }
                 }
             }
             catch (Exception ex)
@@ -754,6 +815,15 @@ namespace SGA_Desktop.ViewModels
             ActualizarEstadoValidacion();
             if (value != null && EsConteoUbicacion)
             {
+                // Limpiar filtros cuando cambia el almacén
+                Pasillo = null;
+                Estanteria = null;
+                Altura = null;
+                Posicion = null;
+                EstanteriaHabilitada = true;
+                AlturaHabilitada = true;
+                PosicionHabilitada = true;
+                
                 _ = CargarRangosDisponiblesAsync();
                 _ = CargarUbicacionesDisponiblesAsync();
             }
@@ -769,6 +839,10 @@ namespace SGA_Desktop.ViewModels
                 ArticuloBuscado = string.Empty;
                 ArticulosEncontrados.Clear();
                 ArticuloSeleccionado = null;
+                // Restablecer estado de habilitación
+                EstanteriaHabilitada = true;
+                AlturaHabilitada = true;
+                PosicionHabilitada = true;
             }
             else
             {
@@ -778,6 +852,10 @@ namespace SGA_Desktop.ViewModels
                 Altura = null;
                 Posicion = null;
                 UbicacionDirecta = "SIN UBICAR";
+                // Restablecer estado de habilitación
+                EstanteriaHabilitada = true;
+                AlturaHabilitada = true;
+                PosicionHabilitada = true;
             }
 
             ActualizarEstadoValidacion();
@@ -788,8 +866,21 @@ namespace SGA_Desktop.ViewModels
             if (value != null)
             {
                 CodigoArticulo = value.CodigoArticulo;
+                // Si se selecciona de la lista de encontrados, tiene stock virtual
+                // Si la descripción indica que no tiene stock, mantenerlo en false
+                if (value.DescripcionArticulo != "Artículo sin stock virtual registrado")
+                {
+                    ArticuloTieneStockVirtual = true;
+                }
             }
+            OnPropertyChanged(nameof(MostrarInfoArticulo));
+            OnPropertyChanged(nameof(MostrarAdvertenciaSinStock));
             ActualizarEstadoValidacion();
+        }
+
+        partial void OnArticuloTieneStockVirtualChanged(bool value)
+        {
+            OnPropertyChanged(nameof(MostrarAdvertenciaSinStock));
         }
 
         partial void OnCodigoArticuloChanged(string value)
@@ -811,10 +902,134 @@ namespace SGA_Desktop.ViewModels
             {
                 // Si se desactiva ubicación directa, establecer "SIN UBICAR" por defecto
                 UbicacionDirecta = "SIN UBICAR";
+                // Restablecer estado de habilitación
+                EstanteriaHabilitada = true;
+                AlturaHabilitada = true;
+                PosicionHabilitada = true;
             }
             
             // Notificar cambio en la visibilidad
             OnPropertyChanged(nameof(MostrarFiltrosSecuenciales));
+        }
+
+        partial void OnPasilloChanged(object? value)
+        {
+            // Si se selecciona "Todos los pasillos", bloquear y limpiar los filtros más específicos
+            if (value is OpcionTodos)
+            {
+                EstanteriaHabilitada = false;
+                AlturaHabilitada = false;
+                PosicionHabilitada = false;
+                Estanteria = null;
+                Altura = null;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se selecciona un pasillo específico, habilitar estantería
+                EstanteriaHabilitada = true;
+                // Re-evaluar el estado de altura y posición basado en estantería
+                ActualizarEstadoFiltros();
+            }
+        }
+
+        partial void OnEstanteriaChanged(object? value)
+        {
+            // Si se selecciona "Todas las estanterías", bloquear y limpiar los filtros más específicos
+            if (value is OpcionTodos)
+            {
+                AlturaHabilitada = false;
+                PosicionHabilitada = false;
+                Altura = null;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se selecciona una estantería específica, habilitar altura
+                AlturaHabilitada = true;
+                // Re-evaluar el estado de posición basado en altura
+                ActualizarEstadoFiltros();
+            }
+        }
+
+        partial void OnAlturaChanged(object? value)
+        {
+            // Si se selecciona "Todas las alturas", bloquear y limpiar el filtro más específico
+            if (value is OpcionTodos)
+            {
+                PosicionHabilitada = false;
+                Posicion = null;
+            }
+            else
+            {
+                // Si se selecciona una altura específica, habilitar posición
+                PosicionHabilitada = true;
+            }
+        }
+
+        private void ActualizarEstadoFiltros()
+        {
+            // Re-evaluar el estado de altura basado en estantería
+            if (Estanteria is OpcionTodos)
+            {
+                AlturaHabilitada = false;
+                PosicionHabilitada = false;
+            }
+            else if (Estanteria != null)
+            {
+                AlturaHabilitada = true;
+                // Re-evaluar posición basado en altura
+                if (Altura is OpcionTodos)
+                {
+                    PosicionHabilitada = false;
+                }
+                else if (Altura != null)
+                {
+                    PosicionHabilitada = true;
+                }
+            }
+        }
+        #endregion
+
+        #region Métodos de filtrado de operarios
+        partial void OnFiltroOperariosChanged(string value)
+        {
+            OperariosView?.Refresh(); // Actualiza el filtrado al teclear
+        }
+
+        private bool FiltraOperario(object obj)
+        {
+            if (string.IsNullOrWhiteSpace(FiltroOperarios)) return true;
+            if (obj is not OperariosAccesoDto operario) return false;
+
+            // Búsqueda acento-insensible, sin mayúsc/minúsc, en cualquier parte del texto
+            var compare = CultureInfo.CurrentCulture.CompareInfo;
+            var options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
+
+            bool contiene(string s) =>
+                !string.IsNullOrEmpty(s) &&
+                compare.IndexOf(s, FiltroOperarios, options) >= 0;
+
+            return contiene(operario.NombreOperario) || contiene(operario.NombreCompleto);
+        }
+
+        [RelayCommand]
+        private void AbrirDropDownOperarios()
+        {
+            FiltroOperarios = ""; // Limpiar el filtro para permitir escribir desde cero
+            IsDropDownOpenOperarios = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownOperarios()
+        {
+            IsDropDownOpenOperarios = false;
+        }
+
+        [RelayCommand]
+        private void LimpiarSeleccionOperarios()
+        {
+            OperarioSeleccionado = null;
         }
         #endregion
 

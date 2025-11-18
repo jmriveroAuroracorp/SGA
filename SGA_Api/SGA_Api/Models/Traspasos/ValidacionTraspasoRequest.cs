@@ -17,5 +17,8 @@ namespace SGA_Api.Models.Traspasos
         public string UbicacionDestino { get; set; } = string.Empty;
         
         public short CodigoEmpresa { get; set; }
+        
+        // 🔷 NUEVO: Partida/Lote para validar bloqueo específico
+        public string? Partida { get; set; }
     }
 }

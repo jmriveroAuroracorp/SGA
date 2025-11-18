@@ -23,6 +23,10 @@ namespace SGA_Desktop.Models
         public string? CodigoPalet { get; set; }
         public string? CodigoGS1 { get; set; }
         
+        public string FechaDisplay => Fecha == default 
+            ? string.Empty 
+            : Fecha.ToString("dd/MM/yyyy HH:mm");
+        
         // Campos calculados
         public decimal? Diferencia => CantidadContada.HasValue && CantidadStock.HasValue 
             ? CantidadContada.Value - CantidadStock.Value 

@@ -227,15 +227,34 @@ namespace SGA_Api.Services
 					var permitirLimpiezaDiariaSinLineas = DebeEjecutarLimpiezaDiariaSinLineas();
 					var seRealizoLimpiezaDiariaSinLineas = false;
 
-					using (var scope = _serviceProvider.CreateScope())
+					IServiceScope? scope = null;
+					try
 					{
-						var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
-						var sageDbContext = scope.ServiceProvider.GetRequiredService<SageDbContext>();
-						var notificacionesService = scope.ServiceProvider.GetRequiredService<INotificacionesTraspasosService>();
-						var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraspasoFinalizacionBackgroundService>>();
+						scope = _serviceProvider.CreateScope();
+					}
+					catch (ObjectDisposedException)
+					{
+						// El contenedor de DI se está liberando, salir del bucle
+						break;
+					}
+					catch (InvalidOperationException)
+					{
+						// El contenedor de DI ya no está disponible, salir del bucle
+						break;
+					}
+
+					if (scope == null)
+						break;
+
+					using (scope)
+				{
+					var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+					var sageDbContext = scope.ServiceProvider.GetRequiredService<SageDbContext>();
+					var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+					var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraspasoFinalizacionBackgroundService>>();
 
                         // 1. DETECCIÓN DE NOTIFICACIONES - Para TODOS los traspasos (ARTICULO y PALET)
-						await DetectarYNotificarCambiosEstadoAsync(dbContext, notificacionesService, logger);
+						await DetectarYNotificarCambiosEstadoAsync(dbContext, sageDbContext, notificacionesUnificadas, logger);
 
                         // 1.1. PROCESAR AJUSTES DE INVENTARIO POR PALET (COMPLETADO)
                         await ProcesarAjustesInventarioPorPaletAsync(dbContext, logger);
@@ -1089,25 +1108,48 @@ namespace SGA_Api.Services
 							//}
 							//await dbContext.SaveChangesAsync(); // <-- Guardar los cambios de la unificaci�n
 						}
+					} // Cierra el bloque using (scope)
 
-						if (permitirLimpiezaDiariaSinLineas && seRealizoLimpiezaDiariaSinLineas)
-						{
-							RegistrarLimpiezaDiariaSinLineas();
-						}
+					if (permitirLimpiezaDiariaSinLineas && seRealizoLimpiezaDiariaSinLineas)
+					{
+						RegistrarLimpiezaDiariaSinLineas();
 					}
+				}
+				catch (ObjectDisposedException)
+				{
+					// El contenedor de DI se está liberando, salir del bucle
+					break;
+				}
+				catch (InvalidOperationException)
+				{
+					// El contenedor de DI ya no está disponible, salir del bucle
+					break;
 				}
 				finally
 				{
 					_enEjecucion = false;
 				}
-				await Task.Delay(_intervalo, stoppingToken);
+				
+				// Verificar si se canceló antes de esperar
+				if (stoppingToken.IsCancellationRequested)
+					break;
+					
+				try
+				{
+					await Task.Delay(_intervalo, stoppingToken);
+				}
+				catch (OperationCanceledException)
+				{
+					// El token fue cancelado, salir del bucle
+					break;
+				}
 			}
 		}
 
 		/// <summary>
 		/// Detecta cambios de estado en traspasos y env�a notificaciones popup correspondientes
 		/// </summary>
-		private async Task DetectarYNotificarCambiosEstadoAsync(AuroraSgaDbContext dbContext, INotificacionesTraspasosService notificacionesService, ILogger<TraspasoFinalizacionBackgroundService> logger)
+		private async Task DetectarYNotificarCambiosEstadoAsync(AuroraSgaDbContext dbContext, SageDbContext sageDbContext, INotificacionesUnificadasService notificacionesUnificadas, ILogger<TraspasoFinalizacionBackgroundService> logger)
 		{
 			try
 			{
@@ -1163,7 +1205,7 @@ namespace SGA_Api.Services
 							
 							if (!string.IsNullOrEmpty(codigoIdentificador) && traspaso.UsuarioInicioId > 0)
 							{
-								await EnviarNotificacionCambioEstadoAsync(traspaso, estadoAnterior, estadoActual, notificacionesService, dbContext, logger);
+								await EnviarNotificacionCambioEstadoAsync(traspaso, estadoAnterior, estadoActual, notificacionesUnificadas, dbContext, sageDbContext, logger);
 							}
 							else
 							{
@@ -1199,7 +1241,7 @@ namespace SGA_Api.Services
 		/// <summary>
 		/// Env�a notificaci�n popup espec�fica seg�n el tipo de traspaso y estado (sistema h�brido: BD + SignalR)
 		/// </summary>
-		private async Task EnviarNotificacionCambioEstadoAsync(object traspaso, string estadoAnterior, string estadoActual, INotificacionesTraspasosService notificacionesService, AuroraSgaDbContext dbContext, ILogger<TraspasoFinalizacionBackgroundService> logger)
+		private async Task EnviarNotificacionCambioEstadoAsync(object traspaso, string estadoAnterior, string estadoActual, INotificacionesUnificadasService notificacionesUnificadas, AuroraSgaDbContext dbContext, SageDbContext sageDbContext, ILogger<TraspasoFinalizacionBackgroundService> logger)
 		{
 			try
 			{
@@ -1262,61 +1304,190 @@ namespace SGA_Api.Services
 
 				// PASO 1: Guardar notificaci�n en base de datos para persistencia
 				var mensajeCompleto = $"{mensaje}\n{informacionAdicional}".Trim();
-				var guardadoEnBD = false;
-				
 				try
 				{
-					guardadoEnBD = await GuardarNotificacionEnBDAsync(
-						dbContext, 
-						usuarioId, 
-						titulo, 
-						mensajeCompleto, 
-						tipoNotificacion, 
-						traspasoId, 
-						estadoAnterior, 
-						estadoActual, 
-						logger);
+					await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+						usuarioId,
+						"TRASPASO",
+						titulo,
+						mensajeCompleto,
+						traspasoId,
+						estadoAnterior,
+						estadoActual,
+						tipoNotificacion);
+					
+					logger.LogInformation("Notificación enviada para traspaso {TraspasoId}: {EstadoAnterior} -> {EstadoActual}", 
+						traspasoId, estadoAnterior, estadoActual);
 				}
 				catch (Exception ex)
 				{
-					logger.LogError(ex, "? Error crítico al guardar notificación en BD para traspaso {TraspasoId}", traspasoId);
-					// Continuar con SignalR aunque falle la BD
+					logger.LogError(ex, "Error al crear y enviar notificación unificada para traspaso {TraspasoId}", traspasoId);
 				}
 
-				// PASO 2: Enviar notificaci�n por SignalR (mantener funcionalidad existente)
-				var maxIntentos = 3;
-				var intento = 0;
-				var enviadoSignalR = false;
-
-				while (intento < maxIntentos && !enviadoSignalR)
+				// PASO 2: Si es ERROR_ERP, notificar también a supervisores con acceso al almacén
+				if (estadoActual == "ERROR_ERP")
 				{
 					try
 					{
-						intento++;
+						// Obtener el traspaso completo para tener AlmacenOrigen y AlmacenDestino
+						var traspasoCompleto = await dbContext.Traspasos
+							.Where(t => t.Id == traspasoId)
+							.Select(t => new { t.AlmacenOrigen, t.AlmacenDestino })
+							.FirstOrDefaultAsync();
 
-						await notificacionesService.NotificarPopupUsuarioAsync(usuarioId, titulo, mensajeCompleto, tipoNotificacion);
-						enviadoSignalR = true;
-						
-											logger.LogInformation("Notificación enviada para traspaso {TraspasoId}: {EstadoAnterior} -> {EstadoActual}", 
-												traspasoId, estadoAnterior, estadoActual);
+						if (traspasoCompleto != null && (!string.IsNullOrEmpty(traspasoCompleto.AlmacenOrigen) || !string.IsNullOrEmpty(traspasoCompleto.AlmacenDestino)))
+						{
+							// Recopilar almacenes únicos del traspaso
+							var almacenesTraspaso = new List<string>();
+							if (!string.IsNullOrEmpty(traspasoCompleto.AlmacenOrigen))
+								almacenesTraspaso.Add(traspasoCompleto.AlmacenOrigen.Trim());
+							if (!string.IsNullOrEmpty(traspasoCompleto.AlmacenDestino) && 
+								traspasoCompleto.AlmacenDestino.Trim() != traspasoCompleto.AlmacenOrigen?.Trim())
+								almacenesTraspaso.Add(traspasoCompleto.AlmacenDestino.Trim());
+
+							if (almacenesTraspaso.Any())
+							{
+								// Buscar supervisores (IdRol = 20) que tengan acceso a los almacenes del traspaso
+								// Primero obtener IDs de operarios con acceso a los almacenes desde Sage
+								var operariosConAcceso = await sageDbContext.OperariosAlmacenes
+									.Where(oa => almacenesTraspaso.Contains(oa.CodigoAlmacen ?? ""))
+									.Select(oa => oa.Operario)
+									.Distinct()
+									.ToListAsync();
+
+								if (operariosConAcceso.Any())
+								{
+									// Luego buscar usuarios que sean supervisores (IdRol = 20) y tengan acceso
+									var supervisoresIds = await dbContext.Usuarios
+										.Where(u => u.IdRol == 20 && operariosConAcceso.Contains(u.IdUsuario))
+										.Select(u => u.IdUsuario)
+										.ToListAsync();
+
+									if (supervisoresIds.Any())
+									{
+										logger.LogInformation("Notificando a {Cantidad} supervisores con acceso a almacenes {Almacenes} del traspaso {TraspasoId}",
+											supervisoresIds.Count, string.Join(", ", almacenesTraspaso), traspasoId);
+
+										// Notificar a cada supervisor
+										foreach (var supervisorId in supervisoresIds)
+										{
+											try
+											{
+												await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+													supervisorId,
+													"TRASPASO",
+													$"Error en Traspaso - {string.Join(", ", almacenesTraspaso)}",
+													$"Supervisión requerida: {mensajeCompleto}",
+													traspasoId,
+													estadoAnterior,
+													estadoActual,
+													"error");
+
+												logger.LogInformation("Notificación enviada a supervisor {SupervisorId} para traspaso {TraspasoId}", supervisorId, traspasoId);
+											}
+											catch (Exception ex)
+											{
+												logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para traspaso {TraspasoId}", supervisorId, traspasoId);
+											}
+										}
+									}
+									else
+									{
+										logger.LogDebug("No se encontraron supervisores con acceso a almacenes {Almacenes} para traspaso {TraspasoId}",
+											string.Join(", ", almacenesTraspaso), traspasoId);
+									}
+								}
+								else
+								{
+									logger.LogDebug("No se encontraron operarios con acceso a almacenes {Almacenes} para traspaso {TraspasoId}",
+										string.Join(", ", almacenesTraspaso), traspasoId);
+								}
+							}
+
+							// Notificar a TODOS los ADMIN (sin filtro de almacén)
+							try
+							{
+								var adminIds = await dbContext.Usuarios
+									.Where(u => u.IdRol == 30)
+									.Select(u => u.IdUsuario)
+									.ToListAsync();
+
+								if (adminIds.Any())
+								{
+									logger.LogInformation("Notificando a {Cantidad} administradores para traspaso {TraspasoId}",
+										adminIds.Count, traspasoId);
+
+									foreach (var adminId in adminIds)
+									{
+										try
+										{
+											await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+												adminId,
+												"TRASPASO",
+												$"Error en Traspaso - {string.Join(", ", almacenesTraspaso)}",
+												$"Supervisión requerida: {mensajeCompleto}",
+												traspasoId,
+												estadoAnterior,
+												estadoActual,
+												"error");
+
+											logger.LogInformation("Notificación enviada a administrador {AdminId} para traspaso {TraspasoId}", adminId, traspasoId);
+										}
+										catch (Exception ex)
+										{
+											logger.LogError(ex, "Error al notificar administrador {AdminId} para traspaso {TraspasoId}", adminId, traspasoId);
+										}
+									}
+								}
+							}
+							catch (Exception ex)
+							{
+								logger.LogError(ex, "Error al notificar administradores para traspaso {TraspasoId}", traspasoId);
+								// No fallar si falla la notificación a administradores
+							}
+						}
 					}
 					catch (Exception ex)
 					{
-						logger.LogWarning(ex, "?? Error al enviar notificación SignalR (intento {Intento}/{MaxIntentos}) para traspaso {TraspasoId}", 
-							intento, maxIntentos, traspasoId);
-						
-						if (intento < maxIntentos)
-						{
-							await Task.Delay(1000 * intento); // Espera progresiva: 1s, 2s, 3s
-						}
+						logger.LogError(ex, "Error al notificar supervisores para traspaso {TraspasoId}", traspasoId);
+						// No fallar la notificación principal si falla la de supervisores
 					}
 				}
 
-				if (!enviadoSignalR)
-				{
-					logger.LogError("? No se pudo enviar notificación SignalR después de {MaxIntentos} intentos para traspaso {TraspasoId} | BD: {GuardadoEnBD}", 
-						maxIntentos, traspasoId, guardadoEnBD ? "?" : "?");
-				}
+				//// PASO 2: Enviar notificaci�n por SignalR (mantener funcionalidad existente)
+				//var maxIntentos = 3;
+				//var intento = 0;
+				//var enviadoSignalR = false;
+
+				//while (intento < maxIntentos && !enviadoSignalR)
+				//{
+				//	try
+				//	{
+				//		intento++;
+
+				//		await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(usuarioId, "TRASPASO", titulo, mensajeCompleto, traspasoId, estadoAnterior, estadoActual, tipoNotificacion);
+				//		enviadoSignalR = true;
+						
+				//							logger.LogInformation("Notificación enviada para traspaso {TraspasoId}: {EstadoAnterior} -> {EstadoActual}", 
+				//								traspasoId, estadoAnterior, estadoActual);
+				//	}
+				//	catch (Exception ex)
+				//	{
+				//		logger.LogWarning(ex, "?? Error al enviar notificación SignalR (intento {Intento}/{MaxIntentos}) para traspaso {TraspasoId}", 
+				//			intento, maxIntentos, traspasoId);
+						
+				//		if (intento < maxIntentos)
+				//		{
+				//			await Task.Delay(1000 * intento); // Espera progresiva: 1s, 2s, 3s
+				//		}
+				//	}
+				//}
+
+				//if (!enviadoSignalR)
+				//{
+				//	logger.LogError("? No se pudo enviar notificación SignalR después de {MaxIntentos} intentos para traspaso {TraspasoId}", 
+				//		maxIntentos, traspasoId);
+				//}
 			}
 			catch (Exception ex)
 			{
