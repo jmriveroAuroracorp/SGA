@@ -271,6 +271,10 @@ namespace SGA_Desktop.Services
 						IsBloqueadoCalidad = jObject["isBloqueadoCalidad"]?.ToObject<bool>() ?? false,
 						MotivoBloqueoCalidad = jObject["motivoBloqueoCalidad"]?.ToString(),
 						FechaBloqueoCalidad = jObject["fechaBloqueoCalidad"]?.ToObject<DateTime?>(),
+						TipoBloqueoCalidad = jObject["tipoBloqueoCalidad"]?.ToString() ?? "TOTAL",
+						
+						// 🔷 NUEVO: Fecha del último traspaso
+						FechaUltimoTraspaso = jObject["fechaUltimoTraspaso"]?.ToObject<DateTime?>(),
 						
 						// 🔷 NUEVO: Inicializar CantidadAMoverTexto con el valor máximo disponible
 						// 🔷 CAMBIADO: Usar formato adaptativo que muestra solo decimales significativos

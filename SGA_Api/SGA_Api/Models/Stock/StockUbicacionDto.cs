@@ -29,6 +29,23 @@ namespace SGA_Api.Models.Stock
 		public List<PaletDetalleDto> Palets { get; set; } = new();
 		public decimal? TotalArticuloGlobal { get; set; }
 		public decimal? TotalArticuloAlmacen { get; set; }
+		
+		// 🔷 NUEVO: Información de bloqueo por calidad
+		[JsonPropertyName("isBloqueadoCalidad")]
+		public bool IsBloqueadoCalidad { get; set; }
+		
+		[JsonPropertyName("motivoBloqueoCalidad")]
+		public string? MotivoBloqueoCalidad { get; set; }
+		
+		[JsonPropertyName("fechaBloqueoCalidad")]
+		public DateTime? FechaBloqueoCalidad { get; set; }
+		
+		[JsonPropertyName("tipoBloqueoCalidad")]
+		public string? TipoBloqueoCalidad { get; set; }
+		
+		// 🔷 NUEVO: Fecha del último traspaso
+		[JsonPropertyName("fechaUltimoTraspaso")]
+		public DateTime? FechaUltimoTraspaso { get; set; }
 	}
 
 }

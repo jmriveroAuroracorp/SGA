@@ -832,26 +832,27 @@ namespace SGA_Desktop.ViewModels
 	//  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
 	private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
 	{
-		var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-		var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+		try
+		{
+			var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+			var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+			var empresa = SessionManager.EmpresaSeleccionada!.Value;
 
-		// Si el usuario tiene almacenes individuales, incluir también los del centro
-		if (almacenesIndividuales.Any())
-		{
-			// Obtener almacenes del centro logístico de forma asíncrona
-			var almacenesCentro = await _stockService.ObtenerAlmacenesAsync(centroLogistico);
-			
-			// Combinar almacenes individuales + almacenes del centro
-			var todosLosAlmacenes = new List<string>(almacenesIndividuales);
-			todosLosAlmacenes.AddRange(almacenesCentro);
-			
-			// Eliminar duplicados
-			return todosLosAlmacenes.Distinct().ToList();
+			// Si el centro está vacío o es "0", usar solo los almacenes individuales
+			if (string.IsNullOrEmpty(centroLogistico) || centroLogistico == "0")
+			{
+				return almacenesIndividuales;
+			}
+
+			// Usar el método del servicio que ya combina almacenes individuales + centro
+			var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centroLogistico, almacenesIndividuales);
+			return almacenesDto.Select(a => a.CodigoAlmacen).ToList();
 		}
-		else
+		catch (Exception ex)
 		{
-			// Si no tiene almacenes individuales, usar solo los del centro
-			return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+			// En caso de error, devolver al menos los almacenes individuales
+			var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+			return almacenesIndividuales;
 		}
 	}
 
@@ -1195,7 +1196,10 @@ namespace SGA_Desktop.ViewModels
 				AlmacenDestino = dto.AlmacenDestino,
 				UbicacionDestino = dto.UbicacionDestino,
 				CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-				Partida = dto.Partida // 🔷 NUEVO: Incluir partida para validación específica
+				Partida = dto.Partida,
+				// 🔷 NUEVO: Incluir ubicación origen para verificar bloqueos específicos
+				AlmacenOrigen = dto.CodigoAlmacen,
+				UbicacionOrigen = dto.Ubicacion
 			};
 
 			var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);

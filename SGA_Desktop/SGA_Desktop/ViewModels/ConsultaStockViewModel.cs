@@ -614,17 +614,11 @@ namespace SGA_Desktop.ViewModels
 
 				_resultadosArticuloBase = lista.ToList();
 
-				// 5) 🔷 NUEVA LÓGICA: Consultar bloqueos de calidad
-				var codigosArticulos = _resultadosArticuloBase.Select(s => s.CodigoArticulo).Distinct().ToList();
-				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
-					SessionManager.EmpresaSeleccionada!.Value, 
-					codigosArticulos);
-
-				// 6) 🔷 NUEVA LÓGICA: Agrupar en artículos con expanders (como TraspasosStockViewModel)
+				// 🔷 ACTUALIZADO: El backend ya devuelve IsBloqueadoCalidad correctamente por ubicación
+				// No necesitamos consultar bloqueos manualmente, usamos lo que viene del backend
 				// Convertir StockDto a StockDisponibleDto para compatibilidad
 				var stockDisponible = _resultadosArticuloBase.Select(s => 
 				{
-					var bloqueo = bloqueosCalidad.GetValueOrDefault(s.CodigoArticulo);
 					return new StockDisponibleDto
 					{
 						CodigoArticulo = s.CodigoArticulo,
@@ -641,10 +635,13 @@ namespace SGA_Desktop.ViewModels
 						Palets = s.Palets ?? new List<PaletDetalleDto>(),
 						TotalArticuloGlobal = s.TotalArticuloGlobal,
 						TotalArticuloAlmacen = s.TotalArticuloAlmacen,
-						// 🔷 NUEVO: Información de bloqueo por calidad
-						IsBloqueadoCalidad = bloqueo?.IsBloqueado ?? false,
-						MotivoBloqueoCalidad = bloqueo?.MotivoBloqueo,
-						FechaBloqueoCalidad = bloqueo?.FechaBloqueo
+						// 🔷 ACTUALIZADO: Usar información de bloqueo que viene del backend (ya verificado por ubicación)
+						IsBloqueadoCalidad = s.IsBloqueadoCalidad,
+						MotivoBloqueoCalidad = s.MotivoBloqueoCalidad,
+						FechaBloqueoCalidad = s.FechaBloqueoCalidad,
+						TipoBloqueoCalidad = s.TipoBloqueoCalidad ?? "TOTAL", // 🔷 NUEVO
+						// 🔷 NUEVO: Fecha del último traspaso
+						FechaUltimoTraspaso = s.FechaUltimoTraspaso
 					};
 				}).ToList();
 				_stockDisponibleArticuloBase = stockDisponible;
@@ -702,23 +699,8 @@ namespace SGA_Desktop.ViewModels
 				);
 
 
-				// 🔷 NUEVO: Consultar bloqueos de calidad para modo ubicación
-				var codigosArticulos = lista.Select(s => s.CodigoArticulo).Distinct().ToList();
-				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
-					SessionManager.EmpresaSeleccionada!.Value, 
-					codigosArticulos);
-
-				// Aplicar información de bloqueos a los resultados
-				foreach (var stock in lista)
-				{
-					var bloqueo = bloqueosCalidad.GetValueOrDefault(stock.CodigoArticulo);
-					if (bloqueo != null)
-					{
-						stock.IsBloqueadoCalidad = bloqueo.IsBloqueado;
-						stock.MotivoBloqueoCalidad = bloqueo.MotivoBloqueo;
-						stock.FechaBloqueoCalidad = bloqueo.FechaBloqueo;
-					}
-				}
+				// 🔷 ACTUALIZADO: El backend ya devuelve IsBloqueadoCalidad correctamente por ubicación
+				// No necesitamos consultar bloqueos manualmente, el backend ya lo hace
 
 				// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
 				LlenarResultados(lista, filterByPermissions: true);
@@ -775,16 +757,262 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
-				// Limpiar resultados previos del modo palet
-				ResultadosStockPorPalet.Clear();
-				StockFiltrado.Clear();
-				ArticulosConUbicaciones.Clear();
+			// Limpiar resultados previos del modo palet
+			ResultadosStockPorPalet.Clear();
+			StockFiltrado.Clear();
+			ArticulosConUbicaciones.Clear();
 
-				// Construir parámetros para la búsqueda
-				string? codigoArticuloParam = tieneArticulo ? FiltroArticuloPalet : null;
-				string? codigoAlmacenParam = tieneAlmacen ? AlmacenSeleccionadoCombo?.CodigoAlmacen : null;
+			// Construir parámetros para la búsqueda
+			string? codigoArticuloParam = tieneArticulo ? FiltroArticuloPalet : null;
+			string? codigoAlmacenParam = tieneAlmacen ? AlmacenSeleccionadoCombo?.CodigoAlmacen : null;
+
+			// 🔷 NUEVO: Si se busca por código de palet específico, obtener todas las líneas del palet
+			if (tieneCodigoPalet && tieneAlmacen && !string.IsNullOrWhiteSpace(codigoAlmacenParam))
+			{
+				try
+				{
+					var paletService = new PaletService();
+					
+					// Buscar el palet por código
+					var palets = await paletService.ObtenerPaletsAsync(
+						SessionManager.EmpresaSeleccionada!.Value,
+						codigo: FiltroCodigoPalet.Trim(),
+						almacen: codigoAlmacenParam
+					);
+					
+					if (palets.Any())
+					{
+						var palet = palets.First();
+						
+						// Obtener todas las líneas del palet
+						var lineasPalet = await paletService.ObtenerLineasAsync(palet.Id);
+						
+						if (lineasPalet.Any())
+						{
+							// Filtrar por ubicación si está especificado
+							if (!string.IsNullOrWhiteSpace(FiltroUbicacion) && FiltroUbicacion != TODO_ALMACEN)
+							{
+								if (FiltroUbicacion == SIN_UBICACION)
+								{
+									lineasPalet = lineasPalet.Where(l => string.IsNullOrWhiteSpace(l.Ubicacion)).ToList();
+								}
+								else
+								{
+									lineasPalet = lineasPalet.Where(l => l.Ubicacion == FiltroUbicacion).ToList();
+								}
+							}
+							
+							// Filtrar por artículo si está especificado
+							if (tieneArticulo && !string.IsNullOrWhiteSpace(FiltroArticuloPalet))
+							{
+								lineasPalet = lineasPalet
+									.Where(l => l.CodigoArticulo.Contains(FiltroArticuloPalet, StringComparison.OrdinalIgnoreCase) ||
+											   (l.DescripcionArticulo?.Contains(FiltroArticuloPalet, StringComparison.OrdinalIgnoreCase) == true))
+									.ToList();
+							}
+							
+							if (lineasPalet.Any())
+							{
+								// Obtener información adicional de artículos para CodigoAlternativo
+								var codigosArticulos = lineasPalet.Select(l => l.CodigoArticulo).Distinct().ToList();
+								var articulosInfo = new Dictionary<string, string>();
+								
+								// Intentar obtener información de artículos desde el servicio de stock
+								foreach (var codigoArticulo in codigosArticulos)
+								{
+									try
+									{
+										var stockInfo = await _stockService.ObtenerPorArticuloAsync(
+											SessionManager.EmpresaSeleccionada!.Value,
+											codigoArticulo: codigoArticulo,
+											codigoAlmacen: codigoAlmacenParam,
+											codigoUbicacion: null,
+											partida: null,
+											descripcion: null
+										);
+										
+										if (stockInfo != null && stockInfo.Any())
+										{
+											var primerStock = stockInfo.First();
+											articulosInfo[codigoArticulo] = primerStock.CodigoAlternativo ?? "";
+										}
+									}
+									catch
+									{
+										// Si falla, dejar vacío
+										articulosInfo[codigoArticulo] = "";
+									}
+								}
+								
+								// Convertir las líneas del palet a StockDto
+								var listaPaletEspecifico = lineasPalet.Select(linea =>
+								{
+									articulosInfo.TryGetValue(linea.CodigoArticulo, out var codigoAlternativo);
+									
+									return new StockDto
+									{
+										CodigoEmpresa = linea.CodigoEmpresa,
+										CodigoArticulo = linea.CodigoArticulo,
+										DescripcionArticulo = linea.DescripcionArticulo ?? "",
+										CodigoAlternativo = codigoAlternativo ?? "",
+										CodigoAlmacen = linea.CodigoAlmacen,
+										Ubicacion = linea.Ubicacion ?? "",
+										Partida = linea.Lote ?? "",
+										FechaCaducidad = linea.FechaCaducidad,
+										UnidadSaldo = linea.Cantidad,
+										Palets = new List<PaletDetalleDto>
+										{
+											new PaletDetalleDto
+											{
+												PaletId = palet.Id,
+												CodigoPalet = palet.Codigo,
+												EstadoPalet = palet.Estado,
+												Cantidad = linea.Cantidad,
+												Ubicacion = linea.Ubicacion ?? "",
+												Partida = linea.Lote ?? ""
+											}
+										},
+										CodigoPalet = palet.Codigo,
+										EstadoPalet = palet.Estado,
+										IsBloqueadoCalidad = linea.IsBloqueadoCalidad,
+										MotivoBloqueoCalidad = linea.MotivoBloqueoCalidad,
+										FechaBloqueoCalidad = linea.FechaBloqueoCalidad,
+										TipoBloqueoCalidad = linea.TipoBloqueoCalidad ?? "TOTAL"
+									};
+								}).ToList();
+								
+								// 🔷 CORREGIDO: Buscar el traspaso MÁS RECIENTE para cada artículo + partida en el palet
+								// Agrupar por artículo + partida y buscar el traspaso más reciente de cada grupo
+								var gruposArticuloPartida = listaPaletEspecifico
+									.GroupBy(s => new { s.CodigoArticulo, s.Partida })
+									.ToList();
+								
+								var fechasTraspaso = new Dictionary<(string CodigoArticulo, string Partida), DateTime?>();
+								
+								try
+								{
+									var traspasosService = new TraspasosService();
+									
+									// Buscar traspasos por código de palet para obtener los más recientes
+									var codigoPalet = palet.Codigo;
+									var traspasosPalet = await traspasosService.ObtenerTraspasosFiltradosAsync(
+										estado: null,
+										codigoPalet: codigoPalet,
+										almacenOrigen: null,
+										almacenDestino: null,
+										fechaInicioDesde: DateTime.MinValue,
+										fechaInicioHasta: DateTime.MaxValue
+									);
+									
+									// Para cada grupo de artículo + partida, encontrar el traspaso más reciente
+									foreach (var grupo in gruposArticuloPartida)
+									{
+										var traspasosRelevantes = traspasosPalet
+											.Where(t => t.CodigoArticulo == grupo.Key.CodigoArticulo &&
+													   (string.IsNullOrWhiteSpace(grupo.Key.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == grupo.Key.Partida) &&
+													   t.FechaFinalizacion.HasValue)
+											.OrderByDescending(t => t.FechaFinalizacion)
+											.ToList();
+										
+										if (traspasosRelevantes.Any())
+										{
+											fechasTraspaso[(grupo.Key.CodigoArticulo, grupo.Key.Partida)] = traspasosRelevantes.First().FechaFinalizacion;
+										}
+									}
+								}
+								catch
+								{
+									// Si falla, continuar sin fechas
+								}
+								
+								// Asignar FechaUltimoTraspaso a cada item
+								foreach (var stockDto in listaPaletEspecifico)
+								{
+									var key = (stockDto.CodigoArticulo, stockDto.Partida);
+									if (fechasTraspaso.TryGetValue(key, out var fechaTraspaso))
+									{
+										stockDto.FechaUltimoTraspaso = fechaTraspaso;
+									}
+								}
+								
+								// Calcular totales globales y por almacén
+								var totalesGlobalesPalet = listaPaletEspecifico
+									.GroupBy(s => new { s.CodigoArticulo, s.Partida })
+									.ToDictionary(
+										g => (g.Key.CodigoArticulo, g.Key.Partida),
+										g => g.Sum(x => x.UnidadSaldo)
+									);
+								
+								var totalesPorAlmacenPalet = listaPaletEspecifico
+									.GroupBy(s => new { s.CodigoArticulo, s.Partida, s.CodigoAlmacen })
+									.ToDictionary(
+										g => (g.Key.CodigoArticulo, g.Key.Partida, g.Key.CodigoAlmacen),
+										g => g.Sum(x => x.UnidadSaldo)
+									);
+								
+								// 🔷 NUEVO: Calcular totales por ubicación (artículo + partida + ubicación)
+								var totalesPorUbicacionPalet = listaPaletEspecifico
+									.GroupBy(s => new { s.CodigoArticulo, s.Partida, s.Ubicacion })
+									.ToDictionary(
+										g => (g.Key.CodigoArticulo, g.Key.Partida ?? "", g.Key.Ubicacion ?? ""),
+										g => g.Sum(x => x.UnidadSaldo)
+									);
+								
+								// Asignar totales a cada item
+								foreach (var item in listaPaletEspecifico)
+								{
+									if (totalesGlobalesPalet.TryGetValue((item.CodigoArticulo, item.Partida), out var totalGlobal))
+									{
+										item.TotalArticuloGlobal = totalGlobal;
+									}
+									
+									if (totalesPorAlmacenPalet.TryGetValue((item.CodigoArticulo, item.Partida, item.CodigoAlmacen), out var totalAlmacen))
+									{
+										item.TotalArticuloAlmacen = totalAlmacen;
+									}
+									
+									// 🔷 MODIFICADO: Usar la cantidad total del artículo en esa ubicación específica
+									var ubicacionKey = (item.CodigoArticulo, item.Partida ?? "", item.Ubicacion ?? "");
+									if (totalesPorUbicacionPalet.TryGetValue(ubicacionKey, out var totalUbicacion))
+									{
+										item.UnidadSaldo = totalUbicacion;
+									}
+									else if (item.TotalArticuloAlmacen.HasValue)
+									{
+										// Si no hay total por ubicación, usar el del almacén
+										item.UnidadSaldo = item.TotalArticuloAlmacen.Value;
+									}
+									else if (item.TotalArticuloGlobal.HasValue)
+									{
+										// Si no hay total por almacén, usar el global
+										item.UnidadSaldo = item.TotalArticuloGlobal.Value;
+									}
+								}
+								
+								// 🔷 NUEVO: Ordenar primero por código de palet, luego por artículo
+								var listaOrdenada = listaPaletEspecifico
+									.OrderBy(x => x.CodigoPalet ?? "")
+									.ThenBy(x => x.CodigoArticulo)
+									.ThenBy(x => x.Partida)
+									.ToList();
+								
+								// Llenar resultados
+								LlenarResultados(listaOrdenada, filterByPermissions: false);
+								OnPropertyChanged(nameof(CanRefresh));
+								OnPropertyChanged(nameof(CanExportExcel));
+								return;
+							}
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					// Si falla la búsqueda por palet específico, continuar con la lógica normal
+					// No mostrar error aquí, dejar que continúe con la búsqueda normal
+				}
+			}
 				
-				// 🔷 NUEVO: Determinar parámetro de ubicación (similar a modo ubicación)
+			// 🔷 NUEVO: Determinar parámetro de ubicación (similar a modo ubicación)
 				string? ubicacionParam = null;
 				if (!string.IsNullOrWhiteSpace(FiltroUbicacion))
 				{
@@ -841,16 +1069,18 @@ namespace SGA_Desktop.ViewModels
 									Ubicacion = palet.Ubicacion ?? s.Ubicacion, // Usar ubicación del palet si está disponible
 									Partida = palet.Partida ?? s.Partida, // Usar partida del palet si está disponible
 									FechaCaducidad = s.FechaCaducidad,
-									UnidadSaldo = palet.Cantidad, // 🔷 IMPORTANTE: Usar la cantidad del palet individual
+									UnidadSaldo = palet.Cantidad, // 🔷 TEMPORAL: Usar cantidad del palet, se actualizará después
 									Reservado = 0,
-									Disponible = palet.Cantidad, // 🔷 IMPORTANTE: Usar la cantidad del palet individual
+									Disponible = palet.Cantidad, // 🔷 TEMPORAL: Usar cantidad del palet, se actualizará después
 									Palets = new List<PaletDetalleDto> { palet }, // Solo este palet en la lista
 									TotalArticuloGlobal = s.TotalArticuloGlobal, // Preservar totales
 									TotalArticuloAlmacen = s.TotalArticuloAlmacen, // Preservar totales
 									TipoStock = "Paletizado",
 									CodigoPalet = palet.CodigoPalet,
 									EstadoPalet = palet.EstadoPalet,
-									PaletId = palet.PaletId
+									PaletId = palet.PaletId,
+									// 🔷 NUEVO: Fecha del último traspaso
+									FechaUltimoTraspaso = s.FechaUltimoTraspaso
 								});
 							}
 						}
@@ -876,8 +1106,37 @@ namespace SGA_Desktop.ViewModels
 								TipoStock = "Suelto",
 								CodigoPalet = null,
 								EstadoPalet = null,
-								PaletId = null
+								PaletId = null,
+								// 🔷 NUEVO: Fecha del último traspaso
+								FechaUltimoTraspaso = s.FechaUltimoTraspaso
 							});
+						}
+					}
+					
+					// 🔷 NUEVO: Calcular totales por ubicación y actualizar Disponible
+					var totalesPorUbicacionUbicacion = stockDisponible
+						.GroupBy(s => new { s.CodigoArticulo, s.Partida, s.Ubicacion })
+						.ToDictionary(
+							g => (g.Key.CodigoArticulo, g.Key.Partida ?? "", g.Key.Ubicacion ?? ""),
+							g => g.Sum(x => 
+							{
+								// Sumar la cantidad del palet individual
+								if (x.Palets != null && x.Palets.Any())
+								{
+									return x.Palets.Sum(p => p.Cantidad);
+								}
+								return x.Disponible;
+							})
+						);
+					
+					// Actualizar Disponible con el total por ubicación
+					foreach (var item in stockDisponible)
+					{
+						var ubicacionKey = (item.CodigoArticulo, item.Partida ?? "", item.Ubicacion ?? "");
+						if (totalesPorUbicacionUbicacion.TryGetValue(ubicacionKey, out var totalUbicacion))
+						{
+							item.Disponible = totalUbicacion;
+							item.UnidadSaldo = totalUbicacion;
 						}
 					}
 				}
@@ -959,6 +1218,26 @@ namespace SGA_Desktop.ViewModels
 				// Calcular totales globales y por almacén si no están disponibles
 				var totalesGlobales = new Dictionary<(string CodigoArticulo, string Partida), decimal>();
 				var totalesPorAlmacen = new Dictionary<(string CodigoArticulo, string Partida, string CodigoAlmacen), decimal>();
+				// 🔷 NUEVO: Calcular totales por ubicación (artículo + partida + ubicación)
+				var totalesPorUbicacion = new Dictionary<(string CodigoArticulo, string Partida, string Ubicacion), decimal>();
+				
+				// Calcular totales por ubicación (siempre, para mostrar en "Disponible")
+				var gruposPorUbicacion = stockFiltradoPorPalet
+					.GroupBy(s => new { s.CodigoArticulo, s.Partida, s.Ubicacion })
+					.ToDictionary(
+						g => (g.Key.CodigoArticulo, g.Key.Partida ?? "", g.Key.Ubicacion ?? ""),
+						g => g.Sum(x => 
+						{
+							// Sumar la cantidad del palet individual (no el total)
+							if (x.Palets != null && x.Palets.Any())
+							{
+								return x.Palets.Sum(p => p.Cantidad);
+							}
+							return x.Disponible;
+						})
+					);
+				
+				totalesPorUbicacion = gruposPorUbicacion;
 				
 				// Si algún item no tiene totales, los calculamos
 				if (stockFiltradoPorPalet.Any(s => !s.TotalArticuloGlobal.HasValue || !s.TotalArticuloAlmacen.HasValue))
@@ -983,100 +1262,90 @@ namespace SGA_Desktop.ViewModels
 					totalesPorAlmacen = gruposPorAlmacen;
 				}
 				
-				// 🔷 MODIFICADO: En modo palet, agrupar por PaletId para que cada palet sea una entrada separada
-				// Usar PaletId como clave única, o CodigoPalet como fallback si no hay PaletId
-				var stockAgrupado = stockFiltradoPorPalet
+				// 🔷 MODIFICADO: En modo palet, crear una entrada por cada artículo/palet (no agrupar)
+				// Esto permite mostrar todas las líneas de todos los palets, ordenadas por palet
+				var lista = stockFiltradoPorPalet
 					.Where(x => x.TipoStock == "Paletizado" && (!string.IsNullOrWhiteSpace(x.CodigoPalet) || x.PaletId.HasValue))
-					.GroupBy(s =>
+					.Select(s =>
 					{
-						if (s.PaletId.HasValue)
-							return s.PaletId.Value;
+						// Cada entrada de stock disponible ya representa un artículo en un palet
+						var palets = new List<PaletDetalleDto>();
 						
-						if (!string.IsNullOrWhiteSpace(s.CodigoPalet))
+						if (s.Palets != null && s.Palets.Any())
 						{
-							// Crear un Guid determinístico a partir del código del palet
-							using var md5 = System.Security.Cryptography.MD5.Create();
-							var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(s.CodigoPalet));
-							var guidBytes = new byte[16];
-							Array.Copy(hash, guidBytes, 16);
-							return new Guid(guidBytes);
+							// Usar los palets que ya vienen en el DTO
+							palets = s.Palets.ToList();
+						}
+						else if (s.PaletId.HasValue || !string.IsNullOrWhiteSpace(s.CodigoPalet))
+						{
+							// Si no hay lista de palets pero hay información de palet, crear uno
+							palets.Add(new PaletDetalleDto
+							{
+								PaletId = s.PaletId ?? Guid.Empty,
+								CodigoPalet = s.CodigoPalet ?? "",
+								EstadoPalet = s.EstadoPalet ?? "",
+								Cantidad = s.Disponible,
+								Ubicacion = s.Ubicacion,
+								Partida = s.Partida
+							});
 						}
 						
-						return Guid.Empty;
-					})
-					.Select(g =>
-					{
-						var primerItem = g.First();
-						
-						// Cada palet es una entrada separada, así que la lista de palets solo contiene este palet
-						var palets = new List<PaletDetalleDto>
-						{
-							new PaletDetalleDto
-							{
-								PaletId = primerItem.PaletId ?? Guid.Empty,
-								CodigoPalet = primerItem.CodigoPalet ?? "",
-								EstadoPalet = primerItem.EstadoPalet ?? "",
-								Cantidad = primerItem.Disponible, // La cantidad del palet individual
-								Ubicacion = primerItem.Ubicacion,
-								Partida = primerItem.Partida
-							}
-						};
-						
 						// Obtener totales: usar los que vienen del API si están disponibles, sino calcular
-						var totalGlobal = primerItem.TotalArticuloGlobal;
-						var totalAlmacen = primerItem.TotalArticuloAlmacen;
+						var totalGlobal = s.TotalArticuloGlobal;
+						var totalAlmacen = s.TotalArticuloAlmacen;
 						
-						if (!totalGlobal.HasValue && totalesGlobales.TryGetValue((primerItem.CodigoArticulo, primerItem.Partida ?? ""), out var globalCalc))
+						if (!totalGlobal.HasValue && totalesGlobales.TryGetValue((s.CodigoArticulo, s.Partida ?? ""), out var globalCalc))
 						{
 							totalGlobal = globalCalc;
 						}
 						
-						if (!totalAlmacen.HasValue && totalesPorAlmacen.TryGetValue((primerItem.CodigoArticulo, primerItem.Partida ?? "", primerItem.CodigoAlmacen), out var almacenCalc))
+						if (!totalAlmacen.HasValue && totalesPorAlmacen.TryGetValue((s.CodigoArticulo, s.Partida ?? "", s.CodigoAlmacen), out var almacenCalc))
 						{
 							totalAlmacen = almacenCalc;
 						}
 						
+						// 🔷 MODIFICADO: Usar la cantidad total del artículo en esa ubicación específica
+						var ubicacionKey = (s.CodigoArticulo, s.Partida ?? "", s.Ubicacion ?? "");
+						var cantidadTotal = totalesPorUbicacion.TryGetValue(ubicacionKey, out var totalUbicacion) 
+							? totalUbicacion 
+							: (totalAlmacen ?? totalGlobal ?? s.Disponible);
+						
 						return new StockDto
 						{
-							CodigoEmpresa = primerItem.CodigoEmpresa, // short se convierte implícitamente a int
-							CodigoArticulo = primerItem.CodigoArticulo,
-							DescripcionArticulo = primerItem.DescripcionArticulo,
-							CodigoAlternativo = primerItem.CodigoAlternativo,
-							CodigoAlmacen = primerItem.CodigoAlmacen,
+							CodigoEmpresa = s.CodigoEmpresa, // short se convierte implícitamente a int
+							CodigoArticulo = s.CodigoArticulo,
+							DescripcionArticulo = s.DescripcionArticulo,
+							CodigoAlternativo = s.CodigoAlternativo,
+							CodigoAlmacen = s.CodigoAlmacen,
 							Almacen = "", // No disponible en StockDisponibleDto
-							Ubicacion = primerItem.Ubicacion,
-							Partida = primerItem.Partida,
-							FechaCaducidad = primerItem.FechaCaducidad,
-							UnidadSaldo = primerItem.Disponible, // Cantidad del palet individual, no sumar
+							Ubicacion = s.Ubicacion,
+							Partida = s.Partida,
+							FechaCaducidad = s.FechaCaducidad,
+							UnidadSaldo = cantidadTotal, // 🔷 MODIFICADO: Usar la cantidad total del artículo
 							Palets = palets,
+							CodigoPalet = s.CodigoPalet,
+							EstadoPalet = s.EstadoPalet,
 							TotalArticuloGlobal = totalGlobal,
 							TotalArticuloAlmacen = totalAlmacen,
-							IsBloqueadoCalidad = primerItem.IsBloqueadoCalidad,
-							MotivoBloqueoCalidad = primerItem.MotivoBloqueoCalidad,
-							FechaBloqueoCalidad = primerItem.FechaBloqueoCalidad
+							IsBloqueadoCalidad = s.IsBloqueadoCalidad,
+							MotivoBloqueoCalidad = s.MotivoBloqueoCalidad,
+							FechaBloqueoCalidad = s.FechaBloqueoCalidad,
+							TipoBloqueoCalidad = s.TipoBloqueoCalidad ?? "TOTAL",
+							// 🔷 NUEVO: Fecha del último traspaso
+							FechaUltimoTraspaso = s.FechaUltimoTraspaso
 						};
 					})
 					.ToList();
-				
-				var lista = stockAgrupado;
 
-				// 🔷 NUEVO: Consultar bloqueos de calidad
-				var codigosArticulos = lista.Select(s => s.CodigoArticulo).Distinct().ToList();
-				var bloqueosCalidad = await _stockService.ObtenerBloqueosCalidadAsync(
-					SessionManager.EmpresaSeleccionada!.Value, 
-					codigosArticulos);
+				// 🔷 ACTUALIZADO: El backend ya devuelve IsBloqueadoCalidad correctamente por ubicación
+				// No necesitamos consultar bloqueos manualmente, el backend ya lo hace
 
-				// Aplicar información de bloqueos a los resultados
-				foreach (var stock in lista)
-				{
-					var bloqueo = bloqueosCalidad.GetValueOrDefault(stock.CodigoArticulo);
-					if (bloqueo != null)
-					{
-						stock.IsBloqueadoCalidad = bloqueo.IsBloqueado;
-						stock.MotivoBloqueoCalidad = bloqueo.MotivoBloqueo;
-						stock.FechaBloqueoCalidad = bloqueo.FechaBloqueo;
-					}
-				}
+				// 🔷 NUEVO: Ordenar primero por código de palet, luego por artículo
+				lista = lista
+					.OrderBy(x => x.CodigoPalet ?? "")
+					.ThenBy(x => x.CodigoArticulo)
+					.ThenBy(x => x.Partida)
+					.ToList();
 
 				// Llenar resultados en modo palet (usa ResultadosStockPorPalet)
 				LlenarResultados(lista, filterByPermissions: false); // Ya filtrado por permisos arriba
@@ -1283,6 +1552,19 @@ namespace SGA_Desktop.ViewModels
 			)
 			{ Owner = Application.Current.MainWindow };
 			error.ShowDialog();
+			return;
+		}
+
+		// Validar que el artículo tenga EAN antes de imprimir
+		if (string.IsNullOrWhiteSpace(codigoAlternativo))
+		{
+			var warning = new WarningDialog(
+				"No se puede imprimir",
+				"El artículo no tiene EAN. No se puede imprimir sin EAN.",
+				"\uE814" // icono de advertencia
+			)
+			{ Owner = Application.Current.MainWindow };
+			warning.ShowDialog();
 			return;
 		}
 
@@ -1735,8 +2017,15 @@ namespace SGA_Desktop.ViewModels
 				// en modo palet no mostramos destacado y clear/fill la colección de palet
 				ArticuloMostrado = string.Empty;
 
+				// 🔷 NUEVO: Ordenar primero por código de palet, luego por artículo
+				var ordenada = filtrada
+					.OrderBy(x => x.CodigoPalet ?? "")
+					.ThenBy(x => x.CodigoArticulo)
+					.ThenBy(x => x.Partida)
+					.ToList();
+
 				ResultadosStockPorPalet.Clear();
-				filtrada.ForEach(x => ResultadosStockPorPalet.Add(x));
+				ordenada.ForEach(x => ResultadosStockPorPalet.Add(x));
 				PartidasDisponibles.Clear();
 			}
 			

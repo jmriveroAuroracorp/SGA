@@ -21,5 +21,9 @@
 		public bool IsBloqueadoCalidad { get; set; }
 		public string? MotivoBloqueoCalidad { get; set; }
 		public DateTime? FechaBloqueoCalidad { get; set; }
+		public string? TipoBloqueoCalidad { get; set; }
+		
+		// 🔷 NUEVO: TraspasoId para obtener fecha del último traspaso
+		public Guid? TraspasoId { get; set; }
 	}
 }

@@ -1,5 +1,6 @@
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Data;
 using SGA_Desktop.ViewModels;
 
 namespace SGA_Desktop.Views
@@ -22,6 +23,13 @@ namespace SGA_Desktop.Views
         {
             if (e.Key == Key.Enter)
             {
+                // Forzar actualización del binding antes de ejecutar el comando
+                if (sender is TextBox textBox)
+                {
+                    var bindingExpression = BindingOperations.GetBindingExpression(textBox, TextBox.TextProperty);
+                    bindingExpression?.UpdateSource();
+                }
+
                 // Ejecutar búsqueda de stock
                 var viewModel = DataContext as CalidadViewModel;
                 if (viewModel?.BuscarStockCommand?.CanExecute(null) == true)
@@ -55,6 +63,13 @@ namespace SGA_Desktop.Views
         {
             if (e.Key == Key.Enter)
             {
+                // Forzar actualización del binding antes de ejecutar el comando
+                if (sender is TextBox textBox)
+                {
+                    var bindingExpression = BindingOperations.GetBindingExpression(textBox, TextBox.TextProperty);
+                    bindingExpression?.UpdateSource();
+                }
+
                 // Ejecutar filtrado de bloqueos
                 var viewModel = DataContext as CalidadViewModel;
                 if (viewModel?.FiltrarBloqueosCommand?.CanExecute(null) == true)

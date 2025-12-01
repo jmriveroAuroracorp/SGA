@@ -165,7 +165,7 @@ namespace SGA_Api.Controllers.Stock
 				q = q.Where(a => a.Ubicacion == codigoUbicacion);
 
 			var datos = await q.ToListAsync();
-			var resultado = ProjectToDto(datos);
+			var resultado = await ProjectToDtoConBloqueosAsync(datos, codigoEmpresa);
 			
 			// Registrar evento de consulta (después de preparar la respuesta para no bloquear)
 			var detalleConsulta = $"Empresa={codigoEmpresa}";
@@ -232,7 +232,7 @@ namespace SGA_Api.Controllers.Stock
 			}
 
 			var datos = await query.ToListAsync();
-			var resultado = ProjectToDto(datos);
+			var resultado = await ProjectToDtoConBloqueosAsync(datos, codigoEmpresa);
 
 			// Registrar evento de consulta
 			var detalleConsulta = $"Empresa={codigoEmpresa}, Almacen={codigoAlmacen}";
@@ -402,7 +402,8 @@ namespace SGA_Api.Controllers.Stock
 						PaletId = pl.PaletId,
 						CodigoPalet = pl.Palet.Codigo,
 						EstadoPalet = pl.Palet.Estado,
-						CantidadEnPalet = pl.Cantidad
+						CantidadEnPalet = pl.Cantidad,
+						TraspasoId = pl.TraspasoId  // 🔷 NUEVO: Incluir TraspasoId de la línea
 					})
 					.ToListAsync();
 
@@ -410,6 +411,26 @@ namespace SGA_Api.Controllers.Stock
 				// Convertir explícitamente a decimal con precisión completa antes de la resta
 				var totalPaletizado = stockPaletizado.Select(p => (decimal)p.CantidadEnPalet).Sum();
 				var stockSuelto = (decimal)item.Disponible - totalPaletizado;
+
+				// 🔷 NUEVO: Obtener fecha del último traspaso para stock suelto
+				DateTime? fechaUltimoTraspasoSuelto = null;
+				if (stockSuelto > 0)
+				{
+					var ultimoTraspasoSuelto = await _auroraSgaContext.Traspasos
+						.Where(t => t.TipoTraspaso == "ARTICULO" &&
+								   t.CodigoEstado == "COMPLETADO" &&
+								   t.FechaFinalizacion != null &&
+								   t.CodigoArticulo == item.CodigoArticulo &&
+								   t.CodigoEmpresa == item.CodigoEmpresa &&
+								   t.AlmacenDestino == item.CodigoAlmacen &&
+								   (string.IsNullOrWhiteSpace(item.Ubicacion) ? string.IsNullOrWhiteSpace(t.UbicacionDestino) : t.UbicacionDestino == item.Ubicacion) &&
+								   (string.IsNullOrWhiteSpace(item.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == item.Partida))
+						.OrderByDescending(t => t.FechaFinalizacion)
+						.Select(t => t.FechaFinalizacion)
+						.FirstOrDefaultAsync();
+					
+					fechaUltimoTraspasoSuelto = ultimoTraspasoSuelto;
+				}
 
 				if (stockSuelto > 0)
 				{
@@ -429,12 +450,27 @@ namespace SGA_Api.Controllers.Stock
 						TipoStock = "Suelto",
 						PaletId = (Guid?)null,
 						CodigoPalet = (string?)null,
-						EstadoPalet = (string?)null
+						EstadoPalet = (string?)null,
+						// 🔷 NUEVO: Fecha del último traspaso
+						FechaUltimoTraspaso = fechaUltimoTraspasoSuelto
 					});
 				}
 
 				foreach (var palet in stockPaletizado)
 				{
+					// 🔷 CORREGIDO: Buscar siempre el traspaso MÁS RECIENTE para este palet + artículo + partida
+					// No usar solo el TraspasoId de la línea porque puede ser un traspaso antiguo
+					// Hay que buscar TODOS los traspasos y tomar el más reciente
+					var fechaUltimoTraspasoPalet = await _auroraSgaContext.Traspasos
+						.Where(t => t.TipoTraspaso == "PALET" &&
+								   t.FechaFinalizacion != null &&
+								   t.CodigoPalet == palet.CodigoPalet &&
+								   t.CodigoArticulo == item.CodigoArticulo &&
+								   (string.IsNullOrWhiteSpace(item.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == item.Partida))
+						.OrderByDescending(t => t.FechaFinalizacion)
+						.Select(t => t.FechaFinalizacion)
+						.FirstOrDefaultAsync();
+
 					resultado.Add(new
 					{
 						CodigoEmpresa = item.CodigoEmpresa.ToString(),
@@ -451,7 +487,9 @@ namespace SGA_Api.Controllers.Stock
 						TipoStock = "Paletizado",
 						PaletId = palet.PaletId,
 						CodigoPalet = palet.CodigoPalet,
-						EstadoPalet = palet.EstadoPalet
+						EstadoPalet = palet.EstadoPalet,
+						// 🔷 NUEVO: Fecha del último traspaso
+						FechaUltimoTraspaso = fechaUltimoTraspasoPalet
 					});
 				}
 			}
@@ -711,38 +749,7 @@ namespace SGA_Api.Controllers.Stock
 
     var datos = await q.ToListAsync();
     
-    // 🔷 NUEVO: Consultar bloqueos de calidad para todos los artículos
-    var codigosArticulosBloqueos = datos.Select(d => d.CodigoArticulo).Distinct().ToList();
-    var bloqueosCalidad = new Dictionary<string, object>();
-    
-    if (codigosArticulosBloqueos.Any())
-    {
-        // Consultar bloqueos activos
-        var bloqueosActivos = await _auroraSgaContext.BloqueosCalidad
-            .Where(b => b.CodigoEmpresa == codigoEmpresa && 
-                       codigosArticulosBloqueos.Contains(b.CodigoArticulo) &&
-                       b.Bloqueado)
-            .GroupBy(b => b.CodigoArticulo)
-            .Select(g => new
-            {
-                CodigoArticulo = g.Key,
-                BloqueoMasReciente = g.OrderByDescending(b => b.FechaBloqueo).First()
-            })
-            .ToListAsync();
-
-        foreach (var bloqueo in bloqueosActivos)
-        {
-            bloqueosCalidad[bloqueo.CodigoArticulo] = new
-            {
-                isBloqueado = true,
-                motivoBloqueo = bloqueo.BloqueoMasReciente.ComentarioBloqueo,
-                fechaBloqueo = bloqueo.BloqueoMasReciente.FechaBloqueo,
-                usuarioBloqueo = bloqueo.BloqueoMasReciente.UsuarioBloqueoId.ToString(),
-                idBloqueo = bloqueo.BloqueoMasReciente.Id
-            };
-        }
-    }
-    
+    // 🔷 ACTUALIZADO: Verificar bloqueos por ubicación específica para cada registro
     // 🔷 NUEVA LÓGICA: Crear opciones separadas para stock suelto y paletizado
     var resultado = new List<object>();
     
@@ -762,7 +769,8 @@ namespace SGA_Api.Controllers.Stock
                 PaletId = pl.PaletId,
                 CodigoPalet = pl.Palet.Codigo,
                 EstadoPalet = pl.Palet.Estado,
-                CantidadEnPalet = pl.Cantidad
+                CantidadEnPalet = pl.Cantidad,
+                TraspasoId = pl.TraspasoId  // 🔷 NUEVO: Incluir TraspasoId de la línea
             })
             .ToListAsync();
 
@@ -771,10 +779,65 @@ namespace SGA_Api.Controllers.Stock
         var totalPaletizado = stockPaletizado.Select(p => (decimal)p.CantidadEnPalet).Sum();
         var stockSuelto = (decimal)item.Disponible - totalPaletizado;
 
+        // 🔷 ACTUALIZADO: Verificar bloqueo específico para esta ubicación
+        var queryBloqueo = _auroraSgaContext.BloqueosCalidad
+            .Where(b => b.CodigoEmpresa == codigoEmpresa &&
+                       b.CodigoArticulo == item.CodigoArticulo &&
+                       b.LotePartida == item.Partida &&
+                       b.CodigoAlmacen == item.CodigoAlmacen &&
+                       b.Bloqueado == true);
+
+        // Filtrar por ubicación específica
+        if (!string.IsNullOrWhiteSpace(item.Ubicacion))
+        {
+            queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == item.Ubicacion);
+        }
+        else
+        {
+            queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+        }
+
+        var bloqueoEspecifico = await queryBloqueo
+            .OrderByDescending(b => b.FechaBloqueo)
+            .FirstOrDefaultAsync();
+
+        object? bloqueoInfo = null;
+        if (bloqueoEspecifico != null)
+        {
+            bloqueoInfo = new
+            {
+                isBloqueado = true,
+                motivoBloqueo = bloqueoEspecifico.ComentarioBloqueo,
+                fechaBloqueo = bloqueoEspecifico.FechaBloqueo,
+                usuarioBloqueo = bloqueoEspecifico.UsuarioBloqueoId.ToString(),
+                idBloqueo = bloqueoEspecifico.Id,
+                tipoBloqueo = bloqueoEspecifico.TipoBloqueo ?? "TOTAL" // 🔷 NUEVO
+            };
+        }
+
+        // 🔷 NUEVO: Obtener fecha del último traspaso para stock suelto
+        DateTime? fechaUltimoTraspasoSuelto = null;
+        if (stockSuelto > 0)
+        {
+            var ultimoTraspasoSuelto = await _auroraSgaContext.Traspasos
+                .Where(t => t.TipoTraspaso == "ARTICULO" &&
+                           t.CodigoEstado == "COMPLETADO" &&
+                           t.FechaFinalizacion != null &&
+                           t.CodigoArticulo == item.CodigoArticulo &&
+                           t.CodigoEmpresa == item.CodigoEmpresa &&
+                           t.AlmacenDestino == item.CodigoAlmacen &&
+                           (string.IsNullOrWhiteSpace(item.Ubicacion) ? string.IsNullOrWhiteSpace(t.UbicacionDestino) : t.UbicacionDestino == item.Ubicacion) &&
+                           (string.IsNullOrWhiteSpace(item.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == item.Partida))
+                .OrderByDescending(t => t.FechaFinalizacion)
+                .Select(t => t.FechaFinalizacion)
+                .FirstOrDefaultAsync();
+            
+            fechaUltimoTraspasoSuelto = ultimoTraspasoSuelto;
+        }
+
         // 🔷 Opción 1: Stock suelto (si hay)
         if (stockSuelto > 0)
         {
-            var bloqueoInfo = bloqueosCalidad.GetValueOrDefault(item.CodigoArticulo);
             resultado.Add(new
             {
                 // Campos originales
@@ -794,17 +857,33 @@ namespace SGA_Api.Controllers.Stock
                 CodigoPalet = (string?)null,
                 EstadoPalet = (string?)null,
                 
-                // 🔷 NUEVO: Información de bloqueo por calidad
+                // 🔷 ACTUALIZADO: Información de bloqueo por calidad (verificado por ubicación específica)
                 IsBloqueadoCalidad = bloqueoInfo != null,
                 MotivoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("motivoBloqueo")?.GetValue(bloqueoInfo)?.ToString(),
-                FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?
+                FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?,
+                TipoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("tipoBloqueo")?.GetValue(bloqueoInfo)?.ToString() ?? "TOTAL", // 🔷 NUEVO
+                
+                // 🔷 NUEVO: Fecha del último traspaso
+                FechaUltimoTraspaso = fechaUltimoTraspasoSuelto
             });
         }
 
         // 🔷 Opción 2: Stock paletizado (por cada palet)
         foreach (var palet in stockPaletizado)
         {
-            var bloqueoInfo = bloqueosCalidad.GetValueOrDefault(item.CodigoArticulo);
+            // 🔷 CORREGIDO: Buscar siempre el traspaso MÁS RECIENTE para este palet + artículo + partida
+            // No usar solo el TraspasoId de la línea porque puede ser un traspaso antiguo
+            // Hay que buscar TODOS los traspasos y tomar el más reciente
+            var fechaUltimoTraspasoPalet = await _auroraSgaContext.Traspasos
+                .Where(t => t.TipoTraspaso == "PALET" &&
+                           t.FechaFinalizacion != null &&
+                           t.CodigoPalet == palet.CodigoPalet &&
+                           t.CodigoArticulo == item.CodigoArticulo &&
+                           (string.IsNullOrWhiteSpace(item.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == item.Partida))
+                .OrderByDescending(t => t.FechaFinalizacion)
+                .Select(t => t.FechaFinalizacion)
+                .FirstOrDefaultAsync();
+
             resultado.Add(new
             {
                 // Campos originales
@@ -824,10 +903,14 @@ namespace SGA_Api.Controllers.Stock
                 CodigoPalet = palet.CodigoPalet,
                 EstadoPalet = palet.EstadoPalet,
                 
-                // 🔷 NUEVO: Información de bloqueo por calidad
+                // 🔷 ACTUALIZADO: Información de bloqueo por calidad (verificado por ubicación específica)
                 IsBloqueadoCalidad = bloqueoInfo != null,
                 MotivoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("motivoBloqueo")?.GetValue(bloqueoInfo)?.ToString(),
-                FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?
+                FechaBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("fechaBloqueo")?.GetValue(bloqueoInfo) as DateTime?,
+                TipoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("tipoBloqueo")?.GetValue(bloqueoInfo)?.ToString() ?? "TOTAL", // 🔷 NUEVO
+                
+                // 🔷 NUEVO: Fecha del último traspaso
+                FechaUltimoTraspaso = fechaUltimoTraspasoPalet
             });
 			}
 		}
@@ -1082,7 +1165,7 @@ namespace SGA_Api.Controllers.Stock
 		}
 
 		// helper para proyectar
-		private List<StockUbicacionDto> ProjectToDto(List<AcumuladoStockUbicacion> datos)
+		private async Task<List<StockUbicacionDto>> ProjectToDtoConBloqueosAsync(List<AcumuladoStockUbicacion> datos, short codigoEmpresa)
 		{
 			if (datos.Count == 0)
 				return new List<StockUbicacionDto>();
@@ -1134,7 +1217,9 @@ namespace SGA_Api.Controllers.Stock
 				);
 
 
-			return datos.Select(s =>
+			var resultado = new List<StockUbicacionDto>();
+			
+			foreach (var s in datos)
 			{
 				var alm = almacenes.FirstOrDefault(x =>
 					x.CodigoEmpresa == s.CodigoEmpresa &&
@@ -1144,34 +1229,106 @@ namespace SGA_Api.Controllers.Stock
 					x.CodigoArticulo == s.CodigoArticulo);
 
 				var palets = lineasPalets
-	.Where(l =>
-		l.CodigoEmpresa == s.CodigoEmpresa &&
-		l.CodigoArticulo == s.CodigoArticulo &&
-		l.Lote == s.Partida &&
-		l.Ubicacion == s.Ubicacion &&
-		l.CodigoAlmacen == s.CodigoAlmacen &&   // 👈 Filtro de almacén
-		(l.Palet.Estado.ToUpper() == "ABIERTO" || l.Palet.Estado.ToUpper() == "CERRADO"))
-	.Select(l => new PaletDetalleDto
-	{
-		PaletId = l.PaletId,
-		CodigoPalet = l.Palet.Codigo,
-		EstadoPalet = l.Palet.Estado,
-		Cantidad = l.Cantidad,
-		Ubicacion = l.Ubicacion,
-		Partida = l.Lote,
-		FechaApertura = l.Palet.FechaApertura,
-		FechaCierre = l.Palet.FechaCierre
-	})
-	.ToList();
+					.Where(l =>
+						l.CodigoEmpresa == s.CodigoEmpresa &&
+						l.CodigoArticulo == s.CodigoArticulo &&
+						l.Lote == s.Partida &&
+						l.Ubicacion == s.Ubicacion &&
+						l.CodigoAlmacen == s.CodigoAlmacen &&   // 👈 Filtro de almacén
+						(l.Palet.Estado.ToUpper() == "ABIERTO" || l.Palet.Estado.ToUpper() == "CERRADO"))
+					.Select(l => new PaletDetalleDto
+					{
+						PaletId = l.PaletId,
+						CodigoPalet = l.Palet.Codigo,
+						EstadoPalet = l.Palet.Estado,
+						Cantidad = l.Cantidad,
+						Ubicacion = l.Ubicacion,
+						Partida = l.Lote,
+						FechaApertura = l.Palet.FechaApertura,
+						FechaCierre = l.Palet.FechaCierre
+					})
+					.ToList();
 
 				// totales
 				totalesGlobales.TryGetValue((s.CodigoArticulo, s.Partida), out var totalArticuloGlobal);
 				totalesPorArticuloAlmacen.TryGetValue(
-	(s.CodigoArticulo, s.Partida, s.CodigoAlmacen),
-	out var totalArticuloAlmacen
-);
+					(s.CodigoArticulo, s.Partida, s.CodigoAlmacen),
+					out var totalArticuloAlmacen
+				);
 
-				return new StockUbicacionDto
+				// 🔷 ACTUALIZADO: Verificar bloqueo específico para esta ubicación
+				var queryBloqueo = _auroraSgaContext.BloqueosCalidad
+					.Where(b => b.CodigoEmpresa == codigoEmpresa &&
+							   b.CodigoArticulo == s.CodigoArticulo &&
+							   b.LotePartida == s.Partida &&
+							   b.CodigoAlmacen == s.CodigoAlmacen &&
+							   b.Bloqueado == true);
+
+				// Filtrar por ubicación específica
+				if (!string.IsNullOrWhiteSpace(s.Ubicacion))
+				{
+					queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == s.Ubicacion);
+				}
+				else
+				{
+					queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+				}
+
+				var bloqueoEspecifico = await queryBloqueo
+					.OrderByDescending(b => b.FechaBloqueo)
+					.FirstOrDefaultAsync();
+
+				// 🔷 CORREGIDO: Obtener fecha del último traspaso
+				// Si hay palets, usar TraspasoId de las líneas directamente
+				DateTime? fechaUltimoTraspaso = null;
+				
+				if (palets != null && palets.Any())
+				{
+					// Obtener las líneas de palet que corresponden a este stock
+					var lineasStock = lineasPalets
+						.Where(l => l.CodigoEmpresa == s.CodigoEmpresa &&
+									l.CodigoArticulo == s.CodigoArticulo &&
+									l.Lote == s.Partida &&
+									l.Ubicacion == s.Ubicacion &&
+									l.CodigoAlmacen == s.CodigoAlmacen)
+						.ToList();
+					
+					// 🔷 CORREGIDO: Buscar siempre el traspaso MÁS RECIENTE para este palet + artículo + partida
+					// No usar solo los TraspasoId de las líneas porque pueden ser traspasos antiguos
+					// Hay que buscar TODOS los traspasos de estos palets y tomar el más reciente
+					var codigosPalet = palets.Select(p => p.CodigoPalet).Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+					var ultimoTraspasoPalet = await _auroraSgaContext.Traspasos
+						.Where(t => t.TipoTraspaso == "PALET" &&
+								   t.FechaFinalizacion != null &&
+								   codigosPalet.Contains(t.CodigoPalet) &&
+								   t.CodigoArticulo == s.CodigoArticulo &&
+								   (string.IsNullOrWhiteSpace(s.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == s.Partida))
+						.OrderByDescending(t => t.FechaFinalizacion)
+						.Select(t => t.FechaFinalizacion)
+						.FirstOrDefaultAsync();
+					
+					fechaUltimoTraspaso = ultimoTraspasoPalet;
+				}
+				else
+				{
+					// Para stock suelto, buscar el último traspaso de artículo
+					var ultimoTraspasoSuelto = await _auroraSgaContext.Traspasos
+						.Where(t => t.TipoTraspaso == "ARTICULO" &&
+								   t.CodigoEstado == "COMPLETADO" &&
+								   t.FechaFinalizacion != null &&
+								   t.CodigoArticulo == s.CodigoArticulo &&
+								   t.CodigoEmpresa == s.CodigoEmpresa &&
+								   t.AlmacenDestino == s.CodigoAlmacen &&
+								   (string.IsNullOrWhiteSpace(s.Ubicacion) ? string.IsNullOrWhiteSpace(t.UbicacionDestino) : t.UbicacionDestino == s.Ubicacion) &&
+								   (string.IsNullOrWhiteSpace(s.Partida) ? string.IsNullOrWhiteSpace(t.Partida) : t.Partida == s.Partida))
+						.OrderByDescending(t => t.FechaFinalizacion)
+						.Select(t => t.FechaFinalizacion)
+						.FirstOrDefaultAsync();
+					
+					fechaUltimoTraspaso = ultimoTraspasoSuelto;
+				}
+
+				resultado.Add(new StockUbicacionDto
 				{
 					CodigoEmpresa = s.CodigoEmpresa.ToString(),
 					CodigoArticulo = s.CodigoArticulo,
@@ -1190,9 +1347,20 @@ namespace SGA_Api.Controllers.Stock
 
 					// 🔹 nuevos campos
 					TotalArticuloGlobal = totalArticuloGlobal,          // total global
-					TotalArticuloAlmacen = totalArticuloAlmacen   // total en este almacén
-				};
-			}).ToList();
+					TotalArticuloAlmacen = totalArticuloAlmacen,   // total en este almacén
+					
+					// 🔷 NUEVO: Información de bloqueo por calidad (verificado por ubicación específica)
+					IsBloqueadoCalidad = bloqueoEspecifico != null,
+					MotivoBloqueoCalidad = bloqueoEspecifico?.ComentarioBloqueo,
+					FechaBloqueoCalidad = bloqueoEspecifico?.FechaBloqueo,
+					TipoBloqueoCalidad = bloqueoEspecifico?.TipoBloqueo ?? "TOTAL", // 🔷 NUEVO
+					
+					// 🔷 NUEVO: Fecha del último traspaso
+					FechaUltimoTraspaso = fechaUltimoTraspaso
+				});
+			}
+			
+			return resultado;
 		}
 	}
 

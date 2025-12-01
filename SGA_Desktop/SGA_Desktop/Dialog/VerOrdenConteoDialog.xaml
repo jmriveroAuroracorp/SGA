@@ -272,7 +272,7 @@
                                           Height="300">
                                 <StackPanel>
                                     <!-- Header de columnas -->
-                                    <Border Background="{StaticResource BrushSecundario}" 
+                                    <Border Background="{StaticResource BrushPrincipal}" 
                                             BorderBrush="{StaticResource BrushIntermedio}" 
                                             BorderThickness="0,0,0,1"
                                             Padding="12,8"
@@ -291,16 +291,16 @@
                                                 <ColumnDefinition Width="120"/>
                                             </Grid.ColumnDefinitions>
                                             
-                                            <TextBlock Grid.Column="0" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}"/>
-                                            <TextBlock Grid.Column="1" Text="Fecha lectura" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="2" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="3" Text="Descripción" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" Margin="8,0"/>
-                                            <TextBlock Grid.Column="4" Text="Lote" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="5" Text="Palet" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="6" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="7" Text="Contado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="8" Text="Diferencia" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
-                                            <TextBlock Grid.Column="9" Text="Estado" FontWeight="Bold" FontSize="11" Foreground="{StaticResource BrushPrincipal}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="0" Text="Ubicación" FontWeight="Bold" FontSize="11" Foreground="White"/>
+                                            <TextBlock Grid.Column="1" Text="Fecha lectura" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="Artículo" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="Descripción" FontWeight="Bold" FontSize="11" Foreground="White" Margin="8,0"/>
+                                            <TextBlock Grid.Column="4" Text="Lote" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="5" Text="Palet" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="Stock" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="7" Text="Contado" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="8" Text="Diferencia" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="9" Text="Estado" FontWeight="Bold" FontSize="11" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center"/>
                                         </Grid>
                                     </Border>
 
@@ -337,7 +337,7 @@
                                                             
                                                             <!-- Ubicación -->
                                                             <TextBlock Grid.Column="0" 
-                                                                       Text="{Binding CodigoUbicacion}" 
+                                                                       Text="{Binding UbicacionDisplay}" 
                                                                        FontWeight="Bold" 
                                                                        FontSize="13" 
                                                                        Foreground="{StaticResource BrushPrincipal}"
@@ -429,7 +429,10 @@
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
                                                                         <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding TieneDiferencia}" Value="True">
+                                                                            <DataTrigger Binding="{Binding EstadoTexto}" Value="Exceso">
+                                                                                <Setter Property="Foreground" Value="#FF8C00"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding EstadoTexto}" Value="Faltante">
                                                                                 <Setter Property="Foreground" Value="Red"/>
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding TieneDiferencia}" Value="False">
@@ -458,7 +461,7 @@
                                                                                 <Setter Property="Foreground" Value="Green"/>
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding EstadoTexto}" Value="Exceso">
-                                                                                <Setter Property="Foreground" Value="Red"/>
+                                                                                <Setter Property="Foreground" Value="#FF8C00"/>
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding EstadoTexto}" Value="Faltante">
                                                                                 <Setter Property="Foreground" Value="Red"/>

@@ -44,13 +44,15 @@ namespace SGA_Api.Services
         Task<object> BloquearStockAsync(BloquearStockDto dto);
 
         /// <summary>
-        /// Verifica si el stock está bloqueado
+        /// Verifica si el stock está bloqueado en una ubicación específica
         /// </summary>
         /// <param name="codigoEmpresa">Código de empresa</param>
         /// <param name="codigoArticulo">Código de artículo</param>
         /// <param name="lotePartida">Lote/partida</param>
+        /// <param name="codigoAlmacen">Código de almacén</param>
+        /// <param name="ubicacion">Código de ubicación (opcional, null para sin ubicación)</param>
         /// <returns>True si está bloqueado, false en caso contrario</returns>
-        Task<bool> EstaStockBloqueadoAsync(short codigoEmpresa, string codigoArticulo, string lotePartida);
+        Task<bool> EstaStockBloqueadoAsync(short codigoEmpresa, string codigoArticulo, string lotePartida, string codigoAlmacen, string? ubicacion = null);
 
         /// <summary>
         /// Desbloquea stock específico
@@ -74,5 +76,25 @@ namespace SGA_Api.Services
         /// <param name="codigosArticulos">Lista de códigos de artículos</param>
         /// <returns>Diccionario con información de bloqueos por artículo</returns>
         Task<Dictionary<string, object>> ObtenerBloqueosPorArticulosAsync(short codigoEmpresa, List<string> codigosArticulos);
+
+        /// <summary>
+        /// 🔷 NUEVO: Copia un bloqueo de calidad desde una ubicación origen a una ubicación destino
+        /// </summary>
+        /// <param name="codigoEmpresa">Código de empresa</param>
+        /// <param name="codigoArticulo">Código de artículo</param>
+        /// <param name="lotePartida">Lote/partida</param>
+        /// <param name="almacenOrigen">Almacén origen</param>
+        /// <param name="ubicacionOrigen">Ubicación origen (null para sin ubicación)</param>
+        /// <param name="almacenDestino">Almacén destino</param>
+        /// <param name="ubicacionDestino">Ubicación destino (null para sin ubicación)</param>
+        /// <returns>True si se copió el bloqueo, false si no había bloqueo en origen o ya existía en destino</returns>
+        Task<bool> CopiarBloqueoCalidadAsync(
+            short codigoEmpresa,
+            string codigoArticulo,
+            string lotePartida,
+            string almacenOrigen,
+            string? ubicacionOrigen,
+            string almacenDestino,
+            string? ubicacionDestino);
     }
 }

@@ -14,5 +14,11 @@ namespace SGA_Api.Models.Calidad
         public string? ComentarioBloqueo { get; set; }
         public DateTime? FechaBloqueo { get; set; }
         public string? UsuarioBloqueo { get; set; }
+        
+        // 🔷 NUEVO: Información de palet si está paletizado
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
+        public string? EstadoPalet { get; set; }
+        public bool EstaPaletizado => !string.IsNullOrEmpty(CodigoPalet);
     }
 }

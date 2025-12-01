@@ -39,6 +39,7 @@ namespace SGA_Desktop.Helpers
 					"ControlesRotativos" => new ControlesRotativosView(),
 					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
 					"Calidad" => new CalidadView(),
+					"Rendimientos" => new RendimientosView(),
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};
 
@@ -74,6 +75,7 @@ namespace SGA_Desktop.Helpers
 					"ControlesRotativos" => new ControlesRotativosView(),
 					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
 					"Calidad" => new CalidadView(),
+					"Rendimientos" => new RendimientosView(),
 
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};

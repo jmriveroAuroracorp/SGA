@@ -79,10 +79,32 @@ namespace SGA_Api.Controllers.Login
                 .Select(a => a.MRH_CodigoAplicacion)
                 .ToListAsync();
 
-            var almacenes = await _context.OperariosAlmacenes
-                .Where(a => a.Operario == operario.Id)
+            // Obtener almacenes individuales del operario
+            var almacenesIndividuales = await _context.OperariosAlmacenes
+                .Where(a => a.Operario == operario.Id && a.CodigoEmpresa == 1)
                 .Select(a => a.CodigoAlmacen)
+                .Where(a => a != null)
                 .ToListAsync();
+
+            var almacenes = new List<string>(almacenesIndividuales);
+
+            // Si el operario tiene centro logístico (y no es cadena vacía), agregar sus almacenes
+            if (!string.IsNullOrEmpty(operario.CodigoCentro) && !string.IsNullOrWhiteSpace(operario.CodigoCentro))
+            {
+                var almacenesCentro = await _context.Almacenes
+                    .Where(a => a.CodigoCentro == operario.CodigoCentro && a.CodigoEmpresa == 1)
+                    .Select(a => a.CodigoAlmacen)
+                    .Where(a => a != null)
+                    .ToListAsync();
+
+                almacenes.AddRange(almacenesCentro);
+            }
+
+            // Eliminar duplicados
+            almacenes = almacenes.Distinct().ToList();
+
+            // Log para diagnóstico
+            Console.WriteLine($"Login operario {operario.Id}: Almacenes individuales={almacenesIndividuales.Count}, CodigoCentro='{operario.CodigoCentro}', Total almacenes={almacenes.Count}");
 
             // ✅ Insertar configuración por defecto si no existe en tabla Usuarios
             var existeUsuario = await _auroraSgaContext.Usuarios.AnyAsync(u => u.IdUsuario == operario.Id);

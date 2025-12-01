@@ -148,4 +148,8 @@ public class StockDisponibleDto : INotifyPropertyChanged
     public bool IsBloqueadoCalidad { get; set; }
     public string? MotivoBloqueoCalidad { get; set; }
     public DateTime? FechaBloqueoCalidad { get; set; }
+    public string? TipoBloqueoCalidad { get; set; }
+    
+    // 🔷 NUEVO: Fecha del último traspaso
+    public DateTime? FechaUltimoTraspaso { get; set; }
 }

@@ -227,36 +227,33 @@
 
                                             <!-- Header con ID y Nombre -->
                                             <Grid Grid.Row="0" Margin="0,0,0,10">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <!-- ID y Nombre -->
-                                                <StackPanel Grid.Column="0" Orientation="Vertical">
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
-                                                        <TextBlock Text="ID: "
-                                                                   FontWeight="Bold"
-                                                                   Foreground="{StaticResource BrushPrincipal}"
-                                                                   FontSize="14"
-                                                                   VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{Binding Id}"
-                                                                   FontFamily="Consolas"
-                                                                   FontWeight="Bold"
-                                                                   Foreground="#2C3E50"
-                                                                   FontSize="14"
-                                                                   VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                    <TextBlock Text="{Binding Nombre}"
+                                                <!-- ID -->
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="ID: "
                                                                FontWeight="Bold"
-                                                               FontSize="16"
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Id}"
+                                                               FontFamily="Consolas"
+                                                               FontWeight="Bold"
                                                                Foreground="#2C3E50"
-                                                               TextTrimming="CharacterEllipsis"/>
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"/>
                                                 </StackPanel>
 
                                                 <!-- Plantilla aplicada -->
-                                                <Border Grid.Column="1"
+                                                <Border Grid.Row="0" Grid.Column="1"
                                                         Background="#E67E22"
                                                         BorderBrush="#D35400"
                                                         BorderThickness="1"
@@ -274,7 +271,7 @@
                                                 </Border>
 
                                                 <!-- Indicador de estado -->
-                                                <Border Grid.Column="2"
+                                                <Border Grid.Row="0" Grid.Column="2"
                                                         Background="{Binding Activo, Converter={StaticResource BoolToColorConverter}}"
                                                         BorderBrush="{Binding Activo, Converter={StaticResource BoolToBorderColorConverter}}"
                                                         BorderThickness="1"
@@ -288,6 +285,15 @@
                                                                Foreground="White"
                                                                HorizontalAlignment="Center"/>
                                                 </Border>
+
+                                                <!-- Nombre del operario -->
+                                                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                                           Text="{Binding Nombre}"
+                                                           FontWeight="Bold"
+                                                           FontSize="16"
+                                                           Foreground="#2C3E50"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,6,0,0"/>
 
                                             </Grid>
 

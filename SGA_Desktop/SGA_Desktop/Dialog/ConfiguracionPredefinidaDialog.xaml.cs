@@ -658,38 +658,6 @@ namespace SGA_Desktop.Dialog
                     CrearElementoPermiso(permiso);
                 }
             }
-            
-            // Actualizar ComboBox para excluir permisos ya asignados
-            ActualizarComboPermisosDisponibles();
-        }
-
-        private void ActualizarComboPermisosDisponibles()
-        {
-            if (_todosLosPermisos != null)
-            {
-                var permisosDisponibles = _todosLosPermisos
-                    .Where(p => !_permisosActuales.Contains(p.Codigo))
-                    .ToList();
-                
-                CmbPermisosDisponibles.ItemsSource = permisosDisponibles;
-                CmbPermisosDisponibles.SelectedItem = null; // Limpiar selección
-                
-                // Actualizar estado del combo y botón
-                bool hayPermisosDisponibles = permisosDisponibles.Any();
-                CmbPermisosDisponibles.IsEnabled = hayPermisosDisponibles;
-                BtnAgregarPermiso.IsEnabled = hayPermisosDisponibles;
-                
-                // Mostrar/ocultar mensaje informativo
-                if (!hayPermisosDisponibles)
-                {
-                    TxtMensajePermisos.Text = "No hay más permisos disponibles para agregar";
-                    TxtMensajePermisos.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    TxtMensajePermisos.Visibility = Visibility.Collapsed;
-                }
-            }
         }
 
         private void CrearElementoPermiso(short codigoPermiso)
@@ -765,25 +733,113 @@ namespace SGA_Desktop.Dialog
             }
         }
 
-        private void AgregarPermiso_Click(object sender, RoutedEventArgs e)
+        private void SeleccionarPermisos_Click(object sender, RoutedEventArgs e)
         {
-            if (CmbPermisosDisponibles.SelectedItem is PermisoDisponibleDto permisoSeleccionado)
+            try
             {
-                if (!_permisosActuales.Contains(permisoSeleccionado.Codigo))
+                // Crear una copia de los permisos actuales para el diálogo
+                var permisosActuales = new List<short>(_permisosActuales);
+                var dialog = new SeleccionPermisosDialog(_todosLosPermisos, permisosActuales);
+                dialog.Owner = this;
+                
+                if (dialog.ShowDialog() == true)
                 {
-                    _permisosActuales.Add(permisoSeleccionado.Codigo);
+                    // Reemplazar la lista actual con la selección del diálogo
+                    _permisosActuales.Clear();
+                    foreach (var permiso in dialog.PermisosSeleccionados)
+                    {
+                        _permisosActuales.Add(permiso);
+                    }
+                    
                     CargarPermisosEnStackPanel();
-                }
-                else
-                {
-                    MessageBox.Show("Este permiso ya está asignado.", "Información", 
-                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    
+                    var successDialog = new WarningDialog(
+                        "Éxito",
+                        $"Se asignaron {dialog.PermisosSeleccionados.Count} permisos a la configuración.",
+                        "\uE946" // ícono de éxito
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != successDialog)
+                        successDialog.Owner = owner;
+                    successDialog.ShowDialog();
                 }
             }
-            else
+            catch (Exception ex)
             {
-                MessageBox.Show("Por favor, seleccione un permiso para agregar.", "Información", 
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al seleccionar permisos: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
+            }
+        }
+
+        private void LimpiarPermisos_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_permisosActuales.Count == 0)
+                {
+                    var infoDialog = new WarningDialog(
+                        "Información",
+                        "No hay permisos asignados para limpiar.",
+                        "\uE946" // ícono de información
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != infoDialog)
+                        infoDialog.Owner = owner;
+                    infoDialog.ShowDialog();
+                    return;
+                }
+
+                var confirmacionEliminar = new ConfirmationDialog(
+                    "Confirmar eliminación",
+                    $"¿Está seguro de que desea eliminar todos los {_permisosActuales.Count} permisos asignados?"
+                );
+                var ownerConfirmacion = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                      ?? Application.Current.MainWindow;
+                if (ownerConfirmacion != null && ownerConfirmacion != confirmacionEliminar)
+                    confirmacionEliminar.Owner = ownerConfirmacion;
+                    
+                var resultado = confirmacionEliminar.ShowDialog();
+
+                if (resultado == true)
+                {
+                    _permisosActuales.Clear();
+                    
+                    CargarPermisosEnStackPanel();
+                    
+                    var successDialog = new WarningDialog(
+                        "Éxito",
+                        "Se eliminaron todos los permisos asignados.",
+                        "\uE946" // ícono de éxito
+                    );
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                               ?? Application.Current.MainWindow;
+                    if (owner != null && owner != successDialog)
+                        successDialog.Owner = owner;
+                    successDialog.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al limpiar permisos: {ex.Message}",
+                    "\uE814" // ícono de error
+                );
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                           ?? Application.Current.MainWindow;
+                if (owner != null && owner != errorDialog)
+                    errorDialog.Owner = owner;
+                errorDialog.ShowDialog();
             }
         }
 

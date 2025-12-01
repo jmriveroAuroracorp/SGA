@@ -81,169 +81,88 @@
                                  Visibility="{Binding MostrandoOrdenes, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid Margin="10">
                     <Grid.RowDefinitions>
-                        <!-- 0: Botón crear -->
+                        <!-- 0: Botones crear y filtros -->
                         <RowDefinition Height="Auto" />
-                        <!-- 1: Filtros -->
-                        <RowDefinition Height="Auto" />
-                        <!-- 2: Lista de órdenes -->
+                        <!-- 1: Lista de órdenes -->
                         <RowDefinition Height="*" />
-                        <!-- 3: Botones de acción -->
+                        <!-- 2: Botones de acción -->
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- BOTÓN CREAR -->
-                    <Button Grid.Row="0"
-                            Content="➕ Crear Orden de Conteo"
-                            Command="{Binding CrearControlRotativoCommand}"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                            Width="180"
-                            Height="32"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            IsEnabled="{Binding CanEnableInputs}"
-                            HorizontalAlignment="Right"
-                            Margin="0,0,0,12"/>
+                    <!-- BOTONES CREAR Y FILTROS -->
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <!-- FILTROS COMPACTOS -->
-                    <Border Grid.Row="1" 
-                            Background="#F8F9FA" 
-                            BorderBrush="#DEE2E6" 
-                            BorderThickness="1" 
-                            CornerRadius="5" 
-                            Padding="8" 
-                            Margin="0,0,0,8">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
+                        <!-- Indicador de filtros activos -->
+                        <Border Grid.Column="0" 
+                                Background="#E8F4FD" 
+                                BorderBrush="#3498DB" 
+                                BorderThickness="1" 
+                                CornerRadius="5" 
+                                Padding="10,6"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Left"
+                                Visibility="{Binding TieneFiltrosActivos, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="🔍 Filtros activos: " 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11"
+                                           Foreground="#2980B9"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding ResumenFiltrosActivos}" 
+                                           FontSize="11"
+                                           Foreground="#34495E"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
 
-                            <!-- Primera fila de filtros -->
-                            <Grid Grid.Row="0" Margin="0,0,0,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Almacén -->
-                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                    <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,2" FontSize="10"/>
-                                    <ComboBox ItemsSource="{Binding AlmacenesComboView}"
-                                              DisplayMemberPath="DescripcionCombo"
-                                              SelectedItem="{Binding AlmacenSeleccionadoCombo}"
-                                              Text="{Binding FiltroAlmacenesTexto, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              Style="{StaticResource EstiloComboBox}"
-                                              Height="26"
-                                              IsEditable="True"
-                                              IsTextSearchEnabled="False"
-                                              StaysOpenOnEdit="True"
-                                              IsDropDownOpen="{Binding IsDropDownOpenAlmacenes}">
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="GotFocus">
-                                                <i:InvokeCommandAction Command="{Binding AbrirDropDownAlmacenesCommand}"/>
-                                            </i:EventTrigger>
-                                            <i:EventTrigger EventName="SelectionChanged">
-                                                <i:InvokeCommandAction Command="{Binding CerrarDropDownAlmacenesCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
-                                        <ComboBox.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <VirtualizingStackPanel/>
-                                            </ItemsPanelTemplate>
-                                        </ComboBox.ItemsPanel>
-                                    </ComboBox>
-                                </StackPanel>
-
-                                <!-- Fecha desde -->
-                                <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                                    <TextBlock Text="Desde" FontWeight="Bold" Margin="0,0,0,2" FontSize="10"/>
-                                    <DatePicker SelectedDate="{Binding FechaDesde}" 
-                                                Style="{StaticResource EstiloDatePicker}"
-                                                Height="26"/>
-                                </StackPanel>
-
-                                <!-- Fecha hasta -->
-                                <StackPanel Grid.Column="2" Margin="0,0,8,0">
-                                    <TextBlock Text="Hasta" FontWeight="Bold" Margin="0,0,0,2" FontSize="10"/>
-                                    <DatePicker SelectedDate="{Binding FechaHasta}" 
-                                                Style="{StaticResource EstiloDatePicker}"
-                                                Height="26"/>
-                                </StackPanel>
-
-                                <!-- Estado -->
-                                <StackPanel Grid.Column="3" Margin="0,0,8,0">
-                                    <TextBlock Text="Estado" FontWeight="Bold" Margin="0,0,0,2" FontSize="10"/>
-                                    <ComboBox ItemsSource="{Binding EstadosCombo}"
-                                              SelectedItem="{Binding EstadoFiltro}"
-                                              Style="{StaticResource EstiloComboBox}"
-                                              Height="26"/>
-                                </StackPanel>
-
-                                <!-- Botón cargar -->
-                                <Button Grid.Column="4"
-                                        Content="🔄 Cargar"
-                                        Command="{Binding CargarControlesCommand}"
-                                        Style="{StaticResource EstiloBotonPrincipal}"
-                                        Width="80"
-                                        Height="26"
-                                        FontSize="10"
-                                        IsEnabled="{Binding CanCargarControles}"/>
-                            </Grid>
-
-                            <!-- Segunda fila de filtros -->
-                            <Grid Grid.Row="1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Operario -->
-                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                    <TextBlock Text="Operario" FontWeight="Bold" Margin="0,0,0,2" FontSize="10"/>
-                                    <ComboBox ItemsSource="{Binding OperariosComboView}"
-                                              DisplayMemberPath="NombreOperario"
-                                              SelectedItem="{Binding OperarioSeleccionadoCombo}"
-                                              Text="{Binding FiltroOperariosCombo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              Style="{StaticResource EstiloComboBox}"
-                                              Height="26"
-                                              IsEditable="True"
-                                              IsTextSearchEnabled="False"
-                                              StaysOpenOnEdit="True"
-                                              IsDropDownOpen="{Binding IsDropDownOpenCombo}">
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="GotFocus">
-                                                <i:InvokeCommandAction Command="{Binding AbrirDropDownComboCommand}"/>
-                                            </i:EventTrigger>
-                                            <i:EventTrigger EventName="SelectionChanged">
-                                                <i:InvokeCommandAction Command="{Binding CerrarDropDownComboCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
-                                        <ComboBox.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <VirtualizingStackPanel/>
-                                            </ItemsPanelTemplate>
-                                        </ComboBox.ItemsPanel>
-                                    </ComboBox>
-                                </StackPanel>
-
-                                <!-- Botón limpiar filtros -->
-                                <Button Grid.Column="1"
-                                        Content="🧹 Limpiar"
-                                        Command="{Binding LimpiarFiltrosCommand}"
-                                        Style="{StaticResource EstiloBotonSecundario}"
-                                        Width="90"
-                                        Height="26"
-                                        FontSize="10"
-                                        IsEnabled="{Binding CanEnableInputs}"/>
-                            </Grid>
-                        </Grid>
-                    </Border>
+                        <!-- Botones de acción -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="🔄 Recargar"
+                                    Command="{Binding CargarControlesCommand}"
+                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                    Width="110"
+                                    Height="32"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    IsEnabled="{Binding CanCargarControles}"
+                                    Margin="0,0,8,0"/>
+                            <Button Content="🔍 Filtros"
+                                    Command="{Binding AbrirFiltrosCommand}"
+                                    Style="{StaticResource EstiloBotonSecundario}"
+                                    Width="110"
+                                    Height="32"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    IsEnabled="{Binding CanEnableInputs}"
+                                    Margin="0,0,8,0"/>
+                            <Button Content="🧹 Limpiar"
+                                    Command="{Binding LimpiarFiltrosCommand}"
+                                    Style="{StaticResource EstiloBotonSecundario}"
+                                    Width="100"
+                                    Height="32"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    IsEnabled="{Binding CanEnableInputs}"
+                                    Margin="0,0,10,0"/>
+                            <Button Content="➕ Crear Orden de Conteo"
+                                    Command="{Binding CrearControlRotativoCommand}"
+                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                    Width="180"
+                                    Height="32"
+                                    FontSize="13"
+                                    FontWeight="Bold"
+                                    IsEnabled="{Binding CanEnableInputs}"/>
+                        </StackPanel>
+                    </Grid>
 
                     <!-- LISTA DE ÓRDENES DE CONTEO -->
-                    <GroupBox Grid.Row="2" Header="📋 Órdenes de Conteo Registradas" Margin="0,0,0,8">
+                    <GroupBox Grid.Row="1" Header="📋 Órdenes de Conteo Registradas" Margin="0,0,0,8">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -469,7 +388,31 @@
                                                                 Height="30"
                                                                 FontSize="11"
                                                                 FontWeight="Medium"
+                                                                Margin="0,0,4,0"
                                                                 Visibility="{Binding PuedeEditar, Converter={StaticResource BoolToVis}}"/>
+                                                        
+                                                        <!-- Botón Cerrar -->
+                                                        <Button Content="🔒 Cerrar"
+                                                                Command="{Binding DataContext.CerrarOrdenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Width="70"
+                                                                Height="30"
+                                                                FontSize="11"
+                                                                FontWeight="Medium"
+                                                                Visibility="{Binding PuedeCerrar, Converter={StaticResource BoolToVis}}">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource EstiloBotonSecundario}">
+                                                                    <Setter Property="Background" Value="#FFF3CD"/>
+                                                                    <Setter Property="BorderBrush" Value="#FFC107"/>
+                                                                    <Setter Property="Foreground" Value="#856404"/>
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="#FFE69C"/>
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -481,7 +424,7 @@
                     </GroupBox>
 
                     <!-- BOTONES DE ACCIÓN ÓRDENES -->
-                    <StackPanel Grid.Row="3" 
+                    <StackPanel Grid.Row="2" 
                                 Orientation="Horizontal" 
                                 HorizontalAlignment="Right">
                         <TextBlock Text="{Binding TotalOrdenes}" 

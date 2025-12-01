@@ -372,6 +372,13 @@ fun EtiquetasScreen(
                                         return@TextButton
                                     }
 
+                                    // Validar que el artículo tenga EAN antes de imprimir
+                                    val ean = articulo?.codigoAlternativo?.takeIf { it.isNotBlank() }
+                                    if (ean.isNullOrBlank()) {
+                                        viewModel.setError("El artículo no tiene EAN. No se puede imprimir sin EAN.")
+                                        return@TextButton
+                                    }
+
                                     val dto = LogImpresionDto(
                                         usuario = sessionViewModel.user.value?.name ?: "Desconocido",
                                         dispositivo = sessionViewModel.dispositivo.value?.id
@@ -381,8 +388,7 @@ fun EtiquetasScreen(
                                         codigoArticulo = stock.codigoArticulo,
                                         descripcionArticulo = stock.descripcionArticulo ?: "",
                                         copias = copias,
-                                        codigoAlternativo = articulo?.codigoAlternativo?.takeIf { it.isNotBlank() }
-                                            ?: "",
+                                        codigoAlternativo = ean,
                                         fechaCaducidad = stock.fechaCaducidad?.take(10),
                                         partida = stock.partida,
                                         alergenos = alergenos,

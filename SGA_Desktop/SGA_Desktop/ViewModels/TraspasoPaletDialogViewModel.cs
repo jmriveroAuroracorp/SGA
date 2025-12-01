@@ -310,16 +310,27 @@ namespace SGA_Desktop.ViewModels
                 if (!articulosBloqueados.Any())
                     return ValidacionTraspasoResult.Valido(); // No hay artículos bloqueados
 
-                // 5. Validar cada artículo bloqueado individualmente
+                // 5. Validar cada artículo bloqueado individualmente con su partida y ubicación origen
                 var ubicacionDestino = UbicacionDestinoSeleccionada.Ubicacion;
+                var almacenOrigen = PaletSeleccionado.AlmacenOrigen;
+                var ubicacionOrigen = PaletSeleccionado.UbicacionOrigen;
+                
                 foreach (var codigoArticulo in articulosBloqueados)
                 {
+                    // Obtener la partida de este artículo desde las líneas del palet
+                    var lineaArticulo = lineasPalet.FirstOrDefault(l => l.CodigoArticulo == codigoArticulo);
+                    var partida = lineaArticulo?.Lote;
+                    
                     var request = new ValidacionTraspasoRequest
                     {
                         CodigoArticulo = codigoArticulo,
                         AlmacenDestino = AlmacenDestinoSeleccionado?.CodigoAlmacen ?? "",
                         UbicacionDestino = ubicacionDestino,
-                        CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+                        CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+                        Partida = partida,
+                        // 🔷 NUEVO: Incluir ubicación origen del palet para verificar bloqueos específicos
+                        AlmacenOrigen = almacenOrigen,
+                        UbicacionOrigen = ubicacionOrigen
                     };
 
                     var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);

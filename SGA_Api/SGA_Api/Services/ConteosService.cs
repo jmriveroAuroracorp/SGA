@@ -306,11 +306,16 @@ namespace SGA_Api.Services
         /// <summary>
         /// Listar todas las órdenes de conteo sin restricciones de usuario (para Desktop)
         /// </summary>
-        public async Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null)
+        public async Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(
+            string? estado = null, 
+            string? codigoOperario = null,
+            DateTime? fechaDesde = null,
+            DateTime? fechaHasta = null)
         {
             try
             {
-                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}, operario: {Operario}", estado, codigoOperario);
+                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}, operario: {Operario}, fechaDesde: {FechaDesde}, fechaHasta: {FechaHasta}", 
+                    estado, codigoOperario, fechaDesde, fechaHasta);
                 
                 var query = _context.OrdenesConteo.AsQueryable();
 
@@ -324,6 +329,18 @@ namespace SGA_Api.Services
                 if (!string.IsNullOrEmpty(codigoOperario))
                 {
                     query = query.Where(o => o.CodigoOperario == codigoOperario);
+                }
+
+                // Aplicar filtro de fecha desde si se especifica
+                if (fechaDesde.HasValue)
+                {
+                    query = query.Where(o => o.FechaCreacion.Date >= fechaDesde.Value.Date);
+                }
+
+                // Aplicar filtro de fecha hasta si se especifica
+                if (fechaHasta.HasValue)
+                {
+                    query = query.Where(o => o.FechaCreacion.Date <= fechaHasta.Value.Date);
                 }
 
                 var ordenes = await query
@@ -1690,30 +1707,27 @@ namespace SGA_Api.Services
                     throw new InvalidOperationException($"No se puede cerrar una orden en estado {orden.Estado}");
                 }
 
-                // Verificar que haya al menos una lectura
-                if (!orden.Lecturas.Any())
+                // Si hay lecturas, verificar que NO hay lecturas pendientes (todas deben estar contadas)
+                if (orden.Lecturas.Any())
                 {
-                    throw new InvalidOperationException("No se puede cerrar una orden sin lecturas");
-                }
-
-                // Verificar que NO hay lecturas pendientes (todas deben estar contadas)
-                var lecturasPendientes = orden.Lecturas.Where(l => l.CantidadContada == null).ToList();
-                if (lecturasPendientes.Any())
-                {
-                    var articulosPendientes = lecturasPendientes
-                        .Select(l => $"{l.CodigoArticulo} (Lote: {l.LotePartida}, Ubicación: {l.CodigoUbicacion})")
-                        .Take(5);
-                    
-                    var mensaje = $"No se puede cerrar la orden. Faltan {lecturasPendientes.Count} lecturas por realizar. Artículos pendientes: {string.Join(", ", articulosPendientes)}";
-                    if (lecturasPendientes.Count > 5)
+                    var lecturasPendientes = orden.Lecturas.Where(l => l.CantidadContada == null).ToList();
+                    if (lecturasPendientes.Any())
                     {
-                        mensaje += $" y {lecturasPendientes.Count - 5} más...";
+                        var articulosPendientes = lecturasPendientes
+                            .Select(l => $"{l.CodigoArticulo} (Lote: {l.LotePartida}, Ubicación: {l.CodigoUbicacion})")
+                            .Take(5);
+                        
+                        var mensaje = $"No se puede cerrar la orden. Faltan {lecturasPendientes.Count} lecturas por realizar. Artículos pendientes: {string.Join(", ", articulosPendientes)}";
+                        if (lecturasPendientes.Count > 5)
+                        {
+                            mensaje += $" y {lecturasPendientes.Count - 5} más...";
+                        }
+                        
+                        throw new InvalidOperationException(mensaje);
                     }
-                    
-                    throw new InvalidOperationException(mensaje);
                 }
 
-                // Obtener todas las lecturas completadas
+                // Obtener todas las lecturas completadas (puede ser 0 si no hay lecturas)
                 var lecturasCompletadas = orden.Lecturas.Where(l => l.CantidadContada.HasValue).ToList();
                 
                 // Contar los resultados ya creados durante las lecturas

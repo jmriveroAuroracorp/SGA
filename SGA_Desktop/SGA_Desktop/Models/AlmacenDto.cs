@@ -14,7 +14,7 @@ namespace SGA_Desktop.Models
 		public short CodigoEmpresa { get; set; }
 		public bool EsDelCentro { get; set; }
 		public string DescripcionCombo =>
-	CodigoAlmacen == "Todas" ? "Todos" : $"{CodigoAlmacen} – {NombreAlmacen}";
+	CodigoAlmacen == "Todas" || CodigoAlmacen == "TODOS" ? "Todos" : $"{CodigoAlmacen} – {NombreAlmacen}";
 
 		private bool _isSelected;
 		public bool IsSelected

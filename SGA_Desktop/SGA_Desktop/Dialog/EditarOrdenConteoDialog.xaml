@@ -28,6 +28,7 @@
             <!-- Converters -->
             <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <helpers:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -107,7 +108,7 @@
                                                Margin="0,0,15,0"
                                                VerticalAlignment="Center"/>
                                     <RadioButton Content="Por Artículo" 
-                                               
+                                               IsChecked="{Binding EsConteoUbicacion, Converter={StaticResource InverseBooleanConverter}, Mode=TwoWay}"
                                                GroupName="TipoConteo"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>

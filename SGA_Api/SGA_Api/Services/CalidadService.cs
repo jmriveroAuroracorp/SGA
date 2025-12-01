@@ -107,49 +107,197 @@ namespace SGA_Api.Services
         {
             try
             {
-                _logger.LogInformation("Iniciando bloqueo de stock para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
-                    dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
-
-                // 1. Verificar que no esté ya bloqueado
-                var yaBloqueado = await _auroraSgaContext.BloqueosCalidad
-                    .AnyAsync(b => b.CodigoEmpresa == dto.CodigoEmpresa &&
-                                  b.CodigoArticulo == dto.CodigoArticulo &&
-                                  b.LotePartida == dto.LotePartida &&
-                                  b.Bloqueado == true);
-
-                if (yaBloqueado)
+                // 🔷 BLOQUEO GLOBAL: Si EsBloqueoGlobal es true, bloquear en todas las ubicaciones
+                if (dto.EsBloqueoGlobal)
                 {
-                    _logger.LogWarning("Stock ya está bloqueado para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
+                    _logger.LogInformation("Iniciando BLOQUEO GLOBAL para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
                         dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+
+                    // Buscar todas las ubicaciones donde existe stock del artículo/lote
+                    var todasLasUbicaciones = await _auroraSgaContext.StockDisponible
+                        .Where(s => s.CodigoEmpresa == dto.CodigoEmpresa &&
+                                   s.CodigoArticulo == dto.CodigoArticulo &&
+                                   s.Partida == dto.LotePartida &&
+                                   s.Disponible > 0)
+                        .Select(s => new { s.CodigoAlmacen, s.Ubicacion })
+                        .Distinct()
+                        .ToListAsync();
+
+                    if (!todasLasUbicaciones.Any())
+                    {
+                        _logger.LogWarning("No se encontró stock disponible para bloqueo global - Empresa: {CodigoEmpresa}, Artículo: {CodigoArticulo}, Partida: {Partida}",
+                            dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+                        return new { 
+                            message = "No se encontró stock disponible para este artículo y lote en ninguna ubicación",
+                            codigoEmpresa = dto.CodigoEmpresa,
+                            codigoArticulo = dto.CodigoArticulo,
+                            lotePartida = dto.LotePartida
+                        };
+                    }
+
+                    var bloqueosCreados = new List<Guid>();
+                    var bloqueosDuplicados = 0;
+
+                    // Validar tipo de bloqueo
+                    var tipoBloqueo = !string.IsNullOrWhiteSpace(dto.TipoBloqueo) 
+                        ? dto.TipoBloqueo.ToUpper() 
+                        : "TOTAL";
+                    
+                    if (tipoBloqueo != "TOTAL" && tipoBloqueo != "SOLO_PULMON")
+                    {
+                        _logger.LogWarning("Tipo de bloqueo inválido: {TipoBloqueo}. Se usará TOTAL por defecto.", dto.TipoBloqueo);
+                        tipoBloqueo = "TOTAL";
+                    }
+
+                    // Crear bloqueo para cada ubicación
+                    foreach (var ubicacion in todasLasUbicaciones)
+                    {
+                        // Verificar si ya existe bloqueo en esta ubicación
+                        var queryBloqueo = _auroraSgaContext.BloqueosCalidad
+                            .Where(b => b.CodigoEmpresa == dto.CodigoEmpresa &&
+                                       b.CodigoArticulo == dto.CodigoArticulo &&
+                                       b.LotePartida == dto.LotePartida &&
+                                       b.CodigoAlmacen == ubicacion.CodigoAlmacen &&
+                                       b.Bloqueado == true);
+
+                        if (!string.IsNullOrWhiteSpace(ubicacion.Ubicacion))
+                        {
+                            queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == ubicacion.Ubicacion);
+                        }
+                        else
+                        {
+                            queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+                        }
+
+                        if (await queryBloqueo.AnyAsync())
+                        {
+                            bloqueosDuplicados++;
+                            _logger.LogInformation("Bloqueo ya existe en {Almacen}-{Ubicacion}, se omite", 
+                                ubicacion.CodigoAlmacen, ubicacion.Ubicacion ?? "(sin ubicación)");
+                            continue;
+                        }
+
+                        // Crear bloqueo para esta ubicación
+                        var bloqueo = new BloqueoCalidad
+                        {
+                            Id = Guid.NewGuid(),
+                            CodigoEmpresa = dto.CodigoEmpresa,
+                            CodigoArticulo = dto.CodigoArticulo,
+                            LotePartida = dto.LotePartida,
+                            CodigoAlmacen = ubicacion.CodigoAlmacen,
+                            Ubicacion = ubicacion.Ubicacion,
+                            Bloqueado = true,
+                            TipoBloqueo = tipoBloqueo,
+                            UsuarioBloqueoId = dto.UsuarioId,
+                            FechaBloqueo = DateTime.Now,
+                            ComentarioBloqueo = $"[BLOQUEO GLOBAL] {dto.ComentarioBloqueo}",
+                            FechaCreacion = DateTime.Now,
+                            FechaModificacion = DateTime.Now
+                        };
+
+                        _auroraSgaContext.BloqueosCalidad.Add(bloqueo);
+                        bloqueosCreados.Add(bloqueo.Id);
+                    }
+
+                    await _auroraSgaContext.SaveChangesAsync();
+
+                    _logger.LogInformation("Bloqueo global completado: {Creados} bloqueos creados, {Duplicados} ya existían", 
+                        bloqueosCreados.Count, bloqueosDuplicados);
+
                     return new { 
-                        message = "El stock ya está bloqueado",
-                        codigoEmpresa = dto.CodigoEmpresa,
-                        codigoArticulo = dto.CodigoArticulo,
-                        lotePartida = dto.LotePartida
+                        Mensaje = $"Bloqueo global aplicado: {bloqueosCreados.Count} ubicaciones bloqueadas",
+                        UbicacionesBloqueadas = bloqueosCreados.Count,
+                        UbicacionesYaBloqueadas = bloqueosDuplicados,
+                        IdsBloqueos = bloqueosCreados,
+                        TipoBloqueo = tipoBloqueo
                     };
                 }
 
-                // 2. Verificar que el stock existe
-                var stockExiste = await _auroraSgaContext.StockDisponible
-                    .AnyAsync(s => s.CodigoEmpresa == dto.CodigoEmpresa &&
-                                  s.CodigoArticulo == dto.CodigoArticulo &&
-                                  s.Partida == dto.LotePartida &&
-                                  s.Disponible > 0);
+                // 🔷 BLOQUEO ESPECÍFICO: Lógica existente para bloqueo en ubicación específica
+                _logger.LogInformation("Iniciando bloqueo de stock para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}",
+                    dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida, dto.CodigoAlmacen, dto.Ubicacion ?? "(sin ubicación)");
+
+                // 1. Verificar que no esté ya bloqueado en esta ubicación específica
+                var queryBloqueoEspecifico = _auroraSgaContext.BloqueosCalidad
+                    .Where(b => b.CodigoEmpresa == dto.CodigoEmpresa &&
+                               b.CodigoArticulo == dto.CodigoArticulo &&
+                               b.LotePartida == dto.LotePartida &&
+                               b.CodigoAlmacen == dto.CodigoAlmacen &&
+                               b.Bloqueado == true);
+
+                // Verificar por ubicación específica
+                if (!string.IsNullOrWhiteSpace(dto.Ubicacion))
+                {
+                    queryBloqueoEspecifico = queryBloqueoEspecifico.Where(b => b.Ubicacion == dto.Ubicacion);
+                }
+                else
+                {
+                    queryBloqueoEspecifico = queryBloqueoEspecifico.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+                }
+
+                var yaBloqueado = await queryBloqueoEspecifico.AnyAsync();
+
+                if (yaBloqueado)
+                {
+                    _logger.LogWarning("Stock ya está bloqueado para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}",
+                        dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida, dto.CodigoAlmacen, dto.Ubicacion ?? "(sin ubicación)");
+                    return new { 
+                        message = "El stock ya está bloqueado en esta ubicación",
+                        codigoEmpresa = dto.CodigoEmpresa,
+                        codigoArticulo = dto.CodigoArticulo,
+                        lotePartida = dto.LotePartida,
+                        codigoAlmacen = dto.CodigoAlmacen,
+                        ubicacion = dto.Ubicacion
+                    };
+                }
+
+                // 2. Verificar que el stock existe en la ubicación especificada
+                var queryStock = _auroraSgaContext.StockDisponible
+                    .Where(s => s.CodigoEmpresa == dto.CodigoEmpresa &&
+                               s.CodigoArticulo == dto.CodigoArticulo &&
+                               s.Partida == dto.LotePartida &&
+                               s.CodigoAlmacen == dto.CodigoAlmacen &&
+                               s.Disponible > 0);
+
+                // Filtrar por ubicación si se especifica
+                if (!string.IsNullOrWhiteSpace(dto.Ubicacion))
+                {
+                    queryStock = queryStock.Where(s => s.Ubicacion == dto.Ubicacion);
+                }
+                else
+                {
+                    queryStock = queryStock.Where(s => string.IsNullOrEmpty(s.Ubicacion));
+                }
+
+                var stockExiste = await queryStock.AnyAsync();
 
                 if (!stockExiste)
                 {
-                    _logger.LogWarning("Stock no encontrado para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
-                        dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+                    _logger.LogWarning("Stock no encontrado para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}",
+                        dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida, dto.CodigoAlmacen, dto.Ubicacion ?? "(sin ubicación)");
                     return new { 
-                        message = "No se encontró stock disponible para los parámetros especificados",
+                        message = "No se encontró stock disponible para los parámetros especificados en esta ubicación",
                         codigoEmpresa = dto.CodigoEmpresa,
                         codigoArticulo = dto.CodigoArticulo,
-                        lotePartida = dto.LotePartida
+                        lotePartida = dto.LotePartida,
+                        codigoAlmacen = dto.CodigoAlmacen,
+                        ubicacion = dto.Ubicacion
                     };
                 }
 
                 // 3. Crear bloqueo
-                var bloqueo = new BloqueoCalidad
+                var tipoBloqueoEspecifico = !string.IsNullOrWhiteSpace(dto.TipoBloqueo) 
+                    ? dto.TipoBloqueo.ToUpper() 
+                    : "TOTAL";
+                
+                // Validar que el tipo sea válido
+                if (tipoBloqueoEspecifico != "TOTAL" && tipoBloqueoEspecifico != "SOLO_PULMON")
+                {
+                    _logger.LogWarning("Tipo de bloqueo inválido: {TipoBloqueo}. Se usará TOTAL por defecto.", dto.TipoBloqueo);
+                    tipoBloqueoEspecifico = "TOTAL";
+                }
+
+                var bloqueoEspecifico = new BloqueoCalidad
                 {
                     Id = Guid.NewGuid(),
                     CodigoEmpresa = dto.CodigoEmpresa,
@@ -158,6 +306,7 @@ namespace SGA_Api.Services
                     CodigoAlmacen = dto.CodigoAlmacen,
                     Ubicacion = dto.Ubicacion,
                     Bloqueado = true,
+                    TipoBloqueo = tipoBloqueoEspecifico, // 🔷 NUEVO: Tipo de bloqueo
                     UsuarioBloqueoId = dto.UsuarioId,
                     FechaBloqueo = DateTime.Now,
                     ComentarioBloqueo = dto.ComentarioBloqueo,
@@ -165,48 +314,62 @@ namespace SGA_Api.Services
                     FechaModificacion = DateTime.Now
                 };
 
-                _auroraSgaContext.BloqueosCalidad.Add(bloqueo);
+                _auroraSgaContext.BloqueosCalidad.Add(bloqueoEspecifico);
                 await _auroraSgaContext.SaveChangesAsync();
 
-                _logger.LogInformation("Bloqueo creado exitosamente con ID {BloqueoId} para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
-                    bloqueo.Id, dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+                _logger.LogInformation("Bloqueo creado exitosamente con ID {BloqueoId} para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}",
+                    bloqueoEspecifico.Id, dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida, dto.CodigoAlmacen, dto.Ubicacion ?? "(sin ubicación)");
 
                 // TODO: Enviar notificación
-                // await EnviarNotificacionBloqueoAsync(bloqueo);
+                // await EnviarNotificacionBloqueoAsync(bloqueoEspecifico);
 
                 return new { 
-                    Id = bloqueo.Id, 
+                    Id = bloqueoEspecifico.Id, 
                     Mensaje = "Stock bloqueado exitosamente",
-                    FechaBloqueo = bloqueo.FechaBloqueo
+                    FechaBloqueo = bloqueoEspecifico.FechaBloqueo
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al bloquear stock para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
-                    dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+                _logger.LogError(ex, "Error al bloquear stock para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}",
+                    dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida, dto.CodigoAlmacen, dto.Ubicacion ?? "(sin ubicación)");
                 throw;
             }
         }
 
-        public async Task<bool> EstaStockBloqueadoAsync(short codigoEmpresa, string codigoArticulo, string lotePartida)
+        public async Task<bool> EstaStockBloqueadoAsync(short codigoEmpresa, string codigoArticulo, string lotePartida, string codigoAlmacen, string? ubicacion = null)
         {
             try
             {
-                var estaBloqueado = await _auroraSgaContext.BloqueosCalidad
-                    .AnyAsync(b => b.CodigoEmpresa == codigoEmpresa &&
-                                  b.CodigoArticulo == codigoArticulo &&
-                                  b.LotePartida == lotePartida &&
-                                  b.Bloqueado == true);
+                var query = _auroraSgaContext.BloqueosCalidad
+                    .Where(b => b.CodigoEmpresa == codigoEmpresa &&
+                               b.CodigoArticulo == codigoArticulo &&
+                               b.LotePartida == lotePartida &&
+                               b.CodigoAlmacen == codigoAlmacen &&
+                               b.Bloqueado == true);
 
-                _logger.LogInformation("Verificación de bloqueo para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}: {EstaBloqueado}",
-                    codigoEmpresa, codigoArticulo, lotePartida, estaBloqueado);
+                // Verificar por ubicación específica
+                if (!string.IsNullOrWhiteSpace(ubicacion))
+                {
+                    query = query.Where(b => b.Ubicacion == ubicacion);
+                }
+                else
+                {
+                    // Si no se especifica ubicación, buscar bloqueos sin ubicación
+                    query = query.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+                }
+
+                var estaBloqueado = await query.AnyAsync();
+
+                _logger.LogInformation("Verificación de bloqueo para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}: {EstaBloqueado}",
+                    codigoEmpresa, codigoArticulo, lotePartida, codigoAlmacen, ubicacion ?? "(sin ubicación)", estaBloqueado);
 
                 return estaBloqueado;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al verificar bloqueo para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
-                    codigoEmpresa, codigoArticulo, lotePartida);
+                _logger.LogError(ex, "Error al verificar bloqueo para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}, almacén {Almacen}, ubicación {Ubicacion}",
+                    codigoEmpresa, codigoArticulo, lotePartida, codigoAlmacen, ubicacion ?? "(sin ubicación)");
                 return false;
             }
         }
@@ -215,48 +378,79 @@ namespace SGA_Api.Services
         {
             var resultado = new List<StockCalidadDto>();
 
-            // 🔷 NUEVO: Agrupar por artículo + lote para consolidar
-            var stockAgrupado = stockData
-                .GroupBy(s => new { s.CodigoArticulo, s.Partida, s.FechaCaducidad })
-                .ToList();
-
-            foreach (var grupo in stockAgrupado)
+            // 🔷 ACTUALIZADO: Procesar cada registro individualmente para verificar bloqueos por ubicación específica
+            foreach (var stock in stockData)
             {
-                var primerStock = grupo.First();
-                
-                // Verificar si el stock está bloqueado
-                var estaBloqueado = await EstaStockBloqueadoAsync(primerStock.CodigoEmpresa, primerStock.CodigoArticulo, primerStock.Partida);
+                // Verificar si este stock específico está bloqueado (por ubicación)
+                var estaBloqueado = await EstaStockBloqueadoAsync(
+                    stock.CodigoEmpresa, 
+                    stock.CodigoArticulo, 
+                    stock.Partida,
+                    stock.CodigoAlmacen,
+                    stock.Ubicacion);
                 
                 // Obtener información del bloqueo si existe
                 BloqueoCalidad? bloqueoInfo = null;
                 if (estaBloqueado)
                 {
-                    bloqueoInfo = await _auroraSgaContext.BloqueosCalidad
-                        .FirstOrDefaultAsync(b => b.CodigoEmpresa == primerStock.CodigoEmpresa &&
-                                                  b.CodigoArticulo == primerStock.CodigoArticulo &&
-                                                  b.LotePartida == primerStock.Partida &&
-                                                  b.Bloqueado == true);
+                    var queryBloqueo = _auroraSgaContext.BloqueosCalidad
+                        .Where(b => b.CodigoEmpresa == stock.CodigoEmpresa &&
+                                   b.CodigoArticulo == stock.CodigoArticulo &&
+                                   b.LotePartida == stock.Partida &&
+                                   b.CodigoAlmacen == stock.CodigoAlmacen &&
+                                   b.Bloqueado == true);
+
+                    // Filtrar por ubicación específica
+                    if (!string.IsNullOrWhiteSpace(stock.Ubicacion))
+                    {
+                        queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == stock.Ubicacion);
+                    }
+                    else
+                    {
+                        queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+                    }
+
+                    bloqueoInfo = await queryBloqueo
+                        .OrderByDescending(b => b.FechaBloqueo)
+                        .FirstOrDefaultAsync();
                 }
 
-                // 🔷 NUEVO: Consolidar cantidades de todas las ubicaciones
-                var cantidadTotal = grupo.Sum(s => s.Disponible);
-                var ubicaciones = grupo.Select(s => s.Ubicacion).Where(u => !string.IsNullOrEmpty(u)).ToList();
-                var almacenes = grupo.Select(s => s.CodigoAlmacen).Distinct().ToList();
+                // 🔷 NUEVO: Obtener información de palet si está paletizado
+                var paletInfo = await _auroraSgaContext.PaletLineas
+                    .Where(pl => pl.CodigoEmpresa == stock.CodigoEmpresa &&
+                                pl.CodigoArticulo == stock.CodigoArticulo &&
+                                pl.CodigoAlmacen == stock.CodigoAlmacen &&
+                                pl.Ubicacion == stock.Ubicacion &&
+                                pl.Lote == stock.Partida &&
+                                pl.Cantidad > 0)
+                    .Include(pl => pl.Palet)
+                    .Where(pl => pl.Palet.Estado.ToUpper() == "ABIERTO" || pl.Palet.Estado.ToUpper() == "CERRADO")
+                    .Select(pl => new
+                    {
+                        pl.PaletId,
+                        pl.Palet.Codigo,
+                        pl.Palet.Estado
+                    })
+                    .FirstOrDefaultAsync();
 
                 var stockCalidad = new StockCalidadDto
                 {
-                    CodigoArticulo = primerStock.CodigoArticulo,
-                    DescripcionArticulo = primerStock.DescripcionArticulo,
-                    CodigoAlmacen = string.Join(", ", almacenes), // Múltiples almacenes si los hay
-                    Almacen = string.Join(", ", grupo.Select(s => s.Almacen).Distinct()), // Múltiples nombres de almacén
-                    Ubicacion = ubicaciones.Any() ? string.Join(", ", ubicaciones) : "Sin ubicación específica",
-                    LotePartida = primerStock.Partida,
-                    FechaCaducidad = primerStock.FechaCaducidad,
-                    CantidadDisponible = cantidadTotal, // 🔷 NUEVO: Cantidad consolidada
+                    CodigoArticulo = stock.CodigoArticulo,
+                    DescripcionArticulo = stock.DescripcionArticulo,
+                    CodigoAlmacen = stock.CodigoAlmacen,
+                    Almacen = stock.Almacen,
+                    Ubicacion = stock.Ubicacion ?? "Sin ubicación específica",
+                    LotePartida = stock.Partida,
+                    FechaCaducidad = stock.FechaCaducidad,
+                    CantidadDisponible = stock.Disponible,
                     EstaBloqueado = estaBloqueado,
                     ComentarioBloqueo = bloqueoInfo?.ComentarioBloqueo,
                     FechaBloqueo = bloqueoInfo?.FechaBloqueo,
-                    UsuarioBloqueo = bloqueoInfo?.UsuarioBloqueoId.ToString()
+                    UsuarioBloqueo = bloqueoInfo?.UsuarioBloqueoId.ToString(),
+                    // 🔷 NUEVO: Información de palet
+                    PaletId = paletInfo?.PaletId,
+                    CodigoPalet = paletInfo?.Codigo,
+                    EstadoPalet = paletInfo?.Estado
                 };
 
                 resultado.Add(stockCalidad);
@@ -269,12 +463,76 @@ namespace SGA_Api.Services
         {
             try
             {
+                // 🔷 DESBLOQUEO GLOBAL: Si EsDesbloqueoGlobal es true, desbloquear en todas las ubicaciones
+                if (dto.EsDesbloqueoGlobal && dto.CodigoEmpresa.HasValue && 
+                    !string.IsNullOrWhiteSpace(dto.CodigoArticulo) && 
+                    !string.IsNullOrWhiteSpace(dto.LotePartida))
+                {
+                    _logger.LogInformation("Iniciando DESBLOQUEO GLOBAL para empresa {CodigoEmpresa}, artículo {CodigoArticulo}, partida {Partida}",
+                        dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+
+                    // Buscar todos los bloqueos activos del artículo y lote
+                    var bloqueosGlobales = await _auroraSgaContext.BloqueosCalidad
+                        .Where(b => b.CodigoEmpresa == dto.CodigoEmpresa.Value &&
+                                   b.CodigoArticulo == dto.CodigoArticulo &&
+                                   b.LotePartida == dto.LotePartida &&
+                                   b.Bloqueado == true)
+                        .ToListAsync();
+
+                    if (!bloqueosGlobales.Any())
+                    {
+                        _logger.LogWarning("No se encontraron bloqueos activos para desbloqueo global - Empresa: {CodigoEmpresa}, Artículo: {CodigoArticulo}, Partida: {Partida}",
+                            dto.CodigoEmpresa, dto.CodigoArticulo, dto.LotePartida);
+                        return new { 
+                            message = "No se encontraron bloqueos activos para este artículo y lote",
+                            codigoEmpresa = dto.CodigoEmpresa,
+                            codigoArticulo = dto.CodigoArticulo,
+                            lotePartida = dto.LotePartida
+                        };
+                    }
+
+                    var bloqueosDesbloqueados = new List<Guid>();
+                    var fechaDesbloqueo = DateTime.Now;
+
+                    // Desbloquear todos los bloqueos encontrados
+                    foreach (var bloqueoGlobal in bloqueosGlobales)
+                    {
+                        bloqueoGlobal.Bloqueado = false;
+                        bloqueoGlobal.UsuarioDesbloqueoId = dto.UsuarioId;
+                        bloqueoGlobal.FechaDesbloqueo = fechaDesbloqueo;
+                        bloqueoGlobal.ComentarioDesbloqueo = $"[DESBLOQUEO GLOBAL] {dto.ComentarioDesbloqueo}";
+                        bloqueoGlobal.FechaModificacion = DateTime.Now;
+                        bloqueosDesbloqueados.Add(bloqueoGlobal.Id);
+                    }
+
+                    await _auroraSgaContext.SaveChangesAsync();
+
+                    _logger.LogInformation("Desbloqueo global completado: {Desbloqueados} bloqueos desbloqueados", 
+                        bloqueosDesbloqueados.Count);
+
+                    return new { 
+                        Mensaje = $"Desbloqueo global aplicado: {bloqueosDesbloqueados.Count} ubicaciones desbloqueadas",
+                        UbicacionesDesbloqueadas = bloqueosDesbloqueados.Count,
+                        IdsBloqueos = bloqueosDesbloqueados,
+                        FechaDesbloqueo = fechaDesbloqueo
+                    };
+                }
+
+                // 🔷 DESBLOQUEO ESPECÍFICO: Lógica existente para desbloqueo de un bloqueo específico
+                if (!dto.IdBloqueo.HasValue)
+                {
+                    _logger.LogWarning("Desbloqueo específico requiere IdBloqueo");
+                    return new { 
+                        message = "Se requiere IdBloqueo para desbloqueo específico o campos para desbloqueo global"
+                    };
+                }
+
                 _logger.LogInformation("Iniciando desbloqueo de stock para bloqueo ID {BloqueoId}",
                     dto.IdBloqueo);
 
                 // 1. Buscar el bloqueo
                 var bloqueo = await _auroraSgaContext.BloqueosCalidad
-                    .FirstOrDefaultAsync(b => b.Id == dto.IdBloqueo);
+                    .FirstOrDefaultAsync(b => b.Id == dto.IdBloqueo.Value);
 
                 if (bloqueo == null)
                 {
@@ -318,8 +576,7 @@ namespace SGA_Api.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al desbloquear stock para bloqueo ID {BloqueoId}",
-                    dto.IdBloqueo);
+                _logger.LogError(ex, "Error al desbloquear stock");
                 throw;
             }
         }
@@ -364,6 +621,7 @@ namespace SGA_Api.Services
                         Almacen = stockInfo?.Almacen ?? "N/A",
                         Ubicacion = bloqueo.Ubicacion,
                         Bloqueado = bloqueo.Bloqueado,
+                        TipoBloqueo = bloqueo.TipoBloqueo ?? "TOTAL", // 🔷 NUEVO: Tipo de bloqueo
                         UsuarioBloqueo = bloqueo.UsuarioBloqueoId.ToString(),
                         FechaBloqueo = bloqueo.FechaBloqueo,
                         ComentarioBloqueo = bloqueo.ComentarioBloqueo,
@@ -449,6 +707,112 @@ namespace SGA_Api.Services
                 _logger.LogError(ex, "Error al obtener bloqueos por artículos para empresa {CodigoEmpresa}",
                     codigoEmpresa);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// 🔷 NUEVO: Copia un bloqueo de calidad desde una ubicación origen a una ubicación destino
+        /// </summary>
+        public async Task<bool> CopiarBloqueoCalidadAsync(
+            short codigoEmpresa,
+            string codigoArticulo,
+            string lotePartida,
+            string almacenOrigen,
+            string? ubicacionOrigen,
+            string almacenDestino,
+            string? ubicacionDestino)
+        {
+            try
+            {
+                // Normalizar ubicaciones (null o vacío = "sin ubicación")
+                var ubicacionOrigenNormalizada = string.IsNullOrWhiteSpace(ubicacionOrigen) ? "" : ubicacionOrigen.Trim();
+                var ubicacionDestinoNormalizada = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino.Trim();
+
+                _logger.LogInformation($"🔍 CopiarBloqueoCalidad - Artículo: {codigoArticulo}, Partida: {lotePartida}, Origen: {almacenOrigen}-{ubicacionOrigenNormalizada}, Destino: {almacenDestino}-{ubicacionDestinoNormalizada}");
+
+                // 1. Buscar bloqueo en origen
+                var queryBloqueoOrigen = _auroraSgaContext.BloqueosCalidad
+                    .Where(b => b.CodigoEmpresa == codigoEmpresa &&
+                               b.CodigoArticulo == codigoArticulo &&
+                               b.LotePartida == lotePartida &&
+                               b.CodigoAlmacen == almacenOrigen &&
+                               b.Bloqueado == true);
+
+                // Filtrar por ubicación origen
+                if (!string.IsNullOrWhiteSpace(ubicacionOrigenNormalizada))
+                {
+                    queryBloqueoOrigen = queryBloqueoOrigen.Where(b => b.Ubicacion == ubicacionOrigenNormalizada);
+                }
+                else
+                {
+                    queryBloqueoOrigen = queryBloqueoOrigen.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+                }
+
+                var bloqueoOrigen = await queryBloqueoOrigen
+                    .OrderByDescending(b => b.FechaBloqueo)
+                    .FirstOrDefaultAsync();
+
+                if (bloqueoOrigen == null)
+                {
+                    _logger.LogInformation($"✅ No hay bloqueo en origen para copiar - Artículo: {codigoArticulo}, Partida: {lotePartida}, Origen: {almacenOrigen}-{ubicacionOrigenNormalizada}");
+                    return false; // No hay bloqueo en origen, no hay nada que copiar
+                }
+
+                // 2. Verificar si ya existe bloqueo en destino (evitar duplicados)
+                var queryBloqueoDestino = _auroraSgaContext.BloqueosCalidad
+                    .Where(b => b.CodigoEmpresa == codigoEmpresa &&
+                               b.CodigoArticulo == codigoArticulo &&
+                               b.LotePartida == lotePartida &&
+                               b.CodigoAlmacen == almacenDestino &&
+                               b.Bloqueado == true);
+
+                // Filtrar por ubicación destino
+                if (!string.IsNullOrWhiteSpace(ubicacionDestinoNormalizada))
+                {
+                    queryBloqueoDestino = queryBloqueoDestino.Where(b => b.Ubicacion == ubicacionDestinoNormalizada);
+                }
+                else
+                {
+                    queryBloqueoDestino = queryBloqueoDestino.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+                }
+
+                var bloqueoDestinoExistente = await queryBloqueoDestino.AnyAsync();
+
+                if (bloqueoDestinoExistente)
+                {
+                    _logger.LogInformation($"⚠️ Ya existe bloqueo en destino - Artículo: {codigoArticulo}, Partida: {lotePartida}, Destino: {almacenDestino}-{ubicacionDestinoNormalizada}. No se copia para evitar duplicados.");
+                    return false; // Ya existe bloqueo en destino, no copiar
+                }
+
+                // 3. Crear bloqueo en destino copiando datos del origen
+                var bloqueoDestino = new BloqueoCalidad
+                {
+                    Id = Guid.NewGuid(),
+                    CodigoEmpresa = bloqueoOrigen.CodigoEmpresa,
+                    CodigoArticulo = bloqueoOrigen.CodigoArticulo,
+                    LotePartida = bloqueoOrigen.LotePartida,
+                    CodigoAlmacen = almacenDestino,
+                    Ubicacion = ubicacionDestinoNormalizada,
+                    Bloqueado = true,
+                    TipoBloqueo = bloqueoOrigen.TipoBloqueo ?? "TOTAL", // Copiar el tipo de bloqueo
+                    UsuarioBloqueoId = bloqueoOrigen.UsuarioBloqueoId,
+                    FechaBloqueo = DateTime.Now, // Nueva fecha de bloqueo
+                    ComentarioBloqueo = $"Bloqueo copiado desde {almacenOrigen}-{ubicacionOrigenNormalizada}. Original: {bloqueoOrigen.ComentarioBloqueo}",
+                    FechaCreacion = DateTime.Now,
+                    FechaModificacion = DateTime.Now
+                };
+
+                _auroraSgaContext.BloqueosCalidad.Add(bloqueoDestino);
+                await _auroraSgaContext.SaveChangesAsync();
+
+                _logger.LogInformation($"✅ Bloqueo copiado exitosamente - ID Origen: {bloqueoOrigen.Id}, ID Destino: {bloqueoDestino.Id}, Tipo: {bloqueoDestino.TipoBloqueo}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error al copiar bloqueo de calidad - Artículo: {codigoArticulo}, Partida: {lotePartida}, Origen: {almacenOrigen}-{ubicacionOrigen}, Destino: {almacenDestino}-{ubicacionDestino}");
+                // En caso de error, no fallar el traspaso, solo loguear
+                return false;
             }
         }
     }

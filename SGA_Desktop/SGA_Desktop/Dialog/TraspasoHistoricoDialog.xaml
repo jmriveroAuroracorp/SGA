@@ -36,6 +36,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/> <!-- Filtros - más compactos -->
+                <RowDefinition Height="Auto"/> <!-- Indicador de filtros activos -->
                 <RowDefinition Height="*"/> <!-- Tabla de traspasos - ocupa todo el espacio disponible -->
                 <RowDefinition Height="Auto"/> <!-- Botones -->
             </Grid.RowDefinitions>
@@ -142,6 +143,13 @@
                     </StackPanel>
 
                     <StackPanel Grid.Row="1" Grid.Column="2" Margin="5,10,5,0">
+                        <TextBlock Text="Lote:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding CodigoLote, UpdateSourceTrigger=PropertyChanged}" 
+                                 IsEnabled="{Binding PuedeFiltrarPorLote}"
+                                 Style="{StaticResource EstiloCajaTexto}" Height="30"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="3" Margin="5,10,5,0">
                         <TextBlock Text="Operario:" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
                         <ComboBox ItemsSource="{Binding OperariosView}"
                                   DisplayMemberPath="NombreOperario"
@@ -165,7 +173,7 @@
                     </StackPanel>
 
                     <!-- Botones de filtros en la segunda fila -->
-                    <StackPanel Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                    <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
                         <Button Content="🔄 Recargar" 
                                 Command="{Binding AplicarFiltrosCommand}"
                                 Style="{StaticResource EstiloBotonPrincipal}" 
@@ -178,16 +186,42 @@
                 </Grid>
             </GroupBox>
 
+            <!-- Indicador de filtros activos -->
+            <Border Grid.Row="1" 
+                    Background="#E8F4FD" 
+                    BorderBrush="#3498DB" 
+                    BorderThickness="1" 
+                    CornerRadius="5" 
+                    Padding="10,6"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Stretch"
+                    Margin="0,0,0,12"
+                    Visibility="{Binding TieneFiltrosActivos, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🔍 Filtros activos: " 
+                               FontWeight="SemiBold" 
+                               FontSize="11"
+                               Foreground="#2980B9"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding ResumenFiltrosActivos}" 
+                               FontSize="11"
+                               Foreground="#34495E"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
             <!-- Indicador de carga -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0"
+                        Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}">
                 <TextBlock Text="Cargando..." 
                            Foreground="{StaticResource BrushPrincipal}" 
-                           FontWeight="Bold" 
-                           Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                           FontWeight="Bold"/>
             </StackPanel>
 
             <!-- Historial de traspasos con formato de cards -->
-            <GroupBox Header="Historial de Traspasos" Grid.Row="1" Margin="0,0,0,16">
+            <GroupBox Header="Historial de Traspasos" Grid.Row="2" Margin="0,0,0,16">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -467,7 +501,7 @@
             </GroupBox>
 
             <!-- Botones -->
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
                 <Button Content="Cerrar" Width="120" Height="35" 
                         IsCancel="True" Command="{Binding CerrarCommand}" 
                         Style="{StaticResource EstiloBotonPrincipal}"/>

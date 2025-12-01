@@ -233,6 +233,18 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		if (dialog.ShowDialog() != true)
 			return;
 
+		// Validar que el artículo tenga EAN antes de imprimir
+		if (string.IsNullOrWhiteSpace(SelectedArticulo.CodigoAlternativo))
+		{
+			var warning = new WarningDialog(
+				"No se puede imprimir",
+				"El artículo no tiene EAN. No se puede imprimir sin EAN.",
+				"\uE814" // icono de advertencia
+			)
+			{ Owner = Application.Current.MainWindow };
+			warning.ShowDialog();
+			return;
+		}
 
 		var alergenos = await _stockService.ObtenerAlergenosArticuloAsync(
 	SessionManager.EmpresaSeleccionada!.Value,

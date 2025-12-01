@@ -209,7 +209,25 @@ namespace SGA_Desktop.ViewModels
                 var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
                 
                 // Filtrar por almacenes autorizados
+                var stockAntesFiltro = stock.Count;
                 stock = stock.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
+                
+                // Si después de filtrar no hay stock, informar al usuario
+                if (stock.Count == 0 && stockAntesFiltro > 0)
+                {
+                    Feedback = $"No tienes acceso a los almacenes donde hay stock de este artículo. Almacenes autorizados: {(almacenesAutorizados.Any() ? string.Join(", ", almacenesAutorizados) : "NINGUNO")}";
+                    AlmacenesFiltro.Clear();
+                    AlmacenFiltroSeleccionado = null;
+                    _todosLosResultadosStock.Clear();
+                    MostrarComboAlmacenes = false;
+                    MostrarFiltroPartida = false;
+                    PartidaSeleccionada = null;
+                    FiltroPartidaTexto = "";
+                    MostrarFiltroPalets = false;
+                    PaletSeleccionado = null;
+                    FiltroPaletsTexto = "";
+                    return;
+                }
 
                 // 🔷 NUEVO: Guardar todos los resultados para filtrado local
                 _todosLosResultadosStock = new List<StockDisponibleDto>(stock);
@@ -370,41 +388,52 @@ namespace SGA_Desktop.ViewModels
 		[RelayCommand]
 		public async Task AbrirDialogoRegularizacionMultipleAsync()
 		{
-			var vm = new RegularizacionMultipleDialogViewModel(_traspasosService, _stockService);
-			await vm.InitializeAsync(); // <- Espera a que cargue datos antes de abrir la ventana
+			try
+			{
+				var vm = new RegularizacionMultipleDialogViewModel(_traspasosService, _stockService);
+				await vm.InitializeAsync(); // <- Espera a que cargue datos antes de abrir la ventana
 
-			var dlg = new SGA_Desktop.Dialog.RegularizacionMultipleDialog(vm);
-			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
-					 ?? Application.Current.MainWindow;
-			if (owner != null && owner != dlg)
-				dlg.Owner = owner;
-			dlg.ShowDialog();
+				var dlg = new SGA_Desktop.Dialog.RegularizacionMultipleDialog(vm);
+				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+						 ?? Application.Current.MainWindow;
+				if (owner != null && owner != dlg)
+					dlg.Owner = owner;
+				dlg.ShowDialog();
+			}
+			catch (Exception ex)
+			{
+				var errorMsg = ex.Message.Contains("400") || ex.Message.Contains("Bad Request")
+					? "Error al cargar los almacenes. Verifica que el usuario tenga almacenes asignados."
+					: $"Error al abrir el diálogo: {ex.Message}";
+				new WarningDialog("Error", errorMsg).ShowDialog();
+			}
 		}
 
 
         //  NUEVA FUNCIÓN: Obtener todos los almacenes autorizados (individuales + centro)
         private async Task<List<string>> ObtenerAlmacenesAutorizadosAsync()
         {
-            var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
-            var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+            try
+            {
+                var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+                var centroLogistico = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var empresa = SessionManager.EmpresaSeleccionada!.Value;
 
-            // Si el usuario tiene almacenes individuales, incluir también los del centro
-            if (almacenesIndividuales.Any())
-            {
-                // Obtener almacenes del centro logístico de forma asíncrona
-                var almacenesCentro = await _stockService.ObtenerAlmacenesAsync(centroLogistico);
-                
-                // Combinar almacenes individuales + almacenes del centro
-                var todosLosAlmacenes = new List<string>(almacenesIndividuales);
-                todosLosAlmacenes.AddRange(almacenesCentro);
-                
-                // Eliminar duplicados
-                return todosLosAlmacenes.Distinct().ToList();
+                // Si el centro está vacío o es "0", usar solo los almacenes individuales
+                if (string.IsNullOrEmpty(centroLogistico) || centroLogistico == "0")
+                {
+                    return almacenesIndividuales;
+                }
+
+                // Usar el método del servicio que ya combina almacenes individuales + centro
+                var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centroLogistico, almacenesIndividuales);
+                return almacenesDto.Select(a => a.CodigoAlmacen).ToList();
             }
-            else
+            catch (Exception ex)
             {
-                // Si no tiene almacenes individuales, usar solo los del centro
-                return await _stockService.ObtenerAlmacenesAsync(centroLogistico);
+                // En caso de error, devolver al menos los almacenes individuales
+                var almacenesIndividuales = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+                return almacenesIndividuales;
             }
         }
 
@@ -754,7 +783,10 @@ namespace SGA_Desktop.ViewModels
                         AlmacenDestino = AlmacenDestino,
                         UbicacionDestino = UbicacionDestino,
                         CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-                        Partida = StockSeleccionado.Partida // 🔷 NUEVO: Incluir partida para validación específica
+                        Partida = StockSeleccionado.Partida,
+                        // 🔷 NUEVO: Incluir ubicación origen para verificar bloqueos específicos
+                        AlmacenOrigen = StockSeleccionado.CodigoAlmacen,
+                        UbicacionOrigen = StockSeleccionado.Ubicacion
                     };
 
                     var resultado = await _traspasosService.ValidarTraspasoArticuloAsync(request);

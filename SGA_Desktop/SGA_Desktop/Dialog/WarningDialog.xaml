@@ -8,7 +8,9 @@
         AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="False"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        MaxWidth="800"
+        MaxHeight="600">
 
     <Border CornerRadius="8"
             Background="{StaticResource BrushFondo}"
@@ -35,13 +37,17 @@
                        TextAlignment="Center"
                        Margin="0,0,0,12"/>
 
-            <!-- Mensaje -->
-            <TextBlock x:Name="MessageText"
-                       FontFamily="{StaticResource FuentePrincipal}"
-                       FontSize="16"
-                       Foreground="Black"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,20"/>
+            <!-- Mensaje con ScrollViewer para mensajes largos -->
+            <ScrollViewer MaxHeight="300"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="0,0,0,20">
+                <TextBlock x:Name="MessageText"
+                           FontFamily="{StaticResource FuentePrincipal}"
+                           FontSize="16"
+                           Foreground="Black"
+                           TextWrapping="Wrap"/>
+            </ScrollViewer>
 
             <!-- Botón Aceptar -->
             <Button Content="Aceptar"

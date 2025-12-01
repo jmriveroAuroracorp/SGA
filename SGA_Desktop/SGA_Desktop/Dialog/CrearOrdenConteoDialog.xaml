@@ -126,8 +126,16 @@
 
                             <!-- Almacén -->
                             <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10">
-                                <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock Text="Almacén" FontWeight="Bold"/>
+                                    <TextBlock Text=" (opcional en conteos por artículo)" 
+                                               FontSize="10" 
+                                               Foreground="#6C757D" 
+                                               FontStyle="Italic"
+                                               Margin="5,0,0,0"
+                                               Visibility="{Binding MostrarConteoArticulo, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                                <ComboBox ItemsSource="{Binding AlmacenesView}"
                                           DisplayMemberPath="DescripcionCombo"
                                           SelectedItem="{Binding AlmacenSeleccionado}"
                                           Height="35"

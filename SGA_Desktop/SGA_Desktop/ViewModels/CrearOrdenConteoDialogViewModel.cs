@@ -68,6 +68,10 @@ namespace SGA_Desktop.ViewModels
             // Inicializar ICollectionView para filtrado de operarios (aunque la colección esté vacía)
             OperariosView = CollectionViewSource.GetDefaultView(OperariosDisponibles);
             OperariosView.Filter = FiltraOperario;
+            
+            // Inicializar ICollectionView para filtrado de almacenes
+            AlmacenesView = CollectionViewSource.GetDefaultView(AlmacenesDisponibles);
+            AlmacenesView.Filter = FiltraAlmacen;
 
             // Valores por defecto
             EsConteoUbicacion = true; // Por defecto, conteo por ubicación
@@ -93,6 +97,9 @@ namespace SGA_Desktop.ViewModels
         
         // Vista filtrada para operarios
         public ICollectionView OperariosView { get; private set; } = null!;
+        
+        // Vista filtrada para almacenes (excluye "TODOS" en modo ubicación)
+        public ICollectionView AlmacenesView { get; private set; } = null!;
 
         [ObservableProperty]
         private string titulo = string.Empty;
@@ -238,9 +245,10 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
-                if (AlmacenSeleccionado == null)
+                // Solo requerir almacén en conteos por ubicación (y que no sea "TODOS")
+                if (EsConteoUbicacion && (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS"))
                 {
-                    var warningDialog = new WarningDialog("Error de validación", "Selecciona un almacén antes de crear la orden.");
+                    var warningDialog = new WarningDialog("Error de validación", "Selecciona un almacén específico antes de crear la orden.");
                     warningDialog.ShowDialog();
                     return;
                 }
@@ -259,7 +267,7 @@ namespace SGA_Desktop.ViewModels
                     CreadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString() ?? "ADMIN",
                     Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
                     CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
-                    CodigoAlmacen = AlmacenSeleccionado?.CodigoAlmacen,
+                    CodigoAlmacen = AlmacenSeleccionado?.CodigoAlmacen == "TODOS" ? null : AlmacenSeleccionado?.CodigoAlmacen,
                     Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim()
                 };
 
@@ -310,9 +318,9 @@ namespace SGA_Desktop.ViewModels
                 }
 
                 // En modo "Por Artículo" no requerimos almacén específico
-                if (EsConteoUbicacion && AlmacenSeleccionado == null)
+                if (EsConteoUbicacion && (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS"))
                 {
-                    var warningDialog = new WarningDialog("Buscar artículo", "Primero selecciona un almacén.");
+                    var warningDialog = new WarningDialog("Buscar artículo", "Primero selecciona un almacén específico.");
                     warningDialog.ShowDialog();
                     return;
                 }
@@ -333,7 +341,7 @@ namespace SGA_Desktop.ViewModels
                     resultados = await _stockService.ObtenerPorArticuloAsync(
                         empresa,
                         codigoArticulo: terminoBusqueda,
-                        codigoAlmacen: AlmacenSeleccionado?.CodigoAlmacen
+                        codigoAlmacen: AlmacenSeleccionado?.CodigoAlmacen == "TODOS" ? null : AlmacenSeleccionado?.CodigoAlmacen
                     );
                 }
 
@@ -346,9 +354,16 @@ namespace SGA_Desktop.ViewModels
                     resultados = await _stockService.ObtenerPorArticuloAsync(
                         empresa,
                         codigoArticulo: null,
-                        codigoAlmacen: AlmacenSeleccionado?.CodigoAlmacen,
+                        codigoAlmacen: AlmacenSeleccionado?.CodigoAlmacen == "TODOS" ? null : AlmacenSeleccionado?.CodigoAlmacen,
                         descripcion: terminoBusqueda
                     );
+                }
+
+                // Si no hay almacén seleccionado o es "TODOS", filtrar por almacenes permitidos del usuario
+                if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
+                {
+                    var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+                    resultados = resultados.Where(r => almacenesPermitidos.Contains(r.CodigoAlmacen)).ToList();
                 }
 
                 // Agrupar por artículo
@@ -374,6 +389,10 @@ namespace SGA_Desktop.ViewModels
                     CodigoArticulo = ArticuloSeleccionado.CodigoArticulo;
                     ArticuloTieneStockVirtual = true; // Tiene stock porque se encontró en la búsqueda
                     var mensaje = $"✓ Encontrado por {tipoBusqueda}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
+                    if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
+                    {
+                        mensaje += "\n\n(Se buscará en todos los almacenes permitidos)";
+                    }
                     var successDialog = new WarningDialog("Artículo encontrado", mensaje);
                     successDialog.ShowDialog();
                 }
@@ -381,6 +400,10 @@ namespace SGA_Desktop.ViewModels
                 {
                     ArticuloTieneStockVirtual = true; // Tiene stock porque se encontraron resultados
                     var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}.\nSelecciona uno de la lista desplegable.";
+                    if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
+                    {
+                        mensaje += "\n\n(Resultados de todos los almacenes permitidos)";
+                    }
                     var infoDialog = new WarningDialog("Múltiples resultados", mensaje);
                     infoDialog.ShowDialog();
                 }
@@ -402,12 +425,16 @@ namespace SGA_Desktop.ViewModels
                         ArticuloTieneStockVirtual = false; // NO tiene stock virtual
                         
                         var mensaje = $"⚠️ No se encontró stock virtual para el código '{terminoBusqueda}'";
-                        if (AlmacenSeleccionado != null)
+                        if (AlmacenSeleccionado != null && AlmacenSeleccionado.CodigoAlmacen != "TODOS")
                         {
                             var nombreAlmacen = !string.IsNullOrWhiteSpace(AlmacenSeleccionado.NombreAlmacen) 
                                 ? $" ({AlmacenSeleccionado.NombreAlmacen})" 
                                 : "";
                             mensaje += $" en el almacén {AlmacenSeleccionado.CodigoAlmacen}{nombreAlmacen}";
+                        }
+                        else
+                        {
+                            mensaje += " en los almacenes permitidos";
                         }
                         mensaje += ".\n\n";
                         mensaje += "✅ Se permitirá crear el conteo igualmente, ya que puede haber stock físico aunque no esté registrado virtualmente.\n\n";
@@ -421,12 +448,16 @@ namespace SGA_Desktop.ViewModels
                         ArticuloTieneStockVirtual = true; // Resetear si no es un código válido
                         // Si parece una descripción, mostrar mensaje informativo
                         var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por descripción";
-                        if (AlmacenSeleccionado != null)
+                        if (AlmacenSeleccionado != null && AlmacenSeleccionado.CodigoAlmacen != "TODOS")
                         {
                             var nombreAlmacen = !string.IsNullOrWhiteSpace(AlmacenSeleccionado.NombreAlmacen) 
                                 ? $" ({AlmacenSeleccionado.NombreAlmacen})" 
                                 : "";
                             mensaje += $" en el almacén {AlmacenSeleccionado.CodigoAlmacen}{nombreAlmacen}";
+                        }
+                        else
+                        {
+                            mensaje += " en los almacenes permitidos";
                         }
                         mensaje += ".\n\n";
                         mensaje += "💡 Sugerencias:\n";
@@ -483,24 +514,74 @@ namespace SGA_Desktop.ViewModels
 
                 AlmacenesDisponibles.Clear();
 
+                // Agregar opción "TODOS" al inicio
+                var opcionTodos = new AlmacenDto
+                {
+                    CodigoAlmacen = "TODOS",
+                    NombreAlmacen = "Todos los almacenes",
+                    CodigoEmpresa = (short)empresa
+                };
+                AlmacenesDisponibles.Add(opcionTodos);
+
+                // Agregar el resto de almacenes
                 foreach (var a in resultado)
                     AlmacenesDisponibles.Add(a);
 
-                AlmacenSeleccionado = AlmacenesDisponibles.FirstOrDefault();
+                // Refrescar la vista filtrada
+                AlmacenesView?.Refresh();
+
+                // Establecer selección por defecto según el modo
+                if (EsConteoUbicacion)
+                {
+                    // En modo ubicación, seleccionar el primer almacén específico (no "TODOS")
+                    var almacenEspecifico = AlmacenesDisponibles.FirstOrDefault(a => a.CodigoAlmacen != "TODOS");
+                    AlmacenSeleccionado = almacenEspecifico ?? opcionTodos;
+                }
+                else
+                {
+                    // En modo artículo, seleccionar "TODOS" por defecto
+                    AlmacenSeleccionado = opcionTodos;
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error cargando almacenes: {ex.Message}");
-                // En caso de error, agregar almacén por defecto
+                // En caso de error, agregar al menos la opción TODOS
                 AlmacenesDisponibles.Clear();
-                var almacenDefecto = new AlmacenDto
+                var opcionTodos = new AlmacenDto
                 {
-                    CodigoAlmacen = "01",
-                    NombreAlmacen = "Almacén Principal",
+                    CodigoAlmacen = "TODOS",
+                    NombreAlmacen = "Todos los almacenes",
                     CodigoEmpresa = (short)(SessionManager.EmpresaSeleccionada ?? 1)
                 };
-                AlmacenesDisponibles.Add(almacenDefecto);
-                AlmacenSeleccionado = almacenDefecto;
+                AlmacenesDisponibles.Add(opcionTodos);
+                AlmacenSeleccionado = opcionTodos;
+            }
+        }
+
+        private async Task<List<string>> ObtenerAlmacenesPermitidosAsync()
+        {
+            try
+            {
+                var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var permisos = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+                
+                if (!permisos.Any())
+                {
+                    permisos = await _stockService.ObtenerAlmacenesAsync(centro);
+                }
+
+                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                
+                // Retornar solo los códigos de almacén permitidos
+                return almacenesAutorizados.Select(a => a.CodigoAlmacen).ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error obteniendo almacenes permitidos: {ex.Message}");
+                // En caso de error, retornar lista vacía para máxima seguridad
+                return new List<string>();
             }
         }
 
@@ -526,19 +607,8 @@ namespace SGA_Desktop.ViewModels
                 // La vista ya está inicializada en el constructor, solo refrescar
                 OperariosView?.Refresh();
 
-                // Seleccionar el operario actual si está en la lista
-                var operarioActual = SessionManager.UsuarioActual?.operario;
-                if (operarioActual.HasValue)
-                {
-                    OperarioSeleccionado = OperariosDisponibles.FirstOrDefault(o => o.Operario == operarioActual.Value);
-                }
-                
-                // Si no se encontró, no seleccionar ninguno (forzar selección manual)
-                if (OperarioSeleccionado == null && OperariosDisponibles.Count > 0)
-                {
-                    // No seleccionar automáticamente - el usuario debe elegir
-                    OperarioSeleccionado = null;
-                }
+                // Dejar el combo en blanco - el usuario debe seleccionar manualmente
+                OperarioSeleccionado = null;
             }
             catch (Exception ex)
             {
@@ -637,8 +707,9 @@ namespace SGA_Desktop.ViewModels
             {
                 var filtros = new Dictionary<string, object>();
 
-                // Incluir siempre el almacén si se ha seleccionado, independientemente del modo
-                if (AlmacenSeleccionado != null)
+                // Incluir el almacén solo si se ha seleccionado y no es "TODOS"
+                // En conteos por ubicación es obligatorio, en conteos por artículo es opcional
+                if (AlmacenSeleccionado != null && AlmacenSeleccionado.CodigoAlmacen != "TODOS")
                 {
                     filtros["almacen"] = AlmacenSeleccionado.CodigoAlmacen;
                 }
@@ -688,6 +759,9 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(MostrarConteoUbicacion));
             OnPropertyChanged(nameof(MostrarConteoArticulo));
             
+            // Actualizar el filtro de almacenes cuando cambia el tipo de conteo
+            AlmacenesView?.Refresh();
+            
             // Limpiar filtros cuando cambia el tipo de conteo
             if (value)
             {
@@ -696,6 +770,16 @@ namespace SGA_Desktop.ViewModels
                 ArticuloBuscado = string.Empty;
                 ArticulosEncontrados.Clear();
                 ArticuloSeleccionado = null;
+                
+                // Asegurar que hay un almacén seleccionado (no "TODOS") para conteos por ubicación
+                if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
+                {
+                    var almacenEspecifico = AlmacenesDisponibles.FirstOrDefault(a => a.CodigoAlmacen != "TODOS");
+                    if (almacenEspecifico != null)
+                    {
+                        AlmacenSeleccionado = almacenEspecifico;
+                    }
+                }
             }
             else
             {
@@ -711,10 +795,11 @@ namespace SGA_Desktop.ViewModels
                 AlturaHabilitada = true;
                 PosicionHabilitada = true;
                 
-                // Asegurar que hay un almacén seleccionado para conteos por artículo
-                if (AlmacenSeleccionado == null && AlmacenesDisponibles.Any())
+                // En conteos por artículo, establecer "TODOS" por defecto
+                var opcionTodos = AlmacenesDisponibles.FirstOrDefault(a => a.CodigoAlmacen == "TODOS");
+                if (opcionTodos != null)
                 {
-                    AlmacenSeleccionado = AlmacenesDisponibles.FirstOrDefault();
+                    AlmacenSeleccionado = opcionTodos;
                 }
             }
             
@@ -774,8 +859,8 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(MostrarListaArticulos));
             OnPropertyChanged(nameof(MostrarInfoArticulo));
 
-            // Cargar rangos disponibles y ubicaciones cuando se selecciona un almacén
-            if (value != null)
+            // Cargar rangos disponibles y ubicaciones solo cuando se selecciona un almacén específico (no "TODOS")
+            if (value != null && value.CodigoAlmacen != "TODOS")
             {
                 _ = CargarRangosDisponiblesAsync();
                 _ = CargarUbicacionesDisponiblesAsync();
@@ -905,6 +990,19 @@ namespace SGA_Desktop.ViewModels
                 compare.IndexOf(s, FiltroOperarios, options) >= 0;
 
             return contiene(operario.NombreOperario) || contiene(operario.NombreCompleto);
+        }
+
+        private bool FiltraAlmacen(object obj)
+        {
+            if (obj is not AlmacenDto almacen) return false;
+            
+            // En modo conteo por ubicación, excluir "TODOS"
+            if (EsConteoUbicacion && almacen.CodigoAlmacen == "TODOS")
+            {
+                return false;
+            }
+            
+            return true;
         }
 
         [RelayCommand]

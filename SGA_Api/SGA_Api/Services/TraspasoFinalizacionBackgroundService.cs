@@ -373,6 +373,10 @@ namespace SGA_Api.Services
 								.ToListAsync();
 							var paletTuvoTemporalesPendientes = tempsPendientes.Count > 0;
 
+							// 🔷 HashSet para rastrear traspasos con ERROR_ERP ya procesados en esta iteración
+							// Evita eliminar las mismas temporales múltiples veces
+							var traspasosErrorErpProcesados = new HashSet<Guid>();
+
 					foreach (var temp in tempsPendientes)
 					{
 						// 🔷 PROTECCIÓN: Las líneas de conteo e inventario NO se consolidan aquí
@@ -394,12 +398,84 @@ namespace SGA_Api.Services
 						var traspaso = await dbContext.Traspasos.FindAsync(temp.TraspasoId);
 						if (traspaso == null) continue;
 						
-					// 2.2) Si el traspaso tiene ERROR_ERP, ELIMINAR la temporal (no procesarla)
-					// Esto limpia las líneas negativas cuando el traspaso falla
+					// 2.2) Si el traspaso tiene ERROR_ERP, ELIMINAR TODAS las temporales asociadas (no procesarlas)
+					// Esto limpia las líneas (positivas y negativas) cuando el traspaso falla
                     if (traspaso.CodigoEstado == "ERROR_ERP")
                     {
-                        logger.LogWarning("⚠️ Temporal {TempId} asociada a traspaso con ERROR_ERP ({TraspasoId}). Se mantiene pendiente para revisión.",
-                            temp.Id, temp.TraspasoId);
+                        // 🔷 Evitar procesar el mismo traspaso múltiples veces en esta iteración
+                        if (traspasosErrorErpProcesados.Contains(traspaso.Id))
+                        {
+                            // Este traspaso ya fue procesado, solo continuar (la temporal ya fue eliminada)
+                            continue;
+                        }
+                        
+                        // Marcar este traspaso como procesado
+                        traspasosErrorErpProcesados.Add(traspaso.Id);
+                        
+                        // 🔷 CRÍTICO: Buscar SOLO las TempPaletLinea asociadas a ESTE traspaso específico (por TraspasoId)
+                        // NO eliminar líneas de otros traspasos aunque sean del mismo artículo
+                        // Esto es crítico porque un palet puede tener múltiples traspasos del mismo artículo
+                        var todasLasTemporalesDelTraspaso = await dbContext.TempPaletLineas
+                            .Where(tpl => tpl.TraspasoId == traspaso.Id && tpl.Procesada == false)
+                            .ToListAsync();
+                        
+                        if (todasLasTemporalesDelTraspaso.Any())
+                        {
+                            // 🔷 VALIDACIÓN ADICIONAL: Verificar que todas las líneas realmente pertenecen a este traspaso
+                            var lineasConTraspasoIdIncorrecto = todasLasTemporalesDelTraspaso
+                                .Where(t => t.TraspasoId != traspaso.Id)
+                                .ToList();
+                            
+                            if (lineasConTraspasoIdIncorrecto.Any())
+                            {
+                                logger.LogError("❌ ERROR CRÍTICO: Se encontraron líneas temporales con TraspasoId incorrecto. Esto no debería pasar. TraspasoId esperado: {TraspasoId}, Líneas encontradas: {Cantidad}",
+                                    traspaso.Id, lineasConTraspasoIdIncorrecto.Count);
+                                // NO eliminar estas líneas, solo las que realmente pertenecen al traspaso
+                                todasLasTemporalesDelTraspaso = todasLasTemporalesDelTraspaso
+                                    .Where(t => t.TraspasoId == traspaso.Id)
+                                    .ToList();
+                            }
+                            
+                            logger.LogWarning("🚨 ERROR_ERP detectado en traspaso {TraspasoId} (Tipo: {TipoTraspaso}, Articulo: {Articulo}). Eliminando SOLO {Cantidad} líneas temporales de ESTE traspaso específico. NO se eliminan líneas de otros traspasos.",
+                                traspaso.Id, traspaso.TipoTraspaso, traspaso.CodigoArticulo, todasLasTemporalesDelTraspaso.Count);
+                            
+                            foreach (var tempDelTraspaso in todasLasTemporalesDelTraspaso)
+                            {
+                                // 🔷 VALIDACIÓN FINAL: Verificar una vez más que el TraspasoId coincide
+                                if (tempDelTraspaso.TraspasoId != traspaso.Id)
+                                {
+                                    logger.LogError("❌ ERROR: TempPaletLinea {TempId} tiene TraspasoId {TraspasoIdTemp} pero se esperaba {TraspasoIdEsperado}. NO se eliminará.",
+                                        tempDelTraspaso.Id, tempDelTraspaso.TraspasoId, traspaso.Id);
+                                    continue; // NO eliminar esta línea
+                                }
+                                
+                                logger.LogInformation("🗑️ Eliminando TempPaletLinea {TempId} del palet {PaletId} (Cantidad: {Cantidad}, Articulo: {Articulo}) por ERROR_ERP del traspaso {TraspasoId}. Esta línea pertenece SOLO a este traspaso.",
+                                    tempDelTraspaso.Id, tempDelTraspaso.PaletId, tempDelTraspaso.Cantidad, tempDelTraspaso.CodigoArticulo, traspaso.Id);
+                                
+                                dbContext.TempPaletLineas.Remove(tempDelTraspaso);
+                            }
+                            
+                            // Guardar cambios inmediatamente para limpiar las líneas
+                            await dbContext.SaveChangesAsync();
+                            
+                            // Registrar en LogPalet para cada palet afectado
+                            var paletsAfectados = todasLasTemporalesDelTraspaso.Select(t => t.PaletId).Distinct().ToList();
+                            foreach (var paletAfectadoId in paletsAfectados)
+                            {
+                                dbContext.LogPalet.Add(new LogPalet
+                                {
+                                    PaletId = paletAfectadoId,
+                                    Fecha = DateTime.Now,
+                                    IdUsuario = traspaso.UsuarioInicioId,
+                                    Accion = "EliminarLineasPorErrorERP",
+                                    Detalle = $"Líneas temporales eliminadas por ERROR_ERP del traspaso {traspaso.Id}. Traspaso falló en ERP."
+                                });
+                            }
+                            
+                            await dbContext.SaveChangesAsync();
+                        }
+                        
+                        // Continuar con la siguiente temporal (esta ya fue eliminada si estaba en la lista)
                         continue;
                     }
 							
@@ -424,11 +500,18 @@ namespace SGA_Api.Services
 						}
 
 								// Si quieres exigir �completado�, acepta lo que ponga el controller
-								var esCompletado =
-									string.Equals(traspaso.CodigoEstado, "COMPLETADO", StringComparison.OrdinalIgnoreCase) ||
-									string.Equals(traspaso.CodigoEstado, "PENDIENTE_ERP", StringComparison.OrdinalIgnoreCase); // opcional
+								// 🔷 CRÍTICO: Solo consolidar líneas cuando el traspaso esté COMPLETADO
+								// NO consolidar en PENDIENTE_ERP porque el traspaso aún puede fallar (ERROR_ERP)
+								// Si se consolida antes de que el ERP confirme, las líneas quedarán en el palet aunque el traspaso falle
+								var esCompletado = string.Equals(traspaso.CodigoEstado, "COMPLETADO", StringComparison.OrdinalIgnoreCase);
 
-								if (!esCompletado) continue;
+								if (!esCompletado)
+								{
+									// Si está en PENDIENTE_ERP, esperar a que el ERP confirme (COMPLETADO o ERROR_ERP)
+									logger.LogDebug("⏳ TempLinea {TempId} esperando confirmación del ERP. Traspaso {TraspasoId} en estado {Estado}",
+										temp.Id, traspaso.Id, traspaso.CodigoEstado);
+									continue;
+								}
 
 						// 3) Busca la línea definitiva (misma clave)
 						// Normalizar valores para comparación
@@ -574,8 +657,9 @@ namespace SGA_Api.Services
 					// Mover TODAS las l�neas del palet al destino del �LTIMO traspaso completado
 					var ultimoTraspasoPalet = await dbContext.Traspasos
 						.Where(t => t.TipoTraspaso == "PALET" &&
-									t.CodigoEstado == "COMPLETADO" &&
+									(t.CodigoEstado == "COMPLETADO" || t.CodigoEstado == "PENDIENTE_ERP") &&
 									t.PaletId == paletId &&
+									t.FechaFinalizacion != null &&
 									t.FechaFinalizacion >= DateTime.Now.AddHours(-24)) // Extendido a 24 horas para cubrir más casos
 						.OrderByDescending(t => t.FechaFinalizacion)
 						.FirstOrDefaultAsync();
@@ -583,17 +667,23 @@ namespace SGA_Api.Services
 					if (ultimoTraspasoPalet != null)
 					{
 						// Verificar si las l�neas ya est�n en la ubicaci�n destino (evitar reprocesamiento)
-						var lineaMuestra = await dbContext.PaletLineas
-							.Where(l => l.PaletId == paletId)
-							.FirstOrDefaultAsync();
+						// 🔷 CORREGIDO: Verificar si HAY ALGUNA línea que no esté en el destino
+						// En lugar de verificar solo una línea de muestra, verificar si hay líneas en diferentes almacenes
+						// Esto corrige el bug donde algunas líneas quedaban sin actualizar
+						var hayLineasEnDiferenteAlmacen = await dbContext.PaletLineas
+							.Where(l => l.PaletId == paletId && 
+										(l.CodigoAlmacen != ultimoTraspasoPalet.AlmacenDestino || 
+										 l.Ubicacion != ultimoTraspasoPalet.UbicacionDestino))
+							.AnyAsync();
 						
-						if (lineaMuestra != null && 
-						    (lineaMuestra.CodigoAlmacen != ultimoTraspasoPalet.AlmacenDestino || 
-						     lineaMuestra.Ubicacion != ultimoTraspasoPalet.UbicacionDestino))
+						if (hayLineasEnDiferenteAlmacen)
 						{
 							var todasLasLineas = await dbContext.PaletLineas
 								.Where(l => l.PaletId == paletId)
 								.ToListAsync();
+
+							logger.LogInformation("🔧 Corrigiendo líneas del palet {PaletId}: {Cantidad} líneas detectadas. Actualizando todas al destino {AlmacenDestino}-{UbicacionDestino}", 
+								paletId, todasLasLineas.Count, ultimoTraspasoPalet.AlmacenDestino, ultimoTraspasoPalet.UbicacionDestino);
 
 							foreach (var linea in todasLasLineas)
 							{
@@ -601,6 +691,11 @@ namespace SGA_Api.Services
 								linea.Ubicacion = ultimoTraspasoPalet.UbicacionDestino;
 								dbContext.PaletLineas.Update(linea);
 							}
+						}
+						else
+						{
+							logger.LogDebug("ℹ️ Todas las líneas del palet {PaletId} ya están en el destino {AlmacenDestino}-{UbicacionDestino}", 
+								paletId, ultimoTraspasoPalet.AlmacenDestino, ultimoTraspasoPalet.UbicacionDestino);
 						}
 
 						var esDestinoPulmon = await EsUbicacionPulmonAsync(
@@ -847,78 +942,111 @@ namespace SGA_Api.Services
 							}
 						}
 
-						// 6) CONSOLIDACIÓN INTELIGENTE - Solo si hay líneas duplicadas
-						// Verificar si hay duplicadas antes de procesar
-						var tieneDuplicadas = await dbContext.PaletLineas
+					// 6) CONSOLIDACIÓN INTELIGENTE - Solo si hay líneas duplicadas
+					// 🔷 CORREGIDO: Incluir CodigoAlmacen y Ubicacion en el GROUP BY
+					// Solo unificar líneas que estén en la misma ubicación y almacén
+					// Esto evita mezclar líneas de diferentes ubicaciones antes de que el palet se mueva a su destino final
+					// 
+					// FORMA ANTIGUA (comentada):
+					// var tieneDuplicadas = await dbContext.PaletLineas
+					// 	.Where(l => l.PaletId == paletId)
+					// 	.GroupBy(l => new { 
+					// 		l.CodigoArticulo, 
+					// 		Lote = l.Lote ?? "", 
+					// 		FechaCaducidad = l.FechaCaducidad 
+					// 	})
+					// 	.AnyAsync(g => g.Count() > 1);
+					
+					// 🔷 NUEVA FORMA: Incluye CodigoAlmacen y Ubicacion para evitar unificar líneas de diferentes ubicaciones
+					var tieneDuplicadas = await dbContext.PaletLineas
+						.Where(l => l.PaletId == paletId)
+						.GroupBy(l => new { 
+							l.CodigoArticulo, 
+							Lote = l.Lote ?? "", 
+							FechaCaducidad = l.FechaCaducidad,
+							l.CodigoAlmacen,  // 🔷 AÑADIDO: Solo unificar si están en el mismo almacén
+							Ubicacion = l.Ubicacion ?? ""  // 🔷 AÑADIDO: Solo unificar si están en la misma ubicación
+						})
+						.AnyAsync(g => g.Count() > 1);
+					
+					if (tieneDuplicadas)
+					{
+						logger.LogInformation("🔍 Palet {PaletId} tiene líneas duplicadas, ejecutando consolidación inteligente", paletId);
+						
+						// Obtener líneas del palet para consolidar
+						var lineasDelPalet = await dbContext.PaletLineas
 							.Where(l => l.PaletId == paletId)
+							.ToListAsync();
+						
+						// 🔷 CORREGIDO: Agrupar incluyendo CodigoAlmacen y Ubicacion
+						// FORMA ANTIGUA (comentada):
+						// var lineasDuplicadas = lineasDelPalet
+						// 	.GroupBy(l => new { 
+						// 		l.CodigoArticulo, 
+						// 		Lote = l.Lote ?? "", 
+						// 		FechaCaducidad = l.FechaCaducidad 
+						// 	})
+						// 	.Where(g => g.Count() > 1)
+						// 	.ToList();
+						
+						// 🔷 NUEVA FORMA: Solo unificar líneas que estén en la misma ubicación
+						var lineasDuplicadas = lineasDelPalet
 							.GroupBy(l => new { 
 								l.CodigoArticulo, 
 								Lote = l.Lote ?? "", 
-								FechaCaducidad = l.FechaCaducidad 
+								FechaCaducidad = l.FechaCaducidad,
+								l.CodigoAlmacen,  // 🔷 AÑADIDO
+								Ubicacion = l.Ubicacion ?? ""  // 🔷 AÑADIDO
 							})
-							.AnyAsync(g => g.Count() > 1);
-						
-						if (tieneDuplicadas)
-						{
-							logger.LogInformation("🔍 Palet {PaletId} tiene líneas duplicadas, ejecutando consolidación inteligente", paletId);
-							
-							// Obtener líneas del palet para consolidar
-							var lineasDelPalet = await dbContext.PaletLineas
-								.Where(l => l.PaletId == paletId)
-								.ToListAsync();
-							
-							// Agrupar en memoria para evitar problemas de traducción de EF
-							var lineasDuplicadas = lineasDelPalet
-								.GroupBy(l => new { 
-									l.CodigoArticulo, 
-									Lote = l.Lote ?? "", 
-									FechaCaducidad = l.FechaCaducidad 
-								})
-								.Where(g => g.Count() > 1)
-								.ToList();
+							.Where(g => g.Count() > 1)
+							.ToList();
 
-						foreach (var grupo in lineasDuplicadas)
+					foreach (var grupo in lineasDuplicadas)
+					{
+						var lineas = grupo.ToList();
+						var lineaPrincipal = lineas.First();
+						
+						// Sumar todas las cantidades
+						var cantidadTotal = lineas.Sum(l => l.Cantidad);
+						
+						// Actualizar la línea principal con la cantidad total
+						lineaPrincipal.Cantidad = cantidadTotal;
+						
+						// 🔷 CORREGIDO: Ya no es necesario actualizar CodigoAlmacen y Ubicacion
+						// porque todas las líneas del grupo tienen los mismos valores (están agrupadas por estos campos)
+						// Usar la información más reciente (última línea por fecha)
+						var ultimaLinea = lineas.OrderByDescending(l => l.FechaAgregado).First();
+						lineaPrincipal.UsuarioId = ultimaLinea.UsuarioId;
+						lineaPrincipal.TraspasoId = ultimaLinea.TraspasoId;
+						// 🔷 Ya no necesario: lineaPrincipal.CodigoAlmacen = ultimaLinea.CodigoAlmacen;
+						// 🔷 Ya no necesario: lineaPrincipal.Ubicacion = ultimaLinea.Ubicacion;
+						// Todas las líneas del grupo ya tienen el mismo CodigoAlmacen y Ubicacion
+						
+						// Mantener la descripción más completa
+						if (string.IsNullOrWhiteSpace(lineaPrincipal.DescripcionArticulo) && 
+							!string.IsNullOrWhiteSpace(ultimaLinea.DescripcionArticulo))
 						{
-							var lineas = grupo.ToList();
-							var lineaPrincipal = lineas.First();
-							
-							// Sumar todas las cantidades
-							var cantidadTotal = lineas.Sum(l => l.Cantidad);
-							
-							// Actualizar la línea principal con la cantidad total
-							lineaPrincipal.Cantidad = cantidadTotal;
-							
-							// Usar la información más reciente (última línea por fecha)
-							var ultimaLinea = lineas.OrderByDescending(l => l.FechaAgregado).First();
-							lineaPrincipal.UsuarioId = ultimaLinea.UsuarioId;
-							lineaPrincipal.TraspasoId = ultimaLinea.TraspasoId;
-							lineaPrincipal.CodigoAlmacen = ultimaLinea.CodigoAlmacen;
-							lineaPrincipal.Ubicacion = ultimaLinea.Ubicacion;
-							
-							// Mantener la descripción más completa
-							if (string.IsNullOrWhiteSpace(lineaPrincipal.DescripcionArticulo) && 
-								!string.IsNullOrWhiteSpace(ultimaLinea.DescripcionArticulo))
-							{
-								lineaPrincipal.DescripcionArticulo = ultimaLinea.DescripcionArticulo;
-							}
-							
-							// Eliminar las líneas duplicadas
-							foreach (var duplicada in lineas.Skip(1))
-							{
-								dbContext.PaletLineas.Remove(duplicada);
-							}
-							
-							// Actualizar la línea principal
-							dbContext.PaletLineas.Update(lineaPrincipal);
-							
-							logger.LogInformation("🔄 Líneas consolidadas: {CantidadLineas} líneas del artículo {CodigoArticulo} (lote: {Lote}) → cantidad total: {CantidadTotal}", 
-								lineas.Count, grupo.Key.CodigoArticulo, grupo.Key.Lote, cantidadTotal);
+							lineaPrincipal.DescripcionArticulo = ultimaLinea.DescripcionArticulo;
 						}
-						}
-						else
+						
+						// Eliminar las líneas duplicadas
+						foreach (var duplicada in lineas.Skip(1))
 						{
-							logger.LogDebug("ℹ️ Palet {PaletId} no tiene líneas duplicadas, omitiendo consolidación", paletId);
+							dbContext.PaletLineas.Remove(duplicada);
 						}
+						
+						// Actualizar la línea principal
+						dbContext.PaletLineas.Update(lineaPrincipal);
+						
+						// 🔷 ACTUALIZADO: Log incluye almacén y ubicación para mejor trazabilidad
+						logger.LogInformation("🔄 Líneas consolidadas: {CantidadLineas} líneas del artículo {CodigoArticulo} (lote: {Lote}, almacen: {Almacen}, ubicacion: {Ubicacion}) → cantidad total: {CantidadTotal}", 
+							lineas.Count, grupo.Key.CodigoArticulo, grupo.Key.Lote, grupo.Key.CodigoAlmacen, grupo.Key.Ubicacion, cantidadTotal);
+					}
+					}
+					else
+					{
+						logger.LogDebug("ℹ️ Palet {PaletId} no tiene líneas duplicadas, omitiendo consolidación", paletId);
+					}
 
 						// Guardar todos los cambios de este palet en una sola operación
 						await dbContext.SaveChangesAsync();

@@ -4,8 +4,12 @@ namespace SGA_Api.Models.Calidad
 {
     public class DesbloquearStockDto
     {
-        [Required]
-        public Guid IdBloqueo { get; set; }
+        public Guid? IdBloqueo { get; set; } // 🔷 MODIFICADO: Ahora es opcional para permitir desbloqueo global
+
+        // 🔷 NUEVO: Campos para desbloqueo global (se usan si IdBloqueo es null)
+        public short? CodigoEmpresa { get; set; }
+        public string? CodigoArticulo { get; set; }
+        public string? LotePartida { get; set; }
 
         [Required]
         [StringLength(500)]
@@ -13,5 +17,7 @@ namespace SGA_Api.Models.Calidad
 
         [Required]
         public int UsuarioId { get; set; }
+
+        public bool EsDesbloqueoGlobal { get; set; } = false; // 🔷 NUEVO: Indica si es desbloqueo en todas las ubicaciones
     }
 }

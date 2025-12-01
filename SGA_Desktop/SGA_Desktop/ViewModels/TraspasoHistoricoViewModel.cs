@@ -28,6 +28,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private DateTime? fechaDesde;
         [ObservableProperty] private DateTime? fechaHasta;
         [ObservableProperty] private string codigoArticulo = "";
+        [ObservableProperty] private string codigoLote = "";
         [ObservableProperty] private string codigoPalet = "";
         [ObservableProperty] private string filtroObservaciones = "";
         [ObservableProperty] private AlmacenDto? almacenOrigenSeleccionado;
@@ -54,6 +55,89 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private string filtroOperarios = "";
         [ObservableProperty] private bool isDropDownOpenOperarios = false;
         public ICollectionView OperariosView { get; private set; }
+
+        // Propiedad para habilitar el campo de lote solo cuando hay artículo
+        public bool PuedeFiltrarPorLote => !string.IsNullOrWhiteSpace(CodigoArticulo);
+
+        // Propiedades calculadas para indicador de filtros activos
+        public bool TieneFiltrosActivos
+        {
+            get
+            {
+                // Verificar si hay filtros activos (no son los valores por defecto)
+                var almacenOrigenActivo = AlmacenOrigenSeleccionado != null;
+                var almacenDestinoActivo = AlmacenDestinoSeleccionado != null;
+                var estadoActivo = EstadoSeleccionado != null && !string.IsNullOrEmpty(EstadoSeleccionado.CodigoEstado);
+                var operarioActivo = OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0;
+                var articuloActivo = !string.IsNullOrWhiteSpace(CodigoArticulo);
+                var loteActivo = !string.IsNullOrWhiteSpace(CodigoLote);
+                var paletActivo = !string.IsNullOrWhiteSpace(CodigoPalet);
+                var observacionesActivo = !string.IsNullOrWhiteSpace(FiltroObservaciones);
+                var fechaDesdeActiva = FechaDesde.HasValue && FechaDesde.Value != DateTime.Today;
+                var fechaHastaActiva = FechaHasta.HasValue && FechaHasta.Value != DateTime.Today;
+
+                return almacenOrigenActivo || almacenDestinoActivo || estadoActivo || operarioActivo || 
+                       articuloActivo || loteActivo || paletActivo || observacionesActivo || fechaDesdeActiva || fechaHastaActiva;
+            }
+        }
+
+        public string ResumenFiltrosActivos
+        {
+            get
+            {
+                var filtros = new List<string>();
+
+                if (AlmacenOrigenSeleccionado != null)
+                {
+                    filtros.Add($"Origen: {AlmacenOrigenSeleccionado.CodigoAlmacen}");
+                }
+
+                if (AlmacenDestinoSeleccionado != null)
+                {
+                    filtros.Add($"Destino: {AlmacenDestinoSeleccionado.CodigoAlmacen}");
+                }
+
+                if (EstadoSeleccionado != null && !string.IsNullOrEmpty(EstadoSeleccionado.CodigoEstado))
+                {
+                    filtros.Add($"Estado: {EstadoSeleccionado.Descripcion}");
+                }
+
+                if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
+                {
+                    filtros.Add($"Operario: {OperarioSeleccionado.NombreOperario}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                {
+                    filtros.Add($"Artículo: {CodigoArticulo}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(CodigoLote))
+                {
+                    filtros.Add($"Lote: {CodigoLote}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(CodigoPalet))
+                {
+                    filtros.Add($"Palet: {CodigoPalet}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(FiltroObservaciones))
+                {
+                    filtros.Add($"Observaciones: {FiltroObservaciones}");
+                }
+
+                if (FechaDesde.HasValue && FechaHasta.HasValue)
+                {
+                    if (FechaDesde.Value != DateTime.Today || FechaHasta.Value != DateTime.Today)
+                    {
+                        filtros.Add($"Fechas: {FechaDesde.Value:dd/MM/yyyy} - {FechaHasta.Value:dd/MM/yyyy}");
+                    }
+                }
+
+                return filtros.Count > 0 ? string.Join(" | ", filtros) : "Sin filtros";
+            }
+        }
 
         // Datos principales
         public ObservableCollection<TraspasoDto> Traspasos { get; } = new();
@@ -166,6 +250,8 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = newValue.Value;
             }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         partial void OnFechaHastaChanged(DateTime? oldValue, DateTime? newValue)
@@ -174,9 +260,67 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = FechaDesde.Value;
             }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         // Los cambios en filtros no cargan automáticamente - el usuario debe presionar "Aplicar filtros"
+        
+        partial void OnCodigoArticuloChanged(string value)
+        {
+            // Notificar cambio en PuedeFiltrarPorLote
+            OnPropertyChanged(nameof(PuedeFiltrarPorLote));
+            
+            // Si se limpia el artículo, limpiar también el lote
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                CodigoLote = "";
+            }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnCodigoLoteChanged(string value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnCodigoPaletChanged(string value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnFiltroObservacionesChanged(string value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnAlmacenOrigenSeleccionadoChanged(AlmacenDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnEstadoSeleccionadoChanged(EstadoTraspasoDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnOperarioSeleccionadoChanged(OperariosAccesoDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
         
         partial void OnFiltroOperariosChanged(string value)
         {
@@ -376,6 +520,20 @@ namespace SGA_Desktop.ViewModels
                     System.Diagnostics.Debug.WriteLine($"Después del filtro de artículo: {traspasosFiltradosFinal.Count} traspasos");
                 }
                 
+                // Filtro por lote (solo si hay artículo escrito)
+                if (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo))
+                {
+                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
+                        (!string.IsNullOrWhiteSpace(t.Partida) && 
+                        t.Partida.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)) ||
+                        (t.LineasPalet != null && t.LineasPalet.Any(l => 
+                            !string.IsNullOrWhiteSpace(l.Lote) && 
+                            l.Lote.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)))
+                    ).ToList();
+                    
+                    System.Diagnostics.Debug.WriteLine($"Después del filtro de lote: {traspasosFiltradosFinal.Count} traspasos");
+                }
+                
                 // Filtro por operario seleccionado
                 if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
                 {
@@ -463,6 +621,10 @@ namespace SGA_Desktop.ViewModels
             {
                 ActualizarTraspasosCombinados();
             }
+
+            // Notificar cambios en propiedades calculadas después de aplicar filtros
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         private void LimpiarFiltros()
@@ -470,12 +632,17 @@ namespace SGA_Desktop.ViewModels
             FechaDesde = DateTime.Today; // Fecha de hoy
             FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
             CodigoArticulo = "";
+            CodigoLote = "";
             CodigoPalet = "";
             FiltroObservaciones = "";
             OperarioSeleccionado = null;
             AlmacenOrigenSeleccionado = null;
             AlmacenDestinoSeleccionado = null;
             EstadoSeleccionado = Estados.FirstOrDefault(e => string.IsNullOrEmpty(e.CodigoEstado)); // "-- Todos los estados --"
+            
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
             
             // Limpiar la lista de traspasos
             Traspasos.Clear();
@@ -738,13 +905,17 @@ namespace SGA_Desktop.ViewModels
                     ? FiltroObservaciones.Trim()
                     : null;
 
+                var partidaFiltro = (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo))
+                    ? CodigoLote
+                    : null;
+
                 var traspasos = await _traspasosService.ObtenerTraspasosStorageControlAsync(
                     fechaDesde: fechaDesde.Date,
                     fechaHasta: fechaHasta.Date,
                     almacenOrigen: AlmacenOrigenSeleccionado?.CodigoAlmacen,
                     almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
                     codigoArticulo: string.IsNullOrWhiteSpace(CodigoArticulo) ? null : CodigoArticulo,
-                    partida: null
+                    partida: partidaFiltro
                 );
 
                 TraspasosStorageControl.Clear();
@@ -792,6 +963,17 @@ namespace SGA_Desktop.ViewModels
                 else if (!string.IsNullOrWhiteSpace(FiltroObservaciones))
                 {
                     System.Diagnostics.Debug.WriteLine($"[StorageControl] Filtro de observaciones ignorado: se necesitan al menos 5 caracteres (actual: {FiltroObservaciones.Trim().Length})");
+                }
+
+                // Filtro por lote (solo si hay artículo escrito y el API no lo filtró)
+                if (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo))
+                {
+                    traspasosFiltrados = traspasosFiltrados.Where(t =>
+                        !string.IsNullOrWhiteSpace(t.Partida) &&
+                        t.Partida.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+
+                    System.Diagnostics.Debug.WriteLine($"[StorageControl] Después del filtro de lote: {traspasosFiltrados.Count}");
                 }
 
                 foreach (var traspaso in traspasosFiltrados.OrderByDescending(t => t.FechaRegistro ?? t.Fecha))
@@ -860,6 +1042,112 @@ namespace SGA_Desktop.ViewModels
                     builder.Append(char.ToUpperInvariant(ch));
             }
             return builder.ToString();
+        }
+
+        // Comandos para copiar datos al portapapeles
+        [RelayCommand]
+        private void CopiarCodigo(string codigo)
+        {
+            if (!string.IsNullOrWhiteSpace(codigo))
+                Clipboard.SetText(codigo);
+        }
+
+        [RelayCommand]
+        private void CopiarDescripcion(string descripcion)
+        {
+            if (!string.IsNullOrWhiteSpace(descripcion))
+                Clipboard.SetText(descripcion);
+        }
+
+        [RelayCommand]
+        private void CopiarLote(string lote)
+        {
+            if (!string.IsNullOrWhiteSpace(lote))
+                Clipboard.SetText(lote);
+        }
+
+        [RelayCommand]
+        private void CopiarFechaCaducidad(DateTime? fechaCaducidad)
+        {
+            if (fechaCaducidad.HasValue)
+                Clipboard.SetText(fechaCaducidad.Value.ToString("dd/MM/yyyy"));
+        }
+
+        [RelayCommand]
+        private void CopiarAlmacenOrigen(string almacen)
+        {
+            if (!string.IsNullOrWhiteSpace(almacen))
+                Clipboard.SetText(almacen);
+        }
+
+        [RelayCommand]
+        private void CopiarUbicacionOrigen(string ubicacion)
+        {
+            if (!string.IsNullOrWhiteSpace(ubicacion))
+                Clipboard.SetText(ubicacion);
+        }
+
+        [RelayCommand]
+        private void CopiarAlmacenDestino(string almacen)
+        {
+            if (!string.IsNullOrWhiteSpace(almacen))
+                Clipboard.SetText(almacen);
+        }
+
+        [RelayCommand]
+        private void CopiarUbicacionDestino(string ubicacion)
+        {
+            if (!string.IsNullOrWhiteSpace(ubicacion))
+                Clipboard.SetText(ubicacion);
+        }
+
+        [RelayCommand]
+        private void CopiarCodigoPalet(string codigoPalet)
+        {
+            if (!string.IsNullOrWhiteSpace(codigoPalet))
+                Clipboard.SetText(codigoPalet);
+        }
+
+        [RelayCommand]
+        private void CopiarCantidad(decimal? cantidad)
+        {
+            if (cantidad.HasValue)
+                Clipboard.SetText(cantidad.Value.ToString("0.########"));
+        }
+
+        [RelayCommand]
+        private void CopiarUsuario(string usuario)
+        {
+            if (!string.IsNullOrWhiteSpace(usuario))
+                Clipboard.SetText(usuario);
+        }
+
+        [RelayCommand]
+        private void CopiarComentarios(string comentarios)
+        {
+            if (!string.IsNullOrWhiteSpace(comentarios))
+                Clipboard.SetText(comentarios);
+        }
+
+        [RelayCommand]
+        private void CopiarTipoTraspaso(string tipoTraspaso)
+        {
+            if (!string.IsNullOrWhiteSpace(tipoTraspaso))
+                Clipboard.SetText(tipoTraspaso);
+        }
+
+        [RelayCommand]
+        private void CopiarEstado(string estado)
+        {
+            if (!string.IsNullOrWhiteSpace(estado))
+                Clipboard.SetText(estado);
+        }
+
+        [RelayCommand]
+        private void CopiarFecha(DateTime? fecha)
+        {
+            if (fecha.HasValue)
+                Clipboard.SetText(fecha.Value.ToString("dd/MM/yyyy HH:mm"));
         }
     }
 }

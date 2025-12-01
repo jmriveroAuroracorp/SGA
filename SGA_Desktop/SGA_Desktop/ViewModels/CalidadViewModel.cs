@@ -54,6 +54,9 @@ namespace SGA_Desktop.ViewModels
         #region Propiedades de Bloqueo/Desbloqueo
         [ObservableProperty] private string comentarioBloqueo = string.Empty;
         [ObservableProperty] private string comentarioDesbloqueo = string.Empty;
+        [ObservableProperty] private string tipoBloqueo = "TOTAL"; // "TOTAL" o "SOLO_PULMON"
+        [ObservableProperty] private bool esBloqueoGlobal = false; // 🔷 NUEVO: Indica si es bloqueo en todas las ubicaciones
+        [ObservableProperty] private bool esDesbloqueoGlobal = false; // 🔷 NUEVO: Indica si es desbloqueo en todas las ubicaciones
         #endregion
 
         #region Comandos
@@ -68,9 +71,6 @@ namespace SGA_Desktop.ViewModels
                 EstaCargando = true;
                 MensajeEstado = "Buscando stock...";
 
-                // Cargar bloqueos primero para poder comparar correctamente
-                await CargarBloqueosInterno(false);
-
                 var filtros = new BuscarStockCalidadDto
                 {
                     CodigoEmpresa = CodigoEmpresa,
@@ -83,39 +83,9 @@ namespace SGA_Desktop.ViewModels
                 StockDisponible.Clear();
                 foreach (var item in resultado)
                 {
-                    // Verificar si este registro específico está bloqueado
-                    // comparando con los bloqueos existentes por ubicación específica
-                    bool estaBloqueadoEspecifico = Bloqueos.Any(b => 
-                        b.CodigoArticulo == item.CodigoArticulo &&
-                        b.LotePartida == item.LotePartida &&
-                        b.Almacen == item.Almacen &&
-                        b.Ubicacion == item.Ubicacion &&
-                        b.Bloqueado);
-
-                    if (estaBloqueadoEspecifico)
-                    {
-                        item.Estado = "Bloqueado";
-                        item.EstaBloqueado = true;
-                        // Obtener información del bloqueo
-                        var bloqueo = Bloqueos.FirstOrDefault(b => 
-                            b.CodigoArticulo == item.CodigoArticulo &&
-                            b.LotePartida == item.LotePartida &&
-                            b.Almacen == item.Almacen &&
-                            b.Ubicacion == item.Ubicacion &&
-                            b.Bloqueado);
-                        
-                        if (bloqueo != null)
-                        {
-                            item.ComentarioBloqueo = bloqueo.ComentarioBloqueo;
-                            item.FechaBloqueo = bloqueo.FechaBloqueo;
-                            item.UsuarioBloqueo = bloqueo.UsuarioBloqueo;
-                        }
-                    }
-                    else
-                    {
-                        item.Estado = "Disponible";
-                        item.EstaBloqueado = false;
-                    }
+                    // 🔷 SIMPLIFICADO: El servicio ya devuelve EstaBloqueado correctamente por ubicación
+                    // Solo establecemos el Estado para la vista basándonos en EstaBloqueado
+                    item.Estado = item.EstaBloqueado ? "Bloqueado" : "Disponible";
                     
                     StockDisponible.Add(item);
                 }
@@ -163,7 +133,9 @@ namespace SGA_Desktop.ViewModels
                     CodigoAlmacen = StockSeleccionado.CodigoAlmacen,
                     Ubicacion = StockSeleccionado.Ubicacion,
                     ComentarioBloqueo = ComentarioBloqueo,
-                    UsuarioId = SessionManager.UsuarioActual?.operario ?? 0
+                    TipoBloqueo = TipoBloqueo, // 🔷 NUEVO: Tipo de bloqueo seleccionado
+                    UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
+                    EsBloqueoGlobal = EsBloqueoGlobal // 🔷 NUEVO: Bloqueo global
                 };
 
                 var resultado = await calidadService.BloquearStockAsync(dto);
@@ -172,14 +144,61 @@ namespace SGA_Desktop.ViewModels
                 var articuloBloqueado = StockSeleccionado.CodigoArticulo;
                 var loteBloqueado = StockSeleccionado.LotePartida;
 
-                MensajeEstado = "Stock bloqueado exitosamente";
+                // 🔷 NUEVO: Mensaje personalizado según tipo de bloqueo
+                string mensajeExito;
+                if (EsBloqueoGlobal)
+                {
+                    // Intentar obtener información del resultado si es bloqueo global
+                    try
+                    {
+                        var jsonString = System.Text.Json.JsonSerializer.Serialize(resultado);
+                        var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonString);
+                        var root = jsonDoc.RootElement;
+
+                        if (root.TryGetProperty("UbicacionesBloqueadas", out var ubicacionesProp))
+                        {
+                            var ubicacionesBloqueadas = ubicacionesProp.GetInt32();
+                            var ubicacionesYaBloqueadas = root.TryGetProperty("UbicacionesYaBloqueadas", out var yaBloqueadasProp) 
+                                ? yaBloqueadasProp.GetInt32() 
+                                : 0;
+                            
+                            if (ubicacionesYaBloqueadas > 0)
+                            {
+                                mensajeExito = $"Bloqueo global aplicado exitosamente.\n{ubicacionesBloqueadas} ubicaciones bloqueadas.\n{ubicacionesYaBloqueadas} ubicaciones ya estaban bloqueadas.";
+                            }
+                            else
+                            {
+                                mensajeExito = $"Bloqueo global aplicado exitosamente.\n{ubicacionesBloqueadas} ubicaciones bloqueadas.";
+                            }
+                        }
+                        else if (root.TryGetProperty("Mensaje", out var mensajeProp))
+                        {
+                            mensajeExito = mensajeProp.GetString() ?? "Bloqueo global aplicado exitosamente.";
+                        }
+                        else
+                        {
+                            mensajeExito = "Bloqueo global aplicado exitosamente en todas las ubicaciones.";
+                        }
+                    }
+                    catch
+                    {
+                        mensajeExito = "Bloqueo global aplicado exitosamente en todas las ubicaciones.";
+                    }
+                }
+                else
+                {
+                    mensajeExito = "Stock bloqueado exitosamente";
+                }
+
+                MensajeEstado = mensajeExito;
                 ComentarioBloqueo = string.Empty;
+                EsBloqueoGlobal = false; // Resetear después del bloqueo
 
                 // Actualizar listas
                 await CargarBloqueosInterno(false);
                 await BuscarStock();
 
-                MessageBox.Show("Stock bloqueado exitosamente", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(mensajeExito, "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
                 System.Diagnostics.Debug.WriteLine($"Stock bloqueado exitosamente para artículo {articuloBloqueado}, lote {loteBloqueado}");
             }
             catch (Exception ex)
@@ -209,8 +228,19 @@ namespace SGA_Desktop.ViewModels
                 return;
             }
 
+            // 🔷 NUEVO: Mensaje de confirmación personalizado según tipo de desbloqueo
+            string mensajeConfirmacion;
+            if (EsDesbloqueoGlobal)
+            {
+                mensajeConfirmacion = $"¿Está seguro de que desea DESBLOQUEAR GLOBALMENTE el stock del artículo {BloqueoSeleccionado.CodigoArticulo} (lote {BloqueoSeleccionado.LotePartida})?\n\nEsto desbloqueará el artículo y lote en TODAS las ubicaciones donde esté bloqueado.";
+            }
+            else
+            {
+                mensajeConfirmacion = $"¿Está seguro de que desea desbloquear el stock del artículo {BloqueoSeleccionado.CodigoArticulo} (lote {BloqueoSeleccionado.LotePartida}) en la ubicación {BloqueoSeleccionado.CodigoAlmacen}-{BloqueoSeleccionado.Ubicacion ?? "(sin ubicación)"}?";
+            }
+
             var resultado = MessageBox.Show(
-                $"¿Está seguro de que desea desbloquear el stock del artículo {BloqueoSeleccionado.CodigoArticulo} (lote {BloqueoSeleccionado.LotePartida})?",
+                mensajeConfirmacion,
                 "Confirmar Desbloqueo",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
@@ -225,23 +255,64 @@ namespace SGA_Desktop.ViewModels
 
                 var dto = new DesbloquearStockDto
                 {
-                    IdBloqueo = BloqueoSeleccionado.Id,
+                    IdBloqueo = EsDesbloqueoGlobal ? null : BloqueoSeleccionado.Id, // 🔷 NUEVO: Null si es global
+                    CodigoEmpresa = EsDesbloqueoGlobal ? CodigoEmpresa : null, // 🔷 NUEVO: Para desbloqueo global
+                    CodigoArticulo = EsDesbloqueoGlobal ? BloqueoSeleccionado.CodigoArticulo : null, // 🔷 NUEVO
+                    LotePartida = EsDesbloqueoGlobal ? BloqueoSeleccionado.LotePartida : null, // 🔷 NUEVO
                     ComentarioDesbloqueo = ComentarioDesbloqueo,
-                    UsuarioId = SessionManager.UsuarioActual?.operario ?? 0
+                    UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
+                    EsDesbloqueoGlobal = EsDesbloqueoGlobal // 🔷 NUEVO
                 };
 
                 // Guardar información antes de limpiar
                 var bloqueoId = BloqueoSeleccionado.Id;
+                var articuloDesbloqueado = BloqueoSeleccionado.CodigoArticulo;
+                var loteDesbloqueado = BloqueoSeleccionado.LotePartida;
 
-                await calidadService.DesbloquearStockAsync(dto);
+                var resultadoDesbloqueo = await calidadService.DesbloquearStockAsync(dto);
 
-                MensajeEstado = "Stock desbloqueado exitosamente";
+                // 🔷 NUEVO: Mensaje personalizado según tipo de desbloqueo
+                string mensajeExito;
+                if (EsDesbloqueoGlobal)
+                {
+                    try
+                    {
+                        var jsonString = System.Text.Json.JsonSerializer.Serialize(resultadoDesbloqueo);
+                        var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonString);
+                        var root = jsonDoc.RootElement;
+
+                        if (root.TryGetProperty("UbicacionesDesbloqueadas", out var ubicacionesProp))
+                        {
+                            var ubicacionesDesbloqueadas = ubicacionesProp.GetInt32();
+                            mensajeExito = $"Desbloqueo global aplicado exitosamente.\n{ubicacionesDesbloqueadas} ubicaciones desbloqueadas.";
+                        }
+                        else if (root.TryGetProperty("Mensaje", out var mensajeProp))
+                        {
+                            mensajeExito = mensajeProp.GetString() ?? "Desbloqueo global aplicado exitosamente.";
+                        }
+                        else
+                        {
+                            mensajeExito = "Desbloqueo global aplicado exitosamente en todas las ubicaciones.";
+                        }
+                    }
+                    catch
+                    {
+                        mensajeExito = "Desbloqueo global aplicado exitosamente en todas las ubicaciones.";
+                    }
+                }
+                else
+                {
+                    mensajeExito = "Stock desbloqueado exitosamente";
+                }
+
+                MensajeEstado = mensajeExito;
                 ComentarioDesbloqueo = string.Empty;
+                EsDesbloqueoGlobal = false; // Resetear después del desbloqueo
 
                 // Actualizar listas
                 await CargarBloqueosInterno(false);
 
-                MessageBox.Show("Stock desbloqueado exitosamente", "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(mensajeExito, "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
                 System.Diagnostics.Debug.WriteLine($"Stock desbloqueado exitosamente para bloqueo ID {bloqueoId}");
             }
             catch (Exception ex)

@@ -231,29 +231,30 @@
                     <Button Content="Consulta de Stock"
                     Command="{Binding IrAConsultaStockCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConsultaStock}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConsultaStock}"/>
                     <Button Content="Ubicaciones"
                     Command="{Binding IrAUbicacionesCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Ubicaciones}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Ubicaciones}"/>
                     <!-- Nuevo botón para traspasos de stock -->
                     <Button Content="Traspasos de Stock"
                     Command="{Binding IrATraspasosStockCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosStock}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosStock}"/>
                     <!-- Renombrar el botón de traspasos actual -->
                     <Button Content="Traspasos de Palet"
                     Command="{Binding IrATraspasosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosPalet}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosPalet}"/>
                     <Button Content="Historial de Traspasos"
                     Command="{Binding IrAHistorialTraspasosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=HistorialTraspasos}"/>
                     <!--<Button Content="Inventario" …/>-->
                     <Button Content="Etiquetas"
                     Command="{Binding IrAEtiquetasCommand}"
@@ -263,8 +264,8 @@
                     <Button Content="Inventario"
                     Command="{Binding IrAInventarioCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}"/>
                     <Button Content="Calidad"
                     Command="{Binding IrACalidadCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
@@ -273,23 +274,28 @@
                     <Button Content="Órdenes de Traspaso"
                     Command="{Binding IrAOrdenTrabajoCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=OrdenTrabajo}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=OrdenTrabajo}"/>
                     <Button Content="Controles Rotativos"
                     Command="{Binding IrAControlesRotativosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}" -->
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}"/>
                     <Button Content="Empresa"
                     Command="{Binding IrASeleccionEmpresaCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                    <!-- Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Empresa}" -->
+                    Margin="10,5"
+                    Visibility="{Binding TieneMultiplesEmpresas, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                     <Button Content="Configuración de Operarios"
                     Command="{Binding IrAConfiguracionOperariosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"
                     Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}"/>
+                    <Button Content="Análisis de Rendimientos"
+                    Command="{Binding IrARendimientosCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Rendimientos}"/>
                     <Button Content="Salir"
                     Command="{Binding CerrarSesionCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

@@ -26,6 +26,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private DateTime? fechaDesde;
         [ObservableProperty] private DateTime? fechaHasta;
         [ObservableProperty] private string codigoArticulo = "";
+        [ObservableProperty] private string codigoLote = "";
         [ObservableProperty] private AlmacenDto? almacenOrigenSeleccionado;
         [ObservableProperty] private AlmacenDto? almacenDestinoSeleccionado;
         [ObservableProperty] private EstadoTraspasoDto? estadoSeleccionado;
@@ -50,6 +51,77 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private string filtroOperarios = "";
         [ObservableProperty] private bool isDropDownOpenOperarios = false;
         public ICollectionView OperariosView { get; private set; }
+
+        // Propiedad para habilitar el campo de lote solo cuando hay artículo
+        public bool PuedeFiltrarPorLote => !string.IsNullOrWhiteSpace(CodigoArticulo);
+
+        // Propiedades calculadas para indicador de filtros activos
+        public bool TieneFiltrosActivos
+        {
+            get
+            {
+                // Verificar si hay filtros activos (no son los valores por defecto)
+                var almacenOrigenActivo = AlmacenOrigenSeleccionado != null;
+                var almacenDestinoActivo = AlmacenDestinoSeleccionado != null;
+                var estadoActivo = EstadoSeleccionado != null && !string.IsNullOrEmpty(EstadoSeleccionado.CodigoEstado);
+                var operarioActivo = OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0;
+                var articuloActivo = !string.IsNullOrWhiteSpace(CodigoArticulo);
+                var loteActivo = !string.IsNullOrWhiteSpace(CodigoLote);
+                var fechaDesdeActiva = FechaDesde.HasValue && FechaDesde.Value != DateTime.Today;
+                var fechaHastaActiva = FechaHasta.HasValue && FechaHasta.Value != DateTime.Today;
+
+                return almacenOrigenActivo || almacenDestinoActivo || estadoActivo || operarioActivo || 
+                       articuloActivo || loteActivo || fechaDesdeActiva || fechaHastaActiva;
+            }
+        }
+
+        public string ResumenFiltrosActivos
+        {
+            get
+            {
+                var filtros = new List<string>();
+
+                if (AlmacenOrigenSeleccionado != null)
+                {
+                    filtros.Add($"Origen: {AlmacenOrigenSeleccionado.CodigoAlmacen}");
+                }
+
+                if (AlmacenDestinoSeleccionado != null)
+                {
+                    filtros.Add($"Destino: {AlmacenDestinoSeleccionado.CodigoAlmacen}");
+                }
+
+                if (EstadoSeleccionado != null && !string.IsNullOrEmpty(EstadoSeleccionado.CodigoEstado))
+                {
+                    filtros.Add($"Estado: {EstadoSeleccionado.Descripcion}");
+                }
+
+                if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
+                {
+                    filtros.Add($"Operario: {OperarioSeleccionado.NombreOperario}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                {
+                    filtros.Add($"Artículo: {CodigoArticulo}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(CodigoLote))
+                {
+                    filtros.Add($"Lote: {CodigoLote}");
+                }
+
+                if (FechaDesde.HasValue && FechaHasta.HasValue)
+                {
+                    if (FechaDesde.Value != DateTime.Today || FechaHasta.Value != DateTime.Today)
+                    {
+                        filtros.Add($"Fechas: {FechaDesde.Value:dd/MM/yyyy} - {FechaHasta.Value:dd/MM/yyyy}");
+                    }
+                }
+
+                return filtros.Count > 0 ? string.Join(" | ", filtros) : "Sin filtros";
+            }
+        }
 
         // Datos principales
         public ObservableCollection<TraspasoDto> Traspasos { get; } = new();
@@ -144,6 +216,8 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = newValue.Value;
             }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         partial void OnFechaHastaChanged(DateTime? oldValue, DateTime? newValue)
@@ -152,9 +226,55 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = FechaDesde.Value;
             }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         // Los cambios en filtros no cargan automáticamente - el usuario debe presionar "Aplicar filtros"
+        
+        partial void OnCodigoArticuloChanged(string value)
+        {
+            // Notificar cambio en PuedeFiltrarPorLote
+            OnPropertyChanged(nameof(PuedeFiltrarPorLote));
+            
+            // Si se limpia el artículo, limpiar también el lote
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                CodigoLote = "";
+            }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnCodigoLoteChanged(string value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnAlmacenOrigenSeleccionadoChanged(AlmacenDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnEstadoSeleccionadoChanged(EstadoTraspasoDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnOperarioSeleccionadoChanged(OperariosAccesoDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
         
         partial void OnFiltroOperariosChanged(string value)
         {
@@ -303,7 +423,7 @@ namespace SGA_Desktop.ViewModels
                 
                 System.Diagnostics.Debug.WriteLine($"Después del filtro de almacenes permitidos: {traspasosFiltrados.Count} traspasos");
                 
-                // Aplicar filtros adicionales (artículo y operario)
+                // Aplicar filtros adicionales (artículo, lote y operario)
                 var traspasosFiltradosFinal = traspasosFiltrados;
                 
                 // Filtro por código de artículo
@@ -315,6 +435,20 @@ namespace SGA_Desktop.ViewModels
                     ).ToList();
                     
                     System.Diagnostics.Debug.WriteLine($"Después del filtro de artículo: {traspasosFiltradosFinal.Count} traspasos");
+                }
+                
+                // Filtro por lote
+                if (!string.IsNullOrWhiteSpace(CodigoLote))
+                {
+                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
+                        (!string.IsNullOrWhiteSpace(t.Partida) && 
+                        t.Partida.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)) ||
+                        (t.LineasPalet != null && t.LineasPalet.Any(l => 
+                            !string.IsNullOrWhiteSpace(l.Lote) && 
+                            l.Lote.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)))
+                    ).ToList();
+                    
+                    System.Diagnostics.Debug.WriteLine($"Después del filtro de lote: {traspasosFiltradosFinal.Count} traspasos");
                 }
                 
                 // El filtro de operario ya se aplica en la API mediante el parámetro usuarioId
@@ -373,6 +507,9 @@ namespace SGA_Desktop.ViewModels
         private async Task AplicarFiltrosAsync()
         {
             await CargarTraspasosAsync();
+            // Notificar cambios en propiedades calculadas después de aplicar filtros
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         private void LimpiarFiltros()
@@ -380,10 +517,15 @@ namespace SGA_Desktop.ViewModels
             FechaDesde = DateTime.Today; // Fecha de hoy
             FechaHasta = DateTime.Today; // Solo la fecha, hora 00:00:00
             CodigoArticulo = "";
+            CodigoLote = "";
             OperarioSeleccionado = null;
             AlmacenOrigenSeleccionado = null;
             AlmacenDestinoSeleccionado = null;
             EstadoSeleccionado = Estados.FirstOrDefault(e => string.IsNullOrEmpty(e.CodigoEstado)); // "-- Todos los estados --"
+            
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
             
             // Limpiar la lista de traspasos
             Traspasos.Clear();

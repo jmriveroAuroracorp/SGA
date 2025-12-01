@@ -686,7 +686,8 @@ public class PaletController : ControllerBase
 				Ubicacion = l.Ubicacion,
 				UsuarioId = l.UsuarioId,
 				FechaAgregado = l.FechaAgregado,
-				Observaciones = l.Observaciones
+				Observaciones = l.Observaciones,
+				TraspasoId = l.TraspasoId  // 🔷 NUEVO: Incluir TraspasoId
 			})
 			.ToListAsync();
 
@@ -708,7 +709,8 @@ public class PaletController : ControllerBase
 				Ubicacion = l.Ubicacion,
 				UsuarioId = l.UsuarioId,
 				FechaAgregado = l.FechaAgregado,
-				Observaciones = l.Observaciones
+				Observaciones = l.Observaciones,
+				TraspasoId = l.TraspasoId  // 🔷 NUEVO: Incluir TraspasoId
 			})
 			.ToListAsync();
 
@@ -802,12 +804,14 @@ public class PaletController : ControllerBase
 					linea.IsBloqueadoCalidad = true;
 					linea.MotivoBloqueoCalidad = bloqueo.ComentarioBloqueo;
 					linea.FechaBloqueoCalidad = bloqueo.FechaBloqueo;
+					linea.TipoBloqueoCalidad = bloqueo.TipoBloqueo ?? "TOTAL"; // 🔷 NUEVO
 				}
 				else
 				{
 					linea.IsBloqueadoCalidad = false;
 					linea.MotivoBloqueoCalidad = null;
 					linea.FechaBloqueoCalidad = null;
+					linea.TipoBloqueoCalidad = null; // 🔷 NUEVO
 				}
 			}
 		}
@@ -1138,149 +1142,245 @@ public class PaletController : ControllerBase
 	[HttpPost("{id}/cerrar")]
 	public async Task<IActionResult> CerrarPalet(Guid id, [FromBody] CerrarPaletDto dto)
 	{
-		var palet = await _auroraSgaContext.Palets.FindAsync(id);
-		if (palet == null)
-			return NotFound("Palet no encontrado");
-
-		if (palet.Estado == "Cerrado")
-			return BadRequest("El palet ya está cerrado.");
-
-		// Verifica que tenga al menos una línea
-		bool tieneLineas = await _auroraSgaContext.TempPaletLineas.AnyAsync(l => l.PaletId == id)
-			|| await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
-
-		if (!tieneLineas)
-			return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
-
-		// Valida que la ubicación destino exista en ese almacén destino
-		var ubicacionDestino = await _auroraSgaContext.Ubicaciones
-			.FirstOrDefaultAsync(u =>
-				u.CodigoAlmacen == dto.CodigoAlmacenDestino &&
-				u.CodigoUbicacion == dto.UbicacionDestino);
-
-		if (ubicacionDestino == null)
-			return BadRequest($"La ubicación '{dto.UbicacionDestino}' no existe en el almacén destino '{dto.CodigoAlmacenDestino}'.");
-
-		// Cierra el palet
-		palet.Estado = "Cerrado";
-		palet.FechaCierre = DateTime.Now;
-		palet.UsuarioCierreId = dto.UsuarioId;
-		if (dto.Altura.HasValue) palet.Altura = dto.Altura;
-		if (dto.Peso.HasValue) palet.Peso = dto.Peso;
-
-		_auroraSgaContext.LogPalet.Add(new LogPalet
+		// 🔷 NUEVO: Usar transacción con nivel de aislamiento para evitar condiciones de carrera y duplicados
+		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync(
+			System.Data.IsolationLevel.Serializable);
+		
+		try
 		{
-			PaletId = palet.Id,
-			Fecha = DateTime.Now,
-			IdUsuario = dto.UsuarioId,
-			Accion = "Cerrar",
-			Detalle = $"Palet cerrado en almacén destino {dto.CodigoAlmacenDestino} - ubicación destino {dto.UbicacionDestino} por usuario {dto.UsuarioId}"
-		});
-
-		// Determina el estado del traspaso por defecto
-		var estadoTraspaso = (dto.CodigoAlmacen == dto.CodigoAlmacenDestino) ? "COMPLETADO" : "PENDIENTE";
-
-		// 1. Obtén las definitivas
-		var lineasDefinitivas = await _auroraSgaContext.PaletLineas
-			.Where(l => l.PaletId == palet.Id)
-			.ToListAsync();
-
-		// 2. Compara con la ubicación/almacén destino
-		bool ubicacionCambiada = lineasDefinitivas.Any() &&
-			(lineasDefinitivas.Any(l => l.CodigoAlmacen != dto.CodigoAlmacenDestino || l.Ubicacion != dto.UbicacionDestino));
-
-		List<TempPaletLinea> lineasParaTraspaso;
-
-		if (ubicacionCambiada)
-		{
-			// Traspasar todas: definitivas (convertidas a temporales) + nuevas temporales no procesadas
-			foreach (var def in lineasDefinitivas)
+			// 🔷 NUEVO: Recargar el palet dentro de la transacción para obtener el estado más reciente
+			var palet = await _auroraSgaContext.Palets.FindAsync(id);
+			if (palet == null)
 			{
-				var yaExiste = await _auroraSgaContext.TempPaletLineas
-					.AnyAsync(t => t.PaletId == palet.Id && t.CodigoArticulo == def.CodigoArticulo && t.Lote == def.Lote && t.Procesada == false);
-				if (!yaExiste)
-				{
-					var temp = new TempPaletLinea
-					{
-						PaletId = def.PaletId,
-						CodigoEmpresa = def.CodigoEmpresa,
-						CodigoArticulo = def.CodigoArticulo,
-						DescripcionArticulo = def.DescripcionArticulo,
-						Cantidad = def.Cantidad,
-						UnidadMedida = def.UnidadMedida,
-						Lote = def.Lote,
-						FechaCaducidad = def.FechaCaducidad,
-						CodigoAlmacen = def.CodigoAlmacen,
-						Ubicacion = def.Ubicacion,
-						UsuarioId = def.UsuarioId,
-						FechaAgregado = DateTime.Now,
-						Observaciones = def.Observaciones,
-						Procesada = false,
-						EsHeredada = true // Marcar como heredada
-					};
-					_auroraSgaContext.TempPaletLineas.Add(temp);
-				}
+				await transaction.RollbackAsync();
+				return NotFound("Palet no encontrado");
 			}
-			await _auroraSgaContext.SaveChangesAsync();
 
-			// Selecciona todas las temporales no procesadas
-			lineasParaTraspaso = await _auroraSgaContext.TempPaletLineas
-				.Where(l => l.PaletId == palet.Id && l.Procesada == false)
-				.ToListAsync();
-		}
-		else
-		{
-			// Solo las nuevas temporales no procesadas
-			lineasParaTraspaso = await _auroraSgaContext.TempPaletLineas
-				.Where(l => l.PaletId == palet.Id && l.Procesada == false)
-				.ToListAsync();
-		}
-
-		var traspasosCreados = new List<Guid>();
-
-		foreach (var linea in lineasParaTraspaso)
-		{
-			var traspasoArticulo = new Traspaso
+			if (palet.Estado == "Cerrado")
 			{
-				Id = Guid.NewGuid(),
+				await transaction.RollbackAsync();
+				return BadRequest("El palet ya está cerrado.");
+			}
+
+			// Verifica que tenga al menos una línea
+			bool tieneLineas = await _auroraSgaContext.TempPaletLineas.AnyAsync(l => l.PaletId == id)
+				|| await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
+
+			if (!tieneLineas)
+			{
+				await transaction.RollbackAsync();
+				return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+			}
+
+			// Valida que la ubicación destino exista en ese almacén destino
+			var ubicacionDestino = await _auroraSgaContext.Ubicaciones
+				.FirstOrDefaultAsync(u =>
+					u.CodigoAlmacen == dto.CodigoAlmacenDestino &&
+					u.CodigoUbicacion == dto.UbicacionDestino);
+
+			if (ubicacionDestino == null)
+			{
+				await transaction.RollbackAsync();
+				return BadRequest($"La ubicación '{dto.UbicacionDestino}' no existe en el almacén destino '{dto.CodigoAlmacenDestino}'.");
+			}
+
+			// Cierra el palet
+			palet.Estado = "Cerrado";
+			palet.FechaCierre = DateTime.Now;
+			palet.UsuarioCierreId = dto.UsuarioId;
+			if (dto.Altura.HasValue) palet.Altura = dto.Altura;
+			if (dto.Peso.HasValue) palet.Peso = dto.Peso;
+
+			_auroraSgaContext.LogPalet.Add(new LogPalet
+			{
 				PaletId = palet.Id,
-				CodigoPalet = palet.Codigo,
-				TipoTraspaso = "PALET", // Siempre PALET
-				CodigoEstado = dto.CodigoEstado ?? estadoTraspaso,
-				FechaInicio = DateTime.Now,
-				UsuarioInicioId = dto.UsuarioId,
-				AlmacenOrigen = linea.CodigoAlmacen,
-				AlmacenDestino = dto.CodigoAlmacenDestino,
-				UbicacionOrigen = linea.Ubicacion,
-				UbicacionDestino = dto.UbicacionDestino, // Siempre se asigna
-				FechaFinalizacion = DateTime.Now, // Siempre se asigna
-				UsuarioFinalizacionId = dto.UsuarioFinalizacionId, // Siempre se asigna
-				CodigoEmpresa = dto.CodigoEmpresa,
-				CodigoArticulo = linea.CodigoArticulo,
-				Cantidad = linea.Cantidad,
-				Partida = linea.Lote,
-				FechaCaducidad = linea.FechaCaducidad,
-				Comentario = dto.Comentario,
-				OrigenTraspaso = "AuroraSGA"
-			};
-			_auroraSgaContext.Traspasos.Add(traspasoArticulo);
-			traspasosCreados.Add(traspasoArticulo.Id);
+				Fecha = DateTime.Now,
+				IdUsuario = dto.UsuarioId,
+				Accion = "Cerrar",
+				Detalle = $"Palet cerrado en almacén destino {dto.CodigoAlmacenDestino} - ubicación destino {dto.UbicacionDestino} por usuario {dto.UsuarioId}"
+			});
 
-			// Asociar el TraspasoId a la línea temporal correspondiente
-			linea.TraspasoId = traspasoArticulo.Id;
-			_auroraSgaContext.TempPaletLineas.Update(linea);
+			// Determina el estado del traspaso por defecto
+			var estadoTraspaso = (dto.CodigoAlmacen == dto.CodigoAlmacenDestino) ? "COMPLETADO" : "PENDIENTE";
+
+			// 1. Obtén las definitivas
+			var lineasDefinitivas = await _auroraSgaContext.PaletLineas
+				.Where(l => l.PaletId == palet.Id)
+				.ToListAsync();
+
+			// 2. Compara con la ubicación/almacén destino
+			bool ubicacionCambiada = lineasDefinitivas.Any() &&
+				(lineasDefinitivas.Any(l => l.CodigoAlmacen != dto.CodigoAlmacenDestino || l.Ubicacion != dto.UbicacionDestino));
+
+			List<TempPaletLinea> lineasParaTraspaso;
+
+			if (ubicacionCambiada)
+			{
+				// Traspasar todas: definitivas (convertidas a temporales) + nuevas temporales no procesadas
+				foreach (var def in lineasDefinitivas)
+				{
+					var yaExiste = await _auroraSgaContext.TempPaletLineas
+						.AnyAsync(t => t.PaletId == palet.Id && t.CodigoArticulo == def.CodigoArticulo && t.Lote == def.Lote && t.Procesada == false);
+					if (!yaExiste)
+					{
+						var temp = new TempPaletLinea
+						{
+							PaletId = def.PaletId,
+							CodigoEmpresa = def.CodigoEmpresa,
+							CodigoArticulo = def.CodigoArticulo,
+							DescripcionArticulo = def.DescripcionArticulo,
+							Cantidad = def.Cantidad,
+							UnidadMedida = def.UnidadMedida,
+							Lote = def.Lote,
+							FechaCaducidad = def.FechaCaducidad,
+							CodigoAlmacen = def.CodigoAlmacen,
+							Ubicacion = def.Ubicacion,
+							UsuarioId = def.UsuarioId,
+							FechaAgregado = DateTime.Now,
+							Observaciones = def.Observaciones,
+							Procesada = false,
+							EsHeredada = true // Marcar como heredada
+						};
+						_auroraSgaContext.TempPaletLineas.Add(temp);
+					}
+				}
+				await _auroraSgaContext.SaveChangesAsync();
+
+				// Selecciona todas las temporales no procesadas
+				lineasParaTraspaso = await _auroraSgaContext.TempPaletLineas
+					.Where(l => l.PaletId == palet.Id && l.Procesada == false)
+					.ToListAsync();
+			}
+			else
+			{
+				// Solo las nuevas temporales no procesadas
+				lineasParaTraspaso = await _auroraSgaContext.TempPaletLineas
+					.Where(l => l.PaletId == palet.Id && l.Procesada == false)
+					.ToListAsync();
+			}
+
+			var traspasosCreados = new List<Guid>();
+
+			// Usar OrdenTrabajoId del palet si existe, sino usar el comentario del DTO
+			var comentarioOrden = !string.IsNullOrWhiteSpace(palet.OrdenTrabajoId)
+				? palet.OrdenTrabajoId
+				: dto.Comentario;
+
+			foreach (var linea in lineasParaTraspaso)
+			{
+				// 🔷 VALIDACIÓN 1: Verificar si la línea temporal ya tiene un traspaso asignado
+				if (linea.TraspasoId != null && linea.TraspasoId != Guid.Empty)
+				{
+					var traspasoExistente = await _auroraSgaContext.Traspasos
+						.FirstOrDefaultAsync(t => t.Id == linea.TraspasoId && t.CodigoEstado != "COMPLETADO");
+					
+					if (traspasoExistente != null)
+					{
+						_logger.LogWarning($"⚠️ CerrarPalet: Línea temporal {linea.Id} ya tiene traspaso {linea.TraspasoId} en estado {traspasoExistente.CodigoEstado}. Omitiendo creación duplicada. PaletId={palet.Id}, Articulo={linea.CodigoArticulo}");
+						continue; // Omitir esta línea, ya tiene traspaso pendiente
+					}
+				}
+				
+				// 🔷 VALIDACIÓN 2: Verificar si ya existe un traspaso pendiente para esta combinación exacta
+				var traspasoDuplicado = await _auroraSgaContext.Traspasos
+					.AnyAsync(t => 
+						t.PaletId == palet.Id &&
+						t.CodigoArticulo == linea.CodigoArticulo &&
+						t.Partida == linea.Lote &&
+						t.AlmacenOrigen == linea.CodigoAlmacen &&
+						t.UbicacionOrigen == linea.Ubicacion &&
+						t.AlmacenDestino == dto.CodigoAlmacenDestino &&
+						t.UbicacionDestino == dto.UbicacionDestino &&
+						t.CodigoEstado != "COMPLETADO" &&
+						t.TipoTraspaso == "PALET");
+				
+				if (traspasoDuplicado)
+				{
+					_logger.LogWarning($"⚠️ CerrarPalet: Ya existe un traspaso pendiente para artículo {linea.CodigoArticulo}, lote {linea.Lote} del palet {palet.Codigo}. Omitiendo creación duplicada. PaletId={palet.Id}");
+					continue; // Omitir esta línea, ya tiene traspaso pendiente
+				}
+
+				var traspasoArticulo = new Traspaso
+				{
+					Id = Guid.NewGuid(),
+					PaletId = palet.Id,
+					CodigoPalet = palet.Codigo,
+					TipoTraspaso = "PALET", // Siempre PALET
+					CodigoEstado = dto.CodigoEstado ?? estadoTraspaso,
+					FechaInicio = DateTime.Now,
+					UsuarioInicioId = dto.UsuarioId,
+					AlmacenOrigen = linea.CodigoAlmacen,
+					AlmacenDestino = dto.CodigoAlmacenDestino,
+					UbicacionOrigen = linea.Ubicacion,
+					UbicacionDestino = dto.UbicacionDestino, // Siempre se asigna
+					FechaFinalizacion = DateTime.Now, // Siempre se asigna
+					UsuarioFinalizacionId = dto.UsuarioFinalizacionId, // Siempre se asigna
+					CodigoEmpresa = dto.CodigoEmpresa,
+					CodigoArticulo = linea.CodigoArticulo,
+					Cantidad = linea.Cantidad,
+					Partida = linea.Lote,
+					FechaCaducidad = linea.FechaCaducidad,
+					Comentario = comentarioOrden, // Incluir OrdenTrabajoId del palet o comentario del usuario
+					OrigenTraspaso = "AuroraSGA"
+				};
+				_auroraSgaContext.Traspasos.Add(traspasoArticulo);
+				traspasosCreados.Add(traspasoArticulo.Id);
+
+				// 🔷 NUEVO (2025-11-26): Prevenir duplicación cuando hay traspaso ARTICULO COMPLETADO pendiente
+				// Si la línea temporal tiene un TraspasoId de un traspaso ARTICULO COMPLETADO y aún no está procesada,
+				// al crear el traspaso PALET necesitamos:
+				// 1. Actualizar el TraspasoId al nuevo traspaso PALET (para que el BackgroundService solo lo procese una vez)
+				// 2. Actualizar la ubicación de la temporal a la nueva ubicación destino del traspaso PALET
+				//    (porque el BackgroundService consolida usando la ubicación de la temporal, no la del traspaso)
+				// Esto evita duplicación y asegura que la línea se consolide en la ubicación correcta.
+				if (linea.TraspasoId != null && linea.TraspasoId != Guid.Empty)
+				{
+					var traspasoAnterior = await _auroraSgaContext.Traspasos
+						.FirstOrDefaultAsync(t => t.Id == linea.TraspasoId);
+					
+					if (traspasoAnterior != null && 
+						traspasoAnterior.TipoTraspaso == "ARTICULO" && 
+						traspasoAnterior.CodigoEstado == "COMPLETADO" &&
+						!linea.Procesada)
+					{
+						_logger.LogInformation($"🔄 CerrarPalet: Actualizando temporal {linea.Id} de traspaso ARTICULO COMPLETADO {linea.TraspasoId} a traspaso PALET {traspasoArticulo.Id}. Actualizando ubicación de {linea.CodigoAlmacen}-{linea.Ubicacion} a {dto.CodigoAlmacenDestino}-{dto.UbicacionDestino} para evitar duplicación. PaletId={palet.Id}, Articulo={linea.CodigoArticulo}");
+						
+						// Actualizar la ubicación de la temporal a la nueva ubicación destino del traspaso PALET
+						// El BackgroundService consolidará usando esta ubicación
+						linea.CodigoAlmacen = dto.CodigoAlmacenDestino;
+						linea.Ubicacion = dto.UbicacionDestino;
+					}
+				}
+
+				// Asociar el TraspasoId a la línea temporal correspondiente
+				// NOTA: Si la temporal tenía un traspaso ARTICULO COMPLETADO, ahora apuntará al traspaso PALET
+				// y su ubicación será la nueva ubicación destino. El BackgroundService procesará la temporal
+				// solo una vez (con el traspaso PALET) en la ubicación correcta.
+				linea.TraspasoId = traspasoArticulo.Id;
+				_auroraSgaContext.TempPaletLineas.Update(linea);
+			}
+
+			// === NUEVO: Aplicar lógica de inventario cuando se cierra el palet ===
+			await AplicarLogicaInventarioAlCerrarPaletAsync(palet.Id, dto.CodigoEmpresa);
+
+			await _auroraSgaContext.SaveChangesAsync();
+			
+			// 🔷 Confirmar la transacción si todo salió bien
+			await transaction.CommitAsync();
+
+			return Ok(new
+			{
+				message = $"Palet {palet.Codigo} cerrado correctamente y traspasos de artículos creados.",
+				traspasosIds = traspasosCreados
+			});
 		}
-
-		// === NUEVO: Aplicar lógica de inventario cuando se cierra el palet ===
-		await AplicarLogicaInventarioAlCerrarPaletAsync(palet.Id, dto.CodigoEmpresa);
-
-		await _auroraSgaContext.SaveChangesAsync();
-
-		return Ok(new
+		catch (Exception ex)
 		{
-			message = $"Palet {palet.Codigo} cerrado correctamente y traspasos de artículos creados.",
-			traspasosIds = traspasosCreados
-		});
+			// 🔷 Si algo falla, revertir todos los cambios
+			await transaction.RollbackAsync();
+			_logger.LogError(ex, "❌ Error al cerrar palet {PaletId}. Se revirtieron todos los cambios.", id);
+			return StatusCode(500, $"Error al cerrar el palet: {ex.Message}");
+		}
 	}
 
 	/// <summary>
@@ -1515,19 +1615,35 @@ public class PaletController : ControllerBase
 	[HttpPost("{id}/cerrar-mobility")]
 	public async Task<IActionResult> CerrarPaletMobility(Guid id, [FromBody] CerrarPaletMobilityDto dto)
 	{
-		var palet = await _auroraSgaContext.Palets.FindAsync(id);
-		if (palet == null)
-			return NotFound("Palet no encontrado");
+		// 🔷 NUEVO: Usar transacción con nivel de aislamiento para evitar condiciones de carrera y duplicados
+		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync(
+			System.Data.IsolationLevel.Serializable);
+		
+		try
+		{
+			// 🔷 NUEVO: Recargar el palet dentro de la transacción para obtener el estado más reciente
+			var palet = await _auroraSgaContext.Palets.FindAsync(id);
+			if (palet == null)
+			{
+				await transaction.RollbackAsync();
+				return NotFound("Palet no encontrado");
+			}
 
-		if (palet.Estado == "Cerrado")
-			return BadRequest("El palet ya está cerrado.");
+			if (palet.Estado == "Cerrado")
+			{
+				await transaction.RollbackAsync();
+				return BadRequest("El palet ya está cerrado.");
+			}
 
-		// Verifica que tenga al menos una línea
-		bool tieneLineas = await _auroraSgaContext.TempPaletLineas.AnyAsync(l => l.PaletId == id)
-			|| await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
+			// Verifica que tenga al menos una línea
+			bool tieneLineas = await _auroraSgaContext.TempPaletLineas.AnyAsync(l => l.PaletId == id)
+				|| await _auroraSgaContext.PaletLineas.AnyAsync(l => l.PaletId == id);
 
-		if (!tieneLineas)
-			return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+			if (!tieneLineas)
+			{
+				await transaction.RollbackAsync();
+				return BadRequest("No se puede cerrar un palet vacío. Debe tener al menos una línea.");
+			}
 
 	// === LÓGICA MEJORADA: Detectar si estamos moviendo material de un palet existente ===
 	var lineasDefinitivas = await _auroraSgaContext.PaletLineas
@@ -1671,12 +1787,50 @@ public class PaletController : ControllerBase
 		});
 
 	var traspasosCreados = new List<Guid>();
+	
+	// Usar OrdenTrabajoId del palet si existe, sino usar el comentario del DTO
+	var comentarioOrden = !string.IsNullOrWhiteSpace(palet.OrdenTrabajoId)
+		? palet.OrdenTrabajoId
+		: dto.Comentario;
+	
 	foreach (var linea in lineasTemporales)
 	{
 		var codigoAlmacenLinea = (linea.CodigoAlmacen ?? string.Empty).Trim();
 		var ubicacionLinea = NormalizarUbicacion(linea.Ubicacion);
 		linea.CodigoAlmacen = codigoAlmacenLinea;
 		linea.Ubicacion = ubicacionLinea;
+
+		// 🔷 VALIDACIÓN 1: Verificar si la línea temporal ya tiene un traspaso asignado
+		if (linea.TraspasoId != null && linea.TraspasoId != Guid.Empty)
+		{
+			var traspasoExistente = await _auroraSgaContext.Traspasos
+				.FirstOrDefaultAsync(t => t.Id == linea.TraspasoId && t.CodigoEstado != "COMPLETADO");
+			
+			if (traspasoExistente != null)
+			{
+				_logger.LogWarning($"⚠️ CerrarPaletMobility: Línea temporal {linea.Id} ya tiene traspaso {linea.TraspasoId} en estado {traspasoExistente.CodigoEstado}. Omitiendo creación duplicada. PaletId={palet.Id}, Articulo={linea.CodigoArticulo}");
+				continue; // Omitir esta línea, ya tiene traspaso pendiente
+			}
+		}
+		
+		// 🔷 VALIDACIÓN 2: Verificar si ya existe un traspaso pendiente para esta combinación exacta
+		// Nota: En CerrarPaletMobility no tenemos AlmacenDestino ni UbicacionDestino en el DTO,
+		// así que validamos solo por origen (almacén y ubicación origen)
+		var traspasoDuplicado = await _auroraSgaContext.Traspasos
+			.AnyAsync(t => 
+				t.PaletId == palet.Id &&
+				t.CodigoArticulo == linea.CodigoArticulo &&
+				t.Partida == linea.Lote &&
+				t.AlmacenOrigen == codigoAlmacenLinea &&
+				t.UbicacionOrigen == ubicacionLinea &&
+				t.CodigoEstado != "COMPLETADO" &&
+				t.TipoTraspaso == "PALET");
+		
+		if (traspasoDuplicado)
+		{
+			_logger.LogWarning($"⚠️ CerrarPaletMobility: Ya existe un traspaso pendiente para artículo {linea.CodigoArticulo}, lote {linea.Lote} del palet {palet.Codigo}. Omitiendo creación duplicada. PaletId={palet.Id}");
+			continue; // Omitir esta línea, ya tiene traspaso pendiente
+		}
 
 		var traspaso = new Traspaso
 		{
@@ -1694,14 +1848,37 @@ public class PaletController : ControllerBase
 			Cantidad = linea.Cantidad,
 			Partida = linea.Lote,
 			FechaCaducidad = linea.FechaCaducidad,
-			Comentario = dto.Comentario,
+			Comentario = comentarioOrden, // Incluir OrdenTrabajoId del palet o comentario del usuario
 			EsNotificado = false,
 			OrigenTraspaso = "AuroraSGA"
 		};
 		_auroraSgaContext.Traspasos.Add(traspaso);
 		traspasosCreados.Add(traspaso.Id);
 
+		// 🔷 NUEVO (2025-11-26): Prevenir duplicación cuando hay traspaso ARTICULO COMPLETADO pendiente
+		// Si la línea temporal tiene un TraspasoId de un traspaso ARTICULO COMPLETADO y aún no está procesada,
+		// al crear el traspaso PALET necesitamos actualizar el TraspasoId al nuevo traspaso PALET
+		// para que el BackgroundService solo lo procese una vez (con el traspaso PALET).
+		// NOTA: En CerrarPaletMobility no conocemos la ubicación destino aún (se asigna al finalizar el traspaso),
+		// así que solo actualizamos el TraspasoId. La ubicación de la temporal se mantendrá hasta que se finalice el traspaso.
+		if (linea.TraspasoId != null && linea.TraspasoId != Guid.Empty)
+		{
+			var traspasoAnterior = await _auroraSgaContext.Traspasos
+				.FirstOrDefaultAsync(t => t.Id == linea.TraspasoId);
+			
+			if (traspasoAnterior != null && 
+				traspasoAnterior.TipoTraspaso == "ARTICULO" && 
+				traspasoAnterior.CodigoEstado == "COMPLETADO" &&
+				!linea.Procesada)
+			{
+				_logger.LogInformation($"🔄 CerrarPaletMobility: Actualizando TraspasoId de temporal {linea.Id} de traspaso ARTICULO COMPLETADO {linea.TraspasoId} a traspaso PALET {traspaso.Id} para evitar duplicación. PaletId={palet.Id}, Articulo={linea.CodigoArticulo}");
+			}
+		}
+
 		// Asociar el TraspasoId a la línea temporal correspondiente (palet destino)
+		// NOTA: Si la temporal tenía un traspaso ARTICULO COMPLETADO, ahora apuntará al traspaso PALET.
+		// El BackgroundService procesará la temporal solo una vez (con el traspaso PALET).
+		// La ubicación de la temporal se actualizará cuando se finalice el traspaso PALET.
 		linea.TraspasoId = traspaso.Id;
 		_auroraSgaContext.TempPaletLineas.Update(linea);
 		
@@ -1728,6 +1905,9 @@ public class PaletController : ControllerBase
 		}
 	}
 	await _auroraSgaContext.SaveChangesAsync();
+	
+		// 🔷 Confirmar la transacción si todo salió bien
+		await transaction.CommitAsync();
 
 		return Ok(new
 		{
@@ -1735,6 +1915,14 @@ public class PaletController : ControllerBase
 			paletId = palet.Id,
 			traspasosIds = traspasosCreados
 		});
+		}
+		catch (Exception ex)
+		{
+			// 🔷 Si algo falla, revertir todos los cambios
+			await transaction.RollbackAsync();
+			_logger.LogError(ex, "❌ Error al cerrar palet desde Mobility {PaletId}. Se revirtieron todos los cambios.", id);
+			return StatusCode(500, $"Error al cerrar el palet: {ex.Message}");
+		}
 	}
 
 	[HttpPost("{id}/completar-traspaso")]
@@ -2354,45 +2542,16 @@ public class RelanzarTraspasoDto
 
 	private async Task<Guid?> RelanzarTraspasoIndividualAsync(Traspaso traspasoError, RelanzarTraspasoDto dto)
 	{
-		// Buscar línea definitiva del palet (estado real actual)
-		var paletLineaDefinitiva = await _auroraSgaContext.PaletLineas
-			.Where(pl => pl.PaletId == traspasoError.PaletId &&
-						 pl.CodigoArticulo == traspasoError.CodigoArticulo &&
-						 (pl.Lote == traspasoError.Partida || (pl.Lote == null && traspasoError.Partida == null)))
-			.FirstOrDefaultAsync();
-
-		if (paletLineaDefinitiva == null)
-		{
-			throw new InvalidOperationException($"No se encontró línea definitiva para el artículo {traspasoError.CodigoArticulo} del traspaso en error {traspasoError.Id}.");
-		}
-
-		// Siempre crear una nueva línea temporal basada en la línea definitiva
-		// Esto evita problemas de concurrencia con líneas temporales que puedan haber sido procesadas
-		var tempLinea = new TempPaletLinea
-		{
-			Id = Guid.NewGuid(),
-			PaletId = paletLineaDefinitiva.PaletId,
-			CodigoEmpresa = paletLineaDefinitiva.CodigoEmpresa,
-			CodigoArticulo = paletLineaDefinitiva.CodigoArticulo,
-			DescripcionArticulo = paletLineaDefinitiva.DescripcionArticulo,
-			Cantidad = paletLineaDefinitiva.Cantidad,
-			UnidadMedida = paletLineaDefinitiva.UnidadMedida,
-			Lote = paletLineaDefinitiva.Lote,
-			FechaCaducidad = paletLineaDefinitiva.FechaCaducidad,
-			CodigoAlmacen = traspasoError.AlmacenOrigen, // Usar el almacén origen del traspaso en error
-			Ubicacion = traspasoError.UbicacionOrigen ?? paletLineaDefinitiva.Ubicacion ?? "", // Usar ubicación origen o la de la línea definitiva
-			UsuarioId = dto.UsuarioId,
-			FechaAgregado = DateTime.Now,
-			Observaciones = $"Creada para relanzar traspaso {traspasoError.Id}",
-			Procesada = false,
-			TraspasoId = null, // Se asignará después
-			EsHeredada = true
-		};
-		_auroraSgaContext.TempPaletLineas.Add(tempLinea);
-
+		// Solo replicar el traspaso en ERROR_ERP y crearlo como PENDIENTE_ERP
+		// NO crear ni tocar líneas (ni temporales ni definitivas)
+		
 		var marcaRelanzado = $"Relanzado: {DateTime.Now:yyyy-MM-dd HH:mm}";
 		var comentarioFinal = marcaRelanzado.Length > 500 ? marcaRelanzado.Substring(0, 500) : marcaRelanzado;
 
+		// Preservar el comentario original del traspaso en error (puede tener información de órdenes de trabajo, etc.)
+		var comentarioOriginal = traspasoError.Comentario;
+
+		// Crear nuevo traspaso copiando todos los datos del traspaso en error
 		var nuevoTraspaso = new Traspaso
 		{
 			Id = Guid.NewGuid(),
@@ -2406,14 +2565,14 @@ public class RelanzarTraspasoDto
 			UbicacionOrigen = traspasoError.UbicacionOrigen,
 			AlmacenDestino = traspasoError.AlmacenDestino,
 			UbicacionDestino = traspasoError.UbicacionDestino,
-			FechaFinalizacion = null,
-			UsuarioFinalizacionId = null,
+			FechaFinalizacion = DateTime.Now, // Fecha de relanzamiento para que el BackgroundService lo procese
+			UsuarioFinalizacionId = dto.UsuarioId,
 			CodigoArticulo = traspasoError.CodigoArticulo,
 			Cantidad = traspasoError.Cantidad,
 			Partida = traspasoError.Partida,
 			FechaCaducidad = traspasoError.FechaCaducidad,
 			CodigoEmpresa = traspasoError.CodigoEmpresa,
-			Comentario = comentarioFinal,
+			Comentario = comentarioOriginal, // Preservar el comentario original (puede tener info de órdenes, etc.)
 			EstadoErp = null,
 			EsNotificado = false,
 			MovPosicionOrigen = traspasoError.MovPosicionOrigen,
@@ -2423,18 +2582,9 @@ public class RelanzarTraspasoDto
 
 		_auroraSgaContext.Traspasos.Add(nuevoTraspaso);
 
-		var paletLineasAsociadas = await _auroraSgaContext.PaletLineas
-			.Where(pl => pl.TraspasoId == traspasoError.Id)
-			.ToListAsync();
-
-		if (paletLineasAsociadas.Any())
-		{
-			_auroraSgaContext.PaletLineas.RemoveRange(paletLineasAsociadas);
-		}
-
-		// Asociar la línea temporal al nuevo traspaso (ya está en el contexto como Added)
-		tempLinea.TraspasoId = nuevoTraspaso.Id;
-		tempLinea.Procesada = false;
+		// Actualizar el comentario del traspaso original a "Relanzado: fecha hora"
+		traspasoError.Comentario = comentarioFinal;
+		_auroraSgaContext.Traspasos.Update(traspasoError);
 
 		var detalleRelanzado = $"Traspaso relanzado. Original: {traspasoError.Id}, Nuevo: {nuevoTraspaso.Id}";
 

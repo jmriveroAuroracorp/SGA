@@ -649,6 +649,7 @@ namespace SGA_Api.Data
                 entity.Property(e => e.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
                 entity.Property(e => e.Ubicacion).HasColumnName("Ubicacion").HasMaxLength(30);
                 entity.Property(e => e.Bloqueado).HasColumnName("Bloqueado");
+                entity.Property(e => e.TipoBloqueo).HasColumnName("TipoBloqueo").HasMaxLength(20);
                 entity.Property(e => e.UsuarioBloqueoId).HasColumnName("UsuarioBloqueoId");
                 entity.Property(e => e.FechaBloqueo).HasColumnName("FechaBloqueo");
                 entity.Property(e => e.ComentarioBloqueo).HasColumnName("ComentarioBloqueo").HasMaxLength(500);

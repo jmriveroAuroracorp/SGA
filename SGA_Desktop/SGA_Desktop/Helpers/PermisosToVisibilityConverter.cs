@@ -19,11 +19,19 @@ namespace SGA_Desktop.Helpers
 				{
 					case "ConsultaStock": return PermisosHelper.PuedeAccederAConsultaStock() ? Visibility.Visible : Visibility.Collapsed;
 					case "Traspasos": return PermisosHelper.PuedeAccederATraspasos() ? Visibility.Visible : Visibility.Collapsed;
-					//case "Inventario": return PermisosHelper.PuedeAccederAInventario() ? Visibility.Visible : Visibility.Collapsed;
+					case "TraspasosStock": return PermisosHelper.PuedeAccederATraspasos() ? Visibility.Visible : Visibility.Collapsed;
+					case "TraspasosPalet": return PermisosHelper.PuedeAccederATraspasos() ? Visibility.Visible : Visibility.Collapsed;
+					case "HistorialTraspasos": return PermisosHelper.PuedeAccederATraspasos() ? Visibility.Visible : Visibility.Collapsed;
 					case "Pesaje": return PermisosHelper.PuedeAccederAPesaje() ? Visibility.Visible : Visibility.Collapsed;
 					case "ImpresionEtiquetas": return PermisosHelper.PuedeAccederAImpresionEtiquetas() ? Visibility.Visible : Visibility.Collapsed;
+					case "Inventario": return PermisosHelper.PuedeAccederAInventario() ? Visibility.Visible : Visibility.Collapsed;
+					case "ControlesRotativos": return PermisosHelper.PuedeAccederAControlesRotativos() ? Visibility.Visible : Visibility.Collapsed;
 					case "Calidad": return PermisosHelper.PuedeAccederACalidad() ? Visibility.Visible : Visibility.Collapsed;
 					case "ConfiguracionOperarios": return PermisosHelper.PuedeAccederAConfiguracionOperarios() ? Visibility.Visible : Visibility.Collapsed;
+					case "Rendimientos": return PermisosHelper.PuedeAccederARendimientos() ? Visibility.Visible : Visibility.Collapsed;
+					case "Ubicaciones": return PermisosHelper.PuedeAccederAUbicaciones() ? Visibility.Visible : Visibility.Collapsed;
+					case "OrdenTrabajo": return PermisosHelper.PuedeAccederAOrdenesTraspaso() ? Visibility.Visible : Visibility.Collapsed;
+					case "OrdenTraspaso": return PermisosHelper.PuedeAccederAOrdenesTraspaso() ? Visibility.Visible : Visibility.Collapsed;
 						// etc...
 				}
 			}

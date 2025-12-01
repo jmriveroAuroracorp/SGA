@@ -174,14 +174,20 @@ namespace SGA_Api.Controllers
         /// </summary>
         /// <param name="estado">Estado de la orden para filtrar</param>
         /// <param name="codigoOperario">Código del operario para filtrar</param>
+        /// <param name="fechaDesde">Fecha desde para filtrar (opcional)</param>
+        /// <param name="fechaHasta">Fecha hasta para filtrar (opcional)</param>
         /// <returns>Lista de todas las órdenes que cumplen con los filtros</returns>
         [HttpGet("ordenes/todas")]
         [ProducesResponseType(typeof(IEnumerable<OrdenDto>), 200)]
-        public async Task<IActionResult> ListarTodasLasOrdenes([FromQuery] string? estado = null, [FromQuery] string? codigoOperario = null)
+        public async Task<IActionResult> ListarTodasLasOrdenes(
+            [FromQuery] string? estado = null, 
+            [FromQuery] string? codigoOperario = null,
+            [FromQuery] DateTime? fechaDesde = null,
+            [FromQuery] DateTime? fechaHasta = null)
         {
             try
             {
-                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado, codigoOperario);
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado, codigoOperario, fechaDesde, fechaHasta);
                 return Ok(ordenes);
             }
             catch (Exception ex)

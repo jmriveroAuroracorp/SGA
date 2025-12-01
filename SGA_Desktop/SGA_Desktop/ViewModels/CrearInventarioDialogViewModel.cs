@@ -612,10 +612,26 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
-                if (AlmacenSeleccionado == null)
+                // Validar según el modo (multialmacén o único)
+                List<string> almacenesParaBuscar = new();
+                if (ModoMultialmacen)
                 {
-                    ShowDialog(new WarningDialog("Buscar artículo", "Primero selecciona un almacén."));
-                    return;
+                    var seleccionados = AlmacenesSeleccionados;
+                    if (!seleccionados.Any())
+                    {
+                        ShowDialog(new WarningDialog("Buscar artículo", "Primero selecciona al menos un almacén."));
+                        return;
+                    }
+                    almacenesParaBuscar = seleccionados.Select(a => a.CodigoAlmacen).ToList();
+                }
+                else
+                {
+                    if (AlmacenSeleccionado == null)
+                    {
+                        ShowDialog(new WarningDialog("Buscar artículo", "Primero selecciona un almacén."));
+                        return;
+                    }
+                    almacenesParaBuscar.Add(AlmacenSeleccionado.CodigoAlmacen);
                 }
 
                 ArticulosEncontrados.Clear();
@@ -627,32 +643,40 @@ namespace SGA_Desktop.ViewModels
                 List<StockDto> resultados = new();
                 string tipoBusqueda = "";
 
-                // Intentar buscar por código primero (si parece un código)
-                if (terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" "))
+                // Buscar en cada almacén seleccionado
+                foreach (var codigoAlmacen in almacenesParaBuscar)
                 {
-                    tipoBusqueda = "código";
-                    resultados = await _stockService.ObtenerPorArticuloAsync(
-                        empresa,
-                        codigoArticulo: terminoBusqueda,
-                        codigoAlmacen: AlmacenSeleccionado.CodigoAlmacen
-                    );
+                    List<StockDto> resultadosAlmacen = new();
+
+                    // Intentar buscar por código primero (si parece un código)
+                    if (terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" "))
+                    {
+                        tipoBusqueda = "código";
+                        resultadosAlmacen = await _stockService.ObtenerPorArticuloAsync(
+                            empresa,
+                            codigoArticulo: terminoBusqueda,
+                            codigoAlmacen: codigoAlmacen
+                        );
+                    }
+
+                    // Si no encuentra por código o el término parece una descripción, buscar por descripción
+                    if (!resultadosAlmacen.Any())
+                    {
+                        tipoBusqueda = terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" ") ? 
+                            "código (sin resultados), luego descripción" : "descripción";
+                        
+                        resultadosAlmacen = await _stockService.ObtenerPorArticuloAsync(
+                            empresa,
+                            codigoArticulo: null,
+                            codigoAlmacen: codigoAlmacen,
+                            descripcion: terminoBusqueda
+                        );
+                    }
+
+                    resultados.AddRange(resultadosAlmacen);
                 }
 
-                // Si no encuentra por código o el término parece una descripción, buscar por descripción
-                if (!resultados.Any())
-                {
-                    tipoBusqueda = terminoBusqueda.Length <= 20 && !terminoBusqueda.Contains(" ") ? 
-                        "código (sin resultados), luego descripción" : "descripción";
-                    
-                    resultados = await _stockService.ObtenerPorArticuloAsync(
-                        empresa,
-                        codigoArticulo: null,
-                        codigoAlmacen: AlmacenSeleccionado.CodigoAlmacen,
-                        descripcion: terminoBusqueda
-                    );
-                }
-
-                // Agrupar por artículo
+                // Agrupar por artículo (eliminar duplicados si el mismo artículo está en múltiples almacenes)
                 var grupos = resultados
                     .GroupBy(x => new { x.CodigoArticulo, x.DescripcionArticulo })
                     .Select(g => new ArticuloResumenDto
@@ -672,21 +696,30 @@ namespace SGA_Desktop.ViewModels
                 if (ArticulosEncontrados.Count == 1)
                 {
                     ArticuloSeleccionado = ArticulosEncontrados.First();
-                    var mensaje = $"✓ Encontrado por {tipoBusqueda}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
+                    var almacenesTexto = ModoMultialmacen 
+                        ? $" en {almacenesParaBuscar.Count} almacén{(almacenesParaBuscar.Count > 1 ? "es" : "")}" 
+                        : $" en el almacén {almacenesParaBuscar.First()}";
+                    var mensaje = $"✓ Encontrado por {tipoBusqueda}{almacenesTexto}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
                     ShowDialog(new WarningDialog("Artículo encontrado", mensaje));
                 }
                 else if (ArticulosEncontrados.Count > 1)
                 {
-                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}.\nSelecciona uno de la lista desplegable.";
+                    var almacenesTexto = ModoMultialmacen 
+                        ? $" en {almacenesParaBuscar.Count} almacén{(almacenesParaBuscar.Count > 1 ? "es" : "")}" 
+                        : $" en el almacén {almacenesParaBuscar.First()}";
+                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}{almacenesTexto}.\nSelecciona uno de la lista desplegable.";
                     ShowDialog(new WarningDialog("Múltiples resultados", mensaje));
                 }
                 else
                 {
-                    var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por {tipoBusqueda} en el almacén {AlmacenSeleccionado.CodigoAlmacen}.\n\n";
+                    var almacenesTexto = ModoMultialmacen 
+                        ? $" en los almacenes seleccionados ({string.Join(", ", almacenesParaBuscar)})" 
+                        : $" en el almacén {almacenesParaBuscar.First()}";
+                    var mensaje = $"No se encontraron artículos buscando '{terminoBusqueda}' por {tipoBusqueda}{almacenesTexto}.\n\n";
                     mensaje += "💡 Consejos:\n";
                     mensaje += "• Para buscar por código: introduce el código exacto (ej: 10000)\n";
                     mensaje += "• Para buscar por descripción: introduce parte de la descripción (ej: azúcar)\n";
-                    mensaje += "• Verifica que el artículo tiene stock en este almacén";
+                    mensaje += "• Verifica que el artículo tiene stock en los almacenes seleccionados";
                     
                     ShowDialog(new WarningDialog("Sin resultados", mensaje));
                 }

@@ -77,6 +77,12 @@ class ImpresionLogic(private val onToast: (String) -> Unit) {
 
         /* ---------- con EAN, pedimos alérgenos ---------- */
         fun conEan(ean13: String?) {
+            // Validar que el artículo tenga EAN antes de imprimir
+            if (ean13.isNullOrBlank()) {
+                onToast("❌ El artículo no tiene EAN. No se puede imprimir sin EAN.")
+                return
+            }
+            
             ApiManager.etiquetasApiService.getAlergenos(
                 codigoEmpresa  = empresaId,
                 codigoArticulo = stock.codigoArticulo

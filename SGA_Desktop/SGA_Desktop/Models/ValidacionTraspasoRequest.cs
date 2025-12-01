@@ -22,5 +22,12 @@ namespace SGA_Desktop.Models
         // 🔷 NUEVO: Partida/Lote para validar bloqueo específico
         [JsonPropertyName("partida")]
         public string? Partida { get; set; }
+        
+        // 🔷 NUEVO: Ubicación origen para verificar bloqueos específicos por ubicación
+        [JsonPropertyName("almacenOrigen")]
+        public string? AlmacenOrigen { get; set; }
+        
+        [JsonPropertyName("ubicacionOrigen")]
+        public string? UbicacionOrigen { get; set; }
     }
 }

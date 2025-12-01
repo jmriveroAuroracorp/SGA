@@ -161,6 +161,7 @@ namespace SGA_Desktop.ViewModels
         #region Propiedades calculadas
         public bool MostrarConteoUbicacion => EsConteoUbicacion;
         public bool MostrarConteoArticulo => !EsConteoUbicacion;
+        public bool EsConteoArticulo => !EsConteoUbicacion;
         public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
         public bool MostrarAdvertenciaSinStock => MostrarInfoArticulo && !ArticuloTieneStockVirtual;
@@ -433,6 +434,9 @@ namespace SGA_Desktop.ViewModels
                 // Cargar prioridad
                 PrioridadSeleccionada = PrioridadesDisponibles.FirstOrDefault(p => p.Valor == orden.Prioridad);
 
+                // Cargar visibilidad
+                VisibilidadSeleccionada = VisibilidadesDisponibles.FirstOrDefault(v => v.Valor == orden.Visibilidad);
+
                 // IMPORTANTE: Cargar las listas PRIMERO antes de seleccionar valores
                 await CargarAlmacenesAsync();
                 await CargarOperariosAsync();
@@ -487,6 +491,23 @@ namespace SGA_Desktop.ViewModels
                 {
                     CodigoArticulo = orden.CodigoArticulo;
                     await BuscarArticuloAsync(orden.CodigoArticulo);
+                    
+                    // Asegurar que se seleccione el artículo correcto si hay múltiples resultados
+                    if (ArticulosEncontrados.Count > 1)
+                    {
+                        ArticuloSeleccionado = ArticulosEncontrados.FirstOrDefault(a => 
+                            a.CodigoArticulo == orden.CodigoArticulo) ?? ArticulosEncontrados.First();
+                    }
+                    // Si no se encontró pero hay código, crear el DTO manualmente
+                    else if (ArticulosEncontrados.Count == 0 && !string.IsNullOrEmpty(orden.CodigoArticulo))
+                    {
+                        ArticuloSeleccionado = new ArticuloResumenDto
+                        {
+                            CodigoArticulo = orden.CodigoArticulo,
+                            DescripcionArticulo = orden.DescripcionArticulo ?? "Artículo sin stock virtual registrado"
+                        };
+                        CodigoArticulo = orden.CodigoArticulo;
+                    }
                 }
 
                 ActualizarEstadoValidacion();

@@ -66,5 +66,9 @@ namespace SGA_Desktop.Models
         }
 
         public bool TienePalet => PaletId.HasValue;
+
+        public string UbicacionDisplay => string.IsNullOrWhiteSpace(CodigoUbicacion) 
+            ? "SIN UBICAR" 
+            : CodigoUbicacion;
     }
 } 

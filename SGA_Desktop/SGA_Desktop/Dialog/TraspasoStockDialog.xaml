@@ -19,6 +19,7 @@
             </ResourceDictionary.MergedDictionaries>
             <Helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <Helpers:TipoBloqueoDisplayConverter x:Key="TipoBloqueoDisplayConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -67,10 +68,13 @@
                         </Border.ToolTip>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔒" FontSize="10" Margin="0,0,2,0"/>
-                            <TextBlock Text="BLOQUEADO" 
-                                       FontSize="8" 
+                            <TextBlock FontSize="8" 
                                        FontWeight="Bold" 
-                                       Foreground="White"/>
+                                       Foreground="White">
+                                <Run Text="BLOQUEADO"/>
+                                <Run Text=" "/>
+                                <Run Text="{Binding TipoBloqueoCalidad, Converter={StaticResource TipoBloqueoDisplayConverter}, Mode=OneWay}"/>
+                            </TextBlock>
                         </StackPanel>
                     </Border>
                 </StackPanel>

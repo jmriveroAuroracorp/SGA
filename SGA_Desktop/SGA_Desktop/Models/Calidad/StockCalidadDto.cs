@@ -15,5 +15,11 @@ namespace SGA_Desktop.Models.Calidad
         public DateTime? FechaBloqueo { get; set; }
         public string? UsuarioBloqueo { get; set; }
         public string Estado { get; set; } = "Disponible";
+        
+        // 🔷 NUEVO: Información de palet si está paletizado
+        public Guid? PaletId { get; set; }
+        public string? CodigoPalet { get; set; }
+        public string? EstadoPalet { get; set; }
+        public bool EstaPaletizado => !string.IsNullOrEmpty(CodigoPalet);
     }
 }

@@ -24,6 +24,7 @@ public class TraspasosController : ControllerBase
 	private readonly SageDbContext _sageContext;
 	private readonly ILogger<TraspasosController> _logger;
 	private readonly IValidacionTraspasoService _validacionService;
+	private readonly ICalidadService _calidadService;
 	private readonly IServiceProvider _serviceProvider;
 
 	public TraspasosController(
@@ -32,6 +33,7 @@ public class TraspasosController : ControllerBase
 		SageDbContext sageContext,
 		ILogger<TraspasosController> logger,
 		IValidacionTraspasoService validacionService,
+		ICalidadService calidadService,
 		IServiceProvider serviceProvider)
 	{
 		_context = context;
@@ -39,6 +41,7 @@ public class TraspasosController : ControllerBase
 		_sageContext = sageContext;
 		_logger = logger;
 		_validacionService = validacionService;
+		_calidadService = calidadService;
 		_serviceProvider = serviceProvider;
 	}
 
@@ -434,7 +437,7 @@ public class TraspasosController : ControllerBase
 			.Take(limiteFinal) // 🚀 Límite dinámico basado en filtros
 			.ToListAsync();
 
-		// 🚀 OPTIMIZACIÓN: Cargar descripciones de artículos en una sola consulta
+		// 🚀 OPTIMIZACIÓN: Cargar descripciones de artículos desde la tabla Articulos (más eficiente que vStockDisponible)
 		var codigosArticulos = lista
 			.Where(t => !string.IsNullOrWhiteSpace(t.CodigoArticulo))
 			.Select(t => t.CodigoArticulo!)
@@ -444,11 +447,36 @@ public class TraspasosController : ControllerBase
 		var descripcionesDict = new Dictionary<string, string>();
 		if (codigosArticulos.Any())
 		{
-			descripcionesDict = await _context.StockDisponible
-				.Where(s => codigosArticulos.Contains(s.CodigoArticulo))
-				.GroupBy(s => s.CodigoArticulo)
-				.Select(g => new { CodigoArticulo = g.Key, DescripcionArticulo = g.First().DescripcionArticulo })
-				.ToDictionaryAsync(x => x.CodigoArticulo, x => x.DescripcionArticulo);
+			// Obtener empresas únicas de los traspasos originales (antes del mapeo a DTO)
+			var empresas = await q
+				.Where(t => t.CodigoEmpresa > 0)
+				.Select(t => t.CodigoEmpresa)
+				.Distinct()
+				.ToListAsync();
+
+			// Crear HashSet para búsqueda eficiente O(1)
+			var codigosArticulosSet = codigosArticulos.ToHashSet();
+
+			// Consultar Articulos por empresa (evita OPENJSON y es mucho más rápido)
+			foreach (var empresa in empresas)
+			{
+				// Cargar todos los artículos de la empresa y filtrar en memoria
+				var articulosEmpresa = await _sageContext.Articulos
+					.Where(a => a.CodigoEmpresa == empresa)
+					.Select(a => new { a.CodigoArticulo, a.DescripcionArticulo })
+					.ToListAsync();
+
+				// Filtrar en memoria usando HashSet (muy rápido)
+				foreach (var art in articulosEmpresa)
+				{
+					if (codigosArticulosSet.Contains(art.CodigoArticulo) && 
+						!string.IsNullOrWhiteSpace(art.DescripcionArticulo) && 
+						!descripcionesDict.ContainsKey(art.CodigoArticulo))
+					{
+						descripcionesDict[art.CodigoArticulo] = art.DescripcionArticulo;
+					}
+				}
+			}
 		}
 
 		// 🚀 OPTIMIZACIÓN: Resolver nombres de usuarios y descripciones en memoria (ya cargados)
@@ -985,6 +1013,34 @@ public class TraspasosController : ControllerBase
 				}
 			}
 
+			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Si se finaliza inmediatamente, validar antes de crear
+			if (dto.Finalizar ?? true)
+			{
+				if (!string.IsNullOrWhiteSpace(dto.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+				{
+					var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+					
+					_logger.LogInformation("🔍 Validando bloqueo de calidad en CrearTraspasoArticulo - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+						dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenOrigen ?? "(null)", dto.UbicacionOrigen ?? "(null)", dto.AlmacenDestino, ubicacionDestino, dto.CodigoEmpresa);
+
+					var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+						dto.CodigoArticulo,
+						dto.AlmacenDestino,
+						ubicacionDestino,
+						dto.CodigoEmpresa,
+						dto.Partida,
+						dto.AlmacenOrigen,
+						dto.UbicacionOrigen);
+
+					if (!resultadoValidacion.EsValido)
+					{
+						_logger.LogWarning("🚫 Traspaso bloqueado por calidad en CrearTraspasoArticulo - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+							dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.MotivoBloqueo);
+						return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede realizar el traspaso debido a un bloqueo de calidad.");
+					}
+				}
+			}
+
 		// 🔷 MEJORADO: Usar transacción para garantizar integridad atómica
 		// Si algo falla después de crear la línea negativa, todo se revierte automáticamente
 		await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -1019,6 +1075,16 @@ public class TraspasosController : ControllerBase
 
 			_context.Traspasos.Add(traspaso);
 			await _context.SaveChangesAsync();
+
+			// 🔷 DEBUG: Log después de guardar para verificar que se guardó correctamente (usando Warning para que siempre se vea)
+			_logger.LogWarning("✅ Traspaso creado - ID={Id}, Tipo={TipoTraspaso}, Estado={CodigoEstado}, Articulo={CodigoArticulo}, Partida={Partida}, Empresa={CodigoEmpresa}, Cantidad={Cantidad}, Origen={AlmacenOrigen}-{UbicacionOrigen}, DTO.Partida={DtoPartida}",
+				traspaso.Id, traspaso.TipoTraspaso, traspaso.CodigoEstado, traspaso.CodigoArticulo ?? "(null)", traspaso.Partida ?? "(null)", traspaso.CodigoEmpresa, traspaso.Cantidad, traspaso.AlmacenOrigen, traspaso.UbicacionOrigen, dto.Partida ?? "(null)");
+			
+			// 🔷 VALIDACIÓN: Verificar que la partida se guardó correctamente
+			if (string.IsNullOrWhiteSpace(traspaso.Partida) && !string.IsNullOrWhiteSpace(dto.Partida))
+			{
+				_logger.LogError("❌ CRÍTICO: La partida del DTO ({DtoPartida}) no se guardó en el traspaso {Id}", dto.Partida, traspaso.Id);
+			}
 
 			// === US-002: Crear línea temporal NEGATIVA para palet origen si existe ===
 			_logger.LogInformation($"🔍 DEBUG CrearTraspasoArticulo: paletIdOrigen.HasValue={paletIdOrigen.HasValue}, paletIdOrigen={paletIdOrigen}");
@@ -1164,6 +1230,32 @@ public class TraspasosController : ControllerBase
 			await transaction.CommitAsync();
 			
 			_logger.LogInformation($"✅ Traspaso {traspaso.Id} creado correctamente con todas sus líneas temporales");
+
+			// 🔷 NUEVO: Copiar bloqueo de calidad si el traspaso se finaliza inmediatamente
+			if ((dto.Finalizar ?? true) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino) && !string.IsNullOrWhiteSpace(dto.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.Partida))
+			{
+				try
+				{
+					var copiado = await _calidadService.CopiarBloqueoCalidadAsync(
+						dto.CodigoEmpresa,
+						dto.CodigoArticulo,
+						dto.Partida,
+						dto.AlmacenOrigen,
+						dto.UbicacionOrigen,
+						dto.AlmacenDestino,
+						dto.UbicacionDestino);
+					
+					if (copiado)
+					{
+						_logger.LogInformation($"✅ Bloqueo de calidad copiado desde {dto.AlmacenOrigen}-{dto.UbicacionOrigen ?? "(sin ubicación)"} a {dto.AlmacenDestino}-{dto.UbicacionDestino ?? "(sin ubicación)"}");
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, $"Error al copiar bloqueo de calidad en CrearTraspasoArticulo - TraspasoId: {traspaso.Id}");
+					// No fallar el traspaso si falla la copia del bloqueo
+				}
+			}
 			
 			var detalleArticuloCreacion = $"TraspasoId={traspaso.Id}, Articulo={dto.CodigoArticulo}, Cantidad={dto.Cantidad}, AlmacenOrigen={dto.AlmacenOrigen}, UbicacionOrigen={dto.UbicacionOrigen}, AlmacenDestino={(dto.Finalizar ?? true ? dto.AlmacenDestino : "Pendiente")}, PaletOrigen={(paletIdOrigen?.ToString() ?? "Suelto")}, PaletDestino={(paletIdDestino?.ToString() ?? "SinPalet")}, Finalizar={(dto.Finalizar ?? true)}";
 			RegistrarEventoTraspasoAsync(
@@ -1304,6 +1396,20 @@ public class TraspasosController : ControllerBase
 		if (traspaso == null)
 			return NotFound();
 
+		// 🔷 DEBUG: Log de toda la información del traspaso al finalizar (usando Warning para que siempre se vea)
+		_logger.LogWarning("📋 FinalizarTraspasoArticulo - Información del traspaso encontrado: ID={Id}, Tipo={TipoTraspaso}, Estado={CodigoEstado}, Articulo={CodigoArticulo}, Partida={Partida}, Empresa={CodigoEmpresa}, Cantidad={Cantidad}, Origen={AlmacenOrigen}-{UbicacionOrigen}",
+			traspaso.Id, traspaso.TipoTraspaso, traspaso.CodigoEstado, traspaso.CodigoArticulo ?? "(null)", traspaso.Partida ?? "(null)", traspaso.CodigoEmpresa, traspaso.Cantidad, traspaso.AlmacenOrigen, traspaso.UbicacionOrigen);
+		
+		// 🔷 VALIDACIÓN CRÍTICA: Verificar que el traspaso tenga información necesaria
+		if (string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
+		{
+			_logger.LogError("❌ CRÍTICO: Traspaso {Id} no tiene código de artículo. No se puede validar bloqueo de calidad.", traspaso.Id);
+		}
+		if (string.IsNullOrWhiteSpace(traspaso.Partida))
+		{
+			_logger.LogWarning("⚠️ ADVERTENCIA: Traspaso {Id} no tiene partida. La validación de bloqueo de calidad no funcionará correctamente.", traspaso.Id);
+		}
+
 		if (!string.Equals(traspaso.TipoTraspaso, "ARTICULO", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El traspaso no es de tipo ARTICULO.");
 
@@ -1324,6 +1430,45 @@ public class TraspasosController : ControllerBase
 		var ubiDestino = ubicacionDestino;  // Ya normalizada arriba
 		var almKey = almDestino.ToUpper();
 		var ubiKey = ubiDestino.ToUpper();
+
+		// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Verificar si el artículo está bloqueado y el destino es PULMÓN
+		// IMPORTANTE: Validar siempre que haya código de artículo y ubicación destino (requerido para finalizar)
+		if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
+		{
+			if (string.IsNullOrWhiteSpace(ubiDestino))
+			{
+				_logger.LogWarning("⚠️ FinalizarTraspasoArticulo: Ubicación destino vacía para artículo {CodigoArticulo}. No se puede validar bloqueo de calidad.", 
+					traspaso.CodigoArticulo);
+			}
+			else
+			{
+				_logger.LogWarning("🔍 Validando bloqueo de calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+					traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", traspaso.AlmacenOrigen ?? "(null)", traspaso.UbicacionOrigen ?? "(null)", almDestino, ubiDestino, traspaso.CodigoEmpresa);
+
+				var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+					traspaso.CodigoArticulo,
+					almDestino,
+					ubiDestino,
+					traspaso.CodigoEmpresa,
+					traspaso.Partida,
+					traspaso.AlmacenOrigen,
+					traspaso.UbicacionOrigen);
+
+				_logger.LogWarning("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
+					resultadoValidacion.EsValido, resultadoValidacion.MotivoBloqueo ?? "(sin motivo)");
+
+				if (!resultadoValidacion.EsValido)
+				{
+					_logger.LogWarning("🚫 Traspaso bloqueado por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+						traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", almDestino, ubiDestino, resultadoValidacion.MotivoBloqueo);
+					return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede realizar el traspaso debido a un bloqueo de calidad.");
+				}
+			}
+		}
+		else
+		{
+			_logger.LogWarning("⚠️ FinalizarTraspasoArticulo: Código de artículo vacío. No se puede validar bloqueo de calidad.");
+		}
 
 		// ─────────────────────────────────────────────────────────────────────────────
 		// NUEVO (mínimo cambio): si hay palet en destino, pedir confirmación SIEMPRE,
@@ -1540,6 +1685,32 @@ public class TraspasosController : ControllerBase
 		await _context.SaveChangesAsync();
 		await tx.CommitAsync();
 
+		// 🔷 NUEVO: Copiar bloqueo de calidad al finalizar traspaso
+		if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo) && !string.IsNullOrWhiteSpace(traspaso.Partida) && !string.IsNullOrWhiteSpace(almDestino))
+		{
+			try
+			{
+				var copiado = await _calidadService.CopiarBloqueoCalidadAsync(
+					traspaso.CodigoEmpresa,
+					traspaso.CodigoArticulo,
+					traspaso.Partida,
+					traspaso.AlmacenOrigen ?? "",
+					traspaso.UbicacionOrigen,
+					almDestino,
+					ubiDestino);
+				
+				if (copiado)
+				{
+					_logger.LogInformation($"✅ Bloqueo de calidad copiado desde {traspaso.AlmacenOrigen}-{traspaso.UbicacionOrigen ?? "(sin ubicación)"} a {almDestino}-{ubiDestino ?? "(sin ubicación)"} en FinalizarTraspasoArticulo");
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, $"Error al copiar bloqueo de calidad en FinalizarTraspasoArticulo - TraspasoId: {traspaso.Id}");
+				// No fallar el traspaso si falla la copia del bloqueo
+			}
+		}
+
 		var detalleFinalArticulo = $"TraspasoId={traspaso.Id}, Articulo={traspaso.CodigoArticulo}, Cantidad={traspaso.Cantidad}, AlmacenDestino={almDestino}, UbicacionDestino={ubiDestino}, PaletDestino={(paletDestinoId?.ToString() ?? (dto.DejarSuelto == true ? "Suelto" : "SinPalet"))}, DejarSuelto={dto.DejarSuelto}, ConfirmarPalet={dto.ConfirmarAgregarAPalet}";
 		RegistrarEventoTraspasoAsync(
 			"TRASPASO_ARTICULO_FINALIZACION",
@@ -1716,6 +1887,36 @@ public class TraspasosController : ControllerBase
 
 			if (lineas.Count == 0)
 				return BadRequest("No hay líneas definitivas para este palet. No se puede mover.");
+
+			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Validar cada línea del palet antes de crear traspasos
+			var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+			var almacenOrigen = ultimoTraspaso.AlmacenDestino ?? "";
+			var ubicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "";
+
+			foreach (var linea in lineas)
+			{
+				if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+				{
+					_logger.LogInformation("🔍 Validando bloqueo de calidad en MoverPalet - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+						linea.CodigoArticulo, linea.Lote ?? "(sin partida)", almacenOrigen, ubicacionOrigen, dto.AlmacenDestino, ubicacionDestino, dto.CodigoEmpresa);
+
+					var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+						linea.CodigoArticulo,
+						dto.AlmacenDestino,
+						ubicacionDestino,
+						dto.CodigoEmpresa,
+						linea.Lote,
+						almacenOrigen,
+						ubicacionOrigen);
+
+					if (!resultadoValidacion.EsValido)
+					{
+						_logger.LogWarning("🚫 Traspaso de palet bloqueado por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+							linea.CodigoArticulo, linea.Lote ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.MotivoBloqueo);
+						return BadRequest($"No se puede mover el palet. {resultadoValidacion.MotivoBloqueo}");
+					}
+				}
+			}
 
 			var traspasosCreados = new List<Guid>();
 
@@ -1966,6 +2167,34 @@ public class TraspasosController : ControllerBase
 		if (traspasosPalet.Count == 0)
 			return BadRequest("No hay traspasos pendientes para este palet.");
 
+		// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Validar cada traspaso antes de finalizarlo
+		var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+
+		foreach (var t in traspasosPalet)
+		{
+			if (!string.IsNullOrWhiteSpace(t.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+			{
+				_logger.LogInformation("🔍 Validando bloqueo de calidad en FinalizarTraspasosDePalet - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+					t.CodigoArticulo, t.Partida ?? "(sin partida)", t.AlmacenOrigen ?? "(null)", t.UbicacionOrigen ?? "(null)", dto.AlmacenDestino, ubicacionDestino, t.CodigoEmpresa);
+
+				var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+					t.CodigoArticulo,
+					dto.AlmacenDestino,
+					ubicacionDestino,
+					t.CodigoEmpresa,
+					t.Partida,
+					t.AlmacenOrigen,
+					t.UbicacionOrigen);
+
+				if (!resultadoValidacion.EsValido)
+				{
+					_logger.LogWarning("🚫 Finalización de traspaso de palet bloqueada por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+						t.CodigoArticulo, t.Partida ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.MotivoBloqueo);
+					return BadRequest($"No se puede finalizar el traspaso del palet. {resultadoValidacion.MotivoBloqueo}");
+				}
+			}
+		}
+
 		foreach (var t in traspasosPalet)
 		{
 			t.AlmacenDestino = dto.AlmacenDestino;
@@ -1977,6 +2206,35 @@ public class TraspasosController : ControllerBase
 		}
 
 		await _context.SaveChangesAsync();
+
+		// 🔷 NUEVO: Copiar bloqueos de calidad para cada traspaso del palet
+		foreach (var t in traspasosPalet)
+		{
+			if (!string.IsNullOrWhiteSpace(t.CodigoArticulo) && !string.IsNullOrWhiteSpace(t.Partida) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+			{
+				try
+				{
+					var copiado = await _calidadService.CopiarBloqueoCalidadAsync(
+						t.CodigoEmpresa,
+						t.CodigoArticulo,
+						t.Partida,
+						t.AlmacenOrigen ?? "",
+						t.UbicacionOrigen,
+						dto.AlmacenDestino,
+						ubicacionDestino);
+					
+					if (copiado)
+					{
+						_logger.LogInformation($"✅ Bloqueo de calidad copiado para artículo {t.CodigoArticulo} (partida {t.Partida}) desde {t.AlmacenOrigen}-{t.UbicacionOrigen ?? "(sin ubicación)"} a {dto.AlmacenDestino}-{ubicacionDestino ?? "(sin ubicación)"} en FinalizarTraspasosDePalet");
+					}
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, $"Error al copiar bloqueo de calidad en FinalizarTraspasosDePalet - TraspasoId: {t.Id}, Articulo: {t.CodigoArticulo}");
+					// No fallar el traspaso si falla la copia del bloqueo
+				}
+			}
+		}
 
 		var detalleFinalPalet = $"PaletId={paletId}, TraspasosActualizados={traspasosPalet.Count}, UsuarioFinalizacion={dto.UsuarioFinalizacionId}, Destino={dto.AlmacenDestino}-{dto.UbicacionDestino}";
 		RegistrarEventoTraspasoAsync(
@@ -2250,7 +2508,9 @@ public class TraspasosController : ControllerBase
 				request.AlmacenDestino,
 				request.UbicacionDestino,
 				request.CodigoEmpresa,
-				request.Partida);
+				request.Partida,
+				request.AlmacenOrigen,
+				request.UbicacionOrigen);
 
 			_logger.LogInformation("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
 				resultado.EsValido, resultado.MotivoBloqueo);

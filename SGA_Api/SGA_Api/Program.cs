@@ -15,7 +15,17 @@ var builder = WebApplication.CreateBuilder(args);
 // Configurar logging para mostrar en consola
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.SetMinimumLevel(LogLevel.Debug); // Cambiar a Debug para ver TODO
+builder.Logging.SetMinimumLevel(LogLevel.Information); // Information para logs normales, Debug muestra demasiado detalle
+
+// Filtrar mensajes de debug de Entity Framework Core
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.ChangeTracking", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Connection", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Infrastructure", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Query", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Model.Validation", LogLevel.Warning);
 
 // Agregar filtro para suprimir ObjectDisposedException del contenedor de DI durante el shutdown
 builder.Logging.AddFilter((category, logLevel) =>
@@ -28,22 +38,22 @@ builder.Logging.AddFilter((category, logLevel) =>
 // Agregamos el DbContext de SAGE
 builder.Services.AddDbContext<SageDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Sage"))
-           .LogTo(Console.WriteLine, LogLevel.Information)); // Cambiar a Information para ver más
+           .LogTo(Console.WriteLine, LogLevel.Warning)); // Warning para solo ver errores y warnings de EF
 
 // Agregamos el DbContext de AURORA_SGA
 builder.Services.AddDbContext<AuroraSgaDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("AuroraSga"))
-           .LogTo(Console.WriteLine, LogLevel.Information)); // Cambiar a Information para ver más
+           .LogTo(Console.WriteLine, LogLevel.Warning)); // Warning para solo ver errores y warnings de EF
 
 // Agregamos el DbContext de StorageControl
 builder.Services.AddDbContext<StorageControlDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("StorageControl"))
-           .LogTo(Console.WriteLine, LogLevel.Information)); // Cambiar a Information para ver más
+           .LogTo(Console.WriteLine, LogLevel.Warning)); // Warning para solo ver errores y warnings de EF
 
 // Agregamos el DbContext de MobilityWH3
 builder.Services.AddDbContext<MobilityWH3DbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("MobilityWH3"))
-           .LogTo(Console.WriteLine, LogLevel.Information)); // Cambiar a Information para ver más
+           .LogTo(Console.WriteLine, LogLevel.Warning)); // Warning para solo ver errores y warnings de EF
 
 
 // Add services to the container.
@@ -105,7 +115,13 @@ builder.Services.AddScoped<INotificacionesUnificadasService, NotificacionesUnifi
 builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
 builder.Services.AddScoped<ICalidadService, CalidadService>();
 builder.Services.AddScoped<IValidacionTraspasoService, ValidacionTraspasoService>();
-//builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
+builder.Services.AddScoped<RendimientosService>(provider => 
+    new RendimientosService(
+        provider.GetRequiredService<AuroraSgaDbContext>(),
+        provider.GetRequiredService<SageDbContext>(),
+        provider.GetRequiredService<ILogger<RendimientosService>>()
+    ));
+builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
 
 // Configuración de SignalR
 builder.Services.AddSignalR();

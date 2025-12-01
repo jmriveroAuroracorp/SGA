@@ -1040,8 +1040,20 @@ fun consultarStockConDescripcion(
                             SoundUtils.getInstance().playErrorSound()
                         }
                     } else {
-                        val errorMsg = response.errorBody()?.string() ?: "Error ${response.code()}"
-                        onError("Error ${response.code()}: $errorMsg")
+                        // 🔷 MEJORADO: Manejo específico para errores 400 (BadRequest) como bloqueos de calidad
+                        val errorMsg = response.errorBody()?.string()?.let { body ->
+                            // Limpiar comillas si viene entre comillas (ASP.NET Core a veces envuelve en JSON)
+                            body.trim().removeSurrounding("\"").trim()
+                        } ?: "Error ${response.code()}"
+                        
+                        // Si es un error 400, mostrar directamente el mensaje sin prefijo adicional
+                        val mensajeFinal = if (response.code() == 400) {
+                            errorMsg
+                        } else {
+                            "Error ${response.code()}: $errorMsg"
+                        }
+                        
+                        onError(mensajeFinal)
                         SoundUtils.getInstance().playErrorSound()
                     }
                 }

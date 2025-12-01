@@ -19,6 +19,7 @@
         <helpers:PaletsCountToVisibilityConverter x:Key="PaletsCountToVisibility"/>
         <helpers:NegativeValueColorConverter x:Key="NegativeValueColorConverter"/>
         <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
+        <helpers:TipoBloqueoDisplayConverter x:Key="TipoBloqueoDisplayConverter"/>
     </Page.Resources>
 
     <Grid Margin="0" Cursor="">
@@ -290,14 +291,6 @@
 Style="{StaticResource EstiloMenuItem}"
 Command="{Binding Data.CopiarDescripcionCommand, Source={StaticResource VmProxy}}"
 CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
-                                <MenuItem Header="Copiar lote"
-Style="{StaticResource EstiloMenuItem}"
-Command="{Binding Data.CopiarLoteCommand, Source={StaticResource VmProxy}}"
-CommandParameter="{Binding Partida, TargetNullValue=''}"/>
-                                <MenuItem Header="Copiar fecha caducidad"
-Style="{StaticResource EstiloMenuItem}"
-Command="{Binding Data.CopiarFechaCaducidadCommand, Source={StaticResource VmProxy}}"
-CommandParameter="{Binding FechaCaducidad}"/>
                             </ContextMenu>
                         </Setter.Value>
                     </Setter>
@@ -482,10 +475,13 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                     </Border.ToolTip>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="🔒" FontSize="12" Margin="0,0,2,0"/>
-                                        <TextBlock Text="BLOQUEADO CALIDAD" 
-                                                   FontSize="10" 
+                                        <TextBlock FontSize="10" 
                                                    FontWeight="Bold" 
-                                                   Foreground="White"/>
+                                                   Foreground="White">
+                                            <Run Text="BLOQUEADO CALIDAD"/>
+                                            <Run Text=" "/>
+                                            <Run Text="{Binding TipoBloqueoCalidad, Converter={StaticResource TipoBloqueoDisplayConverter}, Mode=OneWay}"/>
+                                        </TextBlock>
                                     </StackPanel>
                                 </Border>
                                 
@@ -504,12 +500,29 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 <TextBlock Text="{Binding Ubicacion}" Margin="2,0,0,0"/>
                             </StackPanel>
 
-                            <!-- FILA 2: Lote, Caducidad -->
+                            <!-- FILA 2: Lote, Caducidad, Fecha Traspaso -->
                             <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
                                 <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
                                 <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,0,0"/>
+                                <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,12,0"/>
+                                <TextBlock Text="Último traspaso:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,0,2,0"/>
+                                <TextBlock Margin="0,0,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="{Binding FechaUltimoTraspaso, StringFormat='dd/MM/yyyy HH:mm'}" />
+                                            <Setter Property="ToolTip" Value="{Binding FechaUltimoTraspaso, StringFormat='Traspasado el: {0:dd/MM/yyyy HH:mm}'}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FechaUltimoTraspaso}" Value="{x:Null}">
+                                                    <Setter Property="Text" Value="Sin traspasos" />
+                                                    <Setter Property="FontStyle" Value="Italic" />
+                                                    <Setter Property="Foreground" Value="Gray" />
+                                                    <Setter Property="ToolTip" Value="Este stock no tiene registros de traspasos" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
 
                             <!-- FILA 3: Palets inline/expander + Totales -->
@@ -764,10 +777,13 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                     </Border.ToolTip>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="🔒" FontSize="12" Margin="0,0,2,0"/>
-                                        <TextBlock Text="BLOQUEADO CALIDAD" 
-                                                   FontSize="10" 
+                                        <TextBlock FontSize="10" 
                                                    FontWeight="Bold" 
-                                                   Foreground="White"/>
+                                                   Foreground="White">
+                                            <Run Text="BLOQUEADO CALIDAD"/>
+                                            <Run Text=" "/>
+                                            <Run Text="{Binding TipoBloqueoCalidad, Converter={StaticResource TipoBloqueoDisplayConverter}, Mode=OneWay}"/>
+                                        </TextBlock>
                                     </StackPanel>
                                 </Border>
                                 
@@ -786,12 +802,29 @@ CommandParameter="{Binding FechaCaducidad}"/>
                                 <TextBlock Text="{Binding Ubicacion}" Margin="2,0,0,0"/>
                             </StackPanel>
 
-                            <!-- FILA 2: Lote, Caducidad -->
+                            <!-- FILA 2: Lote, Caducidad, Fecha Traspaso -->
                             <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,0,0">
                                 <TextBlock Text="Lote:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
                                 <TextBlock Text="{Binding Partida}" Margin="2,0,12,0"/>
                                 <TextBlock Text="Caducidad:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
-                                <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,0,0"/>
+                                <TextBlock Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" Margin="2,0,12,0"/>
+                                <TextBlock Text="Último traspaso:" FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}" Margin="0,0,2,0"/>
+                                <TextBlock Margin="0,0,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="{Binding FechaUltimoTraspaso, StringFormat='dd/MM/yyyy HH:mm'}" />
+                                            <Setter Property="ToolTip" Value="{Binding FechaUltimoTraspaso, StringFormat='Traspasado el: {0:dd/MM/yyyy HH:mm}'}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FechaUltimoTraspaso}" Value="{x:Null}">
+                                                    <Setter Property="Text" Value="Sin traspasos" />
+                                                    <Setter Property="FontStyle" Value="Italic" />
+                                                    <Setter Property="Foreground" Value="Gray" />
+                                                    <Setter Property="ToolTip" Value="Este stock no tiene registros de traspasos" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
 
                             <!-- FILA 3: Palets inline/expander + Totales -->

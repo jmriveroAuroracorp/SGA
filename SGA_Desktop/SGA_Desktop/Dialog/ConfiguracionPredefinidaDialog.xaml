@@ -132,37 +132,34 @@
                                 </StackPanel>
                             </ScrollViewer>
                             
-                            <!-- Controles para agregar permiso -->
+                            <!-- Controles para gestionar permisos -->
                             <Grid Grid.Row="2" Margin="0,10,0,0">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
                                 
-                                <Grid Grid.Row="0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    
-                                    <ComboBox Grid.Column="0" x:Name="CmbPermisosDisponibles" 
-                                              DisplayMemberPath="Descripcion" 
-                                              SelectedValuePath="Codigo"
-                                              Margin="0,0,10,0"/>
-                                    
-                                    <Button Grid.Column="1" x:Name="BtnAgregarPermiso" 
-                                            Content="Agregar" 
-                                            Click="AgregarPermiso_Click"
-                                            Style="{StaticResource EstiloBotonSecundario}"/>
-                                </Grid>
-                                
-                                <!-- Mensaje informativo -->
-                                <TextBlock Grid.Row="1" x:Name="TxtMensajePermisos"
-                                           Text=""
+                                <TextBlock Grid.Column="0" 
+                                           Text="Gestionar permisos de forma masiva" 
+                                           VerticalAlignment="Center"
                                            FontStyle="Italic"
-                                           Foreground="{StaticResource BrushSecundario}"
-                                           Margin="0,5,0,0"
-                                           Visibility="Collapsed"/>
+                                           Foreground="{StaticResource BrushSecundario}"/>
+                                
+                                <Button Grid.Column="1" x:Name="BtnSeleccionarPermisos" 
+                                        Content="📋 Seleccionar Permisos" 
+                                        Click="SeleccionarPermisos_Click"
+                                        Style="{StaticResource EstiloBotonPrincipal}"
+                                        Width="160"
+                                        Height="35"
+                                        Margin="0,0,10,0"/>
+                                
+                                <Button Grid.Column="2" x:Name="BtnLimpiarPermisos" 
+                                        Content="🗑️ Limpiar Todo" 
+                                        Click="LimpiarPermisos_Click"
+                                        Style="{StaticResource EstiloBotonSecundario}"
+                                        Width="120"
+                                        Height="35"/>
                             </Grid>
                         </Grid>
                     </GroupBox>

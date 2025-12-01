@@ -141,7 +141,11 @@ namespace SGA_Desktop.Services
         /// <summary>
         /// Listar todas las órdenes de conteo con filtros (para Desktop)
         /// </summary>
-        public async Task<List<OrdenConteoDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null)
+        public async Task<List<OrdenConteoDto>> ListarTodasLasOrdenesAsync(
+            string? estado = null, 
+            string? codigoOperario = null,
+            DateTime? fechaDesde = null,
+            DateTime? fechaHasta = null)
         {
             try
             {
@@ -153,6 +157,12 @@ namespace SGA_Desktop.Services
 
                 if (!string.IsNullOrEmpty(codigoOperario))
                     queryParams.Add($"codigoOperario={Uri.EscapeDataString(codigoOperario)}");
+
+                if (fechaDesde.HasValue)
+                    queryParams.Add($"fechaDesde={fechaDesde.Value:yyyy-MM-dd}");
+
+                if (fechaHasta.HasValue)
+                    queryParams.Add($"fechaHasta={fechaHasta.Value:yyyy-MM-dd}");
 
                 if (queryParams.Count > 0)
                     url += "?" + string.Join("&", queryParams);
@@ -186,7 +196,27 @@ namespace SGA_Desktop.Services
                 var content = new StringContent("", Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync($"conteos/ordenes/{guid}/cerrar", content);
-                response.EnsureSuccessStatusCode();
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    
+                    // Intentar deserializar como ProblemDetails para obtener el mensaje específico
+                    try
+                    {
+                        var problemDetails = JsonConvert.DeserializeObject<dynamic>(errorContent);
+                        if (problemDetails != null && problemDetails.detail != null)
+                        {
+                            throw new Exception(problemDetails.detail.ToString());
+                        }
+                    }
+                    catch
+                    {
+                        // Si no se puede deserializar, usar el contenido completo
+                    }
+                    
+                    throw new Exception($"Error del servidor ({(int)response.StatusCode}): {errorContent}");
+                }
 
                 return true;
             }
@@ -196,6 +226,11 @@ namespace SGA_Desktop.Services
             }
             catch (Exception ex)
             {
+                // Si el mensaje ya contiene información del servidor, no agregar más contexto
+                if (ex.Message.Contains("Error del servidor") || ex.Message.Contains("Error de comunicación"))
+                {
+                    throw;
+                }
                 throw new Exception($"Error al cerrar la orden de conteo: {ex.Message}", ex);
             }
         }

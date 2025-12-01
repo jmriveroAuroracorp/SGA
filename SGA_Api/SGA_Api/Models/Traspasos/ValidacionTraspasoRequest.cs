@@ -20,5 +20,9 @@ namespace SGA_Api.Models.Traspasos
         
         // 🔷 NUEVO: Partida/Lote para validar bloqueo específico
         public string? Partida { get; set; }
+        
+        // 🔷 NUEVO: Ubicación origen para verificar bloqueos específicos por ubicación
+        public string? AlmacenOrigen { get; set; }
+        public string? UbicacionOrigen { get; set; }
     }
 }

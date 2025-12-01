@@ -10,6 +10,7 @@ namespace SGA_Desktop.Models.Calidad
         public string Almacen { get; set; } = string.Empty;
         public string? Ubicacion { get; set; }
         public bool Bloqueado { get; set; }
+        public string TipoBloqueo { get; set; } = "TOTAL"; // "TOTAL" o "SOLO_PULMON"
         public string UsuarioBloqueo { get; set; } = string.Empty;
         public DateTime FechaBloqueo { get; set; }
         public string ComentarioBloqueo { get; set; } = string.Empty;

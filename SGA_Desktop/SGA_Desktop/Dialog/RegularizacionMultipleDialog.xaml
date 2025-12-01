@@ -23,6 +23,7 @@
             </ResourceDictionary.MergedDictionaries>
             <Helpers:ZeroToCollapsedConverter x:Key="ZeroToCollapsedConverter"/>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <Helpers:TipoBloqueoDisplayConverter x:Key="TipoBloqueoDisplayConverter"/>
             <!-- Header atractivo para Expander de artículos -->
             <DataTemplate x:Key="ArticuloExpanderHeaderTemplate">
                 <StackPanel Orientation="Horizontal" Margin="8,2">
@@ -184,10 +185,13 @@
                                                                     </Border.ToolTip>
                                                                     <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="🔒" FontSize="12" Margin="0,0,2,0"/>
-                                                                        <TextBlock Text="BLOQUEADO CALIDAD" 
-                                                                                   FontSize="10" 
+                                                                        <TextBlock FontSize="10" 
                                                                                    FontWeight="Bold" 
-                                                                                   Foreground="White"/>
+                                                                                   Foreground="White">
+                                                                            <Run Text="BLOQUEADO CALIDAD"/>
+                                                                            <Run Text=" "/>
+                                                                            <Run Text="{Binding TipoBloqueoCalidad, Converter={StaticResource TipoBloqueoDisplayConverter}, Mode=OneWay}"/>
+                                                                        </TextBlock>
                                                                     </StackPanel>
                                                                 </Border>
                                                                 

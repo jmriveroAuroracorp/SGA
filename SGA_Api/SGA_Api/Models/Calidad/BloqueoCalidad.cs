@@ -30,6 +30,9 @@ namespace SGA_Api.Models.Calidad
         [Required]
         public bool Bloqueado { get; set; } = true;
 
+        [StringLength(20)]
+        public string TipoBloqueo { get; set; } = "TOTAL"; // "TOTAL" = bloquea todos los traspasos, "SOLO_PULMON" = solo bloquea a PULMÓN
+
         [Required]
         public int UsuarioBloqueoId { get; set; }
 

@@ -88,5 +88,12 @@ namespace SGA_Desktop.Models
 		[JsonPropertyName("fechaBloqueoCalidad")]
 		public DateTime? FechaBloqueoCalidad { get; set; }
 
+		[JsonPropertyName("tipoBloqueoCalidad")]
+		public string? TipoBloqueoCalidad { get; set; }
+
+		// 🔷 NUEVO: Fecha del último traspaso
+		[JsonPropertyName("fechaUltimoTraspaso")]
+		public DateTime? FechaUltimoTraspaso { get; set; }
+
 	}
 }

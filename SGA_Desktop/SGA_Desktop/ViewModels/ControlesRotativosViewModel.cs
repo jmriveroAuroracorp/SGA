@@ -111,6 +111,8 @@ namespace SGA_Desktop.ViewModels
             OrdenesConteoView?.Refresh();
             OnPropertyChanged(nameof(TotalOrdenes));
             OnPropertyChanged(nameof(CanCargarControles));
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         [ObservableProperty]
@@ -125,6 +127,8 @@ namespace SGA_Desktop.ViewModels
             }
             OrdenesConteoView?.Refresh();
             OnPropertyChanged(nameof(TotalOrdenes));
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         [ObservableProperty]
@@ -137,7 +141,7 @@ namespace SGA_Desktop.ViewModels
         private string mensajeEstado = string.Empty;
 
         [ObservableProperty]
-        private DateTime fechaDesde = DateTime.Today.AddDays(-2);
+        private DateTime fechaDesde = DateTime.Today.AddDays(-7);
 
         [ObservableProperty]
         private DateTime fechaHasta = DateTime.Today;
@@ -154,6 +158,8 @@ namespace SGA_Desktop.ViewModels
             }
             OrdenesConteoView?.Refresh();
             OnPropertyChanged(nameof(TotalOrdenes));
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         // Propiedades para supervisión
@@ -217,6 +223,51 @@ namespace SGA_Desktop.ViewModels
                 return $"Total: {total} orden{(total != 1 ? "es" : "")} de conteo";
             }
         }
+
+        public bool TieneFiltrosActivos
+        {
+            get
+            {
+                // Verificar si hay filtros activos
+                var almacenActivo = AlmacenSeleccionadoCombo != null && 
+                                    AlmacenSeleccionadoCombo.CodigoAlmacen != "Todas";
+                var estadoActivo = !string.IsNullOrEmpty(EstadoFiltro) && EstadoFiltro != "TODOS";
+                var operarioActivo = OperarioSeleccionadoCombo != null && 
+                                     OperarioSeleccionadoCombo.Operario != 0;
+                // Siempre mostrar fechas como filtro activo (incluso si son los valores por defecto)
+                var fechasActivas = true; // Siempre hay un rango de fechas aplicado
+
+                return almacenActivo || estadoActivo || operarioActivo || fechasActivas;
+            }
+        }
+
+        public string ResumenFiltrosActivos
+        {
+            get
+            {
+                var filtros = new List<string>();
+
+                // Siempre mostrar las fechas (incluso si son los valores por defecto)
+                filtros.Add($"Fechas: {FechaDesde:dd/MM/yyyy} - {FechaHasta:dd/MM/yyyy}");
+
+                if (AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != "Todas")
+                {
+                    filtros.Add($"Almacén: {AlmacenSeleccionadoCombo.CodigoAlmacen}");
+                }
+
+                if (!string.IsNullOrEmpty(EstadoFiltro) && EstadoFiltro != "TODOS")
+                {
+                    filtros.Add($"Estado: {EstadoFiltro}");
+                }
+
+                if (OperarioSeleccionadoCombo != null && OperarioSeleccionadoCombo.Operario != 0)
+                {
+                    filtros.Add($"Operario: {OperarioSeleccionadoCombo.NombreOperario}");
+                }
+
+                return string.Join(" | ", filtros);
+            }
+        }
         #endregion
 
         #region Commands
@@ -254,6 +305,60 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
+        private async Task AbrirFiltros()
+        {
+            try
+            {
+                // Crear el ViewModel del diálogo con los valores actuales
+                var dialogViewModel = new FiltrosOrdenesConteoDialogViewModel(
+                    AlmacenSeleccionadoCombo,
+                    FechaDesde,
+                    FechaHasta,
+                    EstadoFiltro,
+                    OperarioSeleccionadoCombo
+                );
+
+                // Crear y mostrar el diálogo
+                var dialog = new FiltrosOrdenesConteoDialog(dialogViewModel);
+
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+
+                if (mainWindow != null && mainWindow != dialog)
+                    dialog.Owner = mainWindow;
+
+                // Mostrar el diálogo y esperar resultado
+                var result = dialog.ShowDialog();
+
+                // Si el usuario hizo clic en "Recargar" (result == true), aplicar los filtros
+                if (result == true)
+                {
+                    // Actualizar los filtros del ViewModel principal con los valores del diálogo
+                    AlmacenSeleccionadoCombo = dialogViewModel.AlmacenSeleccionadoCombo;
+                    FechaDesde = dialogViewModel.FechaDesde;
+                    FechaHasta = dialogViewModel.FechaHasta;
+                    EstadoFiltro = dialogViewModel.EstadoFiltro;
+                    OperarioSeleccionadoCombo = dialogViewModel.OperarioSeleccionadoCombo;
+
+                    // Notificar cambios en propiedades calculadas
+                    OnPropertyChanged(nameof(TieneFiltrosActivos));
+                    OnPropertyChanged(nameof(ResumenFiltrosActivos));
+
+                    // Recargar los controles con los nuevos filtros
+                    await CargarControles();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al abrir el diálogo de filtros: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+        }
+
+        [RelayCommand]
         private void LimpiarFiltros()
         {
             EstadoFiltro = "TODOS";
@@ -271,9 +376,13 @@ namespace SGA_Desktop.ViewModels
                 FiltroAlmacenesTexto = ""; // Limpiar el filtro de texto
             }
             
-            // Establecer las fechas al día de hoy en lugar de null
-            FechaDesde = DateTime.Today;
+            // Establecer las fechas: desde hace 7 días hasta hoy
+            FechaDesde = DateTime.Today.AddDays(-7);
             FechaHasta = DateTime.Today;
+
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         [RelayCommand]
@@ -290,8 +399,15 @@ namespace SGA_Desktop.ViewModels
                 // Filtrar por operario si no es "TODOS"
                 var operarioFiltro = OperarioSeleccionadoCombo?.Operario == 0 ? null : OperarioSeleccionadoCombo?.Operario.ToString();
 
-                Debug.WriteLine($"CargarControles - EstadoFiltro: '{EstadoFiltro}', OperarioFiltro: '{OperarioSeleccionadoCombo?.DescripcionCombo}'");
-                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estadoFiltro, operarioFiltro);
+                Debug.WriteLine($"CargarControles - EstadoFiltro: '{EstadoFiltro}', OperarioFiltro: '{OperarioSeleccionadoCombo?.DescripcionCombo}', FechaDesde: {FechaDesde:yyyy-MM-dd}, FechaHasta: {FechaHasta:yyyy-MM-dd}");
+                
+                // Pasar las fechas al servicio para filtrar en el backend
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(
+                    estadoFiltro, 
+                    operarioFiltro,
+                    FechaDesde,
+                    FechaHasta);
+                
                 Debug.WriteLine($"CargarControles - Se obtuvieron {ordenes.Count} órdenes");
 
                 // Asegurar que tenemos los operarios cargados para el mapeo de nombres
@@ -327,6 +443,8 @@ namespace SGA_Desktop.ViewModels
 
                 OrdenesConteoView.Refresh();
                 OnPropertyChanged(nameof(TotalOrdenes));
+                OnPropertyChanged(nameof(TieneFiltrosActivos));
+                OnPropertyChanged(nameof(ResumenFiltrosActivos));
 
                 MensajeEstado = $"Se cargaron {OrdenesConteo.Count} órdenes de conteo";
             }
@@ -370,6 +488,81 @@ namespace SGA_Desktop.ViewModels
                     "Error",
                     $"Error al mostrar el diálogo: {ex.Message}");
                 ShowCenteredDialog(errorDialog);
+            }
+        }
+
+        [RelayCommand]
+        private async Task CerrarOrden(OrdenConteoDto orden)
+        {
+            if (orden == null) return;
+
+            try
+            {
+                // Confirmar antes de cerrar
+                var confirm = new ConfirmationDialog(
+                    "Cerrar Orden de Conteo",
+                    $"¿Estás seguro de que deseas cerrar la orden '{orden.Titulo}'?\n\nEsta acción no se puede deshacer.",
+                    "\uE11B" // ícono de pregunta
+                );
+                
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                
+                if (mainWindow != null && mainWindow != confirm)
+                    confirm.Owner = mainWindow;
+                
+                if (confirm.ShowDialog() != true)
+                    return;
+
+                // Verificar el estado actual desde la BD antes de cerrar
+                var ordenActual = await _conteosService.ObtenerOrdenAsync(orden.GuidID);
+                
+                if (ordenActual == null)
+                {
+                    var dialog = new WarningDialog(
+                        "Error", 
+                        "No se pudo obtener la información actual de la orden.");
+                    ShowCenteredDialog(dialog);
+                    return;
+                }
+                
+                if (ordenActual.Estado != "EN_PROCESO")
+                {
+                    var dialog = new WarningDialog(
+                        "No se puede cerrar", 
+                        $"La orden '{ordenActual.Titulo}' está en estado '{ordenActual.EstadoFormateado}' y no se puede cerrar.\n\nSolo se pueden cerrar órdenes en estado 'En Proceso'.");
+                    ShowCenteredDialog(dialog);
+                    
+                    // Refrescar la lista para actualizar los estados
+                    await CargarControles();
+                    return;
+                }
+
+                // Cerrar la orden
+                IsCargando = true;
+                MensajeEstado = $"Cerrando orden '{orden.Titulo}'...";
+                
+                await _conteosService.CerrarOrdenAsync(orden.GuidID);
+                
+                // Mostrar mensaje de éxito
+                var successDialog = new WarningDialog(
+                    "Orden cerrada",
+                    $"La orden '{orden.Titulo}' ha sido cerrada correctamente.");
+                ShowCenteredDialog(successDialog);
+                
+                // Refrescar la lista
+                await CargarControles();
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al cerrar orden", 
+                    $"No se pudo cerrar la orden: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+            finally
+            {
+                IsCargando = false;
             }
         }
 
@@ -736,6 +929,8 @@ namespace SGA_Desktop.ViewModels
             }
             OrdenesConteoView?.Refresh();
             OnPropertyChanged(nameof(TotalOrdenes));
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         partial void OnFechaHastaChanged(DateTime value)
@@ -747,6 +942,8 @@ namespace SGA_Desktop.ViewModels
             }
             OrdenesConteoView?.Refresh();
             OnPropertyChanged(nameof(TotalOrdenes));
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         private async Task CargarOperarios()

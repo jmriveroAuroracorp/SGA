@@ -29,6 +29,7 @@ namespace SGA_Desktop.ViewModels
 			CurrentHeader = "BIENVENIDO";
 			EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
 			nombreOperario = SessionManager.NombreOperario;
+			TieneMultiplesEmpresas = SessionManager.UsuarioActual?.empresas?.Count > 1;
 			SessionManager.EmpresaCambiada += (_, __) =>
 			{
 				EmpresaNombre = SessionManager.EmpresaSeleccionadaNombre;
@@ -54,6 +55,9 @@ namespace SGA_Desktop.ViewModels
 
 		[ObservableProperty]
 		private string nombreOperario = "";
+
+		[ObservableProperty]
+		private bool tieneMultiplesEmpresas = false;
 
 		[ObservableProperty]
 		private int contadorNotificaciones = 0;
@@ -176,6 +180,13 @@ namespace SGA_Desktop.ViewModels
 	{
 		NavigationStore.Navigate("Calidad");
 		CurrentHeader = "CALIDAD";
+	}
+
+	[RelayCommand]
+	public void IrARendimientos()
+	{
+		NavigationStore.Navigate("Rendimientos");
+		CurrentHeader = "ANÁLISIS DE RENDIMIENTOS";
 	}
 
 		[RelayCommand]

@@ -236,6 +236,7 @@ namespace SGA_Desktop.ViewModels
         public bool IsBloqueadoCalidad => _stockSeleccionado.IsBloqueadoCalidad;
         public string? MotivoBloqueoCalidad => _stockSeleccionado.MotivoBloqueoCalidad;
         public DateTime? FechaBloqueoCalidad => _stockSeleccionado.FechaBloqueoCalidad;
+        public string? TipoBloqueoCalidad => _stockSeleccionado.TipoBloqueoCalidad; // 🔷 NUEVO
 
         // Eliminar las propiedades y la inicialización manual de los comandos
         // Comandos generados automáticamente por [RelayCommand]
@@ -583,7 +584,10 @@ namespace SGA_Desktop.ViewModels
                     AlmacenDestino = AlmacenDestinoSeleccionado?.CodigoAlmacen ?? "",
                     UbicacionDestino = ubicacionDestino,
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
-                    Partida = _stockSeleccionado.Partida // 🔷 NUEVO: Incluir partida para validación específica
+                    Partida = _stockSeleccionado.Partida,
+                    // 🔷 NUEVO: Incluir ubicación origen para verificar bloqueos específicos
+                    AlmacenOrigen = _stockSeleccionado.CodigoAlmacen,
+                    UbicacionOrigen = _stockSeleccionado.Ubicacion
                 };
 
                 var resultado = await _traspasoService.ValidarTraspasoArticuloAsync(request);

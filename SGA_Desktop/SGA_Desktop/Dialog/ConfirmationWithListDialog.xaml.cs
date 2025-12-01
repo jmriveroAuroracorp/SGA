@@ -114,17 +114,24 @@ namespace SGA_Desktop.Dialog
 				if (!articulosBloqueados.Any())
 					return ValidacionTraspasoResult.Valido(); // No hay artículos bloqueados
 
-				// 4. Validar cada artículo bloqueado individualmente
+				// 4. Validar cada artículo bloqueado individualmente con su partida y ubicación origen
 				var ubicacionDestino = UbicacionSeleccionada.Ubicacion;
 				var traspasosService = new TraspasosService();
 				foreach (var codigoArticulo in articulosBloqueados)
 				{
+					// Obtener la primera línea de este artículo para obtener partida y ubicación origen
+					var lineaArticulo = VM.Lineas.FirstOrDefault(l => l.CodigoArticulo == codigoArticulo);
+					
 					var request = new ValidacionTraspasoRequest
 					{
 						CodigoArticulo = codigoArticulo,
 						AlmacenDestino = VM.AlmacenDestinoSeleccionado?.CodigoAlmacen ?? "",
 						UbicacionDestino = ubicacionDestino,
-						CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value
+						CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+						Partida = lineaArticulo?.Lote,
+						// 🔷 NUEVO: Incluir ubicación origen de la línea para verificar bloqueos específicos
+						AlmacenOrigen = lineaArticulo?.CodigoAlmacen,
+						UbicacionOrigen = lineaArticulo?.Ubicacion
 					};
 
 					var resultado = await traspasosService.ValidarTraspasoArticuloAsync(request);
