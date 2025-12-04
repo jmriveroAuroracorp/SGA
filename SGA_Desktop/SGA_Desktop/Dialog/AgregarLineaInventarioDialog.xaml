@@ -1,0 +1,218 @@
+<Window x:Class="SGA_Desktop.Dialog.AgregarLineaInventarioDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+        Title="Agregar Línea Manual"
+        Width="500"
+        Height="650"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="50"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="60"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" 
+                    Background="{StaticResource BrushPrincipal}" 
+                    CornerRadius="6,6,0,0">
+                <TextBlock Text="➕ AGREGAR LÍNEA MANUAL" 
+                           FontSize="16" 
+                           FontWeight="Bold" 
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- Contenido principal -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="25">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                <!-- Código Artículo -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                    <TextBlock Text="Código Artículo *" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding CodigoArticulo, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,5,0"
+                                 Padding="5"/>
+                        <Button Grid.Column="1"
+                                Content="🔍 Buscar"
+                                Command="{Binding BuscarArticuloCommand}"
+                                IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Width="80"
+                                Height="28"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Descripción Artículo (readonly) -->
+                <StackPanel Grid.Row="1" Margin="0,0,0,15">
+                    <TextBlock Text="Descripción" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding DescripcionArticulo, Mode=OneWay}"
+                             IsReadOnly="True"
+                             Background="LightGray"
+                             Padding="5"/>
+                </StackPanel>
+
+                <!-- Almacén (readonly) -->
+                <StackPanel Grid.Row="2" Margin="0,0,0,15">
+                    <TextBlock Text="Almacén" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding CodigoAlmacen, Mode=OneWay}"
+                             IsReadOnly="True"
+                             Background="LightGray"
+                             Padding="5"/>
+                </StackPanel>
+
+                <!-- Ubicación -->
+                <StackPanel Grid.Row="3" Margin="0,0,0,15">
+                    <TextBlock Text="Ubicación *" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <ComboBox ItemsSource="{Binding Ubicaciones}"
+                              SelectedItem="{Binding UbicacionSeleccionada}"
+                              DisplayMemberPath="Ubicacion"
+                              IsEditable="False"
+                              Style="{StaticResource EstiloComboBox}"
+                              Padding="5"/>
+                </StackPanel>
+
+                <!-- Partida -->
+                <StackPanel Grid.Row="4" Margin="0,0,0,15">
+                    <TextBlock Text="Partida *" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <ComboBox ItemsSource="{Binding PartidasDisponibles}"
+                              SelectedValue="{Binding PartidaSeleccionada}"
+                              SelectedValuePath="Partida"
+                              DisplayMemberPath="Partida"
+                              IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                              Style="{StaticResource EstiloComboBox}"
+                              Padding="5"/>
+                </StackPanel>
+
+                <!-- Fecha Caducidad -->
+                <StackPanel Grid.Row="5" Margin="0,0,0,15">
+                    <TextBlock Text="Fecha Caducidad *" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <!-- ComboBox siempre visible con fechas de la partida seleccionada -->
+                    <ComboBox ItemsSource="{Binding FechasDisponibles}"
+                              SelectedItem="{Binding FechaCaducidad}"
+                              IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                              Style="{StaticResource EstiloComboBox}"
+                              Padding="5">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock>
+                                    <TextBlock.Text>
+                                        <Binding StringFormat="{}{0:dd/MM/yyyy}"/>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Cantidad Contada -->
+                <StackPanel Grid.Row="6" Margin="0,0,0,15">
+                    <TextBlock Text="Cantidad Contada *" 
+                               FontWeight="Bold" 
+                               Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding CantidadContada, UpdateSourceTrigger=LostFocus}"
+                             Padding="5"/>
+                </StackPanel>
+
+                <!-- Mensaje Estado -->
+                <TextBlock Grid.Row="7"
+                           Text="{Binding MensajeEstado}"
+                           Foreground="{StaticResource BrushPrincipal}"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,10"
+                           Visibility="{Binding MensajeEstado, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+                </Grid>
+            </ScrollViewer>
+
+            <!-- Footer con botones -->
+            <Border Grid.Row="2" 
+                    Background="{StaticResource BrushSecundario}" 
+                    CornerRadius="0,0,6,6"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{StaticResource BrushIntermedio}">
+                <Grid Margin="20,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Mensaje de carga -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding MensajeEstado}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushPrincipal}"
+                               Visibility="{Binding IsCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                    <!-- Botón Cancelar -->
+                    <Button Grid.Column="1"
+                            Content="Cancelar"
+                            Command="{Binding CancelarCommand}"
+                            IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="100" Height="35"
+                            Margin="0,0,10,0"/>
+
+                    <!-- Botón Guardar -->
+                    <Button Grid.Column="2"
+                            Content="Guardar"
+                            Command="{Binding GuardarCommand}"
+                            IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="100" Height="35"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
+

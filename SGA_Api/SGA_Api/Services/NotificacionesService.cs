@@ -37,7 +37,9 @@ namespace SGA_Api.Services
                     EstadoActual = crearDto.EstadoActual,
                     EsGrupal = crearDto.EsGrupal,
                     GrupoDestino = crearDto.GrupoDestino,
-                    Comentario = crearDto.Comentario
+                    Comentario = crearDto.Comentario,
+                    // 🔷 Usar DateTime.Now para usar hora del servidor/API
+                    FechaCreacion = DateTime.Now
                 };
 
                 _context.Notificaciones.Add(notificacion);

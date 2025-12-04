@@ -289,6 +289,111 @@ namespace SGA_Desktop.Services
 		}
 
 		/// <summary>
+		/// Busca un artículo por código sin filtrar por almacén o stock
+		/// Usa el endpoint /api/Stock/buscar-articulo para validar que el artículo existe en el sistema
+		/// </summary>
+		public async Task<ArticuloResumenDto?> BuscarArticuloPorCodigoAsync(int codigoEmpresa, string codigoArticulo)
+		{
+			try
+			{
+				var qs = $"?codigoEmpresa={codigoEmpresa}&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+				var response = await _httpClient.GetAsync($"Stock/buscar-articulo{qs}");
+				
+				if (response.IsSuccessStatusCode)
+				{
+					var json = await response.Content.ReadAsStringAsync();
+					var articulos = JsonConvert.DeserializeObject<List<ArticuloDto>>(json);
+					
+					if (articulos != null && articulos.Any())
+					{
+						var articulo = articulos.First();
+						return new ArticuloResumenDto
+						{
+							CodigoArticulo = articulo.CodigoArticulo,
+							DescripcionArticulo = articulo.Descripcion ?? string.Empty
+						};
+					}
+				}
+				
+				return null;
+			}
+			catch
+			{
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// Obtiene los lotes activos de un artículo (incluso sin stock) con su fecha de caducidad
+		/// </summary>
+		public async Task<List<LoteDto>> ObtenerLotesActivosAsync(short codigoEmpresa, string codigoArticulo)
+		{
+			var qs = $"?codigoEmpresa={codigoEmpresa}&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+			try
+			{
+				var response = await _httpClient.GetAsync($"Stock/articulo/lotes-activos{qs}");
+				response.EnsureSuccessStatusCode();
+				var json = await response.Content.ReadAsStringAsync();
+				
+				// Deserializar manualmente porque el endpoint devuelve objetos anónimos
+				var lotesRaw = JsonConvert.DeserializeObject<List<dynamic>>(json) ?? new List<dynamic>();
+				var lotes = new List<LoteDto>();
+				
+				foreach (var item in lotesRaw)
+				{
+					var partida = item.partida?.ToString() ?? item.Partida?.ToString() ?? string.Empty;
+					DateTime? fechaCaducidad = null;
+					
+					if (item.fechaCaducidad != null || item.FechaCaducidad != null)
+					{
+						var fechaStr = item.fechaCaducidad?.ToString() ?? item.FechaCaducidad?.ToString();
+						if (!string.IsNullOrWhiteSpace(fechaStr))
+						{
+							if (DateTime.TryParse(fechaStr, out DateTime fechaParsed))
+							{
+								fechaCaducidad = fechaParsed.Date;
+							}
+						}
+					}
+					
+					if (!string.IsNullOrWhiteSpace(partida))
+					{
+						lotes.Add(new LoteDto
+						{
+							Partida = partida,
+							FechaCaducidad = fechaCaducidad
+						});
+					}
+				}
+				
+				return lotes;
+			}
+			catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+			{
+				return new List<LoteDto>();
+			}
+			catch (Exception ex)
+			{
+				throw new Exception($"Error al obtener lotes activos: {ex.Message}", ex);
+			}
+		}
+
+		/// <summary>
+		/// DTO para respuesta del endpoint buscar-articulo
+		/// </summary>
+		private class ArticuloDto
+		{
+			[JsonProperty("codigoArticulo")]
+			public string CodigoArticulo { get; set; } = string.Empty;
+
+			[JsonProperty("descripcion")]
+			public string? Descripcion { get; set; }
+
+			[JsonProperty("codigoAlternativo")]
+			public string? CodigoAlternativo { get; set; }
+		}
+
+		/// <summary>
 		/// Obtiene el precio medio de un artículo desde el API
 		/// </summary>
 		public async Task<decimal> ObtenerPrecioMedioAsync(int codigoEmpresa, string codigoArticulo, string codigoAlmacen)

@@ -512,14 +512,29 @@ namespace SGA_Desktop.ViewModels
                 ShowDialog(confirmacion);
                 if (confirmacion.DialogResult != true) return;
 
-                // Determinar tipo de inventario
-                var tipoInventario = UsarFiltroArticulo || UsarRangoArticulos || ArticulosSeleccionados == "Con stock" ? "PARCIAL" : TipoInventarioSeleccionado;
+                // Determinar tipo de inventario - RESPETAR la selección del usuario
+                // Si el usuario seleccionó TOTAL, mantenerlo como TOTAL incluso con filtros de artículo
+                // Solo forzar a PARCIAL si explícitamente selecciona "Con stock" (sin filtros específicos)
+                var tipoInventario = TipoInventarioSeleccionado;
+
+                // Solo cambiar a PARCIAL si:
+                // 1. El usuario seleccionó PARCIAL explícitamente, O
+                // 2. Seleccionó "Con stock" Y no hay filtros específicos de artículo
+                if (TipoInventarioSeleccionado == "PARCIAL" || 
+                    (ArticulosSeleccionados == "Con stock" && !UsarFiltroArticulo && !UsarRangoArticulos))
+                {
+                    tipoInventario = "PARCIAL";
+                }
                 
                 // Si es inventario TOTAL, siempre incluir artículos con stock 0
                 // Si es PARCIAL, usar la selección del combo
+                // Si hay filtro de artículo específico o rango, SIEMPRE incluir artículos con stock 0
+                // (porque es un filtro específico, no un filtro por stock)
                 var incluirArticulosConStockCero = tipoInventario == "TOTAL" 
                     ? true 
-                    : ArticulosSeleccionados == "Todos";
+                    : (UsarFiltroArticulo || UsarRangoArticulos) 
+                        ? true  // Si hay filtro específico, incluir todos (incluso a 0)
+                        : ArticulosSeleccionados == "Todos";
 
                 var dto = new CrearInventarioDto
                 {

@@ -108,8 +108,8 @@ namespace SGA_Api.Services
                     ModoGeneracion = dto.ModoGeneracion,
                     Alcance = alcanceDeterminado, // Usar el alcance determinado automáticamente
                     FiltrosJson = dto.FiltrosJson,
-                    FechaPlan = dto.FechaPlan?.ToUniversalTime(),
-                    FechaEjecucion = dto.FechaEjecucion?.ToUniversalTime(),
+                    FechaPlan = dto.FechaPlan, // Guardar tal cual viene del cliente (sin convertir a UTC)
+                    FechaEjecucion = dto.FechaEjecucion, // Guardar tal cual viene del cliente (sin convertir a UTC)
                     SupervisorCodigo = dto.SupervisorCodigo,
                     CreadoPorCodigo = dto.CreadoPorCodigo,
                     Estado = !string.IsNullOrEmpty(dto.CodigoOperario) ? "ASIGNADO" : "PLANIFICADO",
@@ -1592,6 +1592,11 @@ namespace SGA_Api.Services
 					{
 						_logger.LogInformation("🔧 Creando InventarioAjustes para resultado {ResultadoGuid} con diferencia {Diferencia}", resultado.GuidID, diferencia);
 
+						// Normalizar FechaCaducidad para evitar problemas de conversión en SQL
+						DateTime? fechaCaducidadNormalizada = resultado.FechaCaducidad.HasValue 
+							? resultado.FechaCaducidad.Value.Date 
+							: null;
+
 						var inventarioAjuste = new InventarioAjustes
 						{
 							IdInventario = null, // Para ajustes de conteo no necesitamos InventarioCabecera
@@ -1604,7 +1609,7 @@ namespace SGA_Api.Services
 							CodigoEmpresa = (short)orden.CodigoEmpresa, // Convertir int a short
 							CodigoAlmacen = resultado.CodigoAlmacen,
 							Estado = "PENDIENTE_ERP",
-							FechaCaducidad = resultado.FechaCaducidad,
+							FechaCaducidad = fechaCaducidadNormalizada,
 							// Información de palet si existe
 							PaletId = resultado.PaletId,
 							CodigoPalet = resultado.CodigoPalet,

@@ -725,6 +725,41 @@ namespace SGA_Api.Controllers.Ubicacion
 			return Ok(new { ok = true });
 		}
 
+		/// <summary>
+		/// GET /api/ubicaciones/validar-almacen
+		/// Valida que una ubicación pertenece a un almacén específico
+		/// </summary>
+		[HttpGet("validar-almacen")]
+		public async Task<IActionResult> ValidarUbicacionAlmacen(
+			[FromQuery] short codigoEmpresa,
+			[FromQuery] string codigoAlmacen,
+			[FromQuery] string ubicacion)
+		{
+			if (string.IsNullOrWhiteSpace(codigoAlmacen) || string.IsNullOrWhiteSpace(ubicacion))
+				return BadRequest(new { valido = false, mensaje = "Almacén y ubicación son obligatorios." });
+
+			try
+			{
+				// Validar que la ubicación existe en la tabla Ubicaciones para ese almacén y empresa
+				var ubicacionExiste = await _auroraSgaContext.Ubicaciones
+					.AnyAsync(u => u.CodigoEmpresa == codigoEmpresa &&
+								   u.CodigoAlmacen == codigoAlmacen && 
+								   u.CodigoUbicacion == ubicacion &&
+								   u.Obsoleta == 0);
+
+				if (!ubicacionExiste)
+				{
+					return Ok(new { valido = false, mensaje = $"La ubicación '{ubicacion}' no existe en el almacén '{codigoAlmacen}'." });
+				}
+
+				return Ok(new { valido = true, mensaje = "Ubicación válida." });
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { valido = false, mensaje = $"Error al validar ubicación: {ex.Message}" });
+			}
+		}
+
 	}
 
 }

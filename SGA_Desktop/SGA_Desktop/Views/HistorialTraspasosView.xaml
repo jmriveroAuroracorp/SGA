@@ -546,8 +546,7 @@
                             CornerRadius="5" 
                             Padding="10,6"
                             VerticalAlignment="Center"
-                            HorizontalAlignment="Left"
-                            Visibility="{Binding TieneFiltrosActivos, Converter={StaticResource BoolToVisibilityConverter}}">
+                            HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔍 Filtros activos: " 
                                        FontWeight="SemiBold" 
@@ -745,8 +744,7 @@
                             CornerRadius="5" 
                             Padding="10,6"
                             VerticalAlignment="Center"
-                            HorizontalAlignment="Left"
-                            Visibility="{Binding TieneFiltrosActivos, Converter={StaticResource BoolToVisibilityConverter}}">
+                            HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔍 Filtros activos: " 
                                        FontWeight="SemiBold" 
@@ -932,8 +930,7 @@
                             CornerRadius="5" 
                             Padding="10,6"
                             VerticalAlignment="Center"
-                            HorizontalAlignment="Left"
-                            Visibility="{Binding TieneFiltrosActivos, Converter={StaticResource BoolToVisibilityConverter}}">
+                            HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔍 Filtros activos: " 
                                        FontWeight="SemiBold" 

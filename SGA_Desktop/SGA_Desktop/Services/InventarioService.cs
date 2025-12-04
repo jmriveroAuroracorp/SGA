@@ -384,6 +384,32 @@ namespace SGA_Desktop.Services
 
 
         /// <summary>
+        /// Valida que una ubicación pertenece a un almacén específico
+        /// </summary>
+        public async Task<bool> ValidarUbicacionAlmacenAsync(string codigoAlmacen, string ubicacion)
+        {
+            try
+            {
+                var empresa = SessionManager.EmpresaSeleccionada ?? 1;
+                var qs = $"?codigoEmpresa={empresa}&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}&ubicacion={Uri.EscapeDataString(ubicacion)}";
+                var response = await _httpClient.GetAsync($"ubicaciones/validar-almacen{qs}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var result = JsonConvert.DeserializeObject<ValidarUbicacionAlmacenResponse>(json);
+                    return result?.Valido ?? false;
+                }
+                
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Helper genérico para GET + deserializar JSON
         /// </summary>
         private async Task<T> GetAsync<T>(string relativeUrl)
@@ -393,5 +419,14 @@ namespace SGA_Desktop.Services
             var json = await response.Content.ReadAsStringAsync();
             return JsonConvert.DeserializeObject<T>(json)!;
         }
+    }
+
+    /// <summary>
+    /// DTO para respuesta de validación de ubicación-almacén
+    /// </summary>
+    public class ValidarUbicacionAlmacenResponse
+    {
+        public bool Valido { get; set; }
+        public string? Mensaje { get; set; }
     }
 } 

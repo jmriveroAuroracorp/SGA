@@ -4,6 +4,7 @@ using SGA_Desktop.Dialog;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -18,6 +19,7 @@ namespace SGA_Desktop.ViewModels
     {
         #region Fields & Services
         private readonly InventarioService _inventarioService;
+        private List<LineaInventarioDto> _todasLasLineas = new();
         #endregion
 
         #region Constructor
@@ -45,10 +47,41 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private string mensajeEstado = string.Empty;
+
+        [ObservableProperty]
+        private string filtroArticulo = string.Empty;
+
+        [ObservableProperty]
+        private string filtroUbicacion = string.Empty;
+
+        [ObservableProperty]
+        private string filtroPartida = string.Empty;
+
+        [ObservableProperty]
+        private string filtroTipoStock = "TODOS";
+
+        [ObservableProperty]
+        private string filtroAjuste = "TODOS";
+
+        [ObservableProperty]
+        private string criterioOrdenacion = "CodigoArticulo";
+
+        [ObservableProperty]
+        private string direccionOrdenacion = "ASC";
         #endregion
 
         #region Computed Properties
-        public string TotalLineas => $"Total: {LineasInventario.Count} líneas";
+        public string TotalLineas
+        {
+            get
+            {
+                var total = _todasLasLineas.Count;
+                var filtradas = LineasInventario.Count;
+                if (total == filtradas)
+                    return $"Total: {total} líneas";
+                return $"Mostrando {filtradas} de {total} líneas";
+            }
+        }
         #endregion
 
         #region Property Change Callbacks
@@ -58,6 +91,41 @@ namespace SGA_Desktop.ViewModels
             {
                 _ = CargarLineasInventarioAsync();
             }
+        }
+
+        partial void OnFiltroArticuloChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
+        }
+
+        partial void OnFiltroUbicacionChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
+        }
+
+        partial void OnFiltroPartidaChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
+        }
+
+        partial void OnFiltroTipoStockChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
+        }
+
+        partial void OnFiltroAjusteChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
+        }
+
+        partial void OnCriterioOrdenacionChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
+        }
+
+        partial void OnDireccionOrdenacionChanged(string oldValue, string newValue)
+        {
+            AplicarFiltrosYOrdenacion();
         }
         #endregion
 
@@ -84,6 +152,24 @@ namespace SGA_Desktop.ViewModels
         private void Cerrar()
         {
             CerrarDialogo();
+        }
+
+        [RelayCommand]
+        private void LimpiarFiltros()
+        {
+            FiltroArticulo = string.Empty;
+            FiltroUbicacion = string.Empty;
+            FiltroPartida = string.Empty;
+            FiltroTipoStock = "TODOS";
+            FiltroAjuste = "TODOS";
+            CriterioOrdenacion = "CodigoArticulo";
+            DireccionOrdenacion = "ASC";
+        }
+
+        [RelayCommand]
+        private void CambiarDireccionOrdenacion()
+        {
+            DireccionOrdenacion = DireccionOrdenacion == "ASC" ? "DESC" : "ASC";
         }
 
         [RelayCommand]
@@ -281,16 +367,13 @@ namespace SGA_Desktop.ViewModels
 
                 var lineas = await _inventarioService.ObtenerLineasInventarioAsync(Inventario.IdInventario);
 
-                LineasInventario.Clear();
-                foreach (var linea in lineas)
-                {
-                    LineasInventario.Add(linea);
-                }
+                // Guardar todas las líneas
+                _todasLasLineas = lineas.ToList();
 
-                // Notificar cambios en las propiedades computadas
-                OnPropertyChanged(nameof(TotalLineas));
+                // Aplicar filtros y ordenación
+                AplicarFiltrosYOrdenacion();
 
-                MensajeEstado = $"Cargadas {LineasInventario.Count} líneas";
+                MensajeEstado = $"Cargadas {_todasLasLineas.Count} líneas";
             }
             catch (Exception ex)
             {
@@ -306,6 +389,107 @@ namespace SGA_Desktop.ViewModels
             {
                 IsCargando = false;
             }
+        }
+
+        private void AplicarFiltrosYOrdenacion()
+        {
+            if (_todasLasLineas == null || !_todasLasLineas.Any())
+            {
+                LineasInventario.Clear();
+                OnPropertyChanged(nameof(TotalLineas));
+                return;
+            }
+
+            var lineasFiltradas = _todasLasLineas.AsEnumerable();
+
+            // Aplicar filtro de artículo
+            if (!string.IsNullOrWhiteSpace(FiltroArticulo))
+            {
+                lineasFiltradas = lineasFiltradas.Where(l =>
+                    l.CodigoArticulo.Contains(FiltroArticulo, StringComparison.OrdinalIgnoreCase) ||
+                    (l.DescripcionArticulo != null && l.DescripcionArticulo.Contains(FiltroArticulo, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            // Aplicar filtro de ubicación
+            if (!string.IsNullOrWhiteSpace(FiltroUbicacion))
+            {
+                lineasFiltradas = lineasFiltradas.Where(l =>
+                    l.CodigoUbicacion.Contains(FiltroUbicacion, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Aplicar filtro de partida
+            if (!string.IsNullOrWhiteSpace(FiltroPartida))
+            {
+                lineasFiltradas = lineasFiltradas.Where(l =>
+                    !string.IsNullOrEmpty(l.Partida) &&
+                    l.Partida.Contains(FiltroPartida, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Aplicar filtro de tipo de stock
+            if (FiltroTipoStock == "SUELTO")
+            {
+                lineasFiltradas = lineasFiltradas.Where(l => !l.TienePalets);
+            }
+            else if (FiltroTipoStock == "PALETIZADO")
+            {
+                lineasFiltradas = lineasFiltradas.Where(l => l.TienePalets);
+            }
+
+            // Aplicar filtro de ajuste
+            if (FiltroAjuste == "CON_AJUSTE")
+            {
+                lineasFiltradas = lineasFiltradas.Where(l => l.AjusteFinal.HasValue && l.AjusteFinal.Value != 0);
+            }
+            else if (FiltroAjuste == "SIN_AJUSTE")
+            {
+                lineasFiltradas = lineasFiltradas.Where(l => !l.AjusteFinal.HasValue || l.AjusteFinal.Value == 0);
+            }
+            else if (FiltroAjuste == "POSITIVOS")
+            {
+                lineasFiltradas = lineasFiltradas.Where(l => l.AjusteFinal.HasValue && l.AjusteFinal.Value > 0);
+            }
+            else if (FiltroAjuste == "NEGATIVOS")
+            {
+                lineasFiltradas = lineasFiltradas.Where(l => l.AjusteFinal.HasValue && l.AjusteFinal.Value < 0);
+            }
+
+            // Aplicar ordenación
+            if (DireccionOrdenacion == "ASC")
+            {
+                lineasFiltradas = CriterioOrdenacion switch
+                {
+                    "CodigoArticulo" => lineasFiltradas.OrderBy(l => l.CodigoArticulo),
+                    "Ubicacion" => lineasFiltradas.OrderBy(l => l.CodigoUbicacion),
+                    "StockTeorico" => lineasFiltradas.OrderBy(l => l.StockTeorico),
+                    "StockContado" => lineasFiltradas.OrderBy(l => l.StockContado),
+                    "AjusteFinal" => lineasFiltradas.OrderBy(l => l.AjusteFinal ?? 0),
+                    "FechaCaducidad" => lineasFiltradas.OrderBy(l => l.FechaCaducidad ?? DateTime.MaxValue),
+                    _ => lineasFiltradas.OrderBy(l => l.CodigoArticulo)
+                };
+            }
+            else
+            {
+                lineasFiltradas = CriterioOrdenacion switch
+                {
+                    "CodigoArticulo" => lineasFiltradas.OrderByDescending(l => l.CodigoArticulo),
+                    "Ubicacion" => lineasFiltradas.OrderByDescending(l => l.CodigoUbicacion),
+                    "StockTeorico" => lineasFiltradas.OrderByDescending(l => l.StockTeorico),
+                    "StockContado" => lineasFiltradas.OrderByDescending(l => l.StockContado),
+                    "AjusteFinal" => lineasFiltradas.OrderByDescending(l => l.AjusteFinal ?? 0),
+                    "FechaCaducidad" => lineasFiltradas.OrderByDescending(l => l.FechaCaducidad ?? DateTime.MinValue),
+                    _ => lineasFiltradas.OrderByDescending(l => l.CodigoArticulo)
+                };
+            }
+
+            // Actualizar la colección visible
+            LineasInventario.Clear();
+            foreach (var linea in lineasFiltradas)
+            {
+                LineasInventario.Add(linea);
+            }
+
+            // Notificar cambios en las propiedades computadas
+            OnPropertyChanged(nameof(TotalLineas));
         }
 
 

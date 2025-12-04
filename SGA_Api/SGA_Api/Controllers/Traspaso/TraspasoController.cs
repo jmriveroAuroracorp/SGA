@@ -693,6 +693,7 @@ public class TraspasosController : ControllerBase
 			Guid? paletIdOrigen = null;
 			string codigoPaletOrigen = null;
 			decimal cantidadDelPalet = 0; // 🔷 Declarado fuera para que esté disponible en ambos casos
+			DateTime? fechaCaducidadOrigen = null; // 🔷 CORREGIDO: Guardar FechaCaducidad de la línea del palet encontrada
 
 			var loteDto = dto.Partida?.Trim() ?? "";
 
@@ -704,20 +705,26 @@ public class TraspasosController : ControllerBase
 				var palet = await _context.Palets.FindAsync(paletIdOrigen.Value);
 				codigoPaletOrigen = palet?.Codigo;
 
-				// Verificar que el palet tenga stock del artículo especificado
-				var tieneStock = await _context.PaletLineas
-					.AnyAsync(pl =>
+				// Verificar que el palet tenga stock del artículo especificado y obtener su FechaCaducidad
+				var lineaPaletOrigen = await _context.PaletLineas
+					.Where(pl =>
 						pl.PaletId == paletIdOrigen.Value &&
 						pl.CodigoArticulo == dto.CodigoArticulo &&
 						pl.CodigoAlmacen.Trim().ToUpper() == dto.AlmacenOrigen.Trim().ToUpper() &&
 						pl.Ubicacion.Trim().ToUpper() == dto.UbicacionOrigen.Trim().ToUpper() &&
 						(pl.Lote ?? "") == loteDto &&
-						pl.Cantidad >= dto.Cantidad);
+						pl.Cantidad >= dto.Cantidad)
+					.OrderByDescending(pl => pl.Cantidad)
+					.ThenByDescending(pl => pl.FechaAgregado)
+					.FirstOrDefaultAsync();
 
-				if (!tieneStock)
+				if (lineaPaletOrigen == null)
 				{
 					return BadRequest($"El palet {codigoPaletOrigen} no tiene suficiente stock del artículo {dto.CodigoArticulo} en la ubicación especificada.");
 				}
+
+				// 🔷 CORREGIDO: Guardar la FechaCaducidad de la línea del palet encontrada
+				fechaCaducidadOrigen = lineaPaletOrigen.FechaCaducidad;
 
 				// Verificar estado del palet
 				if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
@@ -800,6 +807,8 @@ public class TraspasosController : ControllerBase
 						paletIdOrigen = lineaPalet.PaletId;
 						var palet = await _context.Palets.FindAsync(lineaPalet.PaletId);
 						codigoPaletOrigen = palet?.Codigo;
+						// 🔷 CORREGIDO: Guardar la FechaCaducidad de la línea del palet encontrada
+						fechaCaducidadOrigen = lineaPalet.FechaCaducidad;
 
 						if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
 						{
@@ -855,6 +864,8 @@ public class TraspasosController : ControllerBase
 						paletIdOrigen = lineaPalet.PaletId;
 						var palet = await _context.Palets.FindAsync(lineaPalet.PaletId);
 						codigoPaletOrigen = palet?.Codigo;
+						// 🔷 CORREGIDO: Guardar la FechaCaducidad de la línea del palet encontrada
+						fechaCaducidadOrigen = lineaPalet.FechaCaducidad;
 
 						if (palet != null && palet.Estado != null && palet.Estado.ToUpper() == "CERRADO")
 						{
@@ -1104,7 +1115,7 @@ public class TraspasosController : ControllerBase
 					Cantidad = -cantidadDelPalet, // 🔷 CORREGIDO: Solo la cantidad que viene del palet (no toda la del traspaso)
 					UnidadMedida = dto.UnidadMedida,
 					Lote = dto.Partida,
-					FechaCaducidad = dto.FechaCaducidad,
+					FechaCaducidad = fechaCaducidadOrigen ?? dto.FechaCaducidad, // 🔷 CORREGIDO: Usar FechaCaducidad del palet encontrado, si no existe usar la del DTO
 					CodigoAlmacen = dto.AlmacenOrigen, // UBICACIÓN ORIGEN
 					Ubicacion = dto.UbicacionOrigen,   // UBICACIÓN ORIGEN
 					UsuarioId = dto.UsuarioId,
@@ -1117,7 +1128,7 @@ public class TraspasosController : ControllerBase
 					EsHeredada = false
 				};
 			_context.TempPaletLineas.Add(tempLineaOrigen);
-			_logger.LogInformation($"✅ Creada línea temporal NEGATIVA para palet origen: PaletId={paletIdOrigen.Value}, Cantidad={tempLineaOrigen.Cantidad} (de {dto.Cantidad} total), Articulo={dto.CodigoArticulo}");
+			_logger.LogInformation($"✅ Creada línea temporal NEGATIVA para palet origen: PaletId={paletIdOrigen.Value}, Cantidad={tempLineaOrigen.Cantidad} (de {dto.Cantidad} total), Articulo={dto.CodigoArticulo}, FechaCaducidad={tempLineaOrigen.FechaCaducidad?.ToString("yyyy-MM-dd") ?? "null"} (del palet: {fechaCaducidadOrigen?.ToString("yyyy-MM-dd") ?? "null"}, del DTO: {dto.FechaCaducidad?.ToString("yyyy-MM-dd") ?? "null"})");
 			// NO guardamos aquí, lo haremos al final de la transacción
 			}
 			else

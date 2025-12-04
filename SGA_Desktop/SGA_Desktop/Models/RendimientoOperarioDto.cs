@@ -22,8 +22,14 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("traspasosArticulo")]
         public int TraspasosArticulo { get; set; }
         
+        [JsonPropertyName("lineasInventarioGeneradas")]
+        public int LineasInventarioGeneradas { get; set; }
+        
         [JsonPropertyName("lineasInventarioContadas")]
         public int LineasInventarioContadas { get; set; }
+        
+        [JsonPropertyName("lineasInventarioCreadas")]
+        public int LineasInventarioCreadas { get; set; }
         
         [JsonPropertyName("lecturasConteo")]
         public int LecturasConteo { get; set; }

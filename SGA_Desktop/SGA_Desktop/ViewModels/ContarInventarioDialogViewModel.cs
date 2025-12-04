@@ -55,6 +55,18 @@ namespace SGA_Desktop.ViewModels
         private string filtroArticulo = string.Empty;
 
         [ObservableProperty]
+        private string filtroPartida = string.Empty;
+
+        [ObservableProperty]
+        private string filtroEstadoConteo = "TODOS";
+
+        [ObservableProperty]
+        private string criterioOrdenacion = "CodigoArticulo";
+
+        [ObservableProperty]
+        private string direccionOrdenacion = "↑";
+
+        [ObservableProperty]
         private LineaTemporalInventarioDto? articuloSeleccionado;
 
         [ObservableProperty]
@@ -136,6 +148,21 @@ namespace SGA_Desktop.ViewModels
         }
 
         partial void OnFiltroArticuloChanged(string oldValue, string newValue)
+        {
+            AplicarFiltros();
+        }
+
+        partial void OnFiltroPartidaChanged(string oldValue, string newValue)
+        {
+            AplicarFiltros();
+        }
+
+        partial void OnFiltroEstadoConteoChanged(string oldValue, string newValue)
+        {
+            AplicarFiltros();
+        }
+
+        partial void OnCriterioOrdenacionChanged(string oldValue, string newValue)
         {
             AplicarFiltros();
         }
@@ -242,6 +269,17 @@ namespace SGA_Desktop.ViewModels
         {
             FiltroUbicacion = string.Empty;
             FiltroArticulo = string.Empty;
+            FiltroPartida = string.Empty;
+            FiltroEstadoConteo = "TODOS";
+            CriterioOrdenacion = "CodigoArticulo";
+            DireccionOrdenacion = "↑";
+        }
+
+        [RelayCommand]
+        private void CambiarDireccionOrdenacion()
+        {
+            DireccionOrdenacion = DireccionOrdenacion == "↑" ? "↓" : "↑";
+            AplicarFiltros();
         }
 
         [RelayCommand]
@@ -275,8 +313,9 @@ namespace SGA_Desktop.ViewModels
                     return; // No guardar si se superan los límites
                 }
 
-                // ENVIAR TODAS LAS LÍNEAS para inventarios inicializados a 0, o solo las contadas para inventarios normales
-                var lineasParaGuardar = ArticulosInventario
+                // ENVIAR TODAS LAS LÍNEAS (incluyendo las ocultas por filtros) para no perder cambios
+                // Usar _todosLosArticulos en lugar de ArticulosInventario para asegurar que se guarden todos los cambios
+                var lineasParaGuardar = _todosLosArticulos
                     .Select(a => new { Linea = a, Cantidad = ObtenerCantidadContadaNullable(a) })
                     .Where(x => x.Cantidad.HasValue)
                     .ToList();
@@ -284,7 +323,7 @@ namespace SGA_Desktop.ViewModels
                 // Si es inventario inicializado a 0, incluir todas las líneas (incluso las que no se han modificado)
                 if (Inventario?.ConteoACiegas == true)
                 {
-                    lineasParaGuardar = ArticulosInventario
+                    lineasParaGuardar = _todosLosArticulos
                         .Select(a => new { Linea = a, Cantidad = ObtenerCantidadContadaNullable(a) })
                         .Where(x => x.Cantidad.HasValue)
                         .ToList();
@@ -396,8 +435,9 @@ namespace SGA_Desktop.ViewModels
                     return; // No guardar si se superan los límites
                 }
 
-                // Preparar líneas a guardar (solo las contadas por el usuario)
-                var lineasParaGuardar = ArticulosInventario
+                // Preparar líneas a guardar (todas las contadas, incluyendo las ocultas por filtros)
+                // Usar _todosLosArticulos en lugar de ArticulosInventario para asegurar que se guarden todos los cambios
+                var lineasParaGuardar = _todosLosArticulos
                     .Select(a => new { Linea = a, Cantidad = ObtenerCantidadContadaNullable(a) })
                     .Where(x => x.Cantidad.HasValue)
                     .ToList();
@@ -488,6 +528,54 @@ namespace SGA_Desktop.ViewModels
             {
                 IsCargando = false;
                 ValidarFormulario();
+            }
+        }
+
+        [RelayCommand]
+        private async Task AgregarLineaManualAsync()
+        {
+            try
+            {
+                if (Inventario == null)
+                {
+                    var warning = new WarningDialog("Error", "No hay inventario seleccionado.");
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (owner != null && owner != warning)
+                        warning.Owner = owner;
+                    warning.ShowDialog();
+                    return;
+                }
+
+                var dialog = new AgregarLineaInventarioDialog(Inventario);
+                var ownerDialog = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                if (ownerDialog != null && ownerDialog != dialog)
+                    dialog.Owner = ownerDialog;
+
+                var resultado = dialog.ShowDialog();
+
+                if (resultado == true)
+                {
+                    // Recargar líneas temporales para mostrar la nueva línea
+                    await CargarArticulosAsync();
+                    
+                    var success = new WarningDialog("Éxito", "Línea manual agregada correctamente.");
+                    var ownerSuccess = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (ownerSuccess != null && ownerSuccess != success)
+                        success.Owner = ownerSuccess;
+                    success.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                var error = new WarningDialog("Error", $"Error al agregar línea manual: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != error)
+                    error.Owner = owner;
+                error.ShowDialog();
             }
         }
 
@@ -619,8 +707,44 @@ namespace SGA_Desktop.ViewModels
             {
                 articulosFiltrados = articulosFiltrados.Where(a => 
                     a.CodigoArticulo.Contains(FiltroArticulo, StringComparison.OrdinalIgnoreCase) ||
-                    a.DescripcionArticulo.Contains(FiltroArticulo, StringComparison.OrdinalIgnoreCase));
+                    (a.DescripcionArticulo != null && a.DescripcionArticulo.Contains(FiltroArticulo, StringComparison.OrdinalIgnoreCase)));
             }
+
+            // Aplicar filtro de partida
+            if (!string.IsNullOrWhiteSpace(FiltroPartida))
+            {
+                articulosFiltrados = articulosFiltrados.Where(a => 
+                    !string.IsNullOrWhiteSpace(a.Partida) && 
+                    a.Partida.Contains(FiltroPartida, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Aplicar filtro de estado de conteo
+            if (FiltroEstadoConteo != "TODOS")
+            {
+                articulosFiltrados = FiltroEstadoConteo switch
+                {
+                    "CONTADOS" => articulosFiltrados.Where(a => a.CantidadContada.HasValue),
+                    "NO_CONTADOS" => articulosFiltrados.Where(a => !a.CantidadContada.HasValue),
+                    "CON_DIFERENCIA" => articulosFiltrados.Where(a => a.TieneDiferencia),
+                    "SIN_DIFERENCIA" => articulosFiltrados.Where(a => !a.TieneDiferencia),
+                    _ => articulosFiltrados
+                };
+            }
+
+            // Aplicar ordenación
+            var esAscendente = DireccionOrdenacion == "↑";
+            articulosFiltrados = CriterioOrdenacion switch
+            {
+                "CodigoArticulo" => esAscendente ? articulosFiltrados.OrderBy(a => a.CodigoArticulo) : articulosFiltrados.OrderByDescending(a => a.CodigoArticulo),
+                "DescripcionArticulo" => esAscendente ? articulosFiltrados.OrderBy(a => a.DescripcionArticulo ?? "") : articulosFiltrados.OrderByDescending(a => a.DescripcionArticulo ?? ""),
+                "CodigoUbicacion" => esAscendente ? articulosFiltrados.OrderBy(a => a.CodigoUbicacion) : articulosFiltrados.OrderByDescending(a => a.CodigoUbicacion),
+                "Partida" => esAscendente ? articulosFiltrados.OrderBy(a => a.Partida ?? "") : articulosFiltrados.OrderByDescending(a => a.Partida ?? ""),
+                "FechaCaducidad" => esAscendente ? articulosFiltrados.OrderBy(a => a.FechaCaducidad ?? DateTime.MaxValue) : articulosFiltrados.OrderByDescending(a => a.FechaCaducidad ?? DateTime.MinValue),
+                "StockActual" => esAscendente ? articulosFiltrados.OrderBy(a => a.StockActual) : articulosFiltrados.OrderByDescending(a => a.StockActual),
+                "CantidadContada" => esAscendente ? articulosFiltrados.OrderBy(a => a.CantidadContada ?? decimal.MinValue) : articulosFiltrados.OrderByDescending(a => a.CantidadContada ?? decimal.MaxValue),
+                "Diferencia" => esAscendente ? articulosFiltrados.OrderBy(a => a.Diferencia) : articulosFiltrados.OrderByDescending(a => a.Diferencia),
+                _ => articulosFiltrados.OrderBy(a => a.CodigoArticulo)
+            };
 
             // Actualizar la colección visible
             ArticulosInventario.Clear();

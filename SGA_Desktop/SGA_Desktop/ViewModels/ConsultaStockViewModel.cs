@@ -192,6 +192,12 @@ namespace SGA_Desktop.ViewModels
 	[ObservableProperty]
 	private string filtroCodigoPalet = "";
 
+	[ObservableProperty]
+	private string? mensajeEstado;
+
+	[ObservableProperty]
+	private Visibility mensajeEstadoVisibility = Visibility.Collapsed;
+
 		#endregion
 
 		#region Computed Properties
@@ -251,10 +257,12 @@ namespace SGA_Desktop.ViewModels
 		? Visibility.Visible
 		: Visibility.Collapsed;
 
-		public Visibility ListViewVisibility =>
-			(!_busquedaPorDescripcion || StockFiltrado.Any())
+	public Visibility ListViewVisibility =>
+		(MensajeEstadoVisibility == Visibility.Visible)
+			? Visibility.Collapsed
+			: ((!_busquedaPorDescripcion || StockFiltrado.Any())
 				? Visibility.Visible
-				: Visibility.Collapsed;
+				: Visibility.Collapsed);
 
 		public IRelayCommand BuscarCommand =>
 			IsArticleMode ? BuscarPorArticuloCommand :
@@ -545,7 +553,13 @@ namespace SGA_Desktop.ViewModels
 			_stockDisponibleArticuloBase.Clear();
 			ArticuloMostrado = string.Empty;
 			
+			// 🔷 NUEVO: Limpiar mensaje de estado
+			MensajeEstado = null;
+			MensajeEstadoVisibility = Visibility.Collapsed;
+			
 			// Notificar cambios
+			OnPropertyChanged(nameof(MensajeEstado));
+			OnPropertyChanged(nameof(MensajeEstadoVisibility));
 			OnPropertyChanged(nameof(CanRefresh));
 			OnPropertyChanged(nameof(CanClearFilters));
 			OnPropertyChanged(nameof(CanExportExcel));
@@ -611,6 +625,50 @@ namespace SGA_Desktop.ViewModels
 				// 3) 🔷 NUEVA LÓGICA: Filtrar por permisos de almacén (individuales + centro)
 				var almacenesAutorizados = ObtenerAlmacenesAutorizados();
 				lista = lista.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen)).ToList();
+
+				// 🔷 NUEVO: Si no hay resultados, mostrar mensaje apropiado (SIN llamadas adicionales)
+				if (lista == null || !lista.Any())
+				{
+					// Ocultar mensajes previos y limpiar resultados
+					MensajeEstadoVisibility = Visibility.Collapsed;
+					MensajeEstado = null;
+					
+					// Determinar mensaje según tipo de búsqueda (sin verificar existencia)
+					if (!_busquedaPorDescripcion)
+					{
+						// Búsqueda por código: no hay stock asociado
+						MensajeEstado = "No hay stock asociado a ese código de artículo";
+					}
+					else
+					{
+						// Búsqueda por descripción: no se encontraron coincidencias
+						MensajeEstado = $"No se encontraron artículos con la descripción '{FiltroArticulo}'";
+					}
+					
+					MensajeEstadoVisibility = Visibility.Visible;
+					
+					// Limpiar resultados
+					_resultadosArticuloBase.Clear();
+					_stockDisponibleArticuloBase.Clear();
+					ArticulosConUbicaciones.Clear();
+					StockFiltrado.Clear();
+					ArticuloMostrado = string.Empty;
+					
+					OnPropertyChanged(nameof(MensajeEstado));
+					OnPropertyChanged(nameof(MensajeEstadoVisibility));
+					OnPropertyChanged(nameof(ArticuloMostrado));
+					OnPropertyChanged(nameof(ArticulosUnicosVisibility));
+					OnPropertyChanged(nameof(ListViewVisibility));
+					OnPropertyChanged(nameof(CanRefresh));
+					OnPropertyChanged(nameof(CanExportExcel));
+					return;
+				}
+
+				// Si hay resultados, ocultar mensaje
+				MensajeEstadoVisibility = Visibility.Collapsed;
+				MensajeEstado = null;
+				OnPropertyChanged(nameof(MensajeEstado));
+				OnPropertyChanged(nameof(MensajeEstadoVisibility));
 
 				_resultadosArticuloBase = lista.ToList();
 

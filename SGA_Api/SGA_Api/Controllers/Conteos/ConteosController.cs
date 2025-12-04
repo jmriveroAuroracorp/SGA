@@ -640,7 +640,7 @@ namespace SGA_Api.Controllers
                 
                 _logger.LogInformation("✅ TEST DE NOTIFICACIÓN COMPLETADO");
                 
-                return Ok(new { mensaje = "Notificación de prueba enviada", timestamp = DateTime.UtcNow });
+                return Ok(new { mensaje = "Notificación de prueba enviada", timestamp = DateTime.Now });
             }
             catch (Exception ex)
             {

@@ -449,6 +449,24 @@
                                                            Foreground="#34495E"/>
                                             </Grid>
 
+                                            <!-- Líneas Creadas -->
+                                            <Grid Margin="0,0,0,8" 
+                                                  Visibility="{Binding LineasCreadasTexto, Converter={StaticResource NullOrEmptyToVisibility}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="Creadas: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding LineasCreadasTexto}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#E67E22"/>
+                                            </Grid>
+
                                             <!-- Fechas -->
                                             <Grid Margin="0,0,0,8">
                                                 <Grid.ColumnDefinitions>

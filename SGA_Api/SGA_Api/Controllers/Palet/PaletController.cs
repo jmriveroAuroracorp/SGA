@@ -2546,7 +2546,6 @@ public class RelanzarTraspasoDto
 		// NO crear ni tocar líneas (ni temporales ni definitivas)
 		
 		var marcaRelanzado = $"Relanzado: {DateTime.Now:yyyy-MM-dd HH:mm}";
-		var comentarioFinal = marcaRelanzado.Length > 500 ? marcaRelanzado.Substring(0, 500) : marcaRelanzado;
 
 		// Preservar el comentario original del traspaso en error (puede tener información de órdenes de trabajo, etc.)
 		var comentarioOriginal = traspasoError.Comentario;
@@ -2582,8 +2581,22 @@ public class RelanzarTraspasoDto
 
 		_auroraSgaContext.Traspasos.Add(nuevoTraspaso);
 
-		// Actualizar el comentario del traspaso original a "Relanzado: fecha hora"
-		traspasoError.Comentario = comentarioFinal;
+		// Actualizar el comentario del traspaso original agregando la marca de relanzado al comentario existente
+		if (!string.IsNullOrWhiteSpace(comentarioOriginal))
+		{
+			// Si ya tiene comentario, concatenar la marca de relanzado
+			var comentarioConMarca = $"{comentarioOriginal} | {marcaRelanzado}";
+			traspasoError.Comentario = comentarioConMarca.Length > 500 
+				? comentarioConMarca.Substring(0, 500) 
+				: comentarioConMarca;
+		}
+		else
+		{
+			// Si no tiene comentario, solo poner la marca de relanzado
+			traspasoError.Comentario = marcaRelanzado.Length > 500 
+				? marcaRelanzado.Substring(0, 500) 
+				: marcaRelanzado;
+		}
 		_auroraSgaContext.Traspasos.Update(traspasoError);
 
 		var detalleRelanzado = $"Traspaso relanzado. Original: {traspasoError.Id}, Nuevo: {nuevoTraspaso.Id}";

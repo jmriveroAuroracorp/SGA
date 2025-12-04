@@ -253,26 +253,104 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
-		private async Task ActualizarIndicadorErroresAsync()
+	private async Task ActualizarIndicadorErroresAsync()
+	{
+		if (!SessionManager.EmpresaSeleccionada.HasValue)
 		{
-			if (!SessionManager.EmpresaSeleccionada.HasValue)
-			{
-				HayErroresErp = false;
-				return;
-			}
-
-			try
-			{
-				var empresa = SessionManager.EmpresaSeleccionada.Value;
-				var errores = await _paletService.ObtenerTraspasosErrorErpAsync(empresa);
-				HayErroresErp = errores.Any();
-			}
-			catch (Exception ex)
-			{
-				Debug.WriteLine($"Error comprobando palets con ERROR ERP: {ex.Message}");
-				// No forzamos a false para evitar ocultar el botón si previamente sabíamos que había errores.
-			}
+			HayErroresErp = false;
+			return;
 		}
+
+		try
+		{
+			var empresa = SessionManager.EmpresaSeleccionada.Value;
+			var errores = await _paletService.ObtenerTraspasosErrorErpAsync(empresa);
+			
+		if (!errores.Any())
+		{
+			HayErroresErp = false;
+			return;
+		}
+		
+		// 🔷 OPTIMIZADO: Hacer consultas en paralelo para mejorar rendimiento
+		var todosTraspasosTask = _traspasosService.ObtenerTraspasosAsync();
+		var almacenesPermitidosTask = ObtenerAlmacenesPermitidosAsync();
+		var paletsConUbicacionTask = _traspasosService.ObtenerPaletsConUbicacionAsync();
+		
+		await Task.WhenAll(todosTraspasosTask, almacenesPermitidosTask, paletsConUbicacionTask);
+		
+		var todosTraspasos = await todosTraspasosTask;
+		var almacenesPermitidos = await almacenesPermitidosTask;
+		var paletsConUbicacion = await paletsConUbicacionTask;
+		
+		// 🔷 OPTIMIZADO: Crear diccionario de traspasos por PaletId para búsqueda rápida
+		var traspasosPorPaletId = todosTraspasos
+			.Where(t => t.PaletId != Guid.Empty)
+			.GroupBy(t => t.PaletId)
+			.ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.FechaInicio).ToList());
+		
+		// 🔷 OPTIMIZADO: Crear diccionario de ubicaciones por PaletId
+		var ubicacionesPorPaletId = paletsConUbicacion
+			.ToDictionary(pt => pt.Id, pt => pt);
+		
+		var vistos = new HashSet<Guid>();
+		
+		foreach (var error in errores)
+		{
+			if (vistos.Contains(error.PaletId))
+				continue;
+			
+			// Excluir palets de prueba con prefijo PAL25-000088
+			if (error.CodigoPalet?.StartsWith("PAL25-000088", StringComparison.OrdinalIgnoreCase) == true)
+				continue;
+			
+			// 🔷 OPTIMIZADO: Usar diccionario en lugar de Any() para búsqueda rápida
+			if (traspasosPorPaletId.TryGetValue(error.PaletId, out var traspasosDelPalet))
+			{
+				var tieneIntentoPosterior = traspasosDelPalet.Any(t =>
+					t.Id != error.TraspasoId &&
+					t.FechaInicio >= error.FechaInicio &&
+					!string.Equals(t.CodigoEstado, "ERROR_ERP", StringComparison.OrdinalIgnoreCase));
+				
+				if (tieneIntentoPosterior)
+					continue;
+			}
+			
+			// 🔷 OPTIMIZADO: Verificar almacén antes de cargar el palet completo
+			string? almacenOrigen = error.AlmacenOrigen;
+			if (string.IsNullOrEmpty(almacenOrigen) && 
+				ubicacionesPorPaletId.TryGetValue(error.PaletId, out var paletConUbicacion))
+			{
+				almacenOrigen = paletConUbicacion.AlmacenOrigen;
+			}
+			
+			// 🔒 APLICAR FILTRO DE SEGURIDAD: Verificar antes de cargar el palet
+			if (!string.IsNullOrEmpty(almacenOrigen) && 
+				!almacenesPermitidos.Contains(almacenOrigen))
+				continue;
+			
+			// Solo cargar el palet si pasó los filtros anteriores
+			var palet = await _paletService.ObtenerPaletPorIdAsync(error.PaletId);
+			if (palet == null)
+				continue;
+			if (palet.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) || palet.IsVaciado)
+				continue;
+			
+			// Si llegamos aquí, hay al menos un error visible
+			HayErroresErp = true;
+			return; // Salir temprano, ya sabemos que hay errores visibles
+		}
+			
+			// Si llegamos aquí, no hay errores visibles después de aplicar todos los filtros
+			HayErroresErp = false;
+		}
+		catch (Exception ex)
+		{
+			Debug.WriteLine($"Error comprobando palets con ERROR ERP: {ex.Message}");
+			// 🔷 CORREGIDO: Forzar a false cuando hay error para evitar mostrar botón incorrectamente
+			HayErroresErp = false;
+		}
+	}
 
 		private async void OpenFiltros()
 		{

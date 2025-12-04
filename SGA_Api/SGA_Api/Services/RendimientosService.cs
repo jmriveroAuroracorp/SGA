@@ -245,12 +245,61 @@ namespace SGA_Api.Services
                 // Agrupar por operario y calcular tiempo total de trabajo y precisión
                 // Tiempo total = diferencia entre la última y primera línea contada
                 // Precisión = porcentaje de líneas donde CantidadContada coincide con StockActual (diferencia < 0.01)
+                // Consultar líneas creadas manualmente desde InventarioLineas (consolidadas)
+                // Las líneas creadas se identifican por StockTeorico = 0 y StockContado > 0
+                // Hacer JOIN con InventarioLineasTemp para obtener el UsuarioConteoId original
+                var lineasCreadasQuery = from linea in _context.InventarioLineas
+                                         join lineaTemp in _context.InventarioLineasTemp
+                                         on new { 
+                                             linea.IdInventario, 
+                                             linea.CodigoArticulo, 
+                                             linea.CodigoUbicacion
+                                         } equals new { 
+                                             IdInventario = lineaTemp.IdInventario, 
+                                             CodigoArticulo = lineaTemp.CodigoArticulo, 
+                                             CodigoUbicacion = lineaTemp.CodigoUbicacion
+                                         }
+                                         where linea.StockTeorico == 0 && 
+                                               linea.StockContado.HasValue && 
+                                               linea.StockContado.Value > 0 &&
+                                               lineaTemp.UsuarioConteoId > 0 &&
+                                               (linea.Partida == lineaTemp.Partida || (linea.Partida == null && lineaTemp.Partida == null)) &&
+                                               (linea.PaletId == lineaTemp.PaletId || (linea.PaletId == null && lineaTemp.PaletId == null))
+                                         select new
+                                         {
+                                             OperarioId = lineaTemp.UsuarioConteoId,
+                                             FechaValidacion = linea.FechaValidacion
+                                         };
+
+                if (filtros.FechaDesde.HasValue)
+                {
+                    var fechaDesdeInicio = filtros.FechaDesde.Value.Date;
+                    lineasCreadasQuery = lineasCreadasQuery.Where(l => l.FechaValidacion.HasValue && l.FechaValidacion.Value >= fechaDesdeInicio);
+                }
+                if (filtros.FechaHasta.HasValue)
+                {
+                    var fechaHastaFin = filtros.FechaHasta.Value.Date.AddDays(1).AddTicks(-1);
+                    lineasCreadasQuery = lineasCreadasQuery.Where(l => l.FechaValidacion.HasValue && l.FechaValidacion.Value <= fechaHastaFin);
+                }
+
+                var lineasCreadasRaw = await lineasCreadasQuery.ToListAsync();
+
+                var lineasCreadasPorOperario = lineasCreadasRaw
+                    .GroupBy(l => l.OperarioId)
+                    .Select(g => new
+                    {
+                        OperarioId = g.Key,
+                        LineasCreadas = g.Count()
+                    })
+                    .ToList();
+
                 var inventarioPorOperario = inventarioDataRaw
                     .GroupBy(i => i.OperarioId)
                     .Select(g => new
                     {
                         OperarioId = g.Key,
-                        TotalLineas = g.Count(),
+                        TotalLineas = g.Count(), // Total de líneas generadas
+                        LineasContadas = g.Count(i => i.CantidadContada.HasValue), // Solo las que realmente contó el usuario
                         LineasConsolidadas = g.Count(i => i.Consolidado),
                         PrimeraLinea = g.Min(i => i.FechaConteo),
                         UltimaLinea = g.Max(i => i.FechaConteo),
@@ -263,6 +312,9 @@ namespace SGA_Api.Services
                     {
                         g.OperarioId,
                         g.TotalLineas,
+                        g.LineasContadas,
+                        // Obtener líneas creadas desde la consulta separada
+                        LineasCreadas = lineasCreadasPorOperario.FirstOrDefault(l => l.OperarioId == g.OperarioId)?.LineasCreadas ?? 0,
                         g.LineasConsolidadas,
                         // Calcular tiempo total en minutos: desde la primera línea hasta la última
                         TiempoTotalMinutos = (g.UltimaLinea - g.PrimeraLinea).TotalMinutes >= 0.01
@@ -473,29 +525,31 @@ namespace SGA_Api.Services
                         TraspasosPalet = traspaso?.TraspasosPalet ?? 0,
                         TraspasosArticulo = traspaso?.TraspasosArticulo ?? 0,
                         TiempoPromedioTraspasosMinutos = traspaso?.TiempoPromedioMinutos,
-                        LineasInventarioContadas = inventario?.TotalLineas ?? 0,
+                        LineasInventarioGeneradas = inventario?.TotalLineas ?? 0, // Total de líneas generadas
+                        LineasInventarioContadas = inventario?.LineasContadas ?? 0, // Solo las que realmente contó el usuario
+                        LineasInventarioCreadas = inventario?.LineasCreadas ?? 0, // Líneas creadas manualmente
                         TiempoPromedioInventarioMinutos = inventario?.TiempoTotalMinutos, // Tiempo total de trabajo (primera línea a última línea)
                         LecturasConteo = lecturas?.TotalLecturas ?? 0,
                         ConteosCompletados = conteos?.ConteosCompletados ?? 0,
                         TiempoPromedioConteoMinutos = conteos?.TiempoPromedioMinutos, // Tiempo promedio por orden de conteo
                         TotalOperaciones = (traspaso?.TotalTraspasos ?? 0) + 
-                                         (inventario?.TotalLineas ?? 0) + 
+                                         (inventario?.LineasContadas ?? 0) + // ← CAMBIAR: usar LineasContadas en lugar de TotalLineas
                                          (lecturas?.TotalLecturas ?? 0)
                     };
 
                     // Calcular líneas por hora basado en tiempo total de trabajo (inventarios)
-                    // TiempoTotalMinutos = tiempo desde la primera línea contada hasta la última
-                    if (inventario?.TotalLineas > 0 && inventario.TiempoTotalMinutos.HasValue && inventario.TiempoTotalMinutos.Value > 0)
+                    // Usar LineasContadas (las que realmente contó) en lugar de TotalLineas (todas las generadas)
+                    if (inventario?.LineasContadas > 0 && inventario.TiempoTotalMinutos.HasValue && inventario.TiempoTotalMinutos.Value > 0)
                     {
                         // Convertir minutos a horas y calcular líneas por hora
                         var horasTrabajadas = inventario.TiempoTotalMinutos.Value / 60.0;
-                        rendimiento.LineasPorHora = inventario.TotalLineas / horasTrabajadas;
+                        rendimiento.LineasPorHora = inventario.LineasContadas / horasTrabajadas;
                     }
-                    else if (inventario?.TotalLineas > 0)
+                    else if (inventario?.LineasContadas > 0)
                     {
                         // Si todas las líneas fueron contadas en el mismo momento (tiempo = 0),
                         // asumir un tiempo mínimo de 1 minuto para evitar división por cero
-                        rendimiento.LineasPorHora = inventario.TotalLineas * 60; // 60 líneas por minuto = todas en el mismo momento
+                        rendimiento.LineasPorHora = inventario.LineasContadas * 60; // 60 líneas por minuto = todas en el mismo momento
                     }
 
                     // Calcular lecturas por hora basado en tiempo total de trabajo (conteos)
@@ -691,7 +745,8 @@ namespace SGA_Api.Services
                     .Select(i => new
                     {
                         Consolidado = i.Consolidado,
-                        FechaConteo = i.FechaConteo
+                        FechaConteo = i.FechaConteo,
+                        CantidadContada = i.CantidadContada
                     })
                     .ToListAsync();
 
@@ -707,12 +762,14 @@ namespace SGA_Api.Services
                     ? (ultimaLinea.Value - primeraLinea.Value).TotalMinutes
                     : (double?)null;
 
-                var totalLineas = inventarioDataStatsRaw.Count;
+                var totalLineas = inventarioDataStatsRaw.Count; // Total de líneas generadas
+                var lineasContadas = inventarioDataStatsRaw.Count(i => i.CantidadContada.HasValue); // Solo las contadas
                 var consolidados = inventarioDataStatsRaw.Count(i => i.Consolidado);
                 
                 var inventarioStats = new
                 {
                     Total = totalLineas,
+                    LineasContadas = lineasContadas,
                     Consolidados = consolidados,
                     TiempoTotalMinutos = tiempoTotalMinutos
                 };
@@ -722,8 +779,9 @@ namespace SGA_Api.Services
                     var tiempoTotalHoras = inventarioStats.TiempoTotalMinutos.HasValue && inventarioStats.TiempoTotalMinutos.Value > 0
                         ? inventarioStats.TiempoTotalMinutos.Value / 60.0 
                         : 0;
+                    // Usar LineasContadas en lugar de Total para calcular líneas por hora
                     var lineasPorHora = tiempoTotalHoras > 0 
-                        ? inventarioStats.Total / tiempoTotalHoras 
+                        ? inventarioStats.LineasContadas / tiempoTotalHoras 
                         : 0;
 
                     resultados.Add(new RendimientoProcesoDto

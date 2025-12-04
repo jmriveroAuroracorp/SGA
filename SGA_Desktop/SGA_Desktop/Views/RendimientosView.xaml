@@ -641,14 +641,26 @@
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto"/>
                                                             <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
                                                         </Grid.RowDefinitions>
                                                         
                                                         <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                                            <TextBlock Text="Líneas Generadas" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                                            <TextBlock Text="{Binding LineasInventarioGeneradas}" FontSize="14" FontWeight="SemiBold"/>
+                                                        </StackPanel>
+                                                        
+                                                        <StackPanel Grid.Row="1" Margin="0,0,0,8">
                                                             <TextBlock Text="Líneas Contadas" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
                                                             <TextBlock Text="{Binding LineasInventarioContadas}" FontSize="14" FontWeight="SemiBold"/>
                                                         </StackPanel>
                                                         
-                                                        <StackPanel Grid.Row="1">
+                                                        <StackPanel Grid.Row="2" Margin="0,0,0,8">
+                                                            <TextBlock Text="Líneas Creadas" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                                            <TextBlock Text="{Binding LineasInventarioCreadas}" FontSize="14" FontWeight="SemiBold" Foreground="#E67E22"/>
+                                                        </StackPanel>
+                                                        
+                                                        <StackPanel Grid.Row="3">
                                                             <TextBlock Text="Líneas/Hora" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
                                                             <TextBlock FontSize="14" FontWeight="SemiBold">
                                                                 <TextBlock.Text>

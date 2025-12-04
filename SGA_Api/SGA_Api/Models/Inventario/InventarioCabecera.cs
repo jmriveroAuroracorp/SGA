@@ -82,6 +82,9 @@ namespace SGA_Api.Models.Inventario
 
         [NotMapped]
         public int? LineasContadas { get; set; }
+        
+        [NotMapped]
+        public int? LineasCreadas { get; set; }
 
         // Navigation properties
         public virtual ICollection<InventarioLineasTemp> LineasTemp { get; set; } = new List<InventarioLineasTemp>();

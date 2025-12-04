@@ -31,7 +31,7 @@ namespace SGA_Api.Models.Notificaciones
         /// Fecha de creación del destinatario
         /// </summary>
         [Required]
-        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+        public DateTime FechaCreacion { get; set; } = DateTime.Now;
 
         /// <summary>
         /// Indica si el destinatario está activo

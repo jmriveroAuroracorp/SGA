@@ -66,6 +66,7 @@
             <Grid Grid.Row="1" Margin="25,25,25,25">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -159,8 +160,184 @@
                     </Grid>
                 </Border>
 
-                <!-- Lista de líneas del inventario -->
+                <!-- Panel de Filtros y Ordenación (Colapsable) -->
                 <Border Grid.Row="1" 
+                        BorderBrush="{StaticResource BrushSecundario}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Margin="0,0,0,10"
+                        Background="#F8F9FA">
+                    <Expander IsExpanded="False"
+                              Background="Transparent">
+                        <Expander.Header>
+                            <TextBlock Text="🔍 Filtros y Ordenación" 
+                                       FontWeight="Bold" 
+                                       Foreground="{StaticResource BrushPrincipal}"/>
+                        </Expander.Header>
+                    <Grid Margin="15,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Fila 1: Filtros de búsqueda -->
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Filtro Artículo -->
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Buscar Artículo" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding FiltroArticulo, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="30"
+                                         FontSize="12"
+                                         Padding="8,0"
+                                         VerticalContentAlignment="Center"
+                                         Tag="Buscar por código o descripción..."/>
+                            </StackPanel>
+
+                            <!-- Filtro Ubicación -->
+                            <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                <TextBlock Text="Filtrar Ubicación" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding FiltroUbicacion, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="30"
+                                         FontSize="12"
+                                         Padding="8,0"
+                                         VerticalContentAlignment="Center"
+                                         Tag="Filtrar por ubicación..."/>
+                            </StackPanel>
+
+                            <!-- Filtro Partida -->
+                            <StackPanel Grid.Column="2" Margin="8,0,8,0">
+                                <TextBlock Text="Filtrar Partida" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding FiltroPartida, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="30"
+                                         FontSize="12"
+                                         Padding="8,0"
+                                         VerticalContentAlignment="Center"
+                                         Tag="Filtrar por partida..."/>
+                            </StackPanel>
+
+                            <!-- Botón Limpiar Filtros -->
+                            <Button Grid.Column="3"
+                                    Content="🗑️ Limpiar"
+                                    Command="{Binding LimpiarFiltrosCommand}"
+                                    Style="{StaticResource EstiloBotonSecundario}"
+                                    Width="100" Height="30"
+                                    VerticalAlignment="Bottom"
+                                    Margin="8,0,0,0"/>
+                        </Grid>
+
+                        <!-- Fila 2: Filtros avanzados y ordenación -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Filtro Tipo Stock -->
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Tipo Stock" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <ComboBox SelectedValue="{Binding FiltroTipoStock, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Tag"
+                                          Height="30"
+                                          FontSize="12"
+                                          VerticalContentAlignment="Center"
+                                          Style="{StaticResource EstiloComboBox}">
+                                    <ComboBoxItem Content="Todos" Tag="TODOS"/>
+                                    <ComboBoxItem Content="Suelto" Tag="SUELTO"/>
+                                    <ComboBoxItem Content="Paletizado" Tag="PALETIZADO"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Filtro Ajuste -->
+                            <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                <TextBlock Text="Filtro Ajuste" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <ComboBox SelectedValue="{Binding FiltroAjuste, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Tag"
+                                          Height="30"
+                                          FontSize="12"
+                                          VerticalContentAlignment="Center"
+                                          Style="{StaticResource EstiloComboBox}">
+                                    <ComboBoxItem Content="Todos" Tag="TODOS"/>
+                                    <ComboBoxItem Content="Con ajuste" Tag="CON_AJUSTE"/>
+                                    <ComboBoxItem Content="Sin ajuste" Tag="SIN_AJUSTE"/>
+                                    <ComboBoxItem Content="Positivos" Tag="POSITIVOS"/>
+                                    <ComboBoxItem Content="Negativos" Tag="NEGATIVOS"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Ordenación -->
+                            <StackPanel Grid.Column="2" Margin="8,0,8,0">
+                                <TextBlock Text="Ordenar por" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11" 
+                                           Foreground="{StaticResource BrushPrincipal}"
+                                           Margin="0,0,0,5"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0"
+                                              SelectedValue="{Binding CriterioOrdenacion, UpdateSourceTrigger=PropertyChanged}"
+                                              SelectedValuePath="Tag"
+                                              Height="30"
+                                              FontSize="12"
+                                              VerticalContentAlignment="Center"
+                                              Margin="0,0,5,0"
+                                              Style="{StaticResource EstiloComboBox}">
+                                        <ComboBoxItem Content="Código Artículo" Tag="CodigoArticulo"/>
+                                        <ComboBoxItem Content="Ubicación" Tag="Ubicacion"/>
+                                        <ComboBoxItem Content="Stock Teórico" Tag="StockTeorico"/>
+                                        <ComboBoxItem Content="Stock Contado" Tag="StockContado"/>
+                                        <ComboBoxItem Content="Ajuste Final" Tag="AjusteFinal"/>
+                                        <ComboBoxItem Content="Fecha Caducidad" Tag="FechaCaducidad"/>
+                                    </ComboBox>
+                                    <Button Grid.Column="1"
+                                            Command="{Binding CambiarDireccionOrdenacionCommand}"
+                                            Height="30"
+                                            Width="50"
+                                            FontSize="10"
+                                            Padding="2"
+                                            Style="{StaticResource EstiloBotonSecundario}">
+                                        <TextBlock Text="{Binding DireccionOrdenacion}"/>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                    </Expander>
+                </Border>
+
+                <!-- Lista de líneas del inventario -->
+                <Border Grid.Row="2" 
                         BorderBrush="{StaticResource BrushSecundario}" 
                         BorderThickness="1" 
                         CornerRadius="4">
@@ -237,159 +414,164 @@
 
                                 <!-- Lista de líneas -->
                                 <ItemsControl ItemsSource="{Binding LineasInventario}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="White"
-                                                CornerRadius="6" 
-                                                Padding="12" 
-                                                Margin="0,0,0,8" 
-                                                BorderThickness="1" 
-                                                BorderBrush="{StaticResource BrushIntermedio}">
-                                            <Border.Effect>
-                                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.1"/>
-                                            </Border.Effect>
-                                            
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="140"/>
-                                                </Grid.ColumnDefinitions>
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="White"
+                                                    CornerRadius="6" 
+                                                    Padding="12" 
+                                                    Margin="0,0,0,8" 
+                                                    BorderThickness="1" 
+                                                    BorderBrush="{StaticResource BrushIntermedio}">
+                                                <Border.Effect>
+                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.1"/>
+                                                </Border.Effect>
                                                 
-                                                <!-- Artículo -->
-                                                <TextBlock Grid.Column="0" 
-                                                           Text="{Binding CodigoArticulo}" 
-                                                           FontWeight="Bold" 
-                                                           FontSize="13" 
-                                                           Foreground="{StaticResource BrushPrincipal}"
-                                                           VerticalAlignment="Center"/>
-                                                
-                                                <!-- Descripción -->
-                                                <TextBlock Grid.Column="1" 
-                                                           Text="{Binding DescripcionArticulo}" 
-                                                           FontSize="12" 
-                                                           Foreground="Black"
-                                                           TextWrapping="Wrap"
-                                                           VerticalAlignment="Center"
-                                                           Margin="8,0"/>
-                                                
-                                                <!-- Ubicación -->
-                                                <TextBlock Grid.Column="2" 
-                                                           Text="{Binding CodigoUbicacion}" 
-                                                           FontSize="12" 
-                                                           Foreground="Black"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                                
-                                                <!-- Partida -->
-                                                <TextBlock Grid.Column="3" 
-                                                           Text="{Binding Partida}" 
-                                                           FontSize="12" 
-                                                           Foreground="Black"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                                
-                                                <!-- Caducidad -->
-                                                <TextBlock Grid.Column="4" 
-                                                           Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" 
-                                                           FontSize="12" 
-                                                           Foreground="Black"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                                
-                                                <!-- Stock Teórico -->
-                                                <TextBlock Grid.Column="5" 
-                                                           Text="{Binding StockTeorico, StringFormat='0.######'}" 
-                                                           FontSize="12" 
-                                                           FontWeight="Bold"
-                                                           Foreground="Red"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                                
-                                                <!-- Stock Actual -->
-                                                <TextBlock Grid.Column="6" 
-                                                           Text="{Binding StockActual, StringFormat='0.######'}" 
-                                                           FontSize="12" 
-                                                           FontWeight="Bold"
-                                                           Foreground="Green"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                                
-                                                <!-- Stock Contado -->
-                                                <TextBlock Grid.Column="7" 
-                                                           Text="{Binding StockContado, StringFormat='0.######'}" 
-                                                           FontSize="12" 
-                                                           FontWeight="Bold"
-                                                           Foreground="Blue"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                                
-                                                <!-- Ajuste Final -->
-                                                <TextBlock Grid.Column="8" 
-                                                           Text="{Binding AjusteFinal, Converter={StaticResource AjusteFinalTextConverter}}" 
-                                                           FontSize="12" 
-                                                           FontWeight="Bold"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Style.Triggers>
-                                                                <!-- Sin ajuste (0 o null) -->
-                                                                <DataTrigger Binding="{Binding AjusteFinal}" Value="0">
-                                                                    <Setter Property="Foreground" Value="Gray"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding AjusteFinal}" Value="{x:Null}">
-                                                                    <Setter Property="Foreground" Value="Gray"/>
-                                                                </DataTrigger>
-                                                                <!-- Ajuste positivo (sobrestock) -->
-                                                                <DataTrigger Binding="{Binding AjusteFinal}" Value="{x:Static sys:Decimal.MaxValue}">
-                                                                    <Setter Property="Foreground" Value="Green"/>
-                                                                </DataTrigger>
-                                                                <!-- Ajuste negativo (faltante) -->
-                                                                <DataTrigger Binding="{Binding AjusteFinal}" Value="{x:Static sys:Decimal.MinValue}">
-                                                                    <Setter Property="Foreground" Value="Red"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                            <!-- Color por defecto basado en el valor -->
-                                                            <Setter Property="Foreground" Value="{Binding AjusteFinal, Converter={StaticResource AjusteFinalColorConverter}}"/>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                                
-                                                <!-- Palet -->
-                                                <TextBlock Grid.Column="9" 
-                                                           FontSize="10" 
-                                                           FontWeight="Bold"
-                                                           TextWrapping="Wrap"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           MaxWidth="130">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Text" Value="{Binding PaletsResumen}"/>
-                                                            <Setter Property="Foreground" Value="{Binding TienePalets, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='DarkBlue|Gray'}"/>
-                                                            <Style.Triggers>
-                                                                <!-- Si no tiene palets, mostrar "SUELTO" -->
-                                                                <DataTrigger Binding="{Binding TienePalets}" Value="False">
-                                                                    <Setter Property="Text" Value="SUELTO"/>
-                                                                    <Setter Property="Foreground" Value="Gray"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="120"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="120"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="100"/>
+                                                        <ColumnDefinition Width="140"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    
+                                                    <!-- Artículo -->
+                                                    <TextBlock Grid.Column="0" 
+                                                               Text="{Binding CodigoArticulo}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="13" 
+                                                               Foreground="{StaticResource BrushPrincipal}"
+                                                               VerticalAlignment="Center"/>
+                                                    
+                                                    <!-- Descripción -->
+                                                    <TextBlock Grid.Column="1" 
+                                                               Text="{Binding DescripcionArticulo}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               TextWrapping="Wrap"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0"/>
+                                                    
+                                                    <!-- Ubicación -->
+                                                    <TextBlock Grid.Column="2" 
+                                                               Text="{Binding CodigoUbicacion}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Partida -->
+                                                    <TextBlock Grid.Column="3" 
+                                                               Text="{Binding Partida}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Caducidad -->
+                                                    <TextBlock Grid.Column="4" 
+                                                               Text="{Binding FechaCaducidad, StringFormat=dd/MM/yyyy}" 
+                                                               FontSize="12" 
+                                                               Foreground="Black"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Stock Teórico -->
+                                                    <TextBlock Grid.Column="5" 
+                                                               Text="{Binding StockTeorico, StringFormat='0.######'}" 
+                                                               FontSize="12" 
+                                                               FontWeight="Bold"
+                                                               Foreground="Red"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Stock Actual -->
+                                                    <TextBlock Grid.Column="6" 
+                                                               Text="{Binding StockActual, StringFormat='0.######'}" 
+                                                               FontSize="12" 
+                                                               FontWeight="Bold"
+                                                               Foreground="Green"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Stock Contado -->
+                                                    <TextBlock Grid.Column="7" 
+                                                               Text="{Binding StockContado, StringFormat='0.######'}" 
+                                                               FontSize="12" 
+                                                               FontWeight="Bold"
+                                                               Foreground="Blue"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                    
+                                                    <!-- Ajuste Final -->
+                                                    <TextBlock Grid.Column="8" 
+                                                               Text="{Binding AjusteFinal, Converter={StaticResource AjusteFinalTextConverter}}" 
+                                                               FontSize="12" 
+                                                               FontWeight="Bold"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <!-- Sin ajuste (0 o null) -->
+                                                                    <DataTrigger Binding="{Binding AjusteFinal}" Value="0">
+                                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding AjusteFinal}" Value="{x:Null}">
+                                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                                    </DataTrigger>
+                                                                    <!-- Ajuste positivo (sobrestock) -->
+                                                                    <DataTrigger Binding="{Binding AjusteFinal}" Value="{x:Static sys:Decimal.MaxValue}">
+                                                                        <Setter Property="Foreground" Value="Green"/>
+                                                                    </DataTrigger>
+                                                                    <!-- Ajuste negativo (faltante) -->
+                                                                    <DataTrigger Binding="{Binding AjusteFinal}" Value="{x:Static sys:Decimal.MinValue}">
+                                                                        <Setter Property="Foreground" Value="Red"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                                <!-- Color por defecto basado en el valor -->
+                                                                <Setter Property="Foreground" Value="{Binding AjusteFinal, Converter={StaticResource AjusteFinalColorConverter}}"/>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    
+                                                    <!-- Palet -->
+                                                    <TextBlock Grid.Column="9" 
+                                                               FontSize="10" 
+                                                               FontWeight="Bold"
+                                                               TextWrapping="Wrap"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               MaxWidth="130">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="{Binding PaletsResumen}"/>
+                                                                <Setter Property="Foreground" Value="{Binding TienePalets, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='DarkBlue|Gray'}"/>
+                                                                <Style.Triggers>
+                                                                    <!-- Si no tiene palets, mostrar "SUELTO" -->
+                                                                    <DataTrigger Binding="{Binding TienePalets}" Value="False">
+                                                                        <Setter Property="Text" Value="SUELTO"/>
+                                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
@@ -437,4 +619,4 @@
             </Border>
         </Grid>
     </Border>
-</Window> 
+</Window>

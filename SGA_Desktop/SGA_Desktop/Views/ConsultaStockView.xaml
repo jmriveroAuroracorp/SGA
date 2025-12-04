@@ -260,8 +260,31 @@
             </StackPanel>
         </Grid>
 
-
-
+        <!-- Mensaje de estado (sin stock / no encontrado) -->
+        <Border Grid.Row="3"
+                Visibility="{Binding MensajeEstadoVisibility}"
+                Background="#FFF3CD"
+                BorderBrush="#FFC107"
+                BorderThickness="2"
+                CornerRadius="6"
+                Padding="20,15"
+                Margin="20,10,20,10"
+                HorizontalAlignment="Stretch">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE783;"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="24"
+                           Foreground="#856404"
+                           VerticalAlignment="Center"
+                           Margin="0,0,15,0"/>
+                <TextBlock Text="{Binding MensajeEstado}"
+                           FontFamily="{StaticResource FuentePrincipal}"
+                           FontSize="16"
+                           Foreground="#856404"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
 
         <!-- RESULTADOS: MODO POR ARTÍCULO CON EXPANDERS -->
         <ListView Grid.Row="3"

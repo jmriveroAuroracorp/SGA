@@ -73,6 +73,9 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("lineasContadas")]
         public int? LineasContadas { get; set; }
 
+        [JsonPropertyName("lineasCreadas")]
+        public int? LineasCreadas { get; set; }
+
         [JsonPropertyName("incluirUbicacionesEspeciales")]
         public bool? IncluirUbicacionesEspeciales { get; set; }
 
@@ -208,6 +211,19 @@ namespace SGA_Desktop.Models
 
         [JsonIgnore]
         public string UbicacionesEspeciales => IncluirUbicacionesEspeciales == true ? "Sí, incluidas" : "No incluidas";
+
+        [JsonIgnore]
+        public string? LineasCreadasTexto 
+        {
+            get
+            {
+                if (LineasCreadas.HasValue && LineasCreadas.Value > 0)
+                {
+                    return $"{LineasCreadas.Value} línea{(LineasCreadas.Value == 1 ? "" : "s")} creada{(LineasCreadas.Value == 1 ? "" : "s")}";
+                }
+                return null;
+            }
+        }
 
         // === PROPIEDADES MULTIALMACÉN ===
         

@@ -116,8 +116,16 @@ namespace SGA_Api.Controllers.Inventario
                         .Where(lt => lt.IdInventario == inventario.IdInventario && lt.CantidadContada.HasValue)
                         .CountAsync();
 
+                    // Contar líneas creadas manualmente (StockTeorico = 0 y StockContado > 0)
+                    var lineasCreadas = await _context.InventarioLineas
+                        .Where(l => l.IdInventario == inventario.IdInventario && 
+                                   l.StockTeorico == 0 && 
+                                   l.StockContado > 0)
+                        .CountAsync();
+
                     inventario.TotalLineas = totalLineas;
                     inventario.LineasContadas = lineasContadas;
+                    inventario.LineasCreadas = lineasCreadas;
                 }
 
                 // Mapear información de almacenes para cada inventario
@@ -140,6 +148,7 @@ namespace SGA_Api.Controllers.Inventario
                     UsuarioCierreId = inv.UsuarioCierreId,
                     TotalLineas = inv.TotalLineas,
                     LineasContadas = inv.LineasContadas,
+                    LineasCreadas = inv.LineasCreadas,
                     // Información de conteo
                     ConteoACiegas = inv.ConteoACiegas,
                     // NUEVO: Información de almacenes
@@ -472,6 +481,11 @@ namespace SGA_Api.Controllers.Inventario
                     }
                     catch { }
 
+                    // Normalizar FechaCaducidad para evitar problemas de conversión en SQL
+                    DateTime? fechaCaducidadAjuste = linea.FechaCaducidad.HasValue 
+                        ? linea.FechaCaducidad.Value.Date 
+                        : null;
+
                     var ajustePalet = new InventarioAjustes
                     {
                         IdAjuste = Guid.NewGuid(),
@@ -485,7 +499,7 @@ namespace SGA_Api.Controllers.Inventario
                         CodigoEmpresa = inventario.CodigoEmpresa,
                         CodigoAlmacen = linea.CodigoAlmacen ?? inventario.CodigoAlmacen,
                         Estado = "PENDIENTE_ERP", // vuestro servicio marcará COMPLETADO y aplicará al palet
-                        FechaCaducidad = linea.FechaCaducidad,
+                        FechaCaducidad = fechaCaducidadAjuste,
                         Partida = linea.Partida,
                         PaletId = linea.PaletId,
                         CodigoPalet = codigoPalet,
@@ -597,12 +611,19 @@ namespace SGA_Api.Controllers.Inventario
 
                     // Stock suelto actual = Total - Paletizado
                     var actualSueltoErp = totalErp - paletizadoActual;
-                    if (actualSueltoErp < 0) actualSueltoErp = 0; // No permitir negativos
+                    // Para inventarios TOTAL, permitir valores negativos en el cálculo de ajustes
+                    var esInventarioTotal = inventario.TipoInventario?.ToUpper() == "TOTAL";
+                    if (!esInventarioTotal && actualSueltoErp < 0) actualSueltoErp = 0; // No permitir negativos en PARCIAL
 
                     // Diferencia solo para stock suelto
                     var diferencia = g.ContadoTotal - actualSueltoErp;
                     if (Math.Abs(diferencia) < tolerancia)
                         continue; // No ajustar si el total no cambia
+
+                    // Normalizar FechaCaducidad para evitar problemas de conversión en SQL
+                    DateTime? fechaCaducidadAjuste3 = g.FechaCaducidad.HasValue 
+                        ? g.FechaCaducidad.Value.Date 
+                        : null;
 
                     var ajuste = new InventarioAjustes
                     {
@@ -617,7 +638,7 @@ namespace SGA_Api.Controllers.Inventario
                         CodigoEmpresa = inventario.CodigoEmpresa,
                         CodigoAlmacen = g.Almacen,
                         Estado = "PENDIENTE_ERP",
-                        FechaCaducidad = g.FechaCaducidad,
+                        FechaCaducidad = fechaCaducidadAjuste3,
                         Partida = g.Partida,
                         PaletId = null, // Ajuste de stock suelto
                         CodigoPalet = null,
@@ -667,12 +688,15 @@ namespace SGA_Api.Controllers.Inventario
                 
 
                 
+                // Para inventarios TOTAL: mostrar todas las líneas
+                // Para inventarios PARCIAL: mostrar líneas con stock actual > 0 O líneas agregadas manualmente (StockTeorico = 0 y StockContado > 0)
                 var lineas = inventario?.TipoInventario == "TOTAL" 
                     ? await _context.InventarioLineas
                         .Where(l => l.IdInventario == idInventario)
                         .ToListAsync()
                     : await _context.InventarioLineas
-                        .Where(l => l.IdInventario == idInventario && l.StockActual > 0)
+                        .Where(l => l.IdInventario == idInventario && 
+                                   (l.StockActual > 0 || (l.StockTeorico == 0 && l.StockContado > 0)))
                         .ToListAsync();
                 
 
@@ -1217,9 +1241,16 @@ namespace SGA_Api.Controllers.Inventario
                                 .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
 
                             stockActualCalculado = totalSistema - paletizadoActual;
-                            if (stockActualCalculado < 0) stockActualCalculado = 0;
+                            // Para inventarios TOTAL, permitir valores negativos
+                            var esInventarioTotal = inventario.TipoInventario?.ToUpper() == "TOTAL";
+                            if (!esInventarioTotal && stockActualCalculado < 0) stockActualCalculado = 0;
 
                             // Obtener partida y fecha de caducidad del stock acumulado
+                            // Normalizar fecha del artículo para comparación
+                            DateTime? fechaArticuloNormalizada = articulo.FechaCaducidad.HasValue 
+                                ? articulo.FechaCaducidad.Value.Date 
+                                : null;
+                            
                             var stockInfo = await _storageContext.AcumuladoStockUbicacion
                                 .FirstOrDefaultAsync(s => s.CodigoEmpresa == inventario.CodigoEmpresa &&
                                                           s.Ejercicio == ejercicio &&
@@ -1227,13 +1258,26 @@ namespace SGA_Api.Controllers.Inventario
                                                           s.CodigoArticulo == articulo.CodigoArticulo &&
                                                           s.Ubicacion == articulo.CodigoUbicacion &&
                                                           (s.Partida == articulo.Partida || (s.Partida == null && articulo.Partida == null)) &&
-                                                          (s.FechaCaducidad == articulo.FechaCaducidad || (s.FechaCaducidad == null && articulo.FechaCaducidad == null)));
+                                                          (s.FechaCaducidad.HasValue && fechaArticuloNormalizada.HasValue 
+                                                              ? s.FechaCaducidad.Value.Date == fechaArticuloNormalizada.Value.Date
+                                                              : s.FechaCaducidad == null && fechaArticuloNormalizada == null));
                             
                             partida = stockInfo?.Partida;
                             fechaCaducidad = stockInfo?.FechaCaducidad;
                         }
 
                         // Crear nueva línea temporal solo si no existe
+                        // Normalizar FechaCaducidad para evitar problemas de conversión en SQL
+                        DateTime? fechaCaducidadNormalizada = null;
+                        if (fechaCaducidad.HasValue)
+                        {
+                            fechaCaducidadNormalizada = fechaCaducidad.Value.Date; // Solo la fecha, sin hora
+                        }
+                        else if (articulo.FechaCaducidad.HasValue)
+                        {
+                            fechaCaducidadNormalizada = articulo.FechaCaducidad.Value.Date; // Solo la fecha, sin hora
+                        }
+
                         var nuevaLineaTemp = new InventarioLineasTemp
                         {
                             IdInventario = inventario.IdInventario,
@@ -1243,7 +1287,7 @@ namespace SGA_Api.Controllers.Inventario
                             CantidadContada = articulo.CantidadInventario,
                             StockActual = stockActualCalculado, // ← CORREGIDO: Usar stock calculado (palet o suelto)
                             Partida = partida ?? articulo.Partida,
-                            FechaCaducidad = fechaCaducidad ?? articulo.FechaCaducidad,
+                            FechaCaducidad = fechaCaducidadNormalizada,
                             PaletId = articulo.PaletId,
                             UsuarioConteoId = articulo.UsuarioConteo,
                             FechaConteo = DateTime.Now, // Siempre usar la hora del servidor/API
@@ -1450,7 +1494,7 @@ namespace SGA_Api.Controllers.Inventario
                     var stockTeorico = lineaTemp.StockActual;
                     
                     // Stock actual: respetar PALET/SUELTO como en la verificación
-                    var stockActual = await CalcularStockActualLineaTempAsync(lineaTemp, inventario.CodigoEmpresa, ejercicio);
+                    var stockActual = await CalcularStockActualLineaTempAsync(lineaTemp, inventario.CodigoEmpresa, ejercicio, inventario.TipoInventario);
                     
                     // Stock contado por el usuario
                     var stockContado = lineaTemp.CantidadContada ?? lineaTemp.StockActual;
@@ -1482,12 +1526,14 @@ namespace SGA_Api.Controllers.Inventario
                     };
                     
                     _context.InventarioLineas.Add(nuevaLinea);
-                    _logger.LogInformation($"Creando línea: Artículo={lineaTemp.CodigoArticulo}, Almacén={lineaTemp.CodigoAlmacen}, StockTeórico={stockTeorico}, StockActual={stockActual}, StockContado={stockContado}, AjusteFinal={ajusteFinal} (StockContado - StockActual)");
+                    _logger.LogInformation($"Creando línea: Artículo={lineaTemp.CodigoArticulo}, Almacén={lineaTemp.CodigoAlmacen}, Ubicación={lineaTemp.CodigoUbicacion}, Partida={lineaTemp.Partida ?? "NULL"}, PaletId={lineaTemp.PaletId?.ToString() ?? "NULL"}, StockTeórico={stockTeorico}, StockActual={stockActual}, StockContado={stockContado}, AjusteFinal={ajusteFinal} (StockContado - StockActual)");
                     
                     // Marcar línea temporal como consolidada
                     lineaTemp.Consolidado = true;
                     lineaTemp.FechaConsolidacion = DateTime.Now; // Siempre usar la hora del servidor/API
                     lineaTemp.UsuarioConsolidacionId = usuarioValidacionId;
+                    
+                    _logger.LogInformation($"✅ Línea temporal marcada como consolidada: IdTemp={lineaTemp.IdTemp}, Artículo={lineaTemp.CodigoArticulo}, Consolidado={lineaTemp.Consolidado}");
                 }
 
                 // Detectar líneas con diferencias significativas entre el stock al crear y el stock actual
@@ -1949,10 +1995,10 @@ namespace SGA_Api.Controllers.Inventario
                     }
 
                     // 5.3. Crear línea para stock suelto
-                    // Para inventario TOTAL: crear línea incluso si stockSuelto = 0
+                    // Para inventario TOTAL: crear línea incluso si stockSuelto = 0 o negativo
                     // Para inventario PARCIAL: solo crear si stockSuelto > 0
                     var esInventarioTotal = inventario.TipoInventario?.ToUpper() == "TOTAL";
-                    if (stockSuelto > 0 || (esInventarioTotal && stockSuelto >= 0))
+                    if (esInventarioTotal || stockSuelto > 0)
                     {
                         // 🔷 CORREGIDO: Asignar directamente como decimal para preservar precisión completa
                         var stockSueltoValue = (decimal)stockSuelto;
@@ -2198,9 +2244,13 @@ namespace SGA_Api.Controllers.Inventario
 
         /// <summary>
         /// Calcula el stock actual para una línea temporal respetando la separación PALET/SUELTO
+        /// Para inventarios TOTAL, preserva valores negativos si el stock original también era negativo
         /// </summary>
-        private async Task<decimal> CalcularStockActualLineaTempAsync(InventarioLineasTemp lineaTemp, short codigoEmpresa, short ejercicio)
+        private async Task<decimal> CalcularStockActualLineaTempAsync(InventarioLineasTemp lineaTemp, short codigoEmpresa, short ejercicio, string? tipoInventario = null)
         {
+            // Determinar si es inventario TOTAL una sola vez al inicio del método
+            var esInventarioTotal = tipoInventario?.ToUpper() == "TOTAL";
+            
             if (lineaTemp.PaletId.HasValue)
             {
                 // Stock actual del palet específico
@@ -2213,6 +2263,12 @@ namespace SGA_Api.Controllers.Inventario
                                  (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
                                  (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
                     .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+                
+                // Para inventarios TOTAL, si el original era negativo y el cálculo también da negativo, preservar
+                if (esInventarioTotal && paletActual < 0 && lineaTemp.StockActual < 0)
+                {
+                    return paletActual; // Preservar negativo
+                }
                 return paletActual < 0 ? 0 : paletActual;
             }
 
@@ -2237,6 +2293,12 @@ namespace SGA_Api.Controllers.Inventario
                 .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
 
             var suelto = totalSistema - paletizadoActual;
+            
+            // Para inventarios TOTAL, si el original era negativo y el cálculo también da negativo, preservar
+            if (esInventarioTotal && suelto < 0 && lineaTemp.StockActual < 0)
+            {
+                return suelto; // Preservar negativo
+            }
             return suelto < 0 ? 0 : suelto;
         }
 
@@ -2450,7 +2512,7 @@ namespace SGA_Api.Controllers.Inventario
 
                 foreach (var lineaTemp in lineasTemp)
                 {
-                    var stockActualSistema = await CalcularStockActualLineaTempAsync(lineaTemp, inventario.CodigoEmpresa, ejercicio);
+                    var stockActualSistema = await CalcularStockActualLineaTempAsync(lineaTemp, inventario.CodigoEmpresa, ejercicio, inventario.TipoInventario);
                     var stockAlCrearInventario = lineaTemp.StockActual; // Stock cuando se creó el inventario
                     var diferencia = Math.Abs(stockAlCrearInventario - stockActualSistema);
 

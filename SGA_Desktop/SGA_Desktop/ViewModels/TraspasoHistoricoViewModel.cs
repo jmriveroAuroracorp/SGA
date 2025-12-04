@@ -87,6 +87,20 @@ namespace SGA_Desktop.ViewModels
             {
                 var filtros = new List<string>();
 
+                // 🔷 SIEMPRE mostrar las fechas (incluso si son las por defecto)
+                if (FechaDesde.HasValue && FechaHasta.HasValue)
+                {
+                    filtros.Add($"Fechas: {FechaDesde.Value:dd/MM/yyyy} - {FechaHasta.Value:dd/MM/yyyy}");
+                }
+                else if (FechaDesde.HasValue)
+                {
+                    filtros.Add($"Desde: {FechaDesde.Value:dd/MM/yyyy}");
+                }
+                else if (FechaHasta.HasValue)
+                {
+                    filtros.Add($"Hasta: {FechaHasta.Value:dd/MM/yyyy}");
+                }
+
                 if (AlmacenOrigenSeleccionado != null)
                 {
                     filtros.Add($"Origen: {AlmacenOrigenSeleccionado.CodigoAlmacen}");
@@ -125,14 +139,6 @@ namespace SGA_Desktop.ViewModels
                 if (!string.IsNullOrWhiteSpace(FiltroObservaciones))
                 {
                     filtros.Add($"Observaciones: {FiltroObservaciones}");
-                }
-
-                if (FechaDesde.HasValue && FechaHasta.HasValue)
-                {
-                    if (FechaDesde.Value != DateTime.Today || FechaHasta.Value != DateTime.Today)
-                    {
-                        filtros.Add($"Fechas: {FechaDesde.Value:dd/MM/yyyy} - {FechaHasta.Value:dd/MM/yyyy}");
-                    }
                 }
 
                 return filtros.Count > 0 ? string.Join(" | ", filtros) : "Sin filtros";

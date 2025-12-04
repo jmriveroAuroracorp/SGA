@@ -121,7 +121,7 @@ builder.Services.AddScoped<RendimientosService>(provider =>
         provider.GetRequiredService<SageDbContext>(),
         provider.GetRequiredService<ILogger<RendimientosService>>()
     ));
-builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
+//builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
 
 // Configuración de SignalR
 builder.Services.AddSignalR();

@@ -31,7 +31,7 @@ namespace SGA_Api.Models.Notificaciones
         /// Fecha y hora en que se leyó la notificación
         /// </summary>
         [Required]
-        public DateTime FechaLeida { get; set; } = DateTime.UtcNow;
+        public DateTime FechaLeida { get; set; } = DateTime.Now;
 
         // Propiedades de navegación
         /// <summary>

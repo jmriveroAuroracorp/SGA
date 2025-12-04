@@ -208,63 +208,164 @@
                     </Grid>
                 </Border>
 
-                <!-- Filtros -->
+                <!-- Panel de Filtros y Ordenación (Colapsable) -->
                 <Border Grid.Row="1" 
-                        BorderBrush="{StaticResource BrushSecundario}" 
-                        BorderThickness="1" 
+                        BorderBrush="{StaticResource BrushSecundario}"
+                        BorderThickness="1"
                         CornerRadius="4"
-                        Margin="0,0,0,15">
-                    <Grid Margin="15">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Título filtros -->
-                        <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-                                   Text="🔍 Filtros de Búsqueda" 
-                                   FontWeight="Bold" 
-                                   Foreground="{StaticResource BrushPrincipal}"
-                                   Margin="0,0,0,10"/>
-
-                        <!-- Ubicación -->
-                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,15,0">
-                            <TextBlock Text="Ubicación" 
+                        Margin="0,0,0,15"
+                        Background="#F8F9FA">
+                    <Expander IsExpanded="False"
+                              Background="Transparent">
+                        <Expander.Header>
+                            <TextBlock Text="🔍 Filtros y Ordenación" 
                                        FontWeight="Bold" 
-                                       Foreground="{StaticResource BrushPrincipal}"
-                                       Margin="0,0,0,5"/>
-                            <TextBox Name="FiltroUbicacionTextBox"
-                                     Text="{Binding FiltroUbicacion, UpdateSourceTrigger=PropertyChanged}" 
-                                     Style="{StaticResource EstiloCajaTexto}" 
-                                     Height="40"/>
-                        </StackPanel>
+                                       Foreground="{StaticResource BrushPrincipal}"/>
+                        </Expander.Header>
+                        <Grid Margin="15,10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                        <!-- Artículo -->
-                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,15,0">
-                            <TextBlock Text="Artículo" 
-                                       FontWeight="Bold" 
-                                       Foreground="{StaticResource BrushPrincipal}"
-                                       Margin="0,0,0,5"/>
-                            <TextBox Name="FiltroArticuloTextBox"
-                                     Text="{Binding FiltroArticulo, UpdateSourceTrigger=PropertyChanged}" 
-                                     Style="{StaticResource EstiloCajaTexto}" 
-                                     Height="40"/>
-                        </StackPanel>
+                            <!-- Fila 1: Filtros de búsqueda -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                        <!-- Botón limpiar filtros -->
-                        <StackPanel Grid.Row="1" Grid.Column="2" 
-                                    VerticalAlignment="Center">
-                            <Button Content="🧹 Limpiar"
-                                    Command="{Binding LimpiarFiltrosCommand}"
-                                    Style="{StaticResource EstiloBotonSecundario}"
-                                    Width="80" Height="30"/>
-                        </StackPanel>
-                    </Grid>
+                                <!-- Filtro Artículo -->
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Text="Buscar Artículo" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="11" 
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,5"/>
+                                    <TextBox Name="FiltroArticuloTextBox"
+                                             Text="{Binding FiltroArticulo, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="30"
+                                             FontSize="12"
+                                             Padding="8,0"
+                                             VerticalContentAlignment="Center"
+                                             Tag="Buscar por código o descripción..."/>
+                                </StackPanel>
+
+                                <!-- Filtro Ubicación -->
+                                <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <TextBlock Text="Filtrar Ubicación" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="11" 
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,5"/>
+                                    <TextBox Name="FiltroUbicacionTextBox"
+                                             Text="{Binding FiltroUbicacion, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="30"
+                                             FontSize="12"
+                                             Padding="8,0"
+                                             VerticalContentAlignment="Center"
+                                             Tag="Filtrar por ubicación..."/>
+                                </StackPanel>
+
+                                <!-- Filtro Partida -->
+                                <StackPanel Grid.Column="2" Margin="8,0,8,0">
+                                    <TextBlock Text="Filtrar Partida" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="11" 
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,5"/>
+                                    <TextBox Text="{Binding FiltroPartida, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="30"
+                                             FontSize="12"
+                                             Padding="8,0"
+                                             VerticalContentAlignment="Center"
+                                             Tag="Filtrar por partida..."/>
+                                </StackPanel>
+
+                                <!-- Botón Limpiar Filtros -->
+                                <Button Grid.Column="3"
+                                        Content="🗑️ Limpiar"
+                                        Command="{Binding LimpiarFiltrosCommand}"
+                                        Style="{StaticResource EstiloBotonSecundario}"
+                                        Width="100" Height="30"
+                                        VerticalAlignment="Bottom"
+                                        Margin="8,0,0,0"/>
+                            </Grid>
+
+                            <!-- Fila 2: Filtros avanzados y ordenación -->
+                            <Grid Grid.Row="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Filtro Estado Conteo -->
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Text="Estado Conteo" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="11" 
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,5"/>
+                                    <ComboBox SelectedValue="{Binding FiltroEstadoConteo, UpdateSourceTrigger=PropertyChanged}"
+                                              SelectedValuePath="Tag"
+                                              Height="30"
+                                              FontSize="12"
+                                              VerticalContentAlignment="Center"
+                                              Style="{StaticResource EstiloComboBox}">
+                                        <ComboBoxItem Content="Todos" Tag="TODOS"/>
+                                        <ComboBoxItem Content="Contados" Tag="CONTADOS"/>
+                                        <ComboBoxItem Content="No contados" Tag="NO_CONTADOS"/>
+                                        <ComboBoxItem Content="Con diferencia" Tag="CON_DIFERENCIA"/>
+                                        <ComboBoxItem Content="Sin diferencia" Tag="SIN_DIFERENCIA"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- Ordenación -->
+                                <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <TextBlock Text="Ordenar por" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="11" 
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,5"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Grid.Column="0"
+                                                  SelectedValue="{Binding CriterioOrdenacion, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="Tag"
+                                                  Height="30"
+                                                  FontSize="12"
+                                                  VerticalContentAlignment="Center"
+                                                  Margin="0,0,5,0"
+                                                  Style="{StaticResource EstiloComboBox}">
+                                            <ComboBoxItem Content="Código Artículo" Tag="CodigoArticulo"/>
+                                            <ComboBoxItem Content="Descripción" Tag="DescripcionArticulo"/>
+                                            <ComboBoxItem Content="Ubicación" Tag="CodigoUbicacion"/>
+                                            <ComboBoxItem Content="Partida" Tag="Partida"/>
+                                            <ComboBoxItem Content="Fecha Caducidad" Tag="FechaCaducidad"/>
+                                            <ComboBoxItem Content="Stock Actual" Tag="StockActual"/>
+                                            <ComboBoxItem Content="Cantidad Contada" Tag="CantidadContada"/>
+                                            <ComboBoxItem Content="Diferencia" Tag="Diferencia"/>
+                                        </ComboBox>
+                                        <Button Grid.Column="1"
+                                                Command="{Binding CambiarDireccionOrdenacionCommand}"
+                                                Height="30"
+                                                Width="50"
+                                                FontSize="10"
+                                                Padding="2"
+                                                Style="{StaticResource EstiloBotonSecundario}">
+                                            <TextBlock Text="{Binding DireccionOrdenacion}"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Expander>
                 </Border>
 
                 <!-- Lista de artículos -->
@@ -506,6 +607,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Información -->
@@ -523,8 +625,17 @@
                                    Foreground="Green"/>
                     </StackPanel>
 
-                    <!-- Botón Guardar y Continuar -->
+                    <!-- Botón Agregar Línea Manual -->
                     <Button Grid.Column="1"
+                            Content="➕ AGREGAR LÍNEA MANUAL"
+                            Command="{Binding AgregarLineaManualCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="160" Height="35"
+                            Margin="0,0,10,0"
+                            ToolTip="Agrega una línea de material que no existe en el sitio"/>
+
+                    <!-- Botón Guardar y Continuar -->
+                    <Button Grid.Column="2"
                             Content="💾 GUARDAR Y CONTINUAR INVENTARIANDO"
                             Command="{Binding GuardarYContinuarCommand}"
                             IsEnabled="{Binding PuedeGuardar}"
@@ -534,7 +645,7 @@
                             ToolTip="Guarda el progreso actual y permite continuar inventariando"/>
 
                     <!-- Botón Finalizar -->
-                    <Button Grid.Column="2"
+                    <Button Grid.Column="3"
                             Content="✅ FINALIZAR INVENTARIO"
                             Command="{Binding GuardarConteoCommand}"
                             IsEnabled="{Binding PuedeGuardar}"
@@ -544,7 +655,7 @@
                             ToolTip="Guarda el inventario y cierra el diálogo"/>
 
                     <!-- Botón Salir -->
-                    <Button Grid.Column="3"
+                    <Button Grid.Column="4"
                             Content="🚪 SALIR"
                             Command="{Binding CancelarCommand}"
                             Style="{StaticResource EstiloBotonSecundario}"

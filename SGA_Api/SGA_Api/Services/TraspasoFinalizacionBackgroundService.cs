@@ -517,14 +517,22 @@ namespace SGA_Api.Services
 						// Normalizar valores para comparación
 						var tempCodigoAlmacen = (temp.CodigoAlmacen ?? "").Trim().ToUpper();
 						var tempUbicacion = (temp.Ubicacion ?? "").Trim().ToUpper();
-						var tempLote = (temp.Lote ?? "").Trim();
-						
-						var lineasCandidatas = await dbContext.PaletLineas
-							.Where(l => l.PaletId == temp.PaletId && 
-										l.CodigoArticulo == temp.CodigoArticulo)
-							.ToListAsync();
-						
-						var existente = lineasCandidatas
+					var tempLote = (temp.Lote ?? "").Trim();
+					
+					var lineasCandidatas = await dbContext.PaletLineas
+						.Where(l => l.PaletId == temp.PaletId && 
+									l.CodigoArticulo == temp.CodigoArticulo)
+						.ToListAsync();
+					
+					// Para líneas heredadas: buscar SIN incluir ubicación (puede estar en cualquier ubicación)
+					// Para líneas normales: buscar CON ubicación (puede haber múltiples en diferentes ubicaciones)
+					var existente = temp.EsHeredada
+						? lineasCandidatas
+							.Where(l => 
+								(l.Lote ?? "").Trim() == tempLote &&
+								l.FechaCaducidad == temp.FechaCaducidad)
+							.FirstOrDefault()
+						: lineasCandidatas
 							.Where(l => 
 								(l.Lote ?? "").Trim() == tempLote &&
 								l.FechaCaducidad == temp.FechaCaducidad &&
@@ -542,6 +550,15 @@ namespace SGA_Api.Services
 							
 							if (!temp.EsHeredada)
 								existente.Cantidad += temp.Cantidad;  // DELTA (+/-)
+							
+							// Para líneas heredadas, actualizar la ubicación (mover el palet)
+							if (temp.EsHeredada)
+							{
+								existente.CodigoAlmacen = temp.CodigoAlmacen?.Trim();
+								existente.Ubicacion = (temp.Ubicacion ?? "").Trim();
+								logger.LogInformation("📍 Línea heredada actualiza ubicación: PaletId={PaletId}, Articulo={Articulo}, NuevaUbicacion={Almacen}-{Ubicacion}", 
+									temp.PaletId, temp.CodigoArticulo, temp.CodigoAlmacen, temp.Ubicacion);
+							}
 							
 							// 🔷 DEBUG: Log después de sumar
 							logger.LogInformation("🔍 DEBUG Consolidación: Cantidad después de sumar={CantidadFinal} (F6={CantidadFinalF6})", 
@@ -587,10 +604,18 @@ namespace SGA_Api.Services
 					else
 					{
 						// No existe línea en la ubicación de la temporal
+						// Las líneas heredadas NO deben crear nuevas líneas definitivas
+						// Solo actualizan las existentes. Si no existe, solo se marca como procesada.
+						if (temp.EsHeredada)
+						{
+							logger.LogWarning("⚠️ Línea heredada {TempId} no encontró línea definitiva para actualizar. Solo se marca como procesada. PaletId={PaletId}, Articulo={Articulo}, Ubicacion={Almacen}-{Ubicacion}", 
+								temp.Id, temp.PaletId, temp.CodigoArticulo, temp.CodigoAlmacen, temp.Ubicacion);
+							// No crear línea definitiva, solo marcar como procesada más abajo
+						}
 						// IMPORTANTE: Solo crear nueva línea si temp.Cantidad es POSITIVO
 						// Si es NEGATIVO, significa que se intenta restar de una línea que no existe → error de datos
 						// Si es 0, no crear línea (no tiene sentido)
-						if (temp.Cantidad > 0m)
+						else if (temp.Cantidad > 0m)
 						{
 							// Validar solo CodigoAlmacen (Ubicacion puede estar vacía = "sin ubicar")
 							if (string.IsNullOrWhiteSpace(temp.CodigoAlmacen))

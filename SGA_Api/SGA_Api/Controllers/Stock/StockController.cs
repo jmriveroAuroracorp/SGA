@@ -686,6 +686,89 @@ namespace SGA_Api.Controllers.Stock
 		}
 
 		/// <summary>
+		/// GET api/Stock/articulo/lotes-activos
+		/// Obtiene los lotes activos de un artículo (incluso sin stock) con su fecha de caducidad
+		/// </summary>
+		[HttpGet("articulo/lotes-activos")]
+		public async Task<IActionResult> ObtenerLotesActivosArticulo(
+			[FromQuery] short codigoEmpresa,
+			[FromQuery] string codigoArticulo)
+		{
+			try
+			{
+				if (string.IsNullOrWhiteSpace(codigoArticulo))
+					return BadRequest("El código de artículo es obligatorio");
+
+				var ejercicio = await _sageContext.Periodos
+					.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+				
+				if (ejercicio == 0)
+					return BadRequest("Sin ejercicio válido");
+
+				// Obtener todos los lotes activos del artículo con todas sus fechas de caducidad posibles (incluso con stock 0)
+				// Primero obtener todos los registros
+				var registros = await _storageContext.AcumuladoStockUbicacion
+					.Where(s => s.CodigoEmpresa == codigoEmpresa &&
+							   s.Ejercicio == ejercicio &&
+							   s.CodigoArticulo == codigoArticulo &&
+							   !string.IsNullOrEmpty(s.Partida))
+					.ToListAsync();
+
+				// Agrupar por partida y obtener todas las fechas únicas
+				var lotesConFechas = registros
+					.GroupBy(s => s.Partida)
+					.Select(g => new
+					{
+						Partida = g.Key,
+						FechasCaducidad = g.Where(s => s.FechaCaducidad.HasValue)
+										   .Select(s => s.FechaCaducidad.Value.Date)
+										   .Distinct()
+										   .OrderBy(f => f)
+										   .ToList()
+					})
+					.OrderBy(x => x.Partida)
+					.ToList();
+
+				// Convertir a formato de respuesta: devolver un objeto por cada combinación partida-fecha
+				var resultado = new List<object>();
+				foreach (var lote in lotesConFechas)
+				{
+					if (lote.FechasCaducidad.Any())
+					{
+						// Si hay fechas, devolver una entrada por cada fecha
+						foreach (var fecha in lote.FechasCaducidad)
+						{
+							resultado.Add(new
+							{
+								partida = lote.Partida,
+								fechaCaducidad = fecha
+							});
+						}
+					}
+					else
+					{
+						// Si no hay fechas, devolver una entrada con fecha null
+						resultado.Add(new
+						{
+							partida = lote.Partida,
+							fechaCaducidad = (DateTime?)null
+						});
+					}
+				}
+
+				return Ok(resultado);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error al obtener lotes activos para artículo {CodigoArticulo}", codigoArticulo);
+				return StatusCode(500, "Error interno del servidor");
+			}
+		}
+
+		/// <summary>
 		/// GET api/Stock/articulo/disponible
 		/// Devuelve el stock disponible con la reserva de stock de los palets
 		/// </summary>

@@ -10,7 +10,9 @@ namespace SGA_Api.Models.Rendimientos
         public int TraspasosCompletados { get; set; }
         public int TraspasosPalet { get; set; } // Traspasos de tipo PALET
         public int TraspasosArticulo { get; set; } // Traspasos de tipo ARTÍCULO
-        public int LineasInventarioContadas { get; set; }
+        public int LineasInventarioGeneradas { get; set; } // Total de líneas generadas para el inventario
+        public int LineasInventarioContadas { get; set; } // Solo las líneas que realmente contó el usuario
+        public int LineasInventarioCreadas { get; set; } // Líneas creadas manualmente (StockActual = 0 y tiene conteo)
         public int LecturasConteo { get; set; }
         public int ConteosCompletados { get; set; } // Órdenes de conteo cerradas
         

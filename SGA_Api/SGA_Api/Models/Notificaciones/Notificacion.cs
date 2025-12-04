@@ -63,7 +63,7 @@ namespace SGA_Api.Models.Notificaciones
         /// Fecha de creación de la notificación
         /// </summary>
         [Required]
-        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+        public DateTime FechaCreacion { get; set; } = DateTime.Now;
 
         /// <summary>
         /// Indica si la notificación está activa
