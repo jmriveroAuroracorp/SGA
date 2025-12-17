@@ -183,11 +183,13 @@ namespace SGA_Api.Controllers
             [FromQuery] string? estado = null, 
             [FromQuery] string? codigoOperario = null,
             [FromQuery] DateTime? fechaDesde = null,
-            [FromQuery] DateTime? fechaHasta = null)
+            [FromQuery] DateTime? fechaHasta = null,
+            [FromQuery] string? codigoOperarioSesion = null,
+            [FromQuery] string? creadoPorCodigo = null)
         {
             try
             {
-                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado, codigoOperario, fechaDesde, fechaHasta);
+                var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(estado, codigoOperario, fechaDesde, fechaHasta, codigoOperarioSesion, creadoPorCodigo);
                 return Ok(ordenes);
             }
             catch (Exception ex)
@@ -646,6 +648,134 @@ namespace SGA_Api.Controllers
             {
                 _logger.LogError(ex, "❌ ERROR EN TEST DE NOTIFICACIÓN");
                 return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Listar todos los conteos periódicos
+        /// </summary>
+        /// <returns>Lista de conteos periódicos con información de renovaciones</returns>
+        [HttpGet("periodicos")]
+        [ProducesResponseType(typeof(IEnumerable<ConteoPeriodicoDto>), 200)]
+        public async Task<IActionResult> ListarConteosPeriodicos([FromQuery] string? codigoOperario = null)
+        {
+            try
+            {
+                var conteos = await _conteosService.ListarConteosPeriodicosAsync(codigoOperario);
+                return Ok(conteos);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al listar conteos periódicos");
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al listar los conteos periódicos",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Activar la periodicidad de un conteo
+        /// </summary>
+        /// <param name="guid">Guid de la orden periódica</param>
+        /// <returns>Resultado de la operación</returns>
+        [HttpPost("ordenes/{guid:guid}/activar-periodicidad")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> ActivarPeriodicidad(Guid guid)
+        {
+            try
+            {
+                await _conteosService.ActivarPeriodicidadAsync(guid);
+                return Ok(new { mensaje = "Periodicidad activada correctamente" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Error de validación al activar periodicidad para orden {Guid}", guid);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Error de validación",
+                    Detail = ex.Message,
+                    Status = 400
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al activar periodicidad para orden {Guid}", guid);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al activar la periodicidad",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Desactivar la periodicidad de un conteo
+        /// </summary>
+        /// <param name="guid">Guid de la orden periódica</param>
+        /// <returns>Resultado de la operación</returns>
+        [HttpPost("ordenes/{guid:guid}/desactivar-periodicidad")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> DesactivarPeriodicidad(Guid guid)
+        {
+            try
+            {
+                await _conteosService.DesactivarPeriodicidadAsync(guid);
+                return Ok(new { mensaje = "Periodicidad desactivada correctamente" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Error de validación al desactivar periodicidad para orden {Guid}", guid);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Error de validación",
+                    Detail = ex.Message,
+                    Status = 400
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al desactivar periodicidad para orden {Guid}", guid);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al desactivar la periodicidad",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Obtener el historial de renovaciones de un conteo periódico
+        /// </summary>
+        /// <param name="guid">Guid de la orden periódica</param>
+        /// <returns>Lista de órdenes creadas por renovación</returns>
+        [HttpGet("ordenes/{guid:guid}/renovaciones")]
+        [ProducesResponseType(typeof(IEnumerable<OrdenDto>), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> ObtenerRenovaciones(Guid guid)
+        {
+            try
+            {
+                var renovaciones = await _conteosService.ObtenerRenovacionesAsync(guid);
+                return Ok(renovaciones);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener renovaciones para orden {Guid}", guid);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al obtener las renovaciones",
+                    Status = 500
+                });
             }
         }
     }

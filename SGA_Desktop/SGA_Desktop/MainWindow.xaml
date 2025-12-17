@@ -266,21 +266,31 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"
                     Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}"/>
-                    <Button Content="Calidad"
-                    Command="{Binding IrACalidadCommand}"
+                    <Button Content="Conteos Rotativos"
+                    Command="{Binding IrAControlesRotativosCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Calidad}"/>
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}"/>
+                    <Button Content="Historial de Ajustes"
+                    Command="{Binding IrAHistorialAjustesCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=HistorialAjustes}"/>
                     <Button Content="Órdenes de Traspaso"
                     Command="{Binding IrAOrdenTrabajoCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"
                     Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=OrdenTrabajo}"/>
-                    <Button Content="Controles Rotativos"
-                    Command="{Binding IrAControlesRotativosCommand}"
+                    <Button Content="Calidad"
+                    Command="{Binding IrACalidadCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}"/>
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Calidad}"/>
+                    <Button Content="Análisis de Rendimientos"
+                    Command="{Binding IrARendimientosCommand}"
+                    Style="{StaticResource EstiloBotonPrincipal}"
+                    Margin="10,5"
+                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Rendimientos}"/>
                     <Button Content="Empresa"
                     Command="{Binding IrASeleccionEmpresaCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"
@@ -291,11 +301,6 @@
                     Style="{StaticResource EstiloBotonPrincipal}"
                     Margin="10,5"
                     Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}"/>
-                    <Button Content="Análisis de Rendimientos"
-                    Command="{Binding IrARendimientosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Rendimientos}"/>
                     <Button Content="Salir"
                     Command="{Binding CerrarSesionCommand}"
                     Style="{StaticResource EstiloBotonPrincipal}"

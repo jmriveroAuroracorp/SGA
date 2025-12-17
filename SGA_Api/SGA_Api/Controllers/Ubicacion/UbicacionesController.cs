@@ -106,7 +106,8 @@ namespace SGA_Api.Controllers.Ubicacion
 		[HttpGet("basica")]
 		public async Task<IActionResult> GetUbicacionesBasico(
 		[FromQuery] short codigoEmpresa,
-		[FromQuery] string codigoAlmacen)
+		[FromQuery] string codigoAlmacen,
+		[FromQuery] bool? incluirObsoletas = false)
 		{
 			if (string.IsNullOrWhiteSpace(codigoAlmacen))
 				return BadRequest("Debes especificar un código de almacén.");
@@ -115,7 +116,7 @@ namespace SGA_Api.Controllers.Ubicacion
 				from u in _auroraSgaContext.Ubicaciones
 				where u.CodigoEmpresa == codigoEmpresa
 				   && u.CodigoAlmacen == codigoAlmacen
-				   && u.Obsoleta == 0
+				   && (incluirObsoletas == true || u.Obsoleta == 0)
 
 				// LEFT JOIN a configuración
 				join cfg in _auroraSgaContext.Ubicaciones_Configuracion
@@ -158,7 +159,8 @@ namespace SGA_Api.Controllers.Ubicacion
 					DimensionX = u.DimensionX,
 					DimensionY = u.DimensionY,
 					DimensionZ = u.DimensionZ,
-					Angulo = u.Angulo
+					Angulo = u.Angulo,
+					Obsoleta = u.Obsoleta
 				}
 			).ToListAsync();
 
@@ -392,6 +394,7 @@ namespace SGA_Api.Controllers.Ubicacion
 			entidad.DimensionZ = dto.DimensionZ;
 			entidad.Angulo = dto.Angulo;
 			entidad.Orden = dto.Orden;
+			entidad.Obsoleta = dto.Obsoleta ?? 0;
 
 			// 4. Actualizar configuración si existe
 			var cfg = await _auroraSgaContext.Ubicaciones_Configuracion
@@ -474,6 +477,7 @@ namespace SGA_Api.Controllers.Ubicacion
 			entidad.DimensionY = dto.DimensionY;
 			entidad.DimensionZ = dto.DimensionZ;
 			entidad.Angulo = dto.Angulo;
+			entidad.Obsoleta = dto.Obsoleta ?? 0;
 
 			// 4. Actualizar o crear configuración
 			var cfg = await _auroraSgaContext.Ubicaciones_Configuracion

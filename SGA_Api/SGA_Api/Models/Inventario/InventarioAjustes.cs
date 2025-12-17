@@ -66,6 +66,9 @@ namespace SGA_Api.Models.Inventario
         // Campo de control para evitar procesamiento duplicado
         public bool ProcesadoPalet { get; set; } = false;
 
+        // Campo de control para evitar notificar el mismo error múltiples veces
+        public bool ErrorNotificado { get; set; } = false;
+
         // Navigation property
         [ForeignKey("IdInventario")]
         public virtual InventarioCabecera Inventario { get; set; } = null!;

@@ -21,6 +21,7 @@ namespace SGA_Desktop.Helpers
 		public static bool PuedeAccederATraspasos() => PuedeAccederA(12);
 		public static bool PuedeAccederAControlesRotativos() => PuedeAccederA(13);
 		public static bool PuedeAccederAInventario() => PuedeAccederA(14);
+		public static bool PuedeAccederAHistorialAjustes() => PuedeAccederA(13) && PuedeAccederA(14);
 		public static bool PuedeAccederACalidad() => PuedeAccederA(16);
 		public static bool PuedeAccederAConfiguracionOperarios() => PuedeAccederA(17);
 		public static bool PuedeAccederARendimientos() => PuedeAccederA(18);

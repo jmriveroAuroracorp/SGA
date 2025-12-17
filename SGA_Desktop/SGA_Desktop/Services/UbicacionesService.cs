@@ -127,12 +127,14 @@ namespace SGA_Desktop.Services
 		// 2.2) Nuevo: carga solo lo "básico" sin alérgenos ni riesgo
 		public async Task<List<UbicacionDetalladaDto>> ObtenerUbicacionesBasicoAsync(
 	short codigoEmpresa,
-	string codigoAlmacen)
+	string codigoAlmacen,
+	bool incluirObsoletas = false)
 		{
 			// ¡ojo al nombre!
 			var url = $"ubicaciones/basica"
 					+ $"?codigoEmpresa={codigoEmpresa}"
-					+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}";
+					+ $"&codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}"
+					+ $"&incluirObsoletas={incluirObsoletas}";
 
 			var lista = await _httpClient
 				.GetFromJsonAsync<List<UbicacionDetalladaDto>>(url);

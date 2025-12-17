@@ -79,6 +79,24 @@ namespace SGA_Api.Controllers.Login
             return Ok(resultado);
         }
 
+        [HttpGet("inventarios")]
+        public async Task<IActionResult> GetOperariosConAccesoInventarios()
+        {
+            var resultado = await (from o in _context.Operarios
+                                   join a in _context.AccesosOperarios
+                                       on o.Id equals a.Operario
+                                   where o.FechaBaja == null && a.MRH_CodigoAplicacion == 14
+                                   select new OperariosAccesoDto
+                                   {
+                                       Operario = o.Id,
+                                       NombreOperario = o.Nombre!,
+                                       Contraseña = o.Contraseña,
+                                       MRH_CodigoAplicacion = a.MRH_CodigoAplicacion
+                                   }).ToListAsync();
+
+            return Ok(resultado);
+        }
+
         /// <summary>
         /// GET api/OperariosAcceso/limite-inventario/{operario}
         /// Obtiene el límite de inventario en euros para un operario específico

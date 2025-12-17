@@ -20,6 +20,7 @@ namespace SGA_Desktop.ViewModels
 
 		public string DialogTitle => _isNew ? "Nueva Ubicación" : "Editar Ubicación";
 		public string SaveButtonText => _isNew ? "Crear" : "Actualizar";
+		public bool IsNew => _isNew;
 
 		public short CodigoEmpresa { get; }
 		public string CodigoAlmacen { get; }
@@ -69,6 +70,7 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty] private decimal? dimensionY;
 		[ObservableProperty] private decimal? dimensionZ;
 		[ObservableProperty] private decimal? angulo;
+		[ObservableProperty] private bool esObsoleta;
 
 		public ObservableCollection<TipoUbicacionDto> TiposDisponibles { get; } = new();
 		public ObservableCollection<AlergenoSeleccionable> AlergenosDisponibles { get; } = new();
@@ -115,6 +117,7 @@ namespace SGA_Desktop.ViewModels
 				DimensionY = existing.DimensionY;
 				DimensionZ = existing.DimensionZ;
 				Angulo = existing.Angulo;
+				EsObsoleta = existing.Obsoleta == 1;
 
 				// precargar alérgenos seleccionados:
 				var codigos = existing.AlergenosPermitidosList.Select(a => a.Codigo).ToList();
@@ -157,6 +160,7 @@ namespace SGA_Desktop.ViewModels
 				DimensionY = DimensionY,
 				DimensionZ = DimensionZ,
 				Angulo = Angulo,
+				Obsoleta = EsObsoleta ? 1 : 0,
 				AlergenosPermitidos = AlergenosDisponibles.Where(a => a.IsSelected)
 													 .Select(a => a.Codigo)
 													 .ToList()

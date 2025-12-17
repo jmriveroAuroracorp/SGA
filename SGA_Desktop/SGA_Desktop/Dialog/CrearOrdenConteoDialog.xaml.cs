@@ -28,5 +28,13 @@ namespace SGA_Desktop.Dialog
             DataContext = ViewModel;
             ViewModel.DialogResult = this;
         }
+
+        private void RadioButton_Articulo_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.RadioButton radioButton && radioButton.IsChecked == true)
+            {
+                ViewModel.EsConteoUbicacion = false;
+            }
+        }
     }
 } 

@@ -1607,8 +1607,10 @@ namespace SGA_Desktop.ViewModels
 				"Error de impresión",
 				"Tipo de objeto no válido para la impresión.",
 				"\uE814"
-			)
-			{ Owner = Application.Current.MainWindow };
+			);
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+				error.Owner = Application.Current.MainWindow;
 			error.ShowDialog();
 			return;
 		}
@@ -1620,8 +1622,10 @@ namespace SGA_Desktop.ViewModels
 				"No se puede imprimir",
 				"El artículo no tiene EAN. No se puede imprimir sin EAN.",
 				"\uE814" // icono de advertencia
-			)
-			{ Owner = Application.Current.MainWindow };
+			);
+			// Solo establecer Owner si la ventana principal está disponible
+			if (Application.Current.MainWindow != null && Application.Current.MainWindow.IsVisible)
+				warning.Owner = Application.Current.MainWindow;
 			warning.ShowDialog();
 			return;
 		}

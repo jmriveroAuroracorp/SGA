@@ -112,6 +112,7 @@ builder.Services.AddScoped<INotificacionesTraspasosService, NotificacionesTraspa
 builder.Services.AddScoped<INotificacionesConteosService, NotificacionesConteosService>();
 builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
 builder.Services.AddScoped<INotificacionesUnificadasService, NotificacionesUnificadasService>();
+builder.Services.AddScoped<INotificacionesTeamsService, NotificacionesTeamsService>();
 builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
 builder.Services.AddScoped<ICalidadService, CalidadService>();
 builder.Services.AddScoped<IValidacionTraspasoService, ValidacionTraspasoService>();
@@ -122,6 +123,8 @@ builder.Services.AddScoped<RendimientosService>(provider =>
         provider.GetRequiredService<ILogger<RendimientosService>>()
     ));
 //builder.Services.AddHostedService<SGA_Api.Services.TraspasoFinalizacionBackgroundService>();
+//builder.Services.AddHostedService<NotificacionesTeamsBackgroundService>();
+//builder.Services.AddHostedService<ConteosPeriodicosBackgroundService>();
 
 // Configuración de SignalR
 builder.Services.AddSignalR();

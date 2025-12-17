@@ -2301,8 +2301,63 @@ public class TraspasosController : ControllerBase
 	}
 
 	[HttpGet("palets-con-ubicacion")]
-	public async Task<IActionResult> GetPaletsConUbicacion()
+	public async Task<IActionResult> GetPaletsConUbicacion([FromQuery] string? paletIds = null)
 	{
+		// 🔷 OPTIMIZADO: Si se pasan IDs, solo cargar esos (mucho más rápido)
+		if (!string.IsNullOrWhiteSpace(paletIds))
+		{
+			var ids = paletIds.Split(',')
+				.Where(id => Guid.TryParse(id.Trim(), out _))
+				.Select(id => Guid.Parse(id.Trim()))
+				.Distinct()
+				.ToList();
+
+			if (ids.Any())
+			{
+				// Verificar que los palets existen y están en estado válido
+				var paletsEspecificos = await _context.Palets
+					.Where(p => ids.Contains(p.Id) && (p.Estado == "CERRADO" || p.Estado == "ABIERTO"))
+					.Select(p => p.Id)
+					.ToListAsync();
+
+				if (!paletsEspecificos.Any())
+					return Ok(new List<object>());
+
+				// Buscar solo traspasos de estos palets
+				var traspasosCompletadosFiltrados = await _context.Traspasos
+					.Where(t => t.CodigoEstado == "COMPLETADO" && 
+							   t.TipoTraspaso == "PALET" && 
+							   paletsEspecificos.Contains(t.PaletId))
+					.OrderByDescending(t => t.FechaFinalizacion)
+					.ToListAsync();
+
+				var ultimosTraspasosPorPaletFiltrado = traspasosCompletadosFiltrados
+					.GroupBy(t => t.PaletId)
+					.Select(g => g.First())
+					.ToDictionary(t => t.PaletId, t => t);
+
+				var resultadoFiltrado = paletsEspecificos.Select(id => new
+				{
+					Id = id,
+					AlmacenOrigen = ultimosTraspasosPorPaletFiltrado.ContainsKey(id)
+						? ultimosTraspasosPorPaletFiltrado[id].AlmacenDestino ?? ""
+						: "",
+					UbicacionOrigen = ultimosTraspasosPorPaletFiltrado.ContainsKey(id)
+						? ultimosTraspasosPorPaletFiltrado[id].UbicacionDestino ?? ""
+						: "",
+					FechaUltimoTraspaso = ultimosTraspasosPorPaletFiltrado.ContainsKey(id)
+						? ultimosTraspasosPorPaletFiltrado[id].FechaFinalizacion
+						: (DateTime?)null,
+					UsuarioUltimoTraspaso = ultimosTraspasosPorPaletFiltrado.ContainsKey(id)
+						? ultimosTraspasosPorPaletFiltrado[id].UsuarioFinalizacionId
+						: (int?)null
+				}).ToList();
+
+				return Ok(resultadoFiltrado);
+			}
+		}
+
+		// 🔷 COMPATIBLE HACIA ATRÁS: Si no se pasan IDs, comportamiento original
 		// 1. Buscar todos los palets (abiertos y cerrados)
 		var todosLosPalets = await _context.Palets
 			.Where(p => p.Estado == "CERRADO" || p.Estado == "ABIERTO")

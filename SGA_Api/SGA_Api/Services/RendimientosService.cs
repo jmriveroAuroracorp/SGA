@@ -6,6 +6,7 @@ using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Conteos;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Registro;
+using SGA_Api.Models.Stock;
 
 namespace SGA_Api.Services
 {
@@ -299,12 +300,14 @@ namespace SGA_Api.Services
                     {
                         OperarioId = g.Key,
                         TotalLineas = g.Count(), // Total de líneas generadas
-                        LineasContadas = g.Count(i => i.CantidadContada.HasValue), // Solo las que realmente contó el usuario
+                        // 🔷 CORREGIDO: Solo contar líneas realmente modificadas (donde hubo un cambio)
+                        // Esto evita contar líneas inicializadas a 0 que nunca se modificaron
+                        LineasContadas = g.Count(i => i.CantidadContada.HasValue && i.CantidadContada.Value != i.StockActual), // Solo las que realmente contó el usuario
                         LineasConsolidadas = g.Count(i => i.Consolidado),
                         PrimeraLinea = g.Min(i => i.FechaConteo),
                         UltimaLinea = g.Max(i => i.FechaConteo),
-                        // Calcular líneas con conteo (CantidadContada tiene valor)
-                        LineasConConteo = g.Where(i => i.CantidadContada.HasValue).ToList(),
+                        // Calcular líneas con conteo (CantidadContada tiene valor y hubo cambio)
+                        LineasConConteo = g.Where(i => i.CantidadContada.HasValue && i.CantidadContada.Value != i.StockActual).ToList(),
                         TodasLasLineas = g.ToList()
                     })
                     .ToList()
@@ -746,7 +749,8 @@ namespace SGA_Api.Services
                     {
                         Consolidado = i.Consolidado,
                         FechaConteo = i.FechaConteo,
-                        CantidadContada = i.CantidadContada
+                        CantidadContada = i.CantidadContada,
+                        StockActual = i.StockActual // 🔷 AGREGADO: Necesario para detectar líneas realmente modificadas
                     })
                     .ToListAsync();
 
@@ -763,7 +767,9 @@ namespace SGA_Api.Services
                     : (double?)null;
 
                 var totalLineas = inventarioDataStatsRaw.Count; // Total de líneas generadas
-                var lineasContadas = inventarioDataStatsRaw.Count(i => i.CantidadContada.HasValue); // Solo las contadas
+                // 🔷 CORREGIDO: Solo contar líneas realmente modificadas (donde hubo un cambio)
+                // Esto evita contar líneas inicializadas a 0 que nunca se modificaron
+                var lineasContadas = inventarioDataStatsRaw.Count(i => i.CantidadContada.HasValue && i.CantidadContada.Value != i.StockActual); // Solo las contadas
                 var consolidados = inventarioDataStatsRaw.Count(i => i.Consolidado);
                 
                 var inventarioStats = new
@@ -997,6 +1003,550 @@ namespace SGA_Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error calculando tendencias");
+                throw;
+            }
+        }
+
+        public async Task<VolumenMovidoDto> ObtenerVolumenMovidoAsync(FiltroRendimientosDto filtros, bool incluirComparativa = true)
+        {
+            try
+            {
+                _logger.LogInformation("Calculando volumen movido con filtros: {Filtros}", 
+                    System.Text.Json.JsonSerializer.Serialize(filtros));
+
+                var resultado = new VolumenMovidoDto();
+
+                // Consultar traspasos completados
+                var traspasosQuery = _context.Traspasos.AsQueryable();
+                
+                if (filtros.FechaDesde.HasValue)
+                {
+                    var fechaDesdeInicio = filtros.FechaDesde.Value.Date;
+                    traspasosQuery = traspasosQuery.Where(t => t.FechaInicio >= fechaDesdeInicio);
+                }
+                if (filtros.FechaHasta.HasValue)
+                {
+                    var fechaHastaFin = filtros.FechaHasta.Value.Date.AddDays(1).AddTicks(-1);
+                    traspasosQuery = traspasosQuery.Where(t => t.FechaInicio <= fechaHastaFin);
+                }
+                if (filtros.CodigoEmpresa.HasValue)
+                    traspasosQuery = traspasosQuery.Where(t => t.CodigoEmpresa == filtros.CodigoEmpresa.Value);
+
+                var traspasosCompletados = await traspasosQuery
+                    .Where(t => t.FechaFinalizacion.HasValue)
+                    .Select(t => new
+                    {
+                        t.Cantidad,
+                        t.TipoTraspaso,
+                        t.PaletId,
+                        t.CodigoArticulo,
+                        t.MovPosicionOrigen,
+                        t.MovPosicionDestino,
+                        FechaFinalizacion = t.FechaFinalizacion!.Value,
+                        t.CodigoEmpresa
+                    })
+                    .ToListAsync();
+
+                // Obtener descripciones de artículos desde múltiples fuentes
+                var codigosArticulos = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.CodigoArticulo))
+                    .Select(t => t.CodigoArticulo!)
+                    .Distinct()
+                    .ToList();
+
+                var descripcionesArticulos = new Dictionary<string, string?>();
+                if (codigosArticulos.Any() && filtros.CodigoEmpresa.HasValue)
+                {
+                    // 1. Intentar obtener desde PaletLineas
+                    var descripcionesPalet = await _context.PaletLineas
+                        .Where(pl => codigosArticulos.Contains(pl.CodigoArticulo) && 
+                                     pl.CodigoEmpresa == filtros.CodigoEmpresa.Value &&
+                                     !string.IsNullOrEmpty(pl.DescripcionArticulo))
+                        .GroupBy(pl => pl.CodigoArticulo)
+                        .Select(g => new { CodigoArticulo = g.Key, Descripcion = g.First().DescripcionArticulo })
+                        .ToListAsync();
+
+                    foreach (var desc in descripcionesPalet)
+                    {
+                        descripcionesArticulos[desc.CodigoArticulo] = desc.Descripcion;
+                    }
+
+                    // 2. Para los artículos que faltan, buscar en la tabla maestra Articulos de Sage
+                    var codigosFaltantes = codigosArticulos
+                        .Where(c => !descripcionesArticulos.ContainsKey(c))
+                        .ToList();
+
+                    if (codigosFaltantes.Any())
+                    {
+                        try
+                        {
+                            // Cargar todos los artículos de la empresa y filtrar en memoria para evitar Contains
+                            var codigosFaltantesSet = codigosFaltantes.ToHashSet();
+                            var descripcionesSage = await _sageContext.Articulos
+                                .Where(a => a.CodigoEmpresa == filtros.CodigoEmpresa.Value &&
+                                           !string.IsNullOrEmpty(a.DescripcionArticulo))
+                                .Select(a => new { a.CodigoArticulo, a.DescripcionArticulo })
+                                .ToListAsync();
+
+                            // Filtrar en memoria
+                            foreach (var desc in descripcionesSage)
+                            {
+                                if (codigosFaltantesSet.Contains(desc.CodigoArticulo))
+                                {
+                                    descripcionesArticulos[desc.CodigoArticulo] = desc.DescripcionArticulo;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "No se pudieron obtener algunas descripciones de artículos desde Sage");
+                        }
+                    }
+                }
+
+                // 1. Calcular total de unidades movidas
+                resultado.TotalUnidadesMovidas = traspasosCompletados
+                    .Where(t => t.Cantidad.HasValue)
+                    .Sum(t => t.Cantidad!.Value);
+
+                // 2. Calcular palets únicos
+                resultado.TotalPaletsUnicos = traspasosCompletados
+                    .Where(t => t.PaletId != Guid.Empty)
+                    .Select(t => t.PaletId)
+                    .Distinct()
+                    .Count();
+
+                // 3. Calcular valor económico desde MovimientoStock (Aurora)
+                // Filtrar por fecha directamente para evitar problemas con Contains y GUIDs
+                decimal totalValor = 0;
+                if (filtros.FechaDesde.HasValue && filtros.FechaHasta.HasValue && filtros.CodigoEmpresa.HasValue)
+                {
+                    try
+                    {
+                        _sageContext.Database.SetCommandTimeout(60);
+                        
+                        // Filtrar MovimientoStock por fecha y empresa (evita usar Contains con GUIDs)
+                        var fechaDesdeFiltro = filtros.FechaDesde.Value.Date;
+                        var fechaHastaFiltro = filtros.FechaHasta.Value.Date.AddDays(1).AddTicks(-1);
+                        
+                        // Obtener movimientos de salida (TipoMovimiento = 2) en el rango de fechas
+                        var movimientosSalida = await _sageContext.MovimientoStock
+                            .Where(m => m.CodigoEmpresa == filtros.CodigoEmpresa.Value &&
+                                       m.TipoMovimiento == 2 &&
+                                       m.Fecha >= fechaDesdeFiltro &&
+                                       m.Fecha <= fechaHastaFiltro)
+                            .Select(m => new { m.MovPosicion, m.Importe })
+                            .ToListAsync();
+
+                        // Crear diccionario para búsqueda rápida por MovPosicion
+                        var importesPorMovPosicion = movimientosSalida
+                            .GroupBy(m => m.MovPosicion)
+                            .ToDictionary(g => g.Key, g => g.Sum(m => (decimal)m.Importe));
+
+                        // Sumar importes de los MovPosicionOrigen que coincidan con los traspasos
+                        var movPosicionesOrigen = traspasosCompletados
+                            .Where(t => t.MovPosicionOrigen != Guid.Empty)
+                            .Select(t => t.MovPosicionOrigen)
+                            .Distinct()
+                            .ToList();
+
+                        foreach (var movPos in movPosicionesOrigen)
+                        {
+                            if (importesPorMovPosicion.TryGetValue(movPos, out var importe))
+                            {
+                                totalValor += importe;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudo obtener valor económico desde MovimientoStock, se usará 0");
+                        totalValor = 0;
+                    }
+                }
+                resultado.TotalValorEconomico = totalValor;
+
+                // 4. Desglose por tipo
+                // IMPORTANTE: Usamos Traspaso.Cantidad, NO PaletLineas.Cantidad
+                // Cuando se traspasa un palet, se crea un Traspaso por cada línea del palet
+                // Cada Traspaso.Cantidad se guarda en el momento del traspaso desde TempPaletLinea.Cantidad
+                // Esto es histórico y no se elimina aunque luego se eliminen las PaletLineas
+                var traspasosPalet = traspasosCompletados
+                    .Where(t => (t.TipoTraspaso?.ToUpper() ?? "ARTICULO") == "PALET" && t.PaletId != Guid.Empty)
+                    .ToList();
+
+                var traspasosArticulo = traspasosCompletados
+                    .Where(t => (t.TipoTraspaso?.ToUpper() ?? "ARTICULO") != "PALET" || t.PaletId == Guid.Empty)
+                    .ToList();
+
+                // Para traspasos de palet: agrupar por PaletId y sumar todas las líneas del palet
+                // Ejemplo: Si un palet tiene 3 líneas (10, 20, 30 unidades), se crean 3 traspasos
+                // Agrupamos por PaletId y sumamos: 10+20+30 = 60 unidades movidas en ese palet
+                resultado.DesglosePorTipo.UnidadesPalet = traspasosPalet
+                    .Where(t => t.Cantidad.HasValue)
+                    .GroupBy(t => t.PaletId)
+                    .Select(g => g.Sum(t => t.Cantidad!.Value))
+                    .Sum();
+                
+                // Contar palets únicos traspasados (no líneas de traspaso)
+                resultado.DesglosePorTipo.CantidadTraspasosPalet = traspasosPalet
+                    .Select(t => t.PaletId)
+                    .Distinct()
+                    .Count();
+
+                resultado.DesglosePorTipo.UnidadesArticulo = traspasosArticulo
+                    .Where(t => t.Cantidad.HasValue)
+                    .Sum(t => t.Cantidad!.Value);
+                resultado.DesglosePorTipo.CantidadTraspasosArticulo = traspasosArticulo.Count;
+
+                // Calcular valor por tipo (simplificado: proporcional a unidades)
+                if (resultado.TotalUnidadesMovidas > 0)
+                {
+                    resultado.DesglosePorTipo.ValorPalet = resultado.TotalValorEconomico * 
+                        (resultado.DesglosePorTipo.UnidadesPalet / resultado.TotalUnidadesMovidas);
+                    resultado.DesglosePorTipo.ValorArticulo = resultado.TotalValorEconomico * 
+                        (resultado.DesglosePorTipo.UnidadesArticulo / resultado.TotalUnidadesMovidas);
+                }
+
+                // 5. Evolución temporal
+                var diasDiferencia = filtros.FechaHasta.HasValue && filtros.FechaDesde.HasValue
+                    ? (filtros.FechaHasta.Value - filtros.FechaDesde.Value).TotalDays
+                    : 0;
+
+                var agruparPorSemana = diasDiferencia > 30;
+
+                var evolucion = traspasosCompletados
+                    .GroupBy(t => agruparPorSemana 
+                        ? new { Año = t.FechaFinalizacion.Year, Semana = System.Globalization.CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(t.FechaFinalizacion, System.Globalization.CalendarWeekRule.FirstDay, DayOfWeek.Monday) }
+                        : (object)t.FechaFinalizacion.Date)
+                    .Select(g => 
+                    {
+                        var traspasosPaletPeriodo = g.Where(t => (t.TipoTraspaso?.ToUpper() ?? "ARTICULO") == "PALET" && t.PaletId != Guid.Empty && t.Cantidad.HasValue).ToList();
+                        var traspasosArticuloPeriodo = g.Where(t => ((t.TipoTraspaso?.ToUpper() ?? "ARTICULO") != "PALET" || t.PaletId == Guid.Empty) && t.Cantidad.HasValue).ToList();
+                        
+                        // Para traspasos de palet: agrupar por PaletId y sumar todas las líneas del palet
+                        var unidadesPalet = traspasosPaletPeriodo
+                            .GroupBy(t => t.PaletId)
+                            .Select(paletGroup => paletGroup.Sum(t => t.Cantidad!.Value))
+                            .Sum();
+                        
+                        return new PuntoEvolucionDto
+                        {
+                            Fecha = agruparPorSemana 
+                                ? g.First().FechaFinalizacion.Date 
+                                : ((DateTime)g.Key),
+                            Periodo = agruparPorSemana 
+                                ? $"{g.First().FechaFinalizacion.Year}-S{System.Globalization.CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(g.First().FechaFinalizacion, System.Globalization.CalendarWeekRule.FirstDay, DayOfWeek.Monday):D2}"
+                                : ((DateTime)g.Key).ToString("yyyy-MM-dd"),
+                            Unidades = g.Where(t => t.Cantidad.HasValue).Sum(t => t.Cantidad!.Value),
+                            UnidadesPalet = unidadesPalet,
+                            UnidadesArticulo = traspasosArticuloPeriodo.Sum(t => t.Cantidad!.Value),
+                            Palets = g.Where(t => t.PaletId != Guid.Empty).Select(t => t.PaletId).Distinct().Count(),
+                            Valor = 0 // Se calcularía igual que arriba, pero por simplicidad lo dejamos en 0
+                        };
+                    })
+                    .OrderBy(p => p.Fecha)
+                    .ToList();
+
+                resultado.EvolucionTemporal = evolucion;
+
+                // 6. Top artículos
+                var topArticulos = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.CodigoArticulo) && t.Cantidad.HasValue)
+                    .GroupBy(t => t.CodigoArticulo!)
+                    .Select(g => new TopArticuloVolumenDto
+                    {
+                        CodigoArticulo = g.Key,
+                        DescripcionArticulo = descripcionesArticulos.ContainsKey(g.Key) ? descripcionesArticulos[g.Key] : null,
+                        UnidadesMovidas = g.Sum(t => t.Cantidad!.Value)
+                    })
+                    .OrderByDescending(a => a.UnidadesMovidas)
+                    .Take(10)
+                    .ToList();
+
+                if (resultado.TotalUnidadesMovidas > 0)
+                {
+                    for (int i = 0; i < topArticulos.Count; i++)
+                    {
+                        topArticulos[i].Posicion = i + 1;
+                        topArticulos[i].PorcentajeDelTotal = (double)(topArticulos[i].UnidadesMovidas / resultado.TotalUnidadesMovidas * 100);
+                    }
+                }
+
+                resultado.TopArticulos = topArticulos;
+
+                // 7. Comparativa con período anterior (opcional, solo si no es llamada recursiva)
+                if (incluirComparativa && filtros.FechaDesde.HasValue && filtros.FechaHasta.HasValue)
+                {
+                    var diasPeriodo = (filtros.FechaHasta.Value - filtros.FechaDesde.Value).TotalDays + 1;
+                    var filtrosAnterior = new FiltroRendimientosDto
+                    {
+                        FechaDesde = filtros.FechaDesde.Value.AddDays(-diasPeriodo),
+                        FechaHasta = filtros.FechaDesde.Value.AddDays(-1),
+                        CodigoEmpresa = filtros.CodigoEmpresa,
+                        CodigoAlmacen = filtros.CodigoAlmacen
+                    };
+
+                    try
+                    {
+                        // Llamada recursiva sin comparativa para evitar recursión infinita
+                        var volumenAnterior = await ObtenerVolumenMovidoAsync(filtrosAnterior, incluirComparativa: false);
+                        resultado.ComparativaPeriodoAnterior = new ComparativaVolumenDto
+                        {
+                            VariacionUnidades = volumenAnterior.TotalUnidadesMovidas > 0
+                                ? (double)((resultado.TotalUnidadesMovidas - volumenAnterior.TotalUnidadesMovidas) / volumenAnterior.TotalUnidadesMovidas * 100)
+                                : null,
+                            VariacionValor = volumenAnterior.TotalValorEconomico > 0
+                                ? (double)((resultado.TotalValorEconomico - volumenAnterior.TotalValorEconomico) / volumenAnterior.TotalValorEconomico * 100)
+                                : null,
+                            VariacionPalets = volumenAnterior.TotalPaletsUnicos > 0
+                                ? (double)((resultado.TotalPaletsUnicos - volumenAnterior.TotalPaletsUnicos) / (double)volumenAnterior.TotalPaletsUnicos * 100)
+                                : null
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudo calcular comparativa con período anterior");
+                    }
+                }
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calculando volumen movido");
+                throw;
+            }
+        }
+
+        public async Task<DistribucionDto> ObtenerDistribucionAsync(FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                _logger.LogInformation("Calculando distribución con filtros: {Filtros}", 
+                    System.Text.Json.JsonSerializer.Serialize(filtros));
+
+                var resultado = new DistribucionDto();
+
+                // Consultar traspasos completados
+                var traspasosQuery = _context.Traspasos.AsQueryable();
+                
+                if (filtros.FechaDesde.HasValue)
+                {
+                    var fechaDesdeInicio = filtros.FechaDesde.Value.Date;
+                    traspasosQuery = traspasosQuery.Where(t => t.FechaInicio >= fechaDesdeInicio);
+                }
+                if (filtros.FechaHasta.HasValue)
+                {
+                    var fechaHastaFin = filtros.FechaHasta.Value.Date.AddDays(1).AddTicks(-1);
+                    traspasosQuery = traspasosQuery.Where(t => t.FechaInicio <= fechaHastaFin);
+                }
+                if (filtros.CodigoEmpresa.HasValue)
+                    traspasosQuery = traspasosQuery.Where(t => t.CodigoEmpresa == filtros.CodigoEmpresa.Value);
+
+                var traspasosCompletados = await traspasosQuery
+                    .Where(t => t.FechaFinalizacion.HasValue)
+                    .Select(t => new
+                    {
+                        t.Cantidad,
+                        t.TipoTraspaso,
+                        t.PaletId,
+                        t.AlmacenOrigen,
+                        t.AlmacenDestino,
+                        t.UbicacionOrigen,
+                        t.UbicacionDestino,
+                        t.CodigoEmpresa
+                    })
+                    .ToListAsync();
+
+                if (!traspasosCompletados.Any())
+                {
+                    return resultado;
+                }
+
+                // Calcular totales para porcentajes
+                // Para unidades: agrupar por PaletId y sumar todas las líneas del palet
+                var totalUnidades = traspasosCompletados
+                    .Where(t => t.Cantidad.HasValue)
+                    .GroupBy(t => t.PaletId)
+                    .Select(g => g.Sum(t => t.Cantidad!.Value))
+                    .Sum();
+                
+                // Para traspasos: contar palets únicos (no líneas de traspaso)
+                var totalTraspasos = traspasosCompletados
+                    .Where(t => t.PaletId != Guid.Empty)
+                    .Select(t => t.PaletId)
+                    .Distinct()
+                    .Count();
+
+                // 1. Top Almacenes Origen
+                var almacenesOrigen = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.AlmacenOrigen) && t.Cantidad.HasValue)
+                    .GroupBy(t => t.AlmacenOrigen!)
+                    .Select(g => new
+                    {
+                        CodigoAlmacen = g.Key,
+                        UnidadesMovidas = g
+                            .GroupBy(t => t.PaletId)
+                            .Select(paletGroup => paletGroup.Sum(t => t.Cantidad!.Value))
+                            .Sum(),
+                        CantidadTraspasos = g.Select(t => t.PaletId).Distinct().Count()
+                    })
+                    .OrderByDescending(x => x.UnidadesMovidas)
+                    .Take(10)
+                    .ToList();
+
+                resultado.TopAlmacenesOrigen = almacenesOrigen
+                    .Select((a, index) => new AlmacenDistribucionDto
+                    {
+                        CodigoAlmacen = a.CodigoAlmacen,
+                        UnidadesMovidas = a.UnidadesMovidas,
+                        CantidadTraspasos = a.CantidadTraspasos,
+                        PorcentajeDelTotal = totalUnidades > 0 ? (double)(a.UnidadesMovidas / totalUnidades * 100) : 0,
+                        PorcentajePorTraspasos = totalTraspasos > 0 ? (double)(a.CantidadTraspasos / (double)totalTraspasos * 100) : 0,
+                        Posicion = index + 1
+                    })
+                    .ToList();
+
+                // 2. Top Almacenes Destino
+                var almacenesDestino = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.AlmacenDestino) && t.Cantidad.HasValue)
+                    .GroupBy(t => t.AlmacenDestino!)
+                    .Select(g => new
+                    {
+                        CodigoAlmacen = g.Key,
+                        UnidadesMovidas = g
+                            .GroupBy(t => t.PaletId)
+                            .Select(paletGroup => paletGroup.Sum(t => t.Cantidad!.Value))
+                            .Sum(),
+                        CantidadTraspasos = g.Select(t => t.PaletId).Distinct().Count()
+                    })
+                    .OrderByDescending(x => x.UnidadesMovidas)
+                    .Take(10)
+                    .ToList();
+
+                resultado.TopAlmacenesDestino = almacenesDestino
+                    .Select((a, index) => new AlmacenDistribucionDto
+                    {
+                        CodigoAlmacen = a.CodigoAlmacen,
+                        UnidadesMovidas = a.UnidadesMovidas,
+                        CantidadTraspasos = a.CantidadTraspasos,
+                        PorcentajeDelTotal = totalUnidades > 0 ? (double)(a.UnidadesMovidas / totalUnidades * 100) : 0,
+                        PorcentajePorTraspasos = totalTraspasos > 0 ? (double)(a.CantidadTraspasos / (double)totalTraspasos * 100) : 0,
+                        Posicion = index + 1
+                    })
+                    .ToList();
+
+                // 3. Top Ubicaciones Origen
+                var ubicacionesOrigen = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.AlmacenOrigen) && !string.IsNullOrEmpty(t.UbicacionOrigen) && t.Cantidad.HasValue)
+                    .GroupBy(t => new { AlmacenOrigen = t.AlmacenOrigen!, UbicacionOrigen = t.UbicacionOrigen! })
+                    .Select(g => new
+                    {
+                        CodigoAlmacen = g.Key.AlmacenOrigen,
+                        Ubicacion = g.Key.UbicacionOrigen,
+                        UnidadesMovidas = g
+                            .GroupBy(t => t.PaletId)
+                            .Select(paletGroup => paletGroup.Sum(t => t.Cantidad!.Value))
+                            .Sum(),
+                        CantidadTraspasos = g.Select(t => t.PaletId).Distinct().Count()
+                    })
+                    .OrderByDescending(x => x.UnidadesMovidas)
+                    .Take(10)
+                    .ToList();
+
+                resultado.TopUbicacionesOrigen = ubicacionesOrigen
+                    .Select((u, index) => new UbicacionDistribucionDto
+                    {
+                        CodigoAlmacen = u.CodigoAlmacen,
+                        Ubicacion = u.Ubicacion,
+                        UnidadesMovidas = u.UnidadesMovidas,
+                        CantidadTraspasos = u.CantidadTraspasos,
+                        PorcentajeDelTotal = totalUnidades > 0 ? (double)(u.UnidadesMovidas / totalUnidades * 100) : 0,
+                        PorcentajePorTraspasos = totalTraspasos > 0 ? (double)(u.CantidadTraspasos / (double)totalTraspasos * 100) : 0,
+                        Posicion = index + 1
+                    })
+                    .ToList();
+
+                // 4. Top Ubicaciones Destino
+                var ubicacionesDestino = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.AlmacenDestino) && !string.IsNullOrEmpty(t.UbicacionDestino) && t.Cantidad.HasValue)
+                    .GroupBy(t => new { AlmacenDestino = t.AlmacenDestino!, UbicacionDestino = t.UbicacionDestino! })
+                    .Select(g => new
+                    {
+                        CodigoAlmacen = g.Key.AlmacenDestino,
+                        Ubicacion = g.Key.UbicacionDestino,
+                        UnidadesMovidas = g
+                            .GroupBy(t => t.PaletId)
+                            .Select(paletGroup => paletGroup.Sum(t => t.Cantidad!.Value))
+                            .Sum(),
+                        CantidadTraspasos = g.Select(t => t.PaletId).Distinct().Count()
+                    })
+                    .OrderByDescending(x => x.UnidadesMovidas)
+                    .Take(10)
+                    .ToList();
+
+                resultado.TopUbicacionesDestino = ubicacionesDestino
+                    .Select((u, index) => new UbicacionDistribucionDto
+                    {
+                        CodigoAlmacen = u.CodigoAlmacen,
+                        Ubicacion = u.Ubicacion,
+                        UnidadesMovidas = u.UnidadesMovidas,
+                        CantidadTraspasos = u.CantidadTraspasos,
+                        PorcentajeDelTotal = totalUnidades > 0 ? (double)(u.UnidadesMovidas / totalUnidades * 100) : 0,
+                        PorcentajePorTraspasos = totalTraspasos > 0 ? (double)(u.CantidadTraspasos / (double)totalTraspasos * 100) : 0,
+                        Posicion = index + 1
+                    })
+                    .ToList();
+
+                // 5. Flujos Principales (Origen → Destino)
+                var flujos = traspasosCompletados
+                    .Where(t => !string.IsNullOrEmpty(t.AlmacenOrigen) && !string.IsNullOrEmpty(t.AlmacenDestino) 
+                        && !string.IsNullOrEmpty(t.UbicacionOrigen) && !string.IsNullOrEmpty(t.UbicacionDestino) 
+                        && t.Cantidad.HasValue)
+                    .GroupBy(t => new 
+                    { 
+                        AlmacenOrigen = t.AlmacenOrigen!, 
+                        UbicacionOrigen = t.UbicacionOrigen!,
+                        AlmacenDestino = t.AlmacenDestino!,
+                        UbicacionDestino = t.UbicacionDestino!
+                    })
+                    .Select(g => new
+                    {
+                        AlmacenOrigen = g.Key.AlmacenOrigen,
+                        UbicacionOrigen = g.Key.UbicacionOrigen,
+                        AlmacenDestino = g.Key.AlmacenDestino,
+                        UbicacionDestino = g.Key.UbicacionDestino,
+                        UnidadesMovidas = g
+                            .GroupBy(t => t.PaletId)
+                            .Select(paletGroup => paletGroup.Sum(t => t.Cantidad!.Value))
+                            .Sum(),
+                        CantidadTraspasos = g.Select(t => t.PaletId).Distinct().Count()
+                    })
+                    .OrderByDescending(x => x.UnidadesMovidas)
+                    .Take(10)
+                    .ToList();
+
+                resultado.FlujosPrincipales = flujos
+                    .Select((f, index) => new FlujoDistribucionDto
+                    {
+                        AlmacenOrigen = f.AlmacenOrigen,
+                        UbicacionOrigen = f.UbicacionOrigen,
+                        AlmacenDestino = f.AlmacenDestino,
+                        UbicacionDestino = f.UbicacionDestino,
+                        UnidadesMovidas = f.UnidadesMovidas,
+                        CantidadTraspasos = f.CantidadTraspasos,
+                        PorcentajeDelTotal = totalUnidades > 0 ? (double)(f.UnidadesMovidas / totalUnidades * 100) : 0,
+                        PorcentajePorTraspasos = totalTraspasos > 0 ? (double)(f.CantidadTraspasos / (double)totalTraspasos * 100) : 0,
+                        Posicion = index + 1
+                    })
+                    .ToList();
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calculando distribución");
                 throw;
             }
         }

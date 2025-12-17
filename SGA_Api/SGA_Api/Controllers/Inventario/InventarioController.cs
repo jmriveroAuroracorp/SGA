@@ -86,6 +86,12 @@ namespace SGA_Api.Controllers.Inventario
                     query = query.Where(i => i.FechaCreacion <= fechaHasta);
                 }
 
+                // Filtro por usuario (si se especifica, solo mostrar los inventarios de ese usuario)
+                if (filtro.UsuarioCreacionId.HasValue)
+                {
+                    query = query.Where(i => i.UsuarioCreacionId == filtro.UsuarioCreacionId.Value);
+                }
+
                 // Obtener inventarios con información de almacenes
                 var inventarios = await query
                     .Include(i => i.Almacenes)  // ← NUEVO: Incluir almacenes del inventario
@@ -112,8 +118,12 @@ namespace SGA_Api.Controllers.Inventario
                         .Where(lt => lt.IdInventario == inventario.IdInventario)
                         .CountAsync();
                     
+                    // 🔷 CORREGIDO: Solo contar líneas realmente modificadas (donde hubo un cambio)
+                    // Esto evita contar líneas inicializadas a 0 que nunca se modificaron
                     var lineasContadas = await _context.InventarioLineasTemp
-                        .Where(lt => lt.IdInventario == inventario.IdInventario && lt.CantidadContada.HasValue)
+                        .Where(lt => lt.IdInventario == inventario.IdInventario && 
+                                     lt.CantidadContada.HasValue && 
+                                     lt.CantidadContada.Value != lt.StockActual)
                         .CountAsync();
 
                     // Contar líneas creadas manualmente (StockTeorico = 0 y StockContado > 0)
@@ -269,48 +279,71 @@ namespace SGA_Api.Controllers.Inventario
                 
                 await _context.SaveChangesAsync();
 
-                // Generar líneas temporales automáticamente
-                try
+                // Generar líneas temporales automáticamente (solo si no se solicita crear vacío)
+                if (!dto.NoGenerarLineas)
                 {
-                    _logger.LogInformation("Creando inventario con parámetros: IncluirUnidadesCero={IncluirUnidadesCero}, IncluirArticulosConStockCero={IncluirArticulosConStockCero}, IncluirUbicacionesEspeciales={IncluirUbicacionesEspeciales}", 
-                    dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales);
-                var resultadoGeneracion = await GenerarLineasTemporalesInterno(inventario.IdInventario, dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales, dto.CodigoArticuloFiltro, dto.ArticuloDesde, dto.ArticuloHasta);
-                    if (resultadoGeneracion.Exito)
+                    try
                     {
-                        var detalleCreacion = $"IdInventario={inventario.IdInventario}, CodigoInventario={inventario.CodigoInventario}, TipoInventario={inventario.TipoInventario}, Almacenes={string.Join(",", almacenesAIncluir)}, LineasGeneradas={resultadoGeneracion.LineasGeneradas}, UsuarioCreacion={dto.UsuarioCreacionId}";
-                        RegistrarEventoInventarioAsync(
-                            "INVENTARIO_CREACION",
-                            "InventarioController/CrearInventario",
-                            "Inventario creado correctamente",
-                            detalleCreacion);
-                        
-                        return Ok(new { 
-                            Id = inventario.IdInventario, 
-                            Mensaje = "Inventario creado correctamente",
-                            LineasGeneradas = resultadoGeneracion.LineasGeneradas,
-                            UbicacionesEnRango = resultadoGeneracion.UbicacionesEnRango,
-                            StockEncontrado = resultadoGeneracion.StockEncontrado,
-                            AlmacenesIncluidos = almacenesAIncluir,
-                            EsMultialmacen = almacenesAIncluir.Count > 1
-                        });
+                        _logger.LogInformation("Creando inventario con parámetros: IncluirUnidadesCero={IncluirUnidadesCero}, IncluirArticulosConStockCero={IncluirArticulosConStockCero}, IncluirUbicacionesEspeciales={IncluirUbicacionesEspeciales}", 
+                        dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales);
+                    var resultadoGeneracion = await GenerarLineasTemporalesInterno(inventario.IdInventario, dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales, dto.CodigosArticuloFiltro, dto.ArticuloDesde, dto.ArticuloHasta);
+                        if (resultadoGeneracion.Exito)
+                        {
+                            var detalleCreacion = $"IdInventario={inventario.IdInventario}, CodigoInventario={inventario.CodigoInventario}, TipoInventario={inventario.TipoInventario}, Almacenes={string.Join(",", almacenesAIncluir)}, LineasGeneradas={resultadoGeneracion.LineasGeneradas}, UsuarioCreacion={dto.UsuarioCreacionId}";
+                            RegistrarEventoInventarioAsync(
+                                "INVENTARIO_CREACION",
+                                "InventarioController/CrearInventario",
+                                "Inventario creado correctamente",
+                                detalleCreacion);
+                            
+                            return Ok(new { 
+                                Id = inventario.IdInventario, 
+                                Mensaje = "Inventario creado correctamente",
+                                LineasGeneradas = resultadoGeneracion.LineasGeneradas,
+                                UbicacionesEnRango = resultadoGeneracion.UbicacionesEnRango,
+                                StockEncontrado = resultadoGeneracion.StockEncontrado,
+                                AlmacenesIncluidos = almacenesAIncluir,
+                                EsMultialmacen = almacenesAIncluir.Count > 1
+                            });
+                        }
+                        else
+                        {
+                            return Ok(new { 
+                                Id = inventario.IdInventario, 
+                                Mensaje = "Inventario creado correctamente, pero no se pudieron generar líneas temporales",
+                                ErrorGeneracion = resultadoGeneracion.Mensaje,
+                                AlmacenesIncluidos = almacenesAIncluir,
+                                EsMultialmacen = almacenesAIncluir.Count > 1
+                            });
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
+                        _logger.LogWarning(ex, "Inventario creado pero error al generar líneas temporales");
                         return Ok(new { 
                             Id = inventario.IdInventario, 
-                            Mensaje = "Inventario creado correctamente, pero no se pudieron generar líneas temporales",
-                            ErrorGeneracion = resultadoGeneracion.Mensaje,
+                            Mensaje = "Inventario creado correctamente, pero error al generar líneas temporales",
                             AlmacenesIncluidos = almacenesAIncluir,
                             EsMultialmacen = almacenesAIncluir.Count > 1
                         });
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogWarning(ex, "Inventario creado pero error al generar líneas temporales");
+                    // Inventario vacío creado correctamente (sin generar líneas)
+                    var detalleCreacion = $"IdInventario={inventario.IdInventario}, CodigoInventario={inventario.CodigoInventario}, TipoInventario={inventario.TipoInventario}, Almacenes={string.Join(",", almacenesAIncluir)}, LineasGeneradas=0 (inventario vacío), UsuarioCreacion={dto.UsuarioCreacionId}";
+                    RegistrarEventoInventarioAsync(
+                        "INVENTARIO_CREACION",
+                        "InventarioController/CrearInventario",
+                        "Inventario vacío creado correctamente",
+                        detalleCreacion);
+                    
                     return Ok(new { 
                         Id = inventario.IdInventario, 
-                        Mensaje = "Inventario creado correctamente, pero error al generar líneas temporales",
+                        Mensaje = "Inventario vacío creado correctamente. Puede agregar líneas manualmente.",
+                        LineasGeneradas = 0,
+                        UbicacionesEnRango = 0,
+                        StockEncontrado = 0,
                         AlmacenesIncluidos = almacenesAIncluir,
                         EsMultialmacen = almacenesAIncluir.Count > 1
                     });
@@ -921,6 +954,266 @@ namespace SGA_Api.Controllers.Inventario
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al obtener ajustes de inventario");
+                return StatusCode(500, "Error interno del servidor");
+            }
+        }
+
+        /// <summary>
+        /// GET /api/Inventario/ajustes
+        /// Obtiene ajustes con filtros para el historial
+        /// </summary>
+        [HttpGet("ajustes")]
+        public async Task<IActionResult> ObtenerAjustesFiltrados(
+            [FromQuery] int codigoEmpresa,
+            [FromQuery] DateTime? fechaDesde = null,
+            [FromQuery] DateTime? fechaHasta = null,
+            [FromQuery] string? codigoArticulo = null,
+            [FromQuery] string? codigoAlmacen = null,
+            [FromQuery] string? codigoUbicacion = null,
+            [FromQuery] string? estado = null,
+            [FromQuery] int? usuarioId = null,
+            [FromQuery] string? partida = null,
+            [FromQuery] string? codigoPalet = null,
+            [FromQuery] int? limite = null)
+        {
+            try
+            {
+                var query = _context.InventarioAjustes.AsQueryable();
+
+                // Filtro por empresa (obligatorio)
+                query = query.Where(a => a.CodigoEmpresa == codigoEmpresa);
+
+                // Filtro por usuario (aplicar primero para optimización)
+                if (usuarioId.HasValue)
+                {
+                    query = query.Where(a => a.UsuarioId == usuarioId.Value);
+                }
+
+                // Filtros de fecha
+                if (fechaDesde.HasValue)
+                {
+                    query = query.Where(a => a.Fecha >= fechaDesde.Value.Date);
+                }
+                if (fechaHasta.HasValue)
+                {
+                    query = query.Where(a => a.Fecha <= fechaHasta.Value.Date.AddDays(1).AddSeconds(-1));
+                }
+
+                // Otros filtros
+                if (!string.IsNullOrWhiteSpace(codigoArticulo))
+                {
+                    query = query.Where(a => a.CodigoArticulo.Contains(codigoArticulo));
+                }
+                if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+                {
+                    query = query.Where(a => a.CodigoAlmacen == codigoAlmacen);
+                }
+                if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+                {
+                    query = query.Where(a => a.CodigoUbicacion.Contains(codigoUbicacion));
+                }
+                if (!string.IsNullOrWhiteSpace(estado))
+                {
+                    query = query.Where(a => a.Estado == estado);
+                }
+                if (!string.IsNullOrWhiteSpace(partida))
+                {
+                    query = query.Where(a => a.Partida != null && a.Partida.Contains(partida));
+                }
+                if (!string.IsNullOrWhiteSpace(codigoPalet))
+                {
+                    query = query.Where(a => a.CodigoPalet != null && a.CodigoPalet.Contains(codigoPalet));
+                }
+
+                // Calcular límite dinámico
+                int limiteFinal = limite ?? 5000;
+                if (usuarioId.HasValue)
+                {
+                    limiteFinal = Math.Max(limiteFinal, 10000);
+                }
+                else if (fechaDesde.HasValue && fechaHasta.HasValue)
+                {
+                    var diasRango = (fechaHasta.Value.Date - fechaDesde.Value.Date).Days + 1;
+                    if (diasRango > 7)
+                    {
+                        limiteFinal = Math.Max(limiteFinal, 10000);
+                    }
+                    else if (diasRango > 3)
+                    {
+                        limiteFinal = Math.Max(limiteFinal, 5000);
+                    }
+                }
+
+                // Obtener nombres de usuarios
+                var nombreDict = await _context.vUsuariosConNombre
+                    .ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
+                // Obtener códigos de inventario
+                var inventarioIds = await query
+                    .Where(a => a.IdInventario.HasValue)
+                    .Select(a => a.IdInventario!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                var inventarioDict = new Dictionary<Guid, string>();
+                if (inventarioIds.Any())
+                {
+                    var inventarios = await _context.InventarioCabecera
+                        .Where(i => inventarioIds.Contains(i.IdInventario))
+                        .Select(i => new { i.IdInventario, i.CodigoInventario })
+                        .ToListAsync();
+
+                    inventarioDict = inventarios.ToDictionary(i => i.IdInventario, i => i.CodigoInventario);
+                }
+
+                // Obtener códigos de conteo (Titulo de OrdenConteo)
+                var conteoIds = await query
+                    .Where(a => a.IdConteo.HasValue && a.IdConteo.Value != Guid.Empty)
+                    .Select(a => a.IdConteo!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                var conteoDict = new Dictionary<Guid, (string Titulo, string CreadoPorCodigo)>();
+                if (conteoIds.Any())
+                {
+                    var conteos = await _context.OrdenesConteo
+                        .Where(c => conteoIds.Contains(c.GuidID))
+                        .Select(c => new { c.GuidID, c.Titulo, c.CreadoPorCodigo })
+                        .ToListAsync();
+
+                    conteoDict = conteos.ToDictionary(c => c.GuidID, c => (c.Titulo, c.CreadoPorCodigo));
+                }
+
+                // Obtener nombres de creadores de conteos
+                var creadoresCodigos = conteoDict.Values
+                    .Select(c => c.CreadoPorCodigo)
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .Distinct()
+                    .ToList();
+
+                var creadoresDict = new Dictionary<string, string>();
+                if (creadoresCodigos.Any())
+                {
+                    // Buscar nombres de usuarios por código
+                    // CreadoPorCodigo es un string que corresponde al UsuarioId
+                    var usuarios = await _context.vUsuariosConNombre
+                        .Where(u => creadoresCodigos.Contains(u.UsuarioId.ToString()))
+                        .Select(u => new { u.UsuarioId, u.NombreOperario })
+                        .ToListAsync();
+
+                    creadoresDict = usuarios.ToDictionary(u => u.UsuarioId.ToString(), u => u.NombreOperario);
+                }
+
+                // Obtener ajustes
+                var lista = await query
+                    .OrderByDescending(a => a.Fecha)
+                    .Take(limiteFinal)
+                    .Select(a => new AjusteDto
+                    {
+                        IdAjuste = a.IdAjuste,
+                        IdInventario = a.IdInventario,
+                        IdConteo = a.IdConteo,
+                        CodigoArticulo = a.CodigoArticulo,
+                        CodigoUbicacion = a.CodigoUbicacion,
+                        CodigoAlmacen = a.CodigoAlmacen,
+                        Diferencia = a.Diferencia,
+                        UsuarioId = a.UsuarioId,
+                        Fecha = a.Fecha,
+                        Estado = a.Estado,
+                        EstadoErp = a.EstadoErp,
+                        Partida = a.Partida,
+                        FechaCaducidad = a.FechaCaducidad,
+                        PaletId = a.PaletId,
+                        CodigoPalet = a.CodigoPalet,
+                        CodigoGS1 = a.CodigoGS1,
+                        CodigoEmpresa = a.CodigoEmpresa
+                    })
+                    .ToListAsync();
+
+                // Obtener códigos de artículos únicos
+                var codigosArticulos = lista
+                    .Where(a => !string.IsNullOrWhiteSpace(a.CodigoArticulo))
+                    .Select(a => a.CodigoArticulo!)
+                    .Distinct()
+                    .ToList();
+
+                // 🚀 OPTIMIZACIÓN: Obtener descripciones de artículos (solo los que aparecen en los ajustes)
+                var descripcionesDict = new Dictionary<string, string>();
+                if (codigosArticulos.Any())
+                {
+                    try
+                    {
+                        // 🚀 OPTIMIZACIÓN: Cargar solo los artículos que realmente aparecen
+                        // Dividir en lotes pequeños y usar consultas individuales para evitar OPENJSON
+                        const int batchSize = 50;
+                        for (int i = 0; i < codigosArticulos.Count; i += batchSize)
+                        {
+                            var batch = codigosArticulos.Skip(i).Take(batchSize).ToList();
+                            
+                            // Para cada artículo del lote, hacer consulta individual
+                            foreach (var codigo in batch)
+                            {
+                                var articulo = await _sageDbContext.Articulos
+                                    .Where(a => a.CodigoEmpresa == codigoEmpresa && a.CodigoArticulo == codigo)
+                                    .Select(a => new { a.CodigoArticulo, a.DescripcionArticulo })
+                                    .FirstOrDefaultAsync();
+                                
+                                if (articulo != null && !string.IsNullOrWhiteSpace(articulo.DescripcionArticulo))
+                                {
+                                    descripcionesDict[articulo.CodigoArticulo] = articulo.DescripcionArticulo;
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudieron obtener descripciones de artículos de Sage");
+                        // Continuar sin descripciones
+                    }
+                }
+
+                // Enriquecer datos
+                foreach (var ajuste in lista)
+                {
+                    // Nombre de usuario
+                    if (ajuste.UsuarioId > 0 && nombreDict.TryGetValue(ajuste.UsuarioId, out var nombreUsuario))
+                    {
+                        ajuste.UsuarioNombre = nombreUsuario;
+                    }
+
+                    // Descripción de artículo
+                    if (!string.IsNullOrWhiteSpace(ajuste.CodigoArticulo) && descripcionesDict.TryGetValue(ajuste.CodigoArticulo, out var descripcion))
+                    {
+                        ajuste.DescripcionArticulo = descripcion;
+                    }
+
+                    // Código de inventario
+                    if (ajuste.IdInventario.HasValue && inventarioDict.TryGetValue(ajuste.IdInventario.Value, out var codigoInventario))
+                    {
+                        ajuste.CodigoInventario = codigoInventario;
+                    }
+
+                    // Código de conteo y creador
+                    if (ajuste.IdConteo.HasValue && ajuste.IdConteo.Value != Guid.Empty && 
+                        conteoDict.TryGetValue(ajuste.IdConteo.Value, out var conteoInfo))
+                    {
+                        ajuste.CodigoConteo = conteoInfo.Titulo;
+                        ajuste.CreadorConteoCodigo = conteoInfo.CreadoPorCodigo;
+                        
+                        // Obtener nombre del creador
+                        if (!string.IsNullOrWhiteSpace(conteoInfo.CreadoPorCodigo) && 
+                            creadoresDict.TryGetValue(conteoInfo.CreadoPorCodigo, out var nombreCreador))
+                        {
+                            ajuste.CreadorConteoNombre = nombreCreador;
+                        }
+                    }
+                }
+
+                return Ok(lista);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener ajustes filtrados");
                 return StatusCode(500, "Error interno del servidor");
             }
         }
@@ -1768,12 +2061,12 @@ namespace SGA_Api.Controllers.Inventario
         /// Método interno para generar líneas temporales (usado por CrearInventario)
         /// </summary>
                 private async Task<(bool Exito, int LineasGeneradas, int UbicacionesEnRango, int StockEncontrado, string Mensaje)>
-            GenerarLineasTemporalesInterno(Guid idInventario, bool incluirUnidadesCero = false, bool incluirArticulosConStockCero = false, bool incluirUbicacionesEspeciales = false, string? codigoArticuloFiltro = null, string? articuloDesde = null, string? articuloHasta = null)
+            GenerarLineasTemporalesInterno(Guid idInventario, bool incluirUnidadesCero = false, bool incluirArticulosConStockCero = false, bool incluirUbicacionesEspeciales = false, List<string>? codigosArticuloFiltro = null, string? articuloDesde = null, string? articuloHasta = null)
         {
             try
             {
-                _logger.LogInformation("Generando líneas temporales para inventario {IdInventario}, incluirUnidadesCero: {IncluirUnidadesCero}, incluirArticulosConStockCero: {IncluirArticulosConStockCero}, incluirUbicacionesEspeciales: {IncluirUbicacionesEspeciales}, codigoArticuloFiltro: {CodigoArticuloFiltro}", 
-                    idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales, codigoArticuloFiltro ?? "null");
+                _logger.LogInformation("Generando líneas temporales para inventario {IdInventario}, incluirUnidadesCero: {IncluirUnidadesCero}, incluirArticulosConStockCero: {IncluirArticulosConStockCero}, incluirUbicacionesEspeciales: {IncluirUbicacionesEspeciales}, codigosArticuloFiltro: {CodigosArticuloFiltro}", 
+                    idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales, codigosArticuloFiltro != null ? string.Join(", ", codigosArticuloFiltro) : "null");
                 
                 // 1. Obtener inventario con sus almacenes
                 var inventario = await _context.InventarioCabecera
@@ -1848,7 +2141,7 @@ namespace SGA_Api.Controllers.Inventario
                         codigoAlmacen, 
                         ubicacionesEnRangoAlmacen, 
                         incluirArticulosConStockCero,
-                        codigoArticuloFiltro,
+                        codigosArticuloFiltro,
                         articuloDesde,
                         articuloHasta);
 
@@ -1862,7 +2155,7 @@ namespace SGA_Api.Controllers.Inventario
                             ejercicio, 
                             codigoAlmacen, 
                             incluirArticulosConStockCero,
-                            codigoArticuloFiltro,
+                            codigosArticuloFiltro,
                             articuloDesde,
                             articuloHasta);
 
@@ -2308,7 +2601,14 @@ namespace SGA_Api.Controllers.Inventario
         [HttpPost("generar-lineas-temporales/{idInventario}")]
         public async Task<IActionResult> GenerarLineasTemporales(Guid idInventario, [FromQuery] bool incluirUnidadesCero = false, [FromQuery] bool incluirArticulosConStockCero = false, [FromQuery] bool incluirUbicacionesEspeciales = false, [FromQuery] string? codigoArticuloFiltro = null, [FromQuery] string? articuloDesde = null, [FromQuery] string? articuloHasta = null)
         {
-            var resultado = await GenerarLineasTemporalesInterno(idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales, codigoArticuloFiltro, articuloDesde, articuloHasta);
+            // Convertir el parámetro string único a lista para compatibilidad con el método interno
+            List<string>? codigosArticuloFiltro = null;
+            if (!string.IsNullOrWhiteSpace(codigoArticuloFiltro))
+            {
+                codigosArticuloFiltro = new List<string> { codigoArticuloFiltro };
+            }
+            
+            var resultado = await GenerarLineasTemporalesInterno(idInventario, incluirUnidadesCero, incluirArticulosConStockCero, incluirUbicacionesEspeciales, codigosArticuloFiltro, articuloDesde, articuloHasta);
             
             if (resultado.Exito)
             {
@@ -2377,7 +2677,7 @@ namespace SGA_Api.Controllers.Inventario
             string codigoAlmacen, 
             List<string> ubicacionesEnRango, 
             bool incluirArticulosConStockCero,
-            string? codigoArticuloFiltro = null,
+            List<string>? codigosArticuloFiltro = null,
             string? articuloDesde = null,
             string? articuloHasta = null)
         {
@@ -2394,10 +2694,10 @@ namespace SGA_Api.Controllers.Inventario
                     query = query.Where(s => s.UnidadSaldo > 0);
                 }
 
-                // NUEVO: Filtro por artículo específico si se especifica
-                if (!string.IsNullOrWhiteSpace(codigoArticuloFiltro))
+                // NUEVO: Filtro por artículos específicos si se especifica
+                if (codigosArticuloFiltro != null && codigosArticuloFiltro.Any())
                 {
-                    query = query.Where(s => s.CodigoArticulo == codigoArticuloFiltro);
+                    query = query.Where(s => codigosArticuloFiltro.Contains(s.CodigoArticulo));
                 }
 
                 // NUEVO: Filtro por rango de artículos si se especifica
@@ -2436,7 +2736,7 @@ namespace SGA_Api.Controllers.Inventario
             short ejercicio, 
             string codigoAlmacen, 
             bool incluirArticulosConStockCero,
-            string? codigoArticuloFiltro = null,
+            List<string>? codigosArticuloFiltro = null,
             string? articuloDesde = null,
             string? articuloHasta = null)
         {
@@ -2453,10 +2753,10 @@ namespace SGA_Api.Controllers.Inventario
                     query = query.Where(s => s.UnidadSaldo > 0);
                 }
 
-                // NUEVO: Filtro por artículo específico si se especifica
-                if (!string.IsNullOrWhiteSpace(codigoArticuloFiltro))
+                // NUEVO: Filtro por artículos específicos si se especifica
+                if (codigosArticuloFiltro != null && codigosArticuloFiltro.Any())
                 {
-                    query = query.Where(s => s.CodigoArticulo == codigoArticuloFiltro);
+                    query = query.Where(s => codigosArticuloFiltro.Contains(s.CodigoArticulo));
                 }
 
                 // NUEVO: Filtro por rango de artículos si se especifica

@@ -64,6 +64,7 @@ namespace SGA_Api.Services
                         "ALMACEN" => "Conteo por Almacén",
                         "UBICACION" => "Conteo por Ubicación",
                         "ARTICULO" => "Conteo por Artículo",
+                        "MULTIARTICULO" => "Conteo por Múltiples Artículos",
                         "PASILLO" => "Conteo por Pasillo",
                         "ZONA" => "Conteo por Zona",
                         _ => $"Conteo por {alcance}"
@@ -90,6 +91,23 @@ namespace SGA_Api.Services
                         break;
                     case "ARTICULO":
                         if (!string.IsNullOrEmpty(codigoArticulo))
+                        {
+                            mensaje += $"\nArtículo: {codigoArticulo}";
+                        }
+                        break;
+                    case "MULTIARTICULO":
+                        // Obtener FiltrosJson de la orden para extraer múltiples artículos
+                        var orden = await _context.OrdenesConteo
+                            .FirstOrDefaultAsync(o => o.GuidID == ordenId);
+                        if (orden != null && !string.IsNullOrEmpty(orden.FiltrosJson))
+                        {
+                            var codigosArticulos = ExtraerArticulosDelFiltro(orden.FiltrosJson);
+                            if (codigosArticulos != null && codigosArticulos.Any())
+                            {
+                                mensaje += $"\nArtículos ({codigosArticulos.Count}): {string.Join(", ", codigosArticulos)}";
+                            }
+                        }
+                        else if (!string.IsNullOrEmpty(codigoArticulo))
                         {
                             mensaje += $"\nArtículo: {codigoArticulo}";
                         }
@@ -641,6 +659,51 @@ namespace SGA_Api.Services
                     "info"
                 )
             };
+        }
+
+        /// <summary>
+        /// Extrae lista de artículos del FiltrosJson (soporta formato nuevo y antiguo)
+        /// </summary>
+        private List<string>? ExtraerArticulosDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(filtrosJson);
+                
+                // Priorizar formato nuevo: array de artículos
+                if (filtros?.ContainsKey("articulos") == true)
+                {
+                    var articulos = filtros["articulos"];
+                    if (articulos.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        return articulos.EnumerateArray()
+                            .Select(x => x.GetString())
+                            .Where(x => !string.IsNullOrEmpty(x))
+                            .ToList();
+                    }
+                }
+                
+                // Compatibilidad: formato antiguo con un solo artículo
+                if (filtros?.ContainsKey("articulo") == true)
+                {
+                    var articulo = filtros["articulo"];
+                    if (articulo.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var codigoArticulo = articulo.GetString();
+                        if (!string.IsNullOrEmpty(codigoArticulo))
+                        {
+                            return new List<string> { codigoArticulo };
+                        }
+                    }
+                }
+                
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
     }

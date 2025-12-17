@@ -166,47 +166,56 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
-			try
+		try
+		{
+			Cargando = true;
+			Mensaje = "Cargando palets...";
+			
+			// 🔷 OPTIMIZADO: Hacer llamadas en paralelo para mejorar rendimiento
+			var listaTask = _paletService.ObtenerPaletsAsync(
+				codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value,
+				limite: 50); // 🔷 NUEVO: Limitar a 50 palets para carga inicial más rápida
+			
+			var almacenesPermitidosTask = ObtenerAlmacenesPermitidosAsync();
+			
+			await Task.WhenAll(listaTask, almacenesPermitidosTask);
+			
+			var lista = await listaTask;
+			var almacenesPermitidos = await almacenesPermitidosTask;
+			
+			// 🔷 OPTIMIZADO: Solo cargar ubicaciones de los palets que tenemos (no todos)
+			var paletIds = lista.Select(p => p.Id).ToList();
+			var paletsConTraspaso = await _traspasosService.ObtenerPaletsConUbicacionAsync(paletIds);
+			
+			// 🔷 OPTIMIZADO: Usar diccionario en lugar de FirstOrDefault para búsqueda O(1)
+			var ubicacionPorPaletId = paletsConTraspaso
+				.ToDictionary(pt => pt.Id, pt => pt);
+			
+			PaletsView.Clear();
+			foreach (var p in lista)
 			{
-				Cargando = true;
-				Mensaje = "Cargando palets...";
-				
-				var lista = await _paletService.ObtenerPaletsAsync(
-					codigoEmpresa: SessionManager.EmpresaSeleccionada!.Value);
-				
-				// Obtener información de traspaso para todos los palets (cerrados y abiertos)
-				var paletsConTraspaso = await _traspasosService.ObtenerPaletsConUbicacionAsync();
-				
-				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
-				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
-				
-				PaletsView.Clear();
-				foreach (var p in lista)
+				p.ErrorErpMensaje = null;
+				p.TraspasoErrorId = null;
+				// 🔷 OPTIMIZADO: Búsqueda O(1) en lugar de O(n)
+				if (ubicacionPorPaletId.TryGetValue(p.Id, out var paletConTraspaso))
 				{
-					p.ErrorErpMensaje = null;
-					p.TraspasoErrorId = null;
-					// Buscar información de traspaso para cualquier palet (cerrado o abierto)
-					// Solo los palets recién creados no tendrán esta información
-					var paletConTraspaso = paletsConTraspaso.FirstOrDefault(pt => pt.Id == p.Id);
-					if (paletConTraspaso != null)
-					{
-						p.AlmacenOrigen = paletConTraspaso.AlmacenOrigen;
-						p.UbicacionOrigen = paletConTraspaso.UbicacionOrigen;
-						p.FechaUltimoTraspaso = paletConTraspaso.FechaUltimoTraspaso;
-						p.UsuarioUltimoTraspaso = paletConTraspaso.UsuarioUltimoTraspaso;
-					}
-					
-					// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
-					// (después de obtener la información de ubicación)
-					// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
-					bool puedeVerPalet = string.IsNullOrEmpty(p.AlmacenOrigen) || 
-										almacenesPermitidos.Contains(p.AlmacenOrigen);
-					
-					if (puedeVerPalet)
-					{
-						PaletsView.Add(p);
-					}
+					p.AlmacenOrigen = paletConTraspaso.AlmacenOrigen;
+					p.UbicacionOrigen = paletConTraspaso.UbicacionOrigen;
+					p.FechaUltimoTraspaso = paletConTraspaso.FechaUltimoTraspaso;
+					p.UsuarioUltimoTraspaso = paletConTraspaso.UsuarioUltimoTraspaso;
 				}
+				
+				// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
+				// (después de obtener la información de ubicación)
+				// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
+				bool puedeVerPalet = string.IsNullOrEmpty(p.AlmacenOrigen) || 
+									almacenesPermitidos.Contains(p.AlmacenOrigen);
+				
+				if (puedeVerPalet)
+				{
+					PaletsView.Add(p);
+				}
+			}
 				
 				Debug.WriteLine($"Palets totales: {lista.Count}, Palets permitidos: {PaletsView.Count}");
 				
@@ -275,13 +284,11 @@ namespace SGA_Desktop.ViewModels
 		// 🔷 OPTIMIZADO: Hacer consultas en paralelo para mejorar rendimiento
 		var todosTraspasosTask = _traspasosService.ObtenerTraspasosAsync();
 		var almacenesPermitidosTask = ObtenerAlmacenesPermitidosAsync();
-		var paletsConUbicacionTask = _traspasosService.ObtenerPaletsConUbicacionAsync();
 		
-		await Task.WhenAll(todosTraspasosTask, almacenesPermitidosTask, paletsConUbicacionTask);
+		await Task.WhenAll(todosTraspasosTask, almacenesPermitidosTask);
 		
 		var todosTraspasos = await todosTraspasosTask;
 		var almacenesPermitidos = await almacenesPermitidosTask;
-		var paletsConUbicacion = await paletsConUbicacionTask;
 		
 		// 🔷 OPTIMIZADO: Crear diccionario de traspasos por PaletId para búsqueda rápida
 		var traspasosPorPaletId = todosTraspasos
@@ -289,12 +296,10 @@ namespace SGA_Desktop.ViewModels
 			.GroupBy(t => t.PaletId)
 			.ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.FechaInicio).ToList());
 		
-		// 🔷 OPTIMIZADO: Crear diccionario de ubicaciones por PaletId
-		var ubicacionesPorPaletId = paletsConUbicacion
-			.ToDictionary(pt => pt.Id, pt => pt);
-		
 		var vistos = new HashSet<Guid>();
+		var paletIdsParaVerificar = new List<Guid>();
 		
+		// 🔷 PRIMERA PASADA: Filtrar errores válidos y recopilar IDs sin cargar ubicaciones
 		foreach (var error in errores)
 		{
 			if (vistos.Contains(error.PaletId))
@@ -316,10 +321,36 @@ namespace SGA_Desktop.ViewModels
 					continue;
 			}
 			
-			// 🔷 OPTIMIZADO: Verificar almacén antes de cargar el palet completo
-			string? almacenOrigen = error.AlmacenOrigen;
-			if (string.IsNullOrEmpty(almacenOrigen) && 
-				ubicacionesPorPaletId.TryGetValue(error.PaletId, out var paletConUbicacion))
+			// 🔷 Recopilar ID para verificar después (solo si no tiene almacén en el error)
+			// Si el error ya tiene almacén, podemos verificar directamente
+			if (!string.IsNullOrEmpty(error.AlmacenOrigen))
+			{
+				// Verificar almacén directamente del error
+				if (!almacenesPermitidos.Contains(error.AlmacenOrigen))
+					continue;
+			}
+			
+			paletIdsParaVerificar.Add(error.PaletId);
+			vistos.Add(error.PaletId);
+		}
+		
+		if (!paletIdsParaVerificar.Any())
+		{
+			HayErroresErp = false;
+			return;
+		}
+		
+		// 🔷 OPTIMIZADO: Solo cargar ubicaciones de los palets que necesitamos verificar
+		var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync(paletIdsParaVerificar);
+		var ubicacionesPorPaletId = paletsConUbicacion
+			.ToDictionary(pt => pt.Id, pt => pt);
+		
+		// 🔷 SEGUNDA PASADA: Verificar almacenes y cargar solo el primer palet válido
+		foreach (var paletId in paletIdsParaVerificar)
+		{
+			// Verificar almacén desde ubicación si no estaba en el error
+			string? almacenOrigen = null;
+			if (ubicacionesPorPaletId.TryGetValue(paletId, out var paletConUbicacion))
 			{
 				almacenOrigen = paletConUbicacion.AlmacenOrigen;
 			}
@@ -330,7 +361,7 @@ namespace SGA_Desktop.ViewModels
 				continue;
 			
 			// Solo cargar el palet si pasó los filtros anteriores
-			var palet = await _paletService.ObtenerPaletPorIdAsync(error.PaletId);
+			var palet = await _paletService.ObtenerPaletPorIdAsync(paletId);
 			if (palet == null)
 				continue;
 			if (palet.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) || palet.IsVaciado)
@@ -375,32 +406,38 @@ namespace SGA_Desktop.ViewModels
 
 				var f = (PaletFilterDialogViewModel)dlg.DataContext;
 
-				var filtrados = await _paletService.ObtenerPaletsAsync(
-					codigoEmpresa: empresa,
-					codigo: f.Codigo,
-					estado: f.EstadoSeleccionado?.CodigoEstado,
-					tipoPaletCodigo: f.TipoPaletSeleccionado?.CodigoPalet,
-					fechaApertura: f.FechaApertura,
-					fechaCierre: f.FechaCierre,
-					fechaDesde: f.FechaDesde,
-					fechaHasta: f.FechaHasta,
-					usuarioApertura: f.UsuarioAperturaSeleccionado?.UsuarioId == 0 ? null : f.UsuarioAperturaSeleccionado?.UsuarioId,
-					usuarioCierre: f.UsuarioCierreSeleccionado?.UsuarioId == 0 ? null : f.UsuarioCierreSeleccionado?.UsuarioId,
-					almacen: f.Almacen,
-					tipoUltimaActividad: f.TipoUltimaActividadFiltro,
-					usuarioUltimaActividad: f.UsuarioUltimaActividadSeleccionado?.UsuarioId == 0 ? null : f.UsuarioUltimaActividadSeleccionado?.UsuarioId);
+			// 🔷 OPTIMIZADO: Hacer llamadas en paralelo
+			var filtradosTask = _paletService.ObtenerPaletsAsync(
+				codigoEmpresa: empresa,
+				codigo: f.Codigo,
+				estado: f.EstadoSeleccionado?.CodigoEstado,
+				tipoPaletCodigo: f.TipoPaletSeleccionado?.CodigoPalet,
+				fechaApertura: f.FechaApertura,
+				fechaCierre: f.FechaCierre,
+				fechaDesde: f.FechaDesde,
+				fechaHasta: f.FechaHasta,
+				usuarioApertura: f.UsuarioAperturaSeleccionado?.UsuarioId == 0 ? null : f.UsuarioAperturaSeleccionado?.UsuarioId,
+				usuarioCierre: f.UsuarioCierreSeleccionado?.UsuarioId == 0 ? null : f.UsuarioCierreSeleccionado?.UsuarioId,
+				almacen: f.Almacen,
+				tipoUltimaActividad: f.TipoUltimaActividadFiltro,
+				usuarioUltimaActividad: f.UsuarioUltimaActividadSeleccionado?.UsuarioId == 0 ? null : f.UsuarioUltimaActividadSeleccionado?.UsuarioId);
+			
+			var almacenesPermitidosTask = ObtenerAlmacenesPermitidosAsync();
+			
+			await Task.WhenAll(filtradosTask, almacenesPermitidosTask);
+			
+			var filtrados = await filtradosTask;
+			var almacenesPermitidos = await almacenesPermitidosTask;
 
-				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
-				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+			// Limpiar la lista actual
+			PaletsView.Clear();
 
-				// Limpiar la lista actual
-				PaletsView.Clear();
+			// 🔷 OPTIMIZADO: Solo cargar ubicaciones de los palets filtrados (no todos)
+			var paletIdsFiltrados = filtrados.Select(p => p.Id).ToList();
+			var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync(paletIdsFiltrados);
 
-				// Obtener información de ubicación para los palets filtrados
-				var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync();
-
-				// Crear un diccionario para búsqueda rápida de información de ubicación
-				var ubicacionPorPalet = paletsConUbicacion.ToDictionary(p => p.Id, p => p);
+			// 🔷 OPTIMIZADO: Crear un diccionario para búsqueda rápida de información de ubicación
+			var ubicacionPorPalet = paletsConUbicacion.ToDictionary(p => p.Id, p => p);
 
 				// Agregar los palets filtrados con su información de ubicación Y filtro de seguridad
 				foreach (var p in filtrados)
@@ -699,79 +736,137 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
-			try
+		try
+		{
+			ErrorMessage = null;
+			Cargando = true;
+			Mensaje = "Cargando palets con ERROR ERP...";
+
+			var empresa = SessionManager.EmpresaSeleccionada.Value;
+			
+			// 🔷 OPTIMIZADO: Hacer llamadas en paralelo
+			var erroresTask = _paletService.ObtenerTraspasosErrorErpAsync(empresa);
+			var todosTraspasosTask = _traspasosService.ObtenerTraspasosAsync();
+			var almacenesPermitidosTask = ObtenerAlmacenesPermitidosAsync();
+			
+			await Task.WhenAll(erroresTask, todosTraspasosTask, almacenesPermitidosTask);
+			
+			var errores = await erroresTask;
+			var todosTraspasos = await todosTraspasosTask;
+			var almacenesPermitidos = await almacenesPermitidosTask;
+
+			PaletsView.Clear();
+			PaletSeleccionado = null;
+
+			if (!errores.Any())
 			{
-				ErrorMessage = null;
-				Cargando = true;
-				Mensaje = "Cargando palets con ERROR ERP...";
+				HayErroresErp = false;
+				Mensaje = "No hay palets con traspasos en ERROR ERP.";
+				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				return;
+			}
 
-				var empresa = SessionManager.EmpresaSeleccionada.Value;
-				var errores = await _paletService.ObtenerTraspasosErrorErpAsync(empresa);
-				var todosTraspasos = await _traspasosService.ObtenerTraspasosAsync();
+			// 🔷 OPTIMIZADO: Crear diccionarios para búsqueda rápida
+			var traspasosPorPaletId = todosTraspasos
+				.Where(t => t.PaletId != Guid.Empty)
+				.GroupBy(t => t.PaletId)
+				.ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.FechaInicio).ToList());
+			
+			var erroresPorPaletId = errores
+				.GroupBy(e => e.PaletId)
+				.ToDictionary(g => g.Key, g => g.OrderByDescending(e => e.FechaInicio).First());
 
-				// Obtener información de ubicación para los palets
-				var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync();
-				
-				// 🔒 FILTRO DE SEGURIDAD: Obtener almacenes permitidos del usuario
-				var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+			var vistos = new HashSet<Guid>();
+			var paletIdsParaCargar = new List<Guid>();
 
-				PaletsView.Clear();
-				PaletSeleccionado = null;
+			// 🔷 PRIMERA PASADA: Filtrar errores válidos y recopilar IDs sin hacer llamadas HTTP
+			foreach (var error in errores)
+			{
+				if (vistos.Contains(error.PaletId))
+					continue;
 
-				if (!errores.Any())
+				// Excluir palets de prueba con prefijo PAL25-000088
+				if (error.CodigoPalet?.StartsWith("PAL25-000088", StringComparison.OrdinalIgnoreCase) == true)
+					continue;
+
+				// 🔷 OPTIMIZADO: Usar diccionario en lugar de Any() para búsqueda rápida
+				if (traspasosPorPaletId.TryGetValue(error.PaletId, out var traspasosDelPalet))
 				{
-					HayErroresErp = false;
-					Mensaje = "No hay palets con traspasos en ERROR ERP.";
-					RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
-					return;
-				}
-
-				var vistos = new HashSet<Guid>();
-
-				foreach (var error in errores)
-				{
-					if (vistos.Contains(error.PaletId))
-						continue;
-
-					// Excluir palets de prueba con prefijo PAL25-000088
-					if (error.CodigoPalet?.StartsWith("PAL25-000088", StringComparison.OrdinalIgnoreCase) == true)
-						continue;
-
-					// Si existe un traspaso más reciente (con estado distinto a ERROR_ERP), el error ya fue relanzado/solucionado.
-					var tieneIntentoPosterior = todosTraspasos.Any(t =>
-						t.PaletId == error.PaletId &&
+					var tieneIntentoPosterior = traspasosDelPalet.Any(t =>
 						t.Id != error.TraspasoId &&
 						t.FechaInicio >= error.FechaInicio &&
 						!string.Equals(t.CodigoEstado, "ERROR_ERP", StringComparison.OrdinalIgnoreCase));
 
 					if (tieneIntentoPosterior)
 						continue;
+				}
 
-					var palet = await _paletService.ObtenerPaletPorIdAsync(error.PaletId);
-					if (palet == null)
-						continue;
-					if (palet.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) || palet.IsVaciado)
-						continue;
+				// 🔷 Recopilar ID para cargar después en batch
+				paletIdsParaCargar.Add(error.PaletId);
+				vistos.Add(error.PaletId);
+			}
 
-					// Buscar información de ubicación si existe
-					var paletConUbicacion = paletsConUbicacion.FirstOrDefault(pt => pt.Id == palet.Id);
-					if (paletConUbicacion != null)
-					{
-						palet.AlmacenOrigen = paletConUbicacion.AlmacenOrigen;
-						palet.UbicacionOrigen = paletConUbicacion.UbicacionOrigen;
-						palet.FechaUltimoTraspaso = paletConUbicacion.FechaUltimoTraspaso;
-						palet.UsuarioUltimoTraspaso = paletConUbicacion.UsuarioUltimoTraspaso;
-					}
+			if (!paletIdsParaCargar.Any())
+			{
+				HayErroresErp = false;
+				Mensaje = "No hay palets con traspasos en ERROR ERP.";
+				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				return;
+			}
 
-					// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
-					// (después de obtener la información de ubicación)
-					// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
-					bool puedeVerPalet = string.IsNullOrEmpty(palet.AlmacenOrigen) || 
-										almacenesPermitidos.Contains(palet.AlmacenOrigen);
-					
-					if (!puedeVerPalet)
-						continue;
+			// 🔷 OPTIMIZADO: Cargar todos los palets en paralelo
+			var paletsTasks = paletIdsParaCargar
+				.Select(id => _paletService.ObtenerPaletPorIdAsync(id))
+				.ToArray();
+			
+			var paletsCargados = await Task.WhenAll(paletsTasks);
+			
+			// 🔷 OPTIMIZADO: Solo cargar ubicaciones de los palets que tenemos
+			var paletsValidos = paletsCargados
+				.Where(p => p != null && 
+						   !p.Estado.Equals("Vaciado", StringComparison.OrdinalIgnoreCase) && 
+						   !p.IsVaciado)
+				.ToList();
+			
+			if (!paletsValidos.Any())
+			{
+				HayErroresErp = false;
+				Mensaje = "No hay palets con traspasos en ERROR ERP.";
+				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				return;
+			}
 
+			var paletIdsValidos = paletsValidos.Select(p => p.Id).ToList();
+			var paletsConUbicacion = await _traspasosService.ObtenerPaletsConUbicacionAsync(paletIdsValidos);
+			
+			// 🔷 OPTIMIZADO: Usar diccionario en lugar de FirstOrDefault
+			var ubicacionPorPaletId = paletsConUbicacion
+				.ToDictionary(pt => pt.Id, pt => pt);
+
+			// 🔷 SEGUNDA PASADA: Procesar palets cargados
+			foreach (var palet in paletsValidos)
+			{
+				// Buscar información de ubicación si existe
+				if (ubicacionPorPaletId.TryGetValue(palet.Id, out var paletConUbicacion))
+				{
+					palet.AlmacenOrigen = paletConUbicacion.AlmacenOrigen;
+					palet.UbicacionOrigen = paletConUbicacion.UbicacionOrigen;
+					palet.FechaUltimoTraspaso = paletConUbicacion.FechaUltimoTraspaso;
+					palet.UsuarioUltimoTraspaso = paletConUbicacion.UsuarioUltimoTraspaso;
+				}
+
+				// 🔒 APLICAR FILTRO DE SEGURIDAD: Solo mostrar palets de almacenes permitidos
+				// (después de obtener la información de ubicación)
+				// Si el palet no tiene ubicación (recién creado), permitirlo si el usuario tiene acceso general
+				bool puedeVerPalet = string.IsNullOrEmpty(palet.AlmacenOrigen) || 
+									almacenesPermitidos.Contains(palet.AlmacenOrigen);
+				
+				if (!puedeVerPalet)
+					continue;
+
+				// Obtener información del error
+				if (erroresPorPaletId.TryGetValue(palet.Id, out var error))
+				{
 					palet.ErrorErpMensaje = error.EstadoErp ?? error.Comentario ?? "Error reportado por ERP.";
 					palet.FechaUltimaActividad = error.FechaFinalizacion ?? error.FechaInicio;
 					palet.TipoUltimaActividad = "ERROR ERP";
@@ -779,10 +874,10 @@ namespace SGA_Desktop.ViewModels
 					palet.UsuarioUltimaActividadNombre = error.UsuarioFinalizacionNombre ?? error.UsuarioInicioNombre;
 					palet.DescripcionUltimaActividad = error.EstadoErp ?? error.Comentario;
 					palet.TraspasoErrorId = error.TraspasoId;
-
-					PaletsView.Add(palet);
-					vistos.Add(palet.Id);
 				}
+
+				PaletsView.Add(palet);
+			}
 
 				Mensaje = $"Se encontraron {PaletsView.Count} palets con traspasos en ERROR ERP.";
 				HayErroresErp = PaletsView.Any();
@@ -1135,6 +1230,10 @@ namespace SGA_Desktop.ViewModels
 
             try
             {
+                // Guardar información del palet antes del traspaso por si desaparece (se vacía)
+                var paletId = PaletSeleccionado.Id;
+                var codigoPalet = PaletSeleccionado.Codigo;
+                
                 // Abrir el diálogo de traspaso de palets pasando el palet seleccionado
                 var dlg = new TraspasoPaletDialog(PaletSeleccionado);
                 var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
@@ -1146,7 +1245,23 @@ namespace SGA_Desktop.ViewModels
 
                 // Recargar los palets después de cerrar el diálogo
                 await LoadPaletsAsync();
-                Mensaje = $"Gestión de traspaso completada para el palet {PaletSeleccionado.Codigo}";
+                
+                // Intentar encontrar el palet actualizado en la lista recargada
+                // Si el palet fue vaciado en una ubicación Pulmón, desaparecerá de la lista
+                var paletActualizado = PaletsView.FirstOrDefault(p => p.Id == paletId);
+                
+                if (paletActualizado != null)
+                {
+                    // El palet sigue existiendo, actualizar la selección
+                    PaletSeleccionado = paletActualizado;
+                    Mensaje = $"Gestión de traspaso completada para el palet {PaletSeleccionado.Codigo}";
+                }
+                else
+                {
+                    // El palet fue vaciado y desapareció, limpiar la selección
+                    PaletSeleccionado = null;
+                    Mensaje = $"Gestión de traspaso completada. El palet {codigoPalet} fue vaciado en la ubicación destino.";
+                }
                 ErrorMessage = null;
             }
             catch (Exception ex)

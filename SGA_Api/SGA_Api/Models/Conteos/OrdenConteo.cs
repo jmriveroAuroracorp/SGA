@@ -30,6 +30,14 @@ namespace SGA_Api.Models.Conteos
         public DateTime? FechaCierre { get; set; }
         public Guid GuidID { get; set; } = Guid.NewGuid();
 
+        // Propiedades para conteos periódicos
+        public bool EsPeriodico { get; set; } = false;
+        public int? FrecuenciaDias { get; set; }
+        public DateTime? FechaUltimaRenovacion { get; set; }
+        public Guid? OrdenPadreGuid { get; set; }
+        public DateTime? FechaProximaRenovacion { get; set; }
+        public bool Activo { get; set; } = true;
+
         // Navigation properties
         public ICollection<LecturaConteo> Lecturas { get; set; } = new List<LecturaConteo>();
         public ICollection<ResultadoConteo> Resultados { get; set; } = new List<ResultadoConteo>();

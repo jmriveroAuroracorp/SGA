@@ -179,14 +179,33 @@ namespace SGA_Desktop.Services
 			return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<PaletMovibleDto>();
 		}
 
-		public async Task<List<PaletMovibleDto>> ObtenerPaletsConUbicacionAsync()
-		{
-			var resp = await _httpClient.GetAsync("traspasos/palets-con-ubicacion");
-			if (!resp.IsSuccessStatusCode)
-				return new List<PaletMovibleDto>();
-			var text = await resp.Content.ReadAsStringAsync();
-			return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<PaletMovibleDto>();
-		}
+	public async Task<List<PaletMovibleDto>> ObtenerPaletsConUbicacionAsync()
+	{
+		var resp = await _httpClient.GetAsync("traspasos/palets-con-ubicacion");
+		if (!resp.IsSuccessStatusCode)
+			return new List<PaletMovibleDto>();
+		var text = await resp.Content.ReadAsStringAsync();
+		return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? new List<PaletMovibleDto>();
+	}
+
+	// 🔷 OPTIMIZADO: Método sobrecargado que acepta IDs específicos para cargar solo esos palets
+	public async Task<List<PaletMovibleDto>> ObtenerPaletsConUbicacionAsync(List<Guid> paletIds)
+	{
+		if (paletIds == null || !paletIds.Any())
+			return new List<PaletMovibleDto>();
+
+		// Construir query string con IDs separados por comas
+		var idsString = string.Join(",", paletIds);
+		var resp = await _httpClient.GetAsync($"traspasos/palets-con-ubicacion?paletIds={Uri.EscapeDataString(idsString)}");
+		
+		if (!resp.IsSuccessStatusCode)
+			return new List<PaletMovibleDto>();
+		
+		var text = await resp.Content.ReadAsStringAsync();
+		return System.Text.Json.JsonSerializer.Deserialize<List<PaletMovibleDto>>(text, 
+			new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) 
+			?? new List<PaletMovibleDto>();
+	}
 
 		public async Task<ApiResult> MoverPaletAsync(MoverPaletDto dto)
 		{

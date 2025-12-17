@@ -8,7 +8,7 @@ namespace SGA_Api.Services
         Task<OrdenDto> ActualizarOrdenAsync(Guid guid, CrearOrdenConteoDto dto);
         Task<OrdenDto?> ObtenerOrdenAsync(Guid guid);
         Task<IEnumerable<OrdenDto>> ListarOrdenesAsync(string? codigoOperario = null, string? estado = null);
-        Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null, DateTime? fechaDesde = null, DateTime? fechaHasta = null);
+        Task<IEnumerable<OrdenDto>> ListarTodasLasOrdenesAsync(string? estado = null, string? codigoOperario = null, DateTime? fechaDesde = null, DateTime? fechaHasta = null, string? codigoOperarioSesion = null, string? creadoPorCodigo = null);
         Task<OrdenDto> IniciarOrdenAsync(Guid guid, string codigoOperario);
         Task<OrdenDto> AsignarOperarioAsync(Guid guid, AsignarOperarioDto dto);
         Task<LecturaResponseDto> CrearLecturaAsync(Guid ordenGuid, LecturaDto dto);
@@ -19,5 +19,11 @@ namespace SGA_Api.Services
         Task<ResultadoConteoDetalladoDto> ActualizarAprobadorAsync(Guid resultadoGuid, ActualizarAprobadorDto dto);
         Task<OrdenDto> ReasignarLineaAsync(Guid resultadoGuid, ReasignarLineaDto dto);
         Task<List<PaletDisponibleInfo>> ObtenerPaletsDisponiblesAsync(string codigoAlmacen, string? ubicacion, string? codigoArticulo, string? lote, DateTime? fechaCaducidad);
+        
+        // Métodos para conteos periódicos
+        Task<IEnumerable<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(string? codigoOperario = null);
+        Task ActivarPeriodicidadAsync(Guid guid);
+        Task DesactivarPeriodicidadAsync(Guid guid);
+        Task<IEnumerable<OrdenDto>> ObtenerRenovacionesAsync(Guid guid);
     }
 } 

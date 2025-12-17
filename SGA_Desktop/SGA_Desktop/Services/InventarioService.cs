@@ -141,13 +141,16 @@ namespace SGA_Desktop.Services
         /// <summary>
         /// Crea un nuevo registro de inventario
         /// </summary>
-        public async Task<bool> CrearInventarioAsync(CrearInventarioDto inventario)
+        public async Task<CrearInventarioResponseDto?> CrearInventarioAsync(CrearInventarioDto inventario)
         {
             try
             {
                 var response = await _httpClient.PostAsJsonAsync("Inventario/crear", inventario);
                 response.EnsureSuccessStatusCode();
-                return true;
+                
+                var json = await response.Content.ReadAsStringAsync();
+                var resultado = JsonConvert.DeserializeObject<CrearInventarioResponseDto>(json);
+                return resultado;
             }
             catch (Exception ex)
             {
@@ -263,6 +266,63 @@ namespace SGA_Desktop.Services
             }
         }
 
+        /// <summary>
+        /// Obtiene ajustes filtrados para el historial
+        /// </summary>
+        public async Task<List<AjusteDto>> ObtenerAjustesFiltradosAsync(
+            int codigoEmpresa,
+            DateTime? fechaDesde = null,
+            DateTime? fechaHasta = null,
+            string? codigoArticulo = null,
+            string? codigoAlmacen = null,
+            string? codigoUbicacion = null,
+            string? estado = null,
+            int? usuarioId = null,
+            string? partida = null,
+            string? codigoPalet = null,
+            int? limite = null)
+        {
+            try
+            {
+                var query = new List<string>();
+                query.Add($"codigoEmpresa={codigoEmpresa}");
+
+                if (fechaDesde.HasValue)
+                    query.Add($"fechaDesde={fechaDesde.Value:yyyy-MM-dd}");
+                if (fechaHasta.HasValue)
+                    query.Add($"fechaHasta={fechaHasta.Value:yyyy-MM-dd}");
+                if (!string.IsNullOrWhiteSpace(codigoArticulo))
+                    query.Add($"codigoArticulo={Uri.EscapeDataString(codigoArticulo)}");
+                if (!string.IsNullOrWhiteSpace(codigoAlmacen))
+                    query.Add($"codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}");
+                if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+                    query.Add($"codigoUbicacion={Uri.EscapeDataString(codigoUbicacion)}");
+                if (!string.IsNullOrWhiteSpace(estado))
+                    query.Add($"estado={Uri.EscapeDataString(estado)}");
+                if (usuarioId.HasValue && usuarioId.Value > 0)
+                    query.Add($"usuarioId={usuarioId.Value}");
+                if (!string.IsNullOrWhiteSpace(partida))
+                    query.Add($"partida={Uri.EscapeDataString(partida)}");
+                if (!string.IsNullOrWhiteSpace(codigoPalet))
+                    query.Add($"codigoPalet={Uri.EscapeDataString(codigoPalet)}");
+                if (limite.HasValue)
+                    query.Add($"limite={limite.Value}");
+
+                var url = "Inventario/ajustes";
+                if (query.Count > 0)
+                    url += "?" + string.Join("&", query);
+
+                return await GetAsync<List<AjusteDto>>(url);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new List<AjusteDto>();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener ajustes filtrados: {ex.Message}", ex);
+            }
+        }
 
         /// <summary>
         /// Procesa un ajuste de inventario

@@ -30,6 +30,7 @@ namespace SGA_Desktop.Models
 		public int? TemperaturaMax { get; set; }
 		public string? TipoPaletPermitido { get; set; }
 		public bool? Habilitada { get; set; } = true;
+		public int? Obsoleta { get; set; }
 		public short? TipoUbicacionId { get; set; }
 
 		/// <summary>Descripción legible del tipo de ubicación (p.ej. “Refrigerada”)</summary>

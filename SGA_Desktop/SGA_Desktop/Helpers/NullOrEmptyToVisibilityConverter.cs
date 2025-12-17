@@ -18,6 +18,10 @@ namespace SGA_Desktop.Helpers
 			if (value == null)
 				return Visibility.Collapsed;
 
+			// Manejar DateTime? (Nullable<DateTime>)
+			if (value is DateTime dateTime && dateTime != default(DateTime))
+				return Visibility.Visible;
+
 			if (value is IEnumerable enumerable)
 			{
 				foreach (var _ in enumerable)
@@ -25,7 +29,12 @@ namespace SGA_Desktop.Helpers
 				return Visibility.Collapsed;
 			}
 
-			return Visibility.Collapsed;
+			// Para strings y otros tipos, si no es null ni vacío, mostrar
+			if (value is string str && !string.IsNullOrWhiteSpace(str))
+				return Visibility.Visible;
+
+			// Si es cualquier otro tipo no-null, mostrar
+			return Visibility.Visible;
 		}
 
 		public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

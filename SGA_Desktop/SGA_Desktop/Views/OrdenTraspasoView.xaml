@@ -21,107 +21,88 @@
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
-            <!-- 0: Título y botón crear -->
+            <!-- 0: Botones crear y filtros -->
             <RowDefinition Height="Auto" />
-            <!-- 1: Filtros -->
-            <RowDefinition Height="Auto" />
-            <!-- 2: Lista de órdenes -->
+            <!-- 1: Lista de órdenes -->
             <RowDefinition Height="*" />
-            <!-- 3: Botones de acción -->
+            <!-- 2: Botones de acción -->
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- TÍTULO Y BOTÓN CREAR -->
-        <Grid Grid.Row="0" Margin="0,0,0,20">
+        <!-- BOTONES CREAR Y FILTROS -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="🚚 GESTIÓN DE ÓRDENES DE TRASPASO"
-                           FontFamily="{StaticResource FuentePrincipal}"
-                           FontSize="24"
-                           FontWeight="Bold"
-                           Foreground="{StaticResource BrushPrincipal}"/>
-            </StackPanel>
+            <!-- Indicador de filtros activos -->
+            <Border Grid.Column="0" 
+                    Background="#E8F4FD" 
+                    BorderBrush="#3498DB" 
+                    BorderThickness="1" 
+                    CornerRadius="5" 
+                    Padding="10,6"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Left"
+                    Visibility="{Binding TieneFiltrosActivos, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🔍 Filtros activos: " 
+                               FontWeight="SemiBold" 
+                               FontSize="11"
+                               Foreground="#2980B9"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding ResumenFiltrosActivos}" 
+                               FontSize="11"
+                               Foreground="#34495E"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
 
-            <Button Grid.Column="1"
-                    Content="➕ Crear Orden"
-                    Command="{Binding CrearOrdenCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Width="180"
-                    Height="40"
-                    FontSize="14"
-                    FontWeight="Bold"
-                    IsEnabled="{Binding CanEnableInputs}"/>
+            <!-- Botones de acción -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="🔄 Recargar"
+                        Command="{Binding CargarOrdenesCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Width="110"
+                        Height="32"
+                        FontSize="12"
+                        FontWeight="Bold"
+                        IsEnabled="{Binding CanCargarOrdenes}"
+                        Margin="0,0,8,0"/>
+                <Button Content="🔍 Filtros"
+                        Command="{Binding AbrirFiltrosCommand}"
+                        Style="{StaticResource EstiloBotonSecundario}"
+                        Width="110"
+                        Height="32"
+                        FontSize="12"
+                        FontWeight="Bold"
+                        IsEnabled="{Binding CanEnableInputs}"
+                        Margin="0,0,8,0"/>
+                <Button Content="🧹 Limpiar"
+                        Command="{Binding LimpiarFiltrosCommand}"
+                        Style="{StaticResource EstiloBotonSecundario}"
+                        Width="100"
+                        Height="32"
+                        FontSize="12"
+                        FontWeight="Bold"
+                        IsEnabled="{Binding CanEnableInputs}"
+                        Margin="0,0,10,0"/>
+                <Button Content="➕ Crear Orden"
+                        Command="{Binding CrearOrdenCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Width="180"
+                        Height="32"
+                        FontSize="13"
+                        FontWeight="Bold"
+                        IsEnabled="{Binding CanEnableInputs}"/>
+            </StackPanel>
         </Grid>
 
-        <!-- FILTROS -->
-        <GroupBox Grid.Row="1" Header="🔍 Filtros de Búsqueda" Margin="0,0,0,20">
-            <Grid Margin="15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Almacén Destino -->
-                <StackPanel Grid.Column="0" Margin="0,0,15,0">
-                    <TextBlock Text="Almacén Destino" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <ComboBox 
-                              ItemsSource="{Binding AlmacenesCombo}"
-                              DisplayMemberPath="DescripcionCombo"
-                              SelectedItem="{Binding AlmacenDestinoSeleccionado}"
-                              Style="{StaticResource EstiloComboBox}"
-                              Height="30"/>
-                </StackPanel>
-
-                <!-- Fecha desde -->
-                <StackPanel Grid.Column="1" Margin="0,0,15,0">
-                    <TextBlock Text="Desde" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <DatePicker 
-                            SelectedDate="{Binding FechaDesde}" 
-                            Style="{StaticResource EstiloDatePicker}"
-                                Height="30"/>
-                </StackPanel>
-
-                <!-- Fecha hasta -->
-                <StackPanel Grid.Column="2" Margin="0,0,15,0">
-                    <TextBlock Text="Hasta" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <DatePicker 
-                            SelectedDate="{Binding FechaHasta}" 
-                            Style="{StaticResource EstiloDatePicker}"
-                                Height="30"/>
-                </StackPanel>
-
-                <!-- Estado -->
-                <StackPanel Grid.Column="3" Margin="0,0,15,0">
-                    <TextBlock Text="Estado" FontWeight="Bold" Margin="0,0,0,5" FontSize="12"/>
-                    <ComboBox 
-                          ItemsSource="{Binding Source={StaticResource EstadosOrdenTraspaso}}"
-                          SelectedItem="{Binding EstadoFiltro}"
-                          Style="{StaticResource EstiloComboBox}"
-                              Height="30"/>
-                </StackPanel>
-
-                <!-- Botón cargar -->
-                <StackPanel Grid.Column="4" VerticalAlignment="Center">
-                    <Button 
-                            Content="🔄 Cargar"
-                        Command="{Binding CargarOrdenesCommand}"
-                        Style="{StaticResource EstiloBoton}"
-                            Width="100"
-                        Height="30"
-                            IsEnabled="{Binding CanCargarOrdenes}"/>
-                </StackPanel>
-            </Grid>
-        </GroupBox>
-
         <!-- LISTA DE ÓRDENES -->
-        <GroupBox Grid.Row="2" Header="📋 Órdenes de Traspaso Registradas">
+        <GroupBox Grid.Row="1" Header="📋 Órdenes de Traspaso Registradas">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -238,7 +219,7 @@
                                                            FontWeight="SemiBold" 
                                                            FontSize="12"
                                                            Foreground="#7F8C8D"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding PrioridadTexto}" 
+                                                <TextBlock Grid.Column="1" Text="{Binding PrioridadTexto, Mode=OneWay}" 
                                                            FontWeight="Bold" 
                                                            FontSize="12"
                                                            Foreground="#34495E"/>
@@ -438,7 +419,7 @@
         </GroupBox>
 
         <!-- BOTONES DE ACCIÓN -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
             <TextBlock Text="{Binding TotalOrdenes}" 
                        FontWeight="Bold" 
                        VerticalAlignment="Center"

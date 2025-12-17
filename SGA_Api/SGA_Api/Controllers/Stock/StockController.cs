@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Almacen;
@@ -692,30 +693,36 @@ namespace SGA_Api.Controllers.Stock
 		[HttpGet("articulo/lotes-activos")]
 		public async Task<IActionResult> ObtenerLotesActivosArticulo(
 			[FromQuery] short codigoEmpresa,
-			[FromQuery] string codigoArticulo)
+			[FromQuery] string codigoArticulo,
+			[FromQuery] bool incluirHistoricos = false)
 		{
 			try
 			{
 				if (string.IsNullOrWhiteSpace(codigoArticulo))
 					return BadRequest("El código de artículo es obligatorio");
 
-				var ejercicio = await _sageContext.Periodos
-					.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
-					.OrderByDescending(p => p.Fechainicio)
-					.Select(p => p.Ejercicio)
-					.FirstOrDefaultAsync();
-				
-				if (ejercicio == 0)
-					return BadRequest("Sin ejercicio válido");
+				IQueryable<AcumuladoStockUbicacion> query = _storageContext.AcumuladoStockUbicacion
+					.Where(s => s.CodigoEmpresa == codigoEmpresa &&
+							   s.CodigoArticulo == codigoArticulo &&
+							   !string.IsNullOrEmpty(s.Partida));
+
+				// Si no se solicitan históricos, filtrar solo por el ejercicio actual
+				if (!incluirHistoricos)
+				{
+					var ejercicio = await _sageContext.Periodos
+						.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+						.OrderByDescending(p => p.Fechainicio)
+						.Select(p => p.Ejercicio)
+						.FirstOrDefaultAsync();
+					
+					if (ejercicio == 0)
+						return BadRequest("Sin ejercicio válido");
+
+					query = query.Where(s => s.Ejercicio == ejercicio);
+				}
 
 				// Obtener todos los lotes activos del artículo con todas sus fechas de caducidad posibles (incluso con stock 0)
-				// Primero obtener todos los registros
-				var registros = await _storageContext.AcumuladoStockUbicacion
-					.Where(s => s.CodigoEmpresa == codigoEmpresa &&
-							   s.Ejercicio == ejercicio &&
-							   s.CodigoArticulo == codigoArticulo &&
-							   !string.IsNullOrEmpty(s.Partida))
-					.ToListAsync();
+				var registros = await query.ToListAsync();
 
 				// Agrupar por partida y obtener todas las fechas únicas
 				var lotesConFechas = registros
@@ -1307,9 +1314,18 @@ namespace SGA_Api.Controllers.Stock
 				var alm = almacenes.FirstOrDefault(x =>
 					x.CodigoEmpresa == s.CodigoEmpresa &&
 					x.CodigoAlmacen == s.CodigoAlmacen);
+				
+				// 🔷 CORREGIDO: Comparación normalizada para evitar problemas con espacios o mayúsculas/minúsculas
 				var art = articulos.FirstOrDefault(x =>
 					x.CodigoEmpresa == s.CodigoEmpresa &&
-					x.CodigoArticulo == s.CodigoArticulo);
+					string.Equals((x.CodigoArticulo ?? "").Trim(), (s.CodigoArticulo ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+				
+				// 🔷 DEBUG: Log si no encuentra el artículo
+				if (art == null)
+				{
+					_logger.LogWarning("⚠️ No se encontró artículo en Articulos: CodigoEmpresa={CodigoEmpresa}, CodigoArticulo='{CodigoArticulo}' (Length={Length})", 
+						s.CodigoEmpresa, s.CodigoArticulo, s.CodigoArticulo?.Length ?? 0);
+				}
 
 				var palets = lineasPalets
 					.Where(l =>
@@ -1415,7 +1431,7 @@ namespace SGA_Api.Controllers.Stock
 				{
 					CodigoEmpresa = s.CodigoEmpresa.ToString(),
 					CodigoArticulo = s.CodigoArticulo,
-					DescripcionArticulo = art?.DescripcionArticulo,
+					DescripcionArticulo = art?.DescripcionArticulo?.Trim() ?? string.Empty,
 					CodigoAlternativo = art?.CodigoAlternativo ?? "",
 					CodigoAlmacen = s.CodigoAlmacen,
 					Almacen = alm?.Almacen ?? "",

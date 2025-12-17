@@ -30,6 +30,16 @@ namespace SGA_Desktop.Models
         public DateTime? FechaAsignacion { get; set; }
         public DateTime? FechaInicio { get; set; }
         public DateTime? FechaCierre { get; set; }
+        
+        // Total de lecturas registradas
+        public int? TotalLecturas { get; set; }
+        
+        // Propiedades para conteos periódicos
+        public bool EsPeriodico { get; set; } = false;
+        public bool Activo { get; set; } = true;
+        
+        // Si esta orden es una renovación de un conteo periódico, aquí está el Guid del conteo periódico original
+        public Guid? OrdenPadreGuid { get; set; }
 
         // Propiedades adicionales para la UI
         public string EstadoFormateado
@@ -75,6 +85,7 @@ namespace SGA_Desktop.Models
                     "ESTANTERIA" => "Estantería",
                     "UBICACION" => "Ubicación",
                     "ARTICULO" => "Artículo",
+                    "MULTIARTICULO" => "MultiArtículo",
                     "PALET" => "Palet",
                     _ => Alcance
                 };
@@ -100,5 +111,39 @@ namespace SGA_Desktop.Models
         public bool PuedeCerrar => Estado == "EN_PROCESO";
         public bool PuedeVer => true;
         public bool PuedeEditar => Estado == "PLANIFICADO" || Estado == "ASIGNADO";
+        
+        // Propiedad calculada para mostrar líneas contadas
+        public string LineasContadasTexto
+        {
+            get
+            {
+                if (TotalLecturas.HasValue && TotalLecturas.Value > 0)
+                {
+                    return $"{TotalLecturas.Value} línea{(TotalLecturas.Value == 1 ? "" : "s")} contada{(TotalLecturas.Value == 1 ? "" : "s")}";
+                }
+                return "Sin líneas contadas";
+            }
+        }
+        
+        // Propiedad calculada para saber si la fecha plan está vencida (pasada y no cerrada)
+        public bool FechaPlanVencida
+        {
+            get
+            {
+                if (!FechaPlan.HasValue)
+                    return false;
+                    
+                // Si la fecha plan ya pasó y la orden no está cerrada
+                return FechaPlan.Value < DateTime.Now && 
+                       Estado != "CERRADO" && 
+                       !FechaCierre.HasValue;
+            }
+        }
+        
+        // Propiedad calculada para saber si esta orden es una renovación de un conteo periódico
+        public bool EsRenovacion => OrdenPadreGuid.HasValue;
+        
+        // Propiedad calculada para saber si es el conteo periódico original (no una renovación)
+        public bool EsPeriodicoOriginal => EsPeriodico && !OrdenPadreGuid.HasValue;
     }
 } 

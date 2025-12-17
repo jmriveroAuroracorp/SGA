@@ -70,9 +70,9 @@ namespace SGA_Api.Models.Inventario
         [JsonPropertyName("fechaInventario")]
         public DateTime FechaInventario { get; set; } = DateTime.Today.Date;
 
-        // NUEVO: Filtro de artículo específico
-        [JsonPropertyName("codigoArticuloFiltro")]
-        public string? CodigoArticuloFiltro { get; set; }
+        // NUEVO: Filtro de artículos específicos (múltiples)
+        [JsonPropertyName("codigosArticuloFiltro")]
+        public List<string>? CodigosArticuloFiltro { get; set; }
 
         // NUEVO: Rango de artículos
         [JsonPropertyName("articuloDesde")]
@@ -80,6 +80,9 @@ namespace SGA_Api.Models.Inventario
 
         [JsonPropertyName("articuloHasta")]
         public string? ArticuloHasta { get; set; }
+
+        [JsonPropertyName("noGenerarLineas")]
+        public bool NoGenerarLineas { get; set; } = false;
     }
 
     /// <summary>
@@ -198,6 +201,9 @@ namespace SGA_Api.Models.Inventario
 
         [JsonPropertyName("tipoInventario")]
         public string? TipoInventario { get; set; }
+
+        [JsonPropertyName("usuarioCreacionId")]
+        public int? UsuarioCreacionId { get; set; }
     }
 
     /// <summary>

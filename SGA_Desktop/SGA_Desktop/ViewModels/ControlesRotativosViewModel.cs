@@ -41,6 +41,7 @@ namespace SGA_Desktop.ViewModels
             OrdenesConteo = new ObservableCollection<OrdenConteoDto>();
             ResultadosSupervision = new ObservableCollection<ResultadoConteoDetalladoDto>();
             OperariosDisponibles = new ObservableCollection<OperariosAccesoDto>();
+            ConteosPeriodicos = new ObservableCollection<ConteoPeriodicoDto>();
 
             OrdenesConteoView = CollectionViewSource.GetDefaultView(OrdenesConteo);
             OrdenesConteoView.Filter = new Predicate<object>(FiltroOrden);
@@ -89,6 +90,7 @@ namespace SGA_Desktop.ViewModels
         public ObservableCollection<string> EstadosCombo { get; }
         public ObservableCollection<ResultadoConteoDetalladoDto> ResultadosSupervision { get; }
         public ObservableCollection<OperariosAccesoDto> OperariosDisponibles { get; }
+        public ObservableCollection<ConteoPeriodicoDto> ConteosPeriodicos { get; }
         public ICollectionView ResultadosView { get; }
         
         // Propiedades para autocompletado de operarios
@@ -149,6 +151,30 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string estadoFiltro = "TODOS";
 
+        [ObservableProperty]
+        private string idOrdenFiltro = string.Empty;
+
+        [ObservableProperty]
+        private bool verTodosLosConteos = false; // Por defecto, solo ver los propios
+
+        partial void OnIdOrdenFiltroChanged(string value)
+        {
+            OrdenesConteoView?.Refresh();
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
+        partial void OnVerTodosLosConteosChanged(bool value)
+        {
+            // Cuando cambia VerTodosLosConteos, recargar los controles
+            if (!IsCargando)
+            {
+                _ = CargarControles();
+            }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
         partial void OnEstadoFiltroChanged(string value)
         {
             // Recargar automáticamente cuando cambie el estado del filtro
@@ -208,6 +234,7 @@ namespace SGA_Desktop.ViewModels
         // Propiedades calculadas para supervisión
         public bool MostrandoOrdenes => ModoVisualizacion == "ORDENES";
         public bool MostrandoSupervision => ModoVisualizacion == "SUPERVISION";
+        public bool MostrandoPeriodicos => ModoVisualizacion == "PERIODICOS";
         public int TotalResultados => ResultadosSupervision?.Count ?? 0;
         public int ResultadosPendientes => ResultadosSupervision?.Count(r => r.RequiereAprobacion) ?? 0;
         public bool PuedeReasignar => ResultadoSeleccionado != null && 
@@ -234,10 +261,12 @@ namespace SGA_Desktop.ViewModels
                 var estadoActivo = !string.IsNullOrEmpty(EstadoFiltro) && EstadoFiltro != "TODOS";
                 var operarioActivo = OperarioSeleccionadoCombo != null && 
                                      OperarioSeleccionadoCombo.Operario != 0;
+                var idActivo = !string.IsNullOrWhiteSpace(IdOrdenFiltro);
+                var verTodosActivo = VerTodosLosConteos;
                 // Siempre mostrar fechas como filtro activo (incluso si son los valores por defecto)
                 var fechasActivas = true; // Siempre hay un rango de fechas aplicado
 
-                return almacenActivo || estadoActivo || operarioActivo || fechasActivas;
+                return almacenActivo || estadoActivo || operarioActivo || idActivo || verTodosActivo || fechasActivas;
             }
         }
 
@@ -263,6 +292,20 @@ namespace SGA_Desktop.ViewModels
                 if (OperarioSeleccionadoCombo != null && OperarioSeleccionadoCombo.Operario != 0)
                 {
                     filtros.Add($"Operario: {OperarioSeleccionadoCombo.NombreOperario}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(IdOrdenFiltro))
+                {
+                    filtros.Add($"ID: {IdOrdenFiltro}");
+                }
+
+                if (VerTodosLosConteos)
+                {
+                    filtros.Add("Ver todos");
+                }
+                else
+                {
+                    filtros.Add("Solo propios");
                 }
 
                 return string.Join(" | ", filtros);
@@ -315,7 +358,9 @@ namespace SGA_Desktop.ViewModels
                     FechaDesde,
                     FechaHasta,
                     EstadoFiltro,
-                    OperarioSeleccionadoCombo
+                    OperarioSeleccionadoCombo,
+                    IdOrdenFiltro,
+                    VerTodosLosConteos
                 );
 
                 // Crear y mostrar el diálogo
@@ -340,6 +385,8 @@ namespace SGA_Desktop.ViewModels
                     FechaHasta = dialogViewModel.FechaHasta;
                     EstadoFiltro = dialogViewModel.EstadoFiltro;
                     OperarioSeleccionadoCombo = dialogViewModel.OperarioSeleccionadoCombo;
+                    IdOrdenFiltro = dialogViewModel.IdOrdenFiltro;
+                    VerTodosLosConteos = dialogViewModel.VerTodosLosConteos;
 
                     // Notificar cambios en propiedades calculadas
                     OnPropertyChanged(nameof(TieneFiltrosActivos));
@@ -347,6 +394,9 @@ namespace SGA_Desktop.ViewModels
 
                     // Recargar los controles con los nuevos filtros
                     await CargarControles();
+                    
+                    // Refrescar la vista para aplicar el filtro de ID
+                    OrdenesConteoView?.Refresh();
                 }
             }
             catch (Exception ex)
@@ -362,6 +412,8 @@ namespace SGA_Desktop.ViewModels
         private void LimpiarFiltros()
         {
             EstadoFiltro = "TODOS";
+            IdOrdenFiltro = string.Empty;
+            VerTodosLosConteos = false; // Por defecto, solo ver los propios
             
             // Verificar que las colecciones no estén vacías antes de acceder a FirstOrDefault()
             if (OperariosCombo?.Any() == true)
@@ -383,6 +435,10 @@ namespace SGA_Desktop.ViewModels
             // Notificar cambios en propiedades calculadas
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            
+            // Recargar controles y refrescar vista
+            _ = CargarControles();
+            OrdenesConteoView?.Refresh();
         }
 
         [RelayCommand]
@@ -401,14 +457,27 @@ namespace SGA_Desktop.ViewModels
 
                 Debug.WriteLine($"CargarControles - EstadoFiltro: '{EstadoFiltro}', OperarioFiltro: '{OperarioSeleccionadoCombo?.DescripcionCombo}', FechaDesde: {FechaDesde:yyyy-MM-dd}, FechaHasta: {FechaHasta:yyyy-MM-dd}");
                 
+                // Obtener código de operario del usuario actual para filtrar por almacenes autorizados
+                // El filtro de almacenes autorizados siempre se aplica (independiente de VerTodosLosConteos)
+                string? codigoOperarioSesion = SessionManager.UsuarioActual?.operario.ToString();
+                
+                // Obtener código del creador para filtrar por "solo propios" vs "ver todos"
+                // Si VerTodosLosConteos es false, filtrar por CreadoPorCodigo (solo los que creó el usuario)
+                // Si VerTodosLosConteos es true, no filtrar por CreadoPorCodigo (ver todos)
+                string? creadoPorCodigo = VerTodosLosConteos 
+                    ? null 
+                    : SessionManager.UsuarioActual?.operario.ToString();
+                
                 // Pasar las fechas al servicio para filtrar en el backend
                 var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(
                     estadoFiltro, 
                     operarioFiltro,
                     FechaDesde,
-                    FechaHasta);
+                    FechaHasta,
+                    codigoOperarioSesion,
+                    creadoPorCodigo);
                 
-                Debug.WriteLine($"CargarControles - Se obtuvieron {ordenes.Count} órdenes");
+                Debug.WriteLine($"CargarControles - Se obtuvieron {ordenes?.Count ?? 0} órdenes");
 
                 // Asegurar que tenemos los operarios cargados para el mapeo de nombres
                 if (OperariosDisponibles.Count == 0)
@@ -659,6 +728,7 @@ namespace SGA_Desktop.ViewModels
             ModoVisualizacion = "ORDENES";
             OnPropertyChanged(nameof(MostrandoOrdenes));
             OnPropertyChanged(nameof(MostrandoSupervision));
+            OnPropertyChanged(nameof(MostrandoPeriodicos));
         }
 
         [RelayCommand]
@@ -667,12 +737,162 @@ namespace SGA_Desktop.ViewModels
             ModoVisualizacion = "SUPERVISION";
             OnPropertyChanged(nameof(MostrandoOrdenes));
             OnPropertyChanged(nameof(MostrandoSupervision));
+            OnPropertyChanged(nameof(MostrandoPeriodicos));
             
             // Cargar datos de supervisión si es la primera vez
             if (ResultadosSupervision.Count == 0)
             {
                 await CargarResultadosSupervision();
                 await CargarOperarios();
+            }
+        }
+
+        [RelayCommand]
+        private async Task CambiarAPeriodicos()
+        {
+            ModoVisualizacion = "PERIODICOS";
+            OnPropertyChanged(nameof(MostrandoOrdenes));
+            OnPropertyChanged(nameof(MostrandoSupervision));
+            OnPropertyChanged(nameof(MostrandoPeriodicos));
+            
+            // Cargar conteos periódicos si es la primera vez
+            if (ConteosPeriodicos.Count == 0)
+            {
+                await CargarConteosPeriodicos();
+            }
+        }
+
+        [RelayCommand]
+        private async Task CargarConteosPeriodicos()
+        {
+            try
+            {
+                IsCargando = true;
+                MensajeEstado = "Cargando conteos periódicos...";
+
+                // Obtener código de operario del usuario actual para filtrar por almacenes autorizados
+                var codigoOperario = SessionManager.UsuarioActual?.operario.ToString();
+                var conteos = await _conteosService.ListarConteosPeriodicosAsync(codigoOperario);
+
+                ConteosPeriodicos.Clear();
+                foreach (var conteo in conteos.OrderByDescending(c => c.FechaCreacion))
+                {
+                    ConteosPeriodicos.Add(conteo);
+                }
+
+                MensajeEstado = $"Se cargaron {ConteosPeriodicos.Count} conteos periódicos";
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al cargar conteos periódicos",
+                    $"No se pudieron cargar los conteos periódicos: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+                MensajeEstado = "Error al cargar conteos periódicos";
+            }
+            finally
+            {
+                IsCargando = false;
+            }
+        }
+
+        [RelayCommand]
+        private async Task ActivarPeriodicidad(ConteoPeriodicoDto conteo)
+        {
+            if (conteo == null) return;
+
+            try
+            {
+                await _conteosService.ActivarPeriodicidadAsync(conteo.GuidID);
+                
+                // Recargar la lista para obtener datos actualizados
+                await CargarConteosPeriodicos();
+                
+                var successDialog = new WarningDialog(
+                    "Periodicidad activada",
+                    $"El conteo periódico '{conteo.Titulo}' ha sido activado correctamente.");
+                ShowCenteredDialog(successDialog);
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al activar periodicidad",
+                    $"No se pudo activar la periodicidad: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+        }
+
+        [RelayCommand]
+        private async Task DesactivarPeriodicidad(ConteoPeriodicoDto conteo)
+        {
+            if (conteo == null) return;
+
+            try
+            {
+                await _conteosService.DesactivarPeriodicidadAsync(conteo.GuidID);
+                
+                // Recargar la lista para obtener datos actualizados
+                await CargarConteosPeriodicos();
+                
+                var successDialog = new WarningDialog(
+                    "Periodicidad desactivada",
+                    $"El conteo periódico '{conteo.Titulo}' ha sido desactivado correctamente.");
+                ShowCenteredDialog(successDialog);
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al desactivar periodicidad",
+                    $"No se pudo desactivar la periodicidad: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+        }
+
+        [RelayCommand]
+        private async Task VerRenovaciones(ConteoPeriodicoDto conteo)
+        {
+            if (conteo == null) return;
+
+            try
+            {
+                IsCargando = true;
+                MensajeEstado = "Cargando renovaciones...";
+
+                var renovaciones = await _conteosService.ObtenerRenovacionesAsync(conteo.GuidID);
+                
+                var mensaje = $"Historial de renovaciones para '{conteo.Titulo}':\n\n";
+                mensaje += $"Total de renovaciones: {renovaciones.Count}\n\n";
+                
+                if (renovaciones.Any())
+                {
+                    mensaje += "Últimas renovaciones:\n";
+                    foreach (var renovacion in renovaciones.Take(10).OrderByDescending(r => r.FechaCreacion))
+                    {
+                        mensaje += $"- {renovacion.FechaCreacion:dd/MM/yyyy HH:mm} - Estado: {renovacion.Estado}\n";
+                    }
+                    if (renovaciones.Count > 10)
+                    {
+                        mensaje += $"\n... y {renovaciones.Count - 10} más";
+                    }
+                }
+                else
+                {
+                    mensaje += "Aún no se han realizado renovaciones.";
+                }
+
+                var infoDialog = new WarningDialog("Historial de Renovaciones", mensaje);
+                ShowCenteredDialog(infoDialog);
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al obtener renovaciones",
+                    $"No se pudieron obtener las renovaciones: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+            finally
+            {
+                IsCargando = false;
             }
         }
 
@@ -892,6 +1112,13 @@ namespace SGA_Desktop.ViewModels
         private bool FiltroOrden(object item)
         {
             if (item is not OrdenConteoDto orden) return false;
+
+            // Filtro por ID Orden (búsqueda parcial en el título)
+            if (!string.IsNullOrWhiteSpace(IdOrdenFiltro))
+            {
+                if (!orden.Titulo.Contains(IdOrdenFiltro, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
 
             // Filtro por almacén (solo si hay un almacén seleccionado y no es "Todas")
             if (AlmacenSeleccionadoCombo != null && 

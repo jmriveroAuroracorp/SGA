@@ -82,6 +82,9 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string idInventarioFiltro = string.Empty;
 
+        [ObservableProperty]
+        private bool verTodosLosInventarios = false; // Por defecto, solo ver los propios
+
         // Propiedades para rangos de ubicaciones
         [ObservableProperty]
         private int? pasilloDesde;
@@ -126,6 +129,59 @@ namespace SGA_Desktop.ViewModels
             }
         }
         public string TotalUbicaciones => $"Ubicaciones: {StockUbicaciones.Count}";
+
+        public bool TieneFiltrosActivos
+        {
+            get
+            {
+                // Verificar si hay filtros activos
+                var almacenActivo = AlmacenSeleccionadoCombo != null && 
+                                    AlmacenSeleccionadoCombo.CodigoAlmacen != "Todas";
+                var estadoActivo = !string.IsNullOrEmpty(EstadoFiltro) && EstadoFiltro != "TODOS";
+                var idActivo = !string.IsNullOrWhiteSpace(IdInventarioFiltro);
+                // Siempre mostrar fechas como filtro activo (incluso si son los valores por defecto)
+                var fechasActivas = true; // Siempre hay un rango de fechas aplicado
+
+                return almacenActivo || estadoActivo || idActivo || fechasActivas;
+            }
+        }
+
+        public string ResumenFiltrosActivos
+        {
+            get
+            {
+                var filtros = new List<string>();
+
+                // Siempre mostrar las fechas (incluso si son los valores por defecto)
+                filtros.Add($"Fechas: {FechaDesde:dd/MM/yyyy} - {FechaHasta:dd/MM/yyyy}");
+
+                if (AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != "Todas")
+                {
+                    filtros.Add($"Almacén: {AlmacenSeleccionadoCombo.CodigoAlmacen}");
+                }
+
+                if (!string.IsNullOrEmpty(EstadoFiltro) && EstadoFiltro != "TODOS")
+                {
+                    filtros.Add($"Estado: {EstadoFiltro}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(IdInventarioFiltro))
+                {
+                    filtros.Add($"ID: {IdInventarioFiltro}");
+                }
+
+                if (VerTodosLosInventarios)
+                {
+                    filtros.Add("Ver todos");
+                }
+                else
+                {
+                    filtros.Add("Solo propios");
+                }
+
+                return string.Join(" | ", filtros);
+            }
+        }
         #endregion
 
         #region Property Change Callbacks
@@ -133,6 +189,8 @@ namespace SGA_Desktop.ViewModels
         {
             // Notificar cambio en CanCargarInventarios
             OnPropertyChanged(nameof(CanCargarInventarios));
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         partial void OnFechaDesdeChanged(DateTime oldValue, DateTime newValue)
@@ -142,6 +200,8 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = newValue;
             }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         partial void OnFechaHastaChanged(DateTime oldValue, DateTime newValue)
@@ -151,6 +211,8 @@ namespace SGA_Desktop.ViewModels
             {
                 FechaHasta = FechaDesde;
             }
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
 
         partial void OnIsCargandoChanged(bool oldValue, bool newValue)
@@ -160,10 +222,18 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(CanCargarInventarios));
         }
 
+        partial void OnEstadoFiltroChanged(string oldValue, string newValue)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+        }
+
         partial void OnIdInventarioFiltroChanged(string oldValue, string newValue)
         {
             // Refrescar la vista cuando cambie el filtro por ID
             InventariosView.Refresh();
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
         #endregion
 
@@ -234,7 +304,9 @@ namespace SGA_Desktop.ViewModels
                     CodigosAlmacen = codigosAlmacen,
                     FechaDesde = FechaDesde.Date, // Solo la fecha, hora 00:00:00
                     FechaHasta = FechaHasta.Date.AddDays(1).AddSeconds(-1), // Último segundo del día (23:59:59)
-                    EstadoInventario = EstadoFiltro == "TODOS" ? null : EstadoFiltro
+                    EstadoInventario = EstadoFiltro == "TODOS" ? null : EstadoFiltro,
+                    // Enviar el usuario actual solo si NO está marcado "Ver todos"
+                    UsuarioCreacionId = VerTodosLosInventarios ? null : SessionManager.UsuarioActual?.operario
                 };
 
 
@@ -606,6 +678,88 @@ namespace SGA_Desktop.ViewModels
                     errorDialog.Owner = owner;
                 errorDialog.ShowDialog();
             }
+        }
+
+        [RelayCommand]
+        private async Task AbrirFiltros()
+        {
+            try
+            {
+                // Crear el ViewModel del diálogo con los valores actuales
+                var dialogViewModel = new FiltrosInventarioDialogViewModel(
+                    AlmacenSeleccionadoCombo,
+                    FechaDesde,
+                    FechaHasta,
+                    EstadoFiltro,
+                    IdInventarioFiltro,
+                    VerTodosLosInventarios
+                );
+
+                // Crear y mostrar el diálogo
+                var dialog = new FiltrosInventarioDialog(dialogViewModel);
+
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+
+                if (mainWindow != null && mainWindow != dialog)
+                    dialog.Owner = mainWindow;
+
+                // Mostrar el diálogo y esperar resultado
+                var result = dialog.ShowDialog();
+
+                // Si el usuario hizo clic en "Aplicar" (result == true), aplicar los filtros
+                if (result == true)
+                {
+                    // Actualizar los filtros del ViewModel principal con los valores del diálogo
+                    AlmacenSeleccionadoCombo = dialogViewModel.AlmacenSeleccionadoCombo;
+                    FechaDesde = dialogViewModel.FechaDesde;
+                    FechaHasta = dialogViewModel.FechaHasta;
+                    EstadoFiltro = dialogViewModel.EstadoFiltro;
+                    IdInventarioFiltro = dialogViewModel.IdInventarioFiltro;
+                    VerTodosLosInventarios = dialogViewModel.VerTodosLosInventarios;
+
+                    // Notificar cambios en propiedades calculadas
+                    OnPropertyChanged(nameof(TieneFiltrosActivos));
+                    OnPropertyChanged(nameof(ResumenFiltrosActivos));
+
+                    // Recargar los inventarios con los nuevos filtros
+                    await CargarInventariosAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al abrir el diálogo de filtros: {ex.Message}");
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                if (mainWindow != null && mainWindow != errorDialog)
+                    errorDialog.Owner = mainWindow;
+                errorDialog.ShowDialog();
+            }
+        }
+
+        [RelayCommand]
+        private void LimpiarFiltros()
+        {
+            EstadoFiltro = "TODOS";
+            IdInventarioFiltro = string.Empty;
+            VerTodosLosInventarios = false; // Por defecto, solo ver los propios
+            
+            // Verificar que las colecciones no estén vacías antes de acceder a FirstOrDefault()
+            if (AlmacenesCombo?.Any() == true)
+            {
+                AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+            }
+            
+            // Establecer las fechas: desde hace 2 días hasta hoy
+            FechaDesde = DateTime.Today.AddDays(-2);
+            FechaHasta = DateTime.Today;
+
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
         }
         #endregion
 

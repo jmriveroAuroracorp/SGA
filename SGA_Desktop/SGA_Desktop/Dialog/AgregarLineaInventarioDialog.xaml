@@ -92,15 +92,26 @@
                              Padding="5"/>
                 </StackPanel>
 
-                <!-- Almacén (readonly) -->
+                <!-- Almacén -->
                 <StackPanel Grid.Row="2" Margin="0,0,0,15">
-                    <TextBlock Text="Almacén" 
+                    <TextBlock Text="Almacén *" 
                                FontWeight="Bold" 
                                Margin="0,0,0,5"/>
+                    <!-- ComboBox cuando es multialmacén -->
+                    <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
+                              SelectedItem="{Binding AlmacenSeleccionado}"
+                              DisplayMemberPath="NombreAlmacen"
+                              SelectedValuePath="CodigoAlmacen"
+                              IsEnabled="{Binding EsMultialmacen}"
+                              Visibility="{Binding EsMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}"
+                              Style="{StaticResource EstiloComboBox}"
+                              Padding="5"/>
+                    <!-- TextBox readonly cuando NO es multialmacén -->
                     <TextBox Text="{Binding CodigoAlmacen, Mode=OneWay}"
                              IsReadOnly="True"
                              Background="LightGray"
-                             Padding="5"/>
+                             Padding="5"
+                             Visibility="{Binding EsMultialmacen, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                 </StackPanel>
 
                 <!-- Ubicación -->
@@ -110,7 +121,7 @@
                                Margin="0,0,0,5"/>
                     <ComboBox ItemsSource="{Binding Ubicaciones}"
                               SelectedItem="{Binding UbicacionSeleccionada}"
-                              DisplayMemberPath="Ubicacion"
+                              DisplayMemberPath="UbicacionMostrada"
                               IsEditable="False"
                               Style="{StaticResource EstiloComboBox}"
                               Padding="5"/>

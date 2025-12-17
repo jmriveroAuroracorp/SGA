@@ -53,5 +53,11 @@ namespace SGA_Api.Models.Conteos
         
         [StringLength(500, ErrorMessage = "El comentario no puede exceder 500 caracteres")]
         public string? Comentario { get; set; }
+        
+        // Propiedades para conteos periódicos
+        public bool EsPeriodico { get; set; } = false;
+        
+        [Range(1, int.MaxValue, ErrorMessage = "La frecuencia debe ser mayor a 0")]
+        public int? FrecuenciaDias { get; set; }
     }
 } 

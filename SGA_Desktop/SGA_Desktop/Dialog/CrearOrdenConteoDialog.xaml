@@ -6,7 +6,7 @@
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="CREAR ORDEN DE CONTEO"
         Width="800"
-        Height="650"
+        Height="750"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -28,6 +28,7 @@
             <!-- Converters -->
             <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -107,9 +108,10 @@
                                                Margin="0,0,15,0"
                                                VerticalAlignment="Center"/>
                                     <RadioButton Content="Por Artículo" 
-                                               
+                                               IsChecked="{Binding EsConteoArticulo, Mode=OneWay}"
                                                GroupName="TipoConteo"
-                                               VerticalAlignment="Center"/>
+                                               VerticalAlignment="Center"
+                                               Click="RadioButton_Articulo_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -219,6 +221,8 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -256,8 +260,17 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- CheckBox para activar modo rangos -->
+                            <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
+                                      Content="Usar rangos de ubicación"
+                                      IsChecked="{Binding UsarRangos}"
+                                      Margin="0,0,0,10"
+                                      Visibility="{Binding MostrarFiltrosSecuenciales, Converter={StaticResource BoolToVis}}"
+                                      FontSize="13"
+                                      Foreground="#495057"/>
+
                             <!-- Filtros por ubicación secuencial -->
-                            <Border Grid.Row="2" Grid.Column="0" 
+                            <Border Grid.Row="3" Grid.Column="0" 
                                     Background="#FFFFFF"
                                     BorderBrush="#E9ECEF"
                                     BorderThickness="1"
@@ -271,6 +284,7 @@
                                         <TextBlock Text="Pasillo" FontWeight="SemiBold" Foreground="#495057"/>
                                         <TextBlock Text=" (opcional)" FontSize="11" Foreground="#6C757D" FontStyle="Italic"/>
                                     </StackPanel>
+                                    <!-- Modo normal: ComboBox -->
                                     <ComboBox ItemsSource="{Binding PasillosDisponibles}"
                                               SelectedItem="{Binding Pasillo}"
                                               Height="32"
@@ -278,11 +292,36 @@
                                               Padding="8"
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
-                                              Background="White"/>
+                                              Background="White"
+                                              Visibility="{Binding UsarRangos, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <!-- Modo rango: TextBox Desde/Hasta -->
+                                    <StackPanel Orientation="Horizontal" 
+                                                Visibility="{Binding UsarRangos, Converter={StaticResource BoolToVis}}">
+                                        <TextBox Text="{Binding PasilloDesde, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 Margin="0,0,3,0"
+                                                 VerticalContentAlignment="Center"/>
+                                        <TextBlock Text="a" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="3,0"
+                                                   Foreground="#6C757D"
+                                                   FontSize="11"/>
+                                        <TextBox Text="{Binding PasilloHasta, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 VerticalContentAlignment="Center"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <Border Grid.Row="2" Grid.Column="1" 
+                            <Border Grid.Row="3" Grid.Column="1" 
                                     Background="#FFFFFF"
                                     BorderBrush="#E9ECEF"
                                     BorderThickness="1"
@@ -296,6 +335,7 @@
                                         <TextBlock Text="Estantería" FontWeight="SemiBold" Foreground="#495057"/>
                                         <TextBlock Text=" (opcional)" FontSize="11" Foreground="#6C757D" FontStyle="Italic"/>
                                     </StackPanel>
+                                    <!-- Modo normal: ComboBox -->
                                     <ComboBox ItemsSource="{Binding EstanteriasDisponibles}"
                                               SelectedItem="{Binding Estanteria}"
                                               Height="32"
@@ -304,11 +344,38 @@
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
                                               Background="White"
+                                              IsEnabled="{Binding EstanteriaHabilitada}"
+                                              Visibility="{Binding UsarRangos, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <!-- Modo rango: TextBox Desde/Hasta -->
+                                    <StackPanel Orientation="Horizontal" 
+                                                Visibility="{Binding UsarRangos, Converter={StaticResource BoolToVis}}">
+                                        <TextBox Text="{Binding EstanteriaDesde, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 Margin="0,0,3,0"
+                                                 VerticalContentAlignment="Center"
+                                                 IsEnabled="{Binding EstanteriaHabilitada}"/>
+                                        <TextBlock Text="a" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="3,0"
+                                                   Foreground="#6C757D"
+                                                   FontSize="11"/>
+                                        <TextBox Text="{Binding EstanteriaHasta, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 VerticalContentAlignment="Center"
                                               IsEnabled="{Binding EstanteriaHabilitada}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <Border Grid.Row="2" Grid.Column="2" 
+                            <Border Grid.Row="3" Grid.Column="2" 
                                     Background="#FFFFFF"
                                     BorderBrush="#E9ECEF"
                                     BorderThickness="1"
@@ -322,6 +389,7 @@
                                         <TextBlock Text="Altura" FontWeight="SemiBold" Foreground="#495057"/>
                                         <TextBlock Text=" (opcional)" FontSize="11" Foreground="#6C757D" FontStyle="Italic"/>
                                     </StackPanel>
+                                    <!-- Modo normal: ComboBox -->
                                     <ComboBox ItemsSource="{Binding AlturasDisponibles}"
                                               SelectedItem="{Binding Altura}"
                                               Height="32"
@@ -330,11 +398,38 @@
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
                                               Background="White"
+                                              IsEnabled="{Binding AlturaHabilitada}"
+                                              Visibility="{Binding UsarRangos, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <!-- Modo rango: TextBox Desde/Hasta -->
+                                    <StackPanel Orientation="Horizontal" 
+                                                Visibility="{Binding UsarRangos, Converter={StaticResource BoolToVis}}">
+                                        <TextBox Text="{Binding AlturaDesde, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 Margin="0,0,3,0"
+                                                 VerticalContentAlignment="Center"
+                                                 IsEnabled="{Binding AlturaHabilitada}"/>
+                                        <TextBlock Text="a" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="3,0"
+                                                   Foreground="#6C757D"
+                                                   FontSize="11"/>
+                                        <TextBox Text="{Binding AlturaHasta, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 VerticalContentAlignment="Center"
                                               IsEnabled="{Binding AlturaHabilitada}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <Border Grid.Row="2" Grid.Column="3" 
+                            <Border Grid.Row="3" Grid.Column="3" 
                                     Background="#FFFFFF"
                                     BorderBrush="#E9ECEF"
                                     BorderThickness="1"
@@ -348,6 +443,7 @@
                                         <TextBlock Text="Posición" FontWeight="SemiBold" Foreground="#495057"/>
                                         <TextBlock Text=" (opcional)" FontSize="11" Foreground="#6C757D" FontStyle="Italic"/>
                                     </StackPanel>
+                                    <!-- Modo normal: ComboBox -->
                                     <ComboBox ItemsSource="{Binding PosicionesDisponibles}"
                                               SelectedItem="{Binding Posicion}"
                                               Height="32"
@@ -356,12 +452,39 @@
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
                                               Background="White"
+                                              IsEnabled="{Binding PosicionHabilitada}"
+                                              Visibility="{Binding UsarRangos, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <!-- Modo rango: TextBox Desde/Hasta -->
+                                    <StackPanel Orientation="Horizontal" 
+                                                Visibility="{Binding UsarRangos, Converter={StaticResource BoolToVis}}">
+                                        <TextBox Text="{Binding PosicionDesde, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 Margin="0,0,3,0"
+                                                 VerticalContentAlignment="Center"
+                                                 IsEnabled="{Binding PosicionHabilitada}"/>
+                                        <TextBlock Text="a" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="3,0"
+                                                   Foreground="#6C757D"
+                                                   FontSize="11"/>
+                                        <TextBox Text="{Binding PosicionHasta, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="50"
+                                                 Height="28"
+                                                 FontSize="12"
+                                                 Padding="4"
+                                                 BorderBrush="#CED4DA"
+                                                 VerticalContentAlignment="Center"
                                               IsEnabled="{Binding PosicionHabilitada}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 
                             <!-- Ubicación Directa -->
-                            <Border Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"
+                            <Border Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4"
                                     Background="#E3F2FD"
                                     BorderBrush="#2196F3"
                                     BorderThickness="1"
@@ -420,6 +543,59 @@
                                             Height="35"
                                             FontSize="12"/>
                                 </Grid>
+                                
+                                <!-- Lista de artículos seleccionados -->
+                                <Border Visibility="{Binding MostrarListaArticulos, Converter={StaticResource BoolToVis}}"
+                                        Background="#E7F3FF"
+                                        BorderBrush="#2196F3"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="10"
+                                        Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="📋 Artículos seleccionados:" FontWeight="Bold" Foreground="#1976D2" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{Binding DescripcionArticulosSeleccionados}" 
+                                                   FontSize="12" 
+                                                   Foreground="#1976D2" 
+                                                   Margin="0,0,0,8"
+                                                   TextWrapping="Wrap"/>
+                                        <ItemsControl ItemsSource="{Binding ArticulosSeleccionados}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="White"
+                                                            BorderBrush="#BBDEFB"
+                                                            BorderThickness="1"
+                                                            CornerRadius="3"
+                                                            Padding="8"
+                                                            Margin="0,0,0,5">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0">
+                                                                <TextBlock FontWeight="Bold" FontSize="12">
+                                                                    <Run Text="{Binding CodigoArticulo}"/>
+                                                                    <Run Text=" - "/>
+                                                                    <Run Text="{Binding DescripcionArticulo}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1"
+                                                                    Content="✕ Eliminar"
+                                                                    Command="{Binding DataContext.EliminarArticuloCommand, RelativeSource={RelativeSource AncestorType=Border, AncestorLevel=2}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    Style="{StaticResource EstiloBotonSecundario}"
+                                                                    Width="90"
+                                                                    Height="28"
+                                                                    FontSize="11"
+                                                                    Margin="10,0,0,0"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
 
                                 <!-- Lista desplegable para múltiples resultados -->
                                 <StackPanel Visibility="{Binding MostrarListaArticulos, Converter={StaticResource BoolToVis}}"
@@ -486,7 +662,7 @@
                             </StackPanel>
 
                             <!-- Comentario -->
-                            <StackPanel Grid.Row="5" Grid.ColumnSpan="4" Margin="0,0,0,0">
+                            <StackPanel Grid.Row="6" Grid.ColumnSpan="4" Margin="0,0,0,15">
                                 <TextBlock Text="Comentarios" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Comentario, UpdateSourceTrigger=PropertyChanged}"
                                          Height="60"
@@ -495,6 +671,35 @@
                                          TextWrapping="Wrap"
                                          AcceptsReturn="True"
                                          VerticalScrollBarVisibility="Auto"/>
+                            </StackPanel>
+
+                            <!-- Conteo Periódico -->
+                            <StackPanel Grid.Row="7" Grid.ColumnSpan="4" Margin="0,0,0,0">
+                                <CheckBox Content="🔄 Conteo Periódico"
+                                          IsChecked="{Binding EsPeriodico}"
+                                          FontWeight="Bold"
+                                          FontSize="14"
+                                          Margin="0,0,0,10"/>
+                                
+                                <StackPanel Visibility="{Binding EsPeriodico, Converter={StaticResource BoolToVis}}"
+                                            Margin="20,0,0,0">
+                                    <TextBlock Text="Frecuencia (días) *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                    <TextBox Text="{Binding FrecuenciaDias, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="35"
+                                             FontSize="14"
+                                             Padding="8"
+                                             BorderThickness="1"
+                                             BorderBrush="{StaticResource BrushInputBorde}">
+                                        <TextBox.InputBindings>
+                                            <KeyBinding Key="Enter" Command="{Binding CrearOrdenCommand}"/>
+                                        </TextBox.InputBindings>
+                                    </TextBox>
+                                    <TextBlock Text="Ejemplo: 7 para conteos semanales, 30 para mensuales"
+                                               FontSize="11"
+                                               Foreground="Gray"
+                                               Margin="0,5,0,0"
+                                               FontStyle="Italic"/>
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </GroupBox>

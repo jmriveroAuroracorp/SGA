@@ -73,9 +73,9 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("fechaInventario")]
         public DateTime FechaInventario { get; set; } = DateTime.Today.Date;
 
-        // NUEVO: Filtro de artículo específico
-        [JsonPropertyName("codigoArticuloFiltro")]
-        public string? CodigoArticuloFiltro { get; set; }
+        // NUEVO: Filtro de artículos específicos (múltiples)
+        [JsonPropertyName("codigosArticuloFiltro")]
+        public List<string>? CodigosArticuloFiltro { get; set; }
 
         // NUEVO: Rango de artículos
         [JsonPropertyName("articuloDesde")]
@@ -83,6 +83,9 @@ namespace SGA_Desktop.Models
 
         [JsonPropertyName("articuloHasta")]
         public string? ArticuloHasta { get; set; }
+
+        [JsonPropertyName("noGenerarLineas")]
+        public bool NoGenerarLineas { get; set; } = false;
 
         // ===== PROPIEDADES DE COMPATIBILIDAD MULTIALMACÉN =====
         
@@ -165,5 +168,29 @@ namespace SGA_Desktop.Models
 
         [JsonPropertyName("fechaHasta")]
         public DateTime? FechaHasta { get; set; }
+
+        [JsonPropertyName("usuarioCreacionId")]
+        public int? UsuarioCreacionId { get; set; }
+    }
+
+    /// <summary>
+    /// DTO para respuesta de creación de inventario
+    /// </summary>
+    public class CrearInventarioResponseDto
+    {
+        [JsonPropertyName("id")]
+        public Guid Id { get; set; }
+
+        [JsonPropertyName("mensaje")]
+        public string Mensaje { get; set; } = string.Empty;
+
+        [JsonPropertyName("lineasGeneradas")]
+        public int LineasGeneradas { get; set; }
+
+        [JsonPropertyName("ubicacionesEnRango")]
+        public int UbicacionesEnRango { get; set; }
+
+        [JsonPropertyName("stockEncontrado")]
+        public int StockEncontrado { get; set; }
     }
 } 

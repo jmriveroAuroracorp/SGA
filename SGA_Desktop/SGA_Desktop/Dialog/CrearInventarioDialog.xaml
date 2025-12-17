@@ -234,7 +234,7 @@
                             <StackPanel Margin="0,0,0,10">
                                 <TextBlock Text="Incluir artículos:" FontWeight="SemiBold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding OpcionesArticulos}" 
-                                          SelectedItem="{Binding ArticulosSeleccionados}"
+                                          SelectedItem="{Binding OpcionArticulosSeleccionados}"
                                           Style="{StaticResource EstiloComboBox}" 
                                           Height="30"/>
                             </StackPanel>
@@ -263,34 +263,28 @@
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
                                         <!-- Campo de búsqueda -->
                                         <Grid Grid.Row="0" Margin="0,0,0,10">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <TextBlock Grid.Column="0" 
-                                                       Text="Buscar:" 
-                                                       VerticalAlignment="Center" 
-                                                       Margin="0,0,10,0" 
-                                                       FontWeight="SemiBold"/>
-                                            <TextBox Grid.Column="1" 
+                                            <TextBox Grid.Column="0"
                                                      Text="{Binding ArticuloBuscado, UpdateSourceTrigger=PropertyChanged}" 
                                                      Style="{StaticResource EstiloCajaTexto}" 
                                                      Height="35"
                                                      Margin="0,0,10,0"
-                                                     ToolTip="Introduce código (ej: 10000) o descripción (ej: azúcar) del artículo"
-                                                     Tag="Código o descripción..."/>
-                                            <Button Grid.Column="2" 
-                                                    Content="🔍" 
-                                                    Height="30" 
-                                                    Width="30"
-                                                    Command="{Binding BuscarArticuloCommand}"/>
+                                                     ToolTip="Introduce código (ej: 10000) o descripción (ej: azúcar) del artículo"/>
+                                            <Button Grid.Column="1"
+                                                    Content="🔍 Buscar"
+                                                    Command="{Binding BuscarArticuloCommand}"
+                                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                                    Width="100"
+                                                    Height="35"
+                                                    FontSize="12"/>
                                         </Grid>
 
                                         <!-- Lista de resultados -->
@@ -298,31 +292,97 @@
                                                   ItemsSource="{Binding ArticulosEncontrados}" 
                                                   SelectedItem="{Binding ArticuloSeleccionado}"
                                                   Style="{StaticResource EstiloComboBox}" 
-                                                  Height="30"
+                                                  Height="35"
                                                   Margin="0,0,0,10"
                                                   Visibility="{Binding MostrarListaArticulos, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" Margin="0,0,5,0"/>
+                                                        <TextBlock Text="{Binding CodigoArticulo}" FontWeight="Bold" Margin="0,0,10,0"/>
                                                         <TextBlock Text="-" Margin="0,0,5,0"/>
-                                                        <TextBlock Text="{Binding DescripcionArticulo}"/>
+                                                        <TextBlock Text="{Binding DescripcionArticulo}" TextTrimming="CharacterEllipsis"/>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-
-                                        <!-- Info del artículo seleccionado -->
-                                        <TextBlock Grid.Row="2" 
-                                                   Foreground="#2E8B57" 
-                                                   FontStyle="Italic"
-                                                   Visibility="{Binding MostrarInfoArticulo, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <Run Text="✓ Artículo seleccionado:"/>
-                                            <Run Text="{Binding ArticuloSeleccionado.CodigoArticulo}" FontWeight="Bold"/>
-                                            <Run Text="-"/>
-                                            <Run Text="{Binding ArticuloSeleccionado.DescripcionArticulo}"/>
-                                        </TextBlock>
                                     </Grid>
+
+                                    <!-- Lista de artículos seleccionados (FUERA del Grid de búsqueda) -->
+                                    <Border Visibility="{Binding UsarFiltroArticulo, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            Background="#E7F3FF"
+                                            BorderBrush="#2196F3"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="10"
+                                            Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="📋 Artículos seleccionados:" 
+                                                       FontWeight="Bold" 
+                                                       Foreground="#1976D2" 
+                                                       Margin="0,0,0,8"/>
+                                            <TextBlock Text="{Binding DescripcionArticulosSeleccionados}" 
+                                                       FontSize="12" 
+                                                       Foreground="#1976D2" 
+                                                       Margin="0,0,0,8"
+                                                       TextWrapping="Wrap"/>
+                                            <ItemsControl ItemsSource="{Binding ArticulosSeleccionados}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="White"
+                                                                BorderBrush="#BBDEFB"
+                                                                BorderThickness="1"
+                                                                CornerRadius="3"
+                                                                Padding="8"
+                                                                Margin="0,0,0,5">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <StackPanel Grid.Column="0">
+                                                                    <TextBlock FontWeight="Bold" FontSize="12">
+                                                                        <Run Text="{Binding CodigoArticulo}"/>
+                                                                        <Run Text=" - "/>
+                                                                        <Run Text="{Binding DescripcionArticulo}"/>
+                                                                    </TextBlock>
+                                                                </StackPanel>
+                                                                <Button Grid.Column="1"
+                                                                        Content="✕ Eliminar"
+                                                                        Command="{Binding DataContext.EliminarArticuloCommand, RelativeSource={RelativeSource AncestorType=Border, AncestorLevel=2}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Style="{StaticResource EstiloBotonSecundario}"
+                                                                        Width="90"
+                                                                        Height="28"
+                                                                        FontSize="11"
+                                                                        Margin="10,0,0,0"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Información del artículo seleccionado (cuando hay uno solo y no está en la lista) -->
+                                    <Border Visibility="{Binding MostrarInfoArticulo, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            Background="#F8F9FA"
+                                            BorderBrush="#DEE2E6"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="10"
+                                            Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="✅ Artículo seleccionado:" FontWeight="Bold" Foreground="#198754" Margin="0,0,0,5"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                <TextBlock Text="Código: " FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding ArticuloSeleccionado.CodigoArticulo}" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Descripción: " FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding ArticuloSeleccionado.DescripcionArticulo}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
 
                                     <!-- Separador -->
                                     <Border Height="1" Background="#E0E0E0" Margin="0,10,0,10"/>
@@ -551,6 +611,11 @@
                             <!-- Unidades a 0 -->
                             <CheckBox Content="Unidades a 0" 
                                       IsChecked="{Binding IncluirUnidadesCero}"
+                                      Margin="0,0,0,10"/>
+
+                            <!-- Crear inventario vacío -->
+                            <CheckBox Content="Crear inventario vacío (sin generar líneas automáticamente)" 
+                                      IsChecked="{Binding NoGenerarLineas}"
                                       Margin="0,0,0,10"/>
 
 

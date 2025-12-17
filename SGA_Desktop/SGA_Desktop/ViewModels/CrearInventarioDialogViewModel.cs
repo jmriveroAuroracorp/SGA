@@ -40,7 +40,7 @@ namespace SGA_Desktop.ViewModels
             
             // Valores por defecto
             TipoInventarioSeleccionado = "TOTAL";
-            ArticulosSeleccionados = "Todos"; // Por defecto "Todos" para incluir artículos con stock 0
+            OpcionArticulosSeleccionados = "Todos"; // Por defecto "Todos" para incluir artículos con stock 0
             IncluirUnidadesCero = false; // Por defecto false (no inicializar a 0)
             IncluirUbicacionesEspeciales = false; // Por defecto false
             Comentarios = string.Empty; // Sin comentario predeterminado
@@ -96,7 +96,7 @@ namespace SGA_Desktop.ViewModels
         private DateTime fechaInventario = DateTime.Today.Date;
 
         [ObservableProperty]
-        private string articulosSeleccionados = "Todos";
+        private string opcionArticulosSeleccionados = "Todos";
 
         [ObservableProperty]
         private string valoracionSeleccionada = "Precio medio de las entradas";
@@ -160,6 +160,9 @@ namespace SGA_Desktop.ViewModels
         private bool incluirUbicacionesEspeciales = false;
 
         [ObservableProperty]
+        private bool noGenerarLineas = false;
+
+        [ObservableProperty]
         private string comentarios = string.Empty;
 
         [ObservableProperty]
@@ -191,7 +194,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private bool codigoExiste = false;
 
-        // NUEVO: Propiedades para filtro de artículo específico
+        // NUEVO: Propiedades para filtro de artículos específicos (múltiples)
         [ObservableProperty]
         private bool usarFiltroArticulo = false;
 
@@ -202,11 +205,30 @@ namespace SGA_Desktop.ViewModels
         private ObservableCollection<ArticuloResumenDto> articulosEncontrados = new();
 
         [ObservableProperty]
-        private ArticuloResumenDto? articuloSeleccionado;
+        private ArticuloResumenDto? articuloSeleccionado; // Para el ComboBox de resultados
+
+        [ObservableProperty]
+        private ObservableCollection<ArticuloResumenDto> articulosSeleccionados = new();
 
         // Propiedades calculadas para la UI
         public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
+
+        public string DescripcionArticulosSeleccionados
+        {
+            get
+            {
+                if (!ArticulosSeleccionados.Any())
+                    return "Ningún artículo seleccionado";
+                    
+                if (ArticulosSeleccionados.Count == 1)
+                    return $"{ArticulosSeleccionados.First().CodigoArticulo} - {ArticulosSeleccionados.First().DescripcionArticulo}";
+                    
+                return ArticulosSeleccionados.Count <= 3 
+                    ? string.Join(", ", ArticulosSeleccionados.Select(a => a.CodigoArticulo))
+                    : $"{string.Join(", ", ArticulosSeleccionados.Take(2).Select(a => a.CodigoArticulo))} y {ArticulosSeleccionados.Count - 2} más";
+            }
+        }
 
         // Propiedades calculadas para UI de rango de artículos
         public bool MostrarInfoRango => !string.IsNullOrWhiteSpace(ArticuloDesde) && !string.IsNullOrWhiteSpace(ArticuloHasta) && UsarRangoArticulos;
@@ -358,7 +380,7 @@ namespace SGA_Desktop.ViewModels
             ValidarFormulario();
         }
 
-        partial void OnArticulosSeleccionadosChanged(string oldValue, string newValue)
+        partial void OnOpcionArticulosSeleccionadosChanged(string oldValue, string newValue)
         {
             // Si selecciona "Todos", deshabilitar rango de ubicaciones
             if (newValue == "Todos")
@@ -414,23 +436,106 @@ namespace SGA_Desktop.ViewModels
         partial void OnUsarFiltroArticuloChanged(bool value)
         {
             OnPropertyChanged(nameof(MostrarInfoArticulo));
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
             if (value)
             {
                 // Si se activa el filtro específico, desactivar rango
                 UsarRangoArticulos = false;
+            }
+            else
+            {
+                // Si se desactiva el filtro, limpiar la lista de artículos seleccionados
+                ArticulosSeleccionados.Clear();
+                ArticuloSeleccionado = null;
+                ArticuloBuscado = string.Empty;
+                ArticulosEncontrados.Clear();
             }
             ValidarFormulario();
         }
 
         partial void OnArticuloSeleccionadoChanged(ArticuloResumenDto? oldValue, ArticuloResumenDto? newValue)
         {
+            // Notificar cambios en la visibilidad del Border de información
             OnPropertyChanged(nameof(MostrarInfoArticulo));
-            ValidarFormulario();
+            
+            // Si hay múltiples resultados y se selecciona uno, mostrar ConfirmationDialog automáticamente
+            if (newValue != null && ArticulosEncontrados.Count > 1)
+            {
+                var mensaje = $"¿Deseas agregar el artículo a la lista?\n\n{newValue.CodigoArticulo} - {newValue.DescripcionArticulo}";
+                var confirmacion = new ConfirmationDialog("Agregar artículo", mensaje);
+                ShowDialog(confirmacion);
+                
+                if (confirmacion.DialogResult == true)
+                {
+                    // Verificar si ya está en la lista
+                    if (!ArticulosSeleccionados.Any(a => a.CodigoArticulo == newValue.CodigoArticulo))
+                    {
+                        ArticulosSeleccionados.Add(newValue);
+                        ArticuloSeleccionado = null; // Limpiar selección
+                        ArticuloBuscado = string.Empty; // Limpiar búsqueda
+                        ArticulosEncontrados.Clear();
+                        
+                        OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+                        OnPropertyChanged(nameof(MostrarListaArticulos));
+                        ValidarFormulario();
+                    }
+                    else
+                    {
+                        ShowDialog(new WarningDialog("Artículo duplicado", $"El artículo {newValue.CodigoArticulo} ya está en la lista."));
+                        ArticuloSeleccionado = null; // Limpiar selección para evitar confusión
+                    }
+                }
+                else
+                {
+                    // Si cancela, limpiar la selección
+                    ArticuloSeleccionado = null;
+                }
+            }
         }
 
         partial void OnArticulosEncontradosChanged(ObservableCollection<ArticuloResumenDto> oldValue, ObservableCollection<ArticuloResumenDto> newValue)
         {
             OnPropertyChanged(nameof(MostrarListaArticulos));
+        }
+
+        partial void OnArticulosSeleccionadosChanged(ObservableCollection<ArticuloResumenDto> oldValue, ObservableCollection<ArticuloResumenDto> newValue)
+        {
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+            ValidarFormulario();
+        }
+
+        partial void OnIncluirUnidadesCeroChanged(bool value)
+        {
+            // Solo mostrar advertencia cuando se ACTIVA el checkbox (value == true)
+            if (value)
+            {
+                var mensaje = "⚠️ ADVERTENCIA CRÍTICA ⚠️\n\n" +
+                              "Has activado la opción 'Inicializar a 0'.\n\n" +
+                              "🔴 RIESGO GRAVE:\n" +
+                              "Si cierras el inventario sin modificar todas las cantidades contadas, " +
+                              "el sistema generará ajustes que ELIMINARÁN TODO EL STOCK del almacén.\n\n" +
+                              "📋 IMPORTANTE:\n" +
+                              "• Debes contar y modificar TODAS las líneas del inventario\n" +
+                              "• NO cierres el inventario hasta haber verificado todas las cantidades\n" +
+                              "• Si no modificas una línea, se considerará como 0 y se eliminará el stock\n\n" +
+                              "¿Estás seguro de que quieres activar esta opción?";
+
+                var confirmacion = new ConfirmationDialog(
+                    "⚠️ ADVERTENCIA: Inicializar a 0", 
+                    mensaje);
+                
+                ShowDialog(confirmacion);
+                
+                // Si el usuario cancela, desactivar el checkbox
+                if (confirmacion.DialogResult != true)
+                {
+                    // Usar Dispatcher para evitar problemas de threading
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        IncluirUnidadesCero = false;
+                    });
+                }
+            }
         }
         #endregion
 
@@ -465,6 +570,25 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
+                // Determinar tipo de inventario
+                // Si el usuario selecciona "Con stock", siempre debe ser PARCIAL (independientemente de filtros)
+                // Si selecciona "Todos" o tiene filtros específicos, respetar la selección de tipo
+                var tipoInventario = TipoInventarioSeleccionado;
+
+                // Forzar a PARCIAL si:
+                // 1. El usuario seleccionó PARCIAL explícitamente, O
+                // 2. Seleccionó "Con stock" (siempre, con o sin filtros específicos)
+                if (TipoInventarioSeleccionado == "PARCIAL" || 
+                    OpcionArticulosSeleccionados == "Con stock")
+                {
+                    tipoInventario = "PARCIAL";
+                }
+
+                // Calcular si incluir artículos con stock 0 (para el mensaje de confirmación)
+                var incluirStockCeroDebug = tipoInventario == "TOTAL" 
+                    ? true 
+                    : OpcionArticulosSeleccionados == "Todos";
+
                 // Mostrar diálogo de confirmación
                 var mensaje = $"Se va a crear un inventario con las siguientes características:\n\n";
                 mensaje += $"• Código: {CodigoInventario}\n";
@@ -478,13 +602,29 @@ namespace SGA_Desktop.ViewModels
                     mensaje += $"• Almacén: {AlmacenSeleccionado?.DescripcionCombo}\n";
                 }
                 
-                mensaje += $"• Tipo: {TipoInventarioSeleccionado}\n";
+                mensaje += $"• Tipo: {tipoInventario}\n";
                 mensaje += $"• Fecha: {FechaInventario:dd/MM/yyyy}\n";
-                mensaje += $"• Artículos: {ArticulosSeleccionados}\n";
+                mensaje += $"• Artículos: {OpcionArticulosSeleccionados}\n";
                 mensaje += $"• Valoración: {ValoracionSeleccionada}\n";
+                
+                // Mostrar información de filtrado de stock (para depuración)
+                mensaje += $"• Incluir artículos con stock 0: {(incluirStockCeroDebug ? "Sí" : "No")}\n";
 
                 if (UsarRangoArticulos)
                     mensaje += $"• Rango artículos: {ArticuloDesde} - {ArticuloHasta}\n";
+
+                if (UsarFiltroArticulo && ArticulosSeleccionados.Any())
+                {
+                    mensaje += $"• Artículos específicos ({ArticulosSeleccionados.Count}):\n";
+                    foreach (var articulo in ArticulosSeleccionados.Take(5))
+                    {
+                        mensaje += $"  - {articulo.CodigoArticulo} - {articulo.DescripcionArticulo}\n";
+                    }
+                    if (ArticulosSeleccionados.Count > 5)
+                    {
+                        mensaje += $"  ... y {ArticulosSeleccionados.Count - 5} más\n";
+                    }
+                }
 
                 if (UsarRangoUbicaciones)
                 {
@@ -512,29 +652,25 @@ namespace SGA_Desktop.ViewModels
                 ShowDialog(confirmacion);
                 if (confirmacion.DialogResult != true) return;
 
-                // Determinar tipo de inventario - RESPETAR la selección del usuario
-                // Si el usuario seleccionó TOTAL, mantenerlo como TOTAL incluso con filtros de artículo
-                // Solo forzar a PARCIAL si explícitamente selecciona "Con stock" (sin filtros específicos)
-                var tipoInventario = TipoInventarioSeleccionado;
-
-                // Solo cambiar a PARCIAL si:
-                // 1. El usuario seleccionó PARCIAL explícitamente, O
-                // 2. Seleccionó "Con stock" Y no hay filtros específicos de artículo
-                if (TipoInventarioSeleccionado == "PARCIAL" || 
-                    (ArticulosSeleccionados == "Con stock" && !UsarFiltroArticulo && !UsarRangoArticulos))
+                // Determinar si incluir artículos con stock 0
+                // Reglas:
+                // 1. Si es inventario TOTAL → siempre incluir artículos con stock 0
+                // 2. Si es PARCIAL y "Con stock" → NO incluir artículos con stock 0 (solo con stock > 0)
+                // 3. Si es PARCIAL y "Todos" → incluir artículos con stock 0
+                // 4. Si hay filtro de artículo específico o rango:
+                //    - Si "Con stock" → NO incluir artículos con stock 0 (solo los específicos con stock)
+                //    - Si "Todos" → incluir todos los artículos específicos (incluso a 0)
+                bool incluirArticulosConStockCero;
+                if (tipoInventario == "TOTAL")
                 {
-                    tipoInventario = "PARCIAL";
+                    incluirArticulosConStockCero = true;
                 }
-                
-                // Si es inventario TOTAL, siempre incluir artículos con stock 0
+                else
+                {
                 // Si es PARCIAL, usar la selección del combo
-                // Si hay filtro de artículo específico o rango, SIEMPRE incluir artículos con stock 0
-                // (porque es un filtro específico, no un filtro por stock)
-                var incluirArticulosConStockCero = tipoInventario == "TOTAL" 
-                    ? true 
-                    : (UsarFiltroArticulo || UsarRangoArticulos) 
-                        ? true  // Si hay filtro específico, incluir todos (incluso a 0)
-                        : ArticulosSeleccionados == "Todos";
+                    // "Con stock" = false, "Todos" = true
+                    incluirArticulosConStockCero = OpcionArticulosSeleccionados == "Todos";
+                }
 
                 var dto = new CrearInventarioDto
                 {
@@ -547,8 +683,11 @@ namespace SGA_Desktop.ViewModels
                     IncluirUnidadesCero = IncluirUnidadesCero, // Checkbox "Inicializar a 0"
                     IncluirArticulosConStockCero = incluirArticulosConStockCero, // TRUE si es TOTAL, o según combo si es PARCIAL
                     IncluirUbicacionesEspeciales = IncluirUbicacionesEspeciales,
-                    // NUEVO: Filtro de artículo específico
-                    CodigoArticuloFiltro = UsarFiltroArticulo ? ArticuloSeleccionado?.CodigoArticulo : null,
+                    NoGenerarLineas = NoGenerarLineas, // Crear inventario vacío
+                    // NUEVO: Filtro de artículos específicos (múltiples)
+                    CodigosArticuloFiltro = UsarFiltroArticulo && ArticulosSeleccionados.Any() 
+                        ? ArticulosSeleccionados.Select(a => a.CodigoArticulo).ToList() 
+                        : null,
                     // NUEVO: Rango de artículos
                     ArticuloDesde = UsarRangoArticulos ? ArticuloDesde : null,
                     ArticuloHasta = UsarRangoArticulos ? ArticuloHasta : null
@@ -600,9 +739,30 @@ namespace SGA_Desktop.ViewModels
 
                 var resultado = await _inventarioService.CrearInventarioAsync(dto);
 
-                if (resultado)
+                if (resultado != null)
                 {
-                    ShowDialog(new WarningDialog("Éxito", "Inventario creado correctamente."));
+                    // Construir mensaje con información detallada
+                    var mensajeExito = $"✅ {resultado.Mensaje}\n\n";
+                    
+                    if (NoGenerarLineas)
+                    {
+                        mensajeExito += "📋 Inventario vacío creado.\n";
+                        mensajeExito += "Puede agregar líneas manualmente usando el botón 'Agregar línea'.";
+                    }
+                    else
+                    {
+                        mensajeExito += $"📊 Líneas generadas: {resultado.LineasGeneradas}\n";
+                        if (resultado.UbicacionesEnRango > 0)
+                        {
+                            mensajeExito += $"📍 Ubicaciones en rango: {resultado.UbicacionesEnRango}\n";
+                        }
+                        if (resultado.StockEncontrado > 0)
+                        {
+                            mensajeExito += $"📦 Stock encontrado: {resultado.StockEncontrado}";
+                        }
+                    }
+                    
+                    ShowDialog(new WarningDialog("Éxito", mensajeExito));
                     CerrarDialogo(true);
                 }
                 else
@@ -714,15 +874,44 @@ namespace SGA_Desktop.ViewModels
                     var almacenesTexto = ModoMultialmacen 
                         ? $" en {almacenesParaBuscar.Count} almacén{(almacenesParaBuscar.Count > 1 ? "es" : "")}" 
                         : $" en el almacén {almacenesParaBuscar.First()}";
-                    var mensaje = $"✓ Encontrado por {tipoBusqueda}{almacenesTexto}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
-                    ShowDialog(new WarningDialog("Artículo encontrado", mensaje));
+                    var mensaje = $"✓ Encontrado por {tipoBusqueda}{almacenesTexto}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}\n\n¿Deseas agregarlo a la lista?";
+                    
+                    var confirmacion = new ConfirmationDialog("Artículo encontrado", mensaje);
+                    ShowDialog(confirmacion);
+                    
+                    // Si el usuario confirma, agregar directamente
+                    if (confirmacion.DialogResult == true)
+                    {
+                        // Verificar si ya está en la lista
+                        if (!ArticulosSeleccionados.Any(a => a.CodigoArticulo == ArticuloSeleccionado!.CodigoArticulo))
+                        {
+                            ArticulosSeleccionados.Add(ArticuloSeleccionado);
+                            ArticuloSeleccionado = null; // Limpiar selección
+                            ArticuloBuscado = string.Empty; // Limpiar búsqueda
+                            ArticulosEncontrados.Clear();
+                            
+                            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+                            OnPropertyChanged(nameof(MostrarListaArticulos));
+                            ValidarFormulario();
+                        }
+                        else
+                        {
+                            ShowDialog(new WarningDialog("Artículo duplicado", $"El artículo {ArticuloSeleccionado.CodigoArticulo} ya está en la lista."));
+                            ArticuloSeleccionado = null; // Limpiar selección
+                        }
+                    }
+                    else
+                    {
+                        // Si cancela, limpiar la selección
+                        ArticuloSeleccionado = null;
+                    }
                 }
                 else if (ArticulosEncontrados.Count > 1)
                 {
                     var almacenesTexto = ModoMultialmacen 
                         ? $" en {almacenesParaBuscar.Count} almacén{(almacenesParaBuscar.Count > 1 ? "es" : "")}" 
                         : $" en el almacén {almacenesParaBuscar.First()}";
-                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}{almacenesTexto}.\nSelecciona uno de la lista desplegable.";
+                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}{almacenesTexto}.\nSelecciona uno de la lista.";
                     ShowDialog(new WarningDialog("Múltiples resultados", mensaje));
                 }
                 else
@@ -741,7 +930,6 @@ namespace SGA_Desktop.ViewModels
 
                 // Notificar cambios en visibilidad
                 OnPropertyChanged(nameof(MostrarListaArticulos));
-                OnPropertyChanged(nameof(MostrarInfoArticulo));
             }
             catch (Exception ex)
             {
@@ -751,6 +939,42 @@ namespace SGA_Desktop.ViewModels
 
 
 
+
+        [RelayCommand]
+        private void AgregarArticulo()
+        {
+            if (ArticuloSeleccionado == null)
+            {
+                ShowDialog(new WarningDialog("Agregar artículo", "Primero selecciona un artículo de los resultados de búsqueda."));
+                return;
+            }
+
+            // Verificar si ya está en la lista
+            if (ArticulosSeleccionados.Any(a => a.CodigoArticulo == ArticuloSeleccionado.CodigoArticulo))
+            {
+                ShowDialog(new WarningDialog("Artículo duplicado", $"El artículo {ArticuloSeleccionado.CodigoArticulo} ya está en la lista."));
+                return;
+            }
+
+            ArticulosSeleccionados.Add(ArticuloSeleccionado);
+            ArticuloSeleccionado = null; // Limpiar selección (esto disparará OnArticuloSeleccionadoChanged que notificará MostrarInfoArticulo)
+            ArticuloBuscado = string.Empty; // Limpiar búsqueda
+            ArticulosEncontrados.Clear();
+            
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+            OnPropertyChanged(nameof(MostrarListaArticulos));
+            ValidarFormulario();
+        }
+
+        [RelayCommand]
+        private void EliminarArticulo(ArticuloResumenDto articulo)
+        {
+            if (articulo == null) return;
+            
+            ArticulosSeleccionados.Remove(articulo);
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+            ValidarFormulario();
+        }
 
         [RelayCommand]
         private void BuscarUbicacionDesde()
@@ -969,10 +1193,10 @@ namespace SGA_Desktop.ViewModels
                     return false;
             }
 
-            // Validar filtro de artículo específico
+            // Validar filtro de artículos específicos
             if (UsarFiltroArticulo)
             {
-                return ArticuloSeleccionado != null;
+                return ArticulosSeleccionados.Any();
             }
 
             return true;

@@ -25,6 +25,8 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private DateTime fechaHasta = DateTime.Today;
         [ObservableProperty] private string estadoFiltro = "TODOS";
         [ObservableProperty] private OperariosAccesoDto? operarioSeleccionadoCombo;
+        [ObservableProperty] private string idOrdenFiltro = string.Empty;
+        [ObservableProperty] private bool verTodosLosConteos = false; // Por defecto, solo ver los propios
 
         // Colecciones para filtros
         public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
@@ -117,13 +119,17 @@ namespace SGA_Desktop.ViewModels
             DateTime fechaDesde,
             DateTime fechaHasta,
             string estadoFiltro,
-            OperariosAccesoDto? operarioSeleccionado) : this()
+            OperariosAccesoDto? operarioSeleccionado,
+            string idOrdenFiltro,
+            bool verTodosLosConteos) : this()
         {
             AlmacenSeleccionadoCombo = almacenSeleccionado;
             FechaDesde = fechaDesde;
             FechaHasta = fechaHasta;
             EstadoFiltro = estadoFiltro;
             OperarioSeleccionadoCombo = operarioSeleccionado;
+            IdOrdenFiltro = idOrdenFiltro;
+            VerTodosLosConteos = verTodosLosConteos;
         }
 
         // Validaciones de fechas
@@ -248,6 +254,8 @@ namespace SGA_Desktop.ViewModels
         private void LimpiarFiltros()
         {
             EstadoFiltro = "TODOS";
+            IdOrdenFiltro = string.Empty;
+            VerTodosLosConteos = false; // Por defecto, solo ver los propios
 
             // Seleccionar "Todas" en almacenes
             if (AlmacenesCombo?.Any() == true)

@@ -136,6 +136,13 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private string comentario = string.Empty;
 
+        // Propiedades para conteos periódicos
+        [ObservableProperty]
+        private bool esPeriodico = false;
+
+        [ObservableProperty]
+        private int? frecuenciaDias;
+
         // Filtros para conteos por ubicación
         [ObservableProperty]
         private object? pasillo;
@@ -186,6 +193,34 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private ObservableCollection<object> posicionesDisponibles = new();
 
+        // Propiedades para rangos de ubicación
+        [ObservableProperty]
+        private bool usarRangos = false;
+
+        [ObservableProperty]
+        private int? pasilloDesde;
+
+        [ObservableProperty]
+        private int? pasilloHasta;
+
+        [ObservableProperty]
+        private int? estanteriaDesde;
+
+        [ObservableProperty]
+        private int? estanteriaHasta;
+
+        [ObservableProperty]
+        private int? alturaDesde;
+
+        [ObservableProperty]
+        private int? alturaHasta;
+
+        [ObservableProperty]
+        private int? posicionDesde;
+
+        [ObservableProperty]
+        private int? posicionHasta;
+
         // Filtros para conteos por artículo
         [ObservableProperty]
         private string codigoArticulo = string.Empty;
@@ -202,6 +237,28 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private bool articuloTieneStockVirtual = true; // Indica si el artículo tiene stock virtual registrado
+
+        // Propiedades para selección múltiple de artículos
+        [ObservableProperty]
+        private ObservableCollection<ArticuloResumenDto> articulosSeleccionados = new();
+
+        [ObservableProperty]
+        private bool usarFiltroMultiArticulo = false;
+
+        // Propiedad calculada para mostrar descripción de artículos seleccionados
+        public string DescripcionArticulosSeleccionados
+        {
+            get
+            {
+                if (ArticulosSeleccionados == null || !ArticulosSeleccionados.Any())
+                    return "Ningún artículo seleccionado";
+                
+                if (ArticulosSeleccionados.Count == 1)
+                    return $"{ArticulosSeleccionados.First().CodigoArticulo} - {ArticulosSeleccionados.First().DescripcionArticulo}";
+                
+                return $"{ArticulosSeleccionados.Count} artículos seleccionados";
+            }
+        }
 
         // Estados
         [ObservableProperty]
@@ -223,7 +280,7 @@ namespace SGA_Desktop.ViewModels
         // Propiedad computada para el radio button
         public bool EsConteoArticulo => !EsConteoUbicacion;
         // Visibilidad para búsqueda de artículos
-        public bool MostrarListaArticulos => ArticulosEncontrados.Count > 1;
+        public bool MostrarListaArticulos => ArticulosSeleccionados != null && ArticulosSeleccionados.Any();
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
         public bool MostrarAdvertenciaSinStock => MostrarInfoArticulo && !ArticuloTieneStockVirtual;
         #endregion
@@ -253,6 +310,63 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
+                // Validar periodicidad
+                if (EsPeriodico && (!FrecuenciaDias.HasValue || FrecuenciaDias.Value <= 0))
+                {
+                    var warningDialog = new WarningDialog("Error de validación", "La frecuencia en días es obligatoria y debe ser mayor a 0 para conteos periódicos.");
+                    warningDialog.ShowDialog();
+                    return;
+                }
+
+                // Validar que no se mezclen filtros de ubicación y artículo (medida de seguridad)
+                if (EsConteoUbicacion && (ArticulosSeleccionados.Any() || !string.IsNullOrWhiteSpace(CodigoArticulo)))
+                {
+                    var warningDialog = new WarningDialog("Error de validación", 
+                        "No se pueden combinar filtros de ubicación con filtros de artículo. Por favor, elige un solo tipo de conteo.");
+                    warningDialog.ShowDialog();
+                    return;
+                }
+                
+                if (!EsConteoUbicacion && (UsarRangos || Pasillo != null || Estanteria != null || Altura != null || Posicion != null || (!string.IsNullOrWhiteSpace(UbicacionDirecta) && UbicacionDirecta != "SIN UBICAR")))
+                {
+                    var warningDialog = new WarningDialog("Error de validación", 
+                        "No se pueden combinar filtros de artículo con filtros de ubicación. Por favor, elige un solo tipo de conteo.");
+                    warningDialog.ShowDialog();
+                    return;
+                }
+
+                // Validar rangos de ubicación si está en modo rango
+                if (EsConteoUbicacion && UsarRangos)
+                {
+                    if (PasilloDesde.HasValue && PasilloHasta.HasValue && PasilloDesde > PasilloHasta)
+                    {
+                        var warningDialog = new WarningDialog("Error de validación", "El valor 'Desde' del pasillo no puede ser mayor que 'Hasta'.");
+                        warningDialog.ShowDialog();
+                        return;
+                    }
+                    
+                    if (EstanteriaDesde.HasValue && EstanteriaHasta.HasValue && EstanteriaDesde > EstanteriaHasta)
+                    {
+                        var warningDialog = new WarningDialog("Error de validación", "El valor 'Desde' de la estantería no puede ser mayor que 'Hasta'.");
+                        warningDialog.ShowDialog();
+                        return;
+                    }
+                    
+                    if (AlturaDesde.HasValue && AlturaHasta.HasValue && AlturaDesde > AlturaHasta)
+                    {
+                        var warningDialog = new WarningDialog("Error de validación", "El valor 'Desde' de la altura no puede ser mayor que 'Hasta'.");
+                        warningDialog.ShowDialog();
+                        return;
+                    }
+                    
+                    if (PosicionDesde.HasValue && PosicionHasta.HasValue && PosicionDesde > PosicionHasta)
+                    {
+                        var warningDialog = new WarningDialog("Error de validación", "El valor 'Desde' de la posición no puede ser mayor que 'Hasta'.");
+                        warningDialog.ShowDialog();
+                        return;
+                    }
+                }
+
                 // Crear el DTO
                 var dto = new CrearOrdenConteoDto
                 {
@@ -268,14 +382,25 @@ namespace SGA_Desktop.ViewModels
                     Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
                     CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
                     CodigoAlmacen = AlmacenSeleccionado?.CodigoAlmacen == "TODOS" ? null : AlmacenSeleccionado?.CodigoAlmacen,
-                    Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim()
+                    Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim(),
+                    EsPeriodico = EsPeriodico,
+                    FrecuenciaDias = EsPeriodico ? FrecuenciaDias : null
                 };
 
 
                 // Si el alcance es ARTICULO, agregar el código del artículo
-                if (!EsConteoUbicacion && !string.IsNullOrWhiteSpace(CodigoArticulo))
+                if (!EsConteoUbicacion)
                 {
-                    dto.CodigoArticulo = CodigoArticulo.Trim();
+                    if (ArticulosSeleccionados != null && ArticulosSeleccionados.Any())
+                    {
+                        // Si hay artículos seleccionados, usar el primero para compatibilidad con el campo CodigoArticulo
+                        // (el resto se enviará en FiltrosJson)
+                        dto.CodigoArticulo = ArticulosSeleccionados.First().CodigoArticulo;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                    {
+                        dto.CodigoArticulo = CodigoArticulo.Trim();
+                    }
                 }
 
                 // Crear la orden
@@ -386,20 +511,51 @@ namespace SGA_Desktop.ViewModels
                 if (ArticulosEncontrados.Count == 1)
                 {
                     ArticuloSeleccionado = ArticulosEncontrados.First();
-                    CodigoArticulo = ArticuloSeleccionado.CodigoArticulo;
                     ArticuloTieneStockVirtual = true; // Tiene stock porque se encontró en la búsqueda
+                    
+                    // Siempre mostrar ConfirmationDialog para agregar a la lista
                     var mensaje = $"✓ Encontrado por {tipoBusqueda}:\n{ArticuloSeleccionado.CodigoArticulo} - {ArticuloSeleccionado.DescripcionArticulo}";
                     if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
                     {
                         mensaje += "\n\n(Se buscará en todos los almacenes permitidos)";
                     }
-                    var successDialog = new WarningDialog("Artículo encontrado", mensaje);
-                    successDialog.ShowDialog();
+                    mensaje += "\n\n¿Deseas agregarlo a la lista?";
+                    
+                    var confirmacion = new ConfirmationDialog("Artículo encontrado", mensaje);
+                    confirmacion.ShowDialog();
+                    
+                    // Si el usuario confirma, agregar directamente
+                    if (confirmacion.DialogResult == true)
+                    {
+                        // Verificar si ya está en la lista
+                        if (!ArticulosSeleccionados.Any(a => a.CodigoArticulo == ArticuloSeleccionado!.CodigoArticulo))
+                        {
+                            ArticulosSeleccionados.Add(ArticuloSeleccionado);
+                            ArticuloSeleccionado = null; // Limpiar selección
+                            ArticuloBuscado = string.Empty; // Limpiar búsqueda
+                            ArticulosEncontrados.Clear();
+                            
+                            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+                            OnPropertyChanged(nameof(MostrarListaArticulos));
+                            OnPropertyChanged(nameof(MostrarInfoArticulo));
+                        }
+                        else
+                        {
+                            var warningDialog = new WarningDialog("Artículo duplicado", $"El artículo {ArticuloSeleccionado.CodigoArticulo} ya está en la lista.");
+                            warningDialog.ShowDialog();
+                            ArticuloSeleccionado = null; // Limpiar selección
+                        }
+                    }
+                    else
+                    {
+                        // Si cancela, limpiar la selección
+                        ArticuloSeleccionado = null;
+                    }
                 }
                 else if (ArticulosEncontrados.Count > 1)
                 {
                     ArticuloTieneStockVirtual = true; // Tiene stock porque se encontraron resultados
-                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}.\nSelecciona uno de la lista desplegable.";
+                    var mensaje = $"Se encontraron {ArticulosEncontrados.Count} artículos por {tipoBusqueda}.\nSelecciona uno de la lista.";
                     if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
                     {
                         mensaje += "\n\n(Resultados de todos los almacenes permitidos)";
@@ -421,7 +577,7 @@ namespace SGA_Desktop.ViewModels
                             CodigoArticulo = terminoBusqueda,
                             DescripcionArticulo = "Artículo sin stock virtual registrado"
                         };
-                        CodigoArticulo = terminoBusqueda;
+                        
                         ArticuloTieneStockVirtual = false; // NO tiene stock virtual
                         
                         var mensaje = $"⚠️ No se encontró stock virtual para el código '{terminoBusqueda}'";
@@ -438,10 +594,39 @@ namespace SGA_Desktop.ViewModels
                         }
                         mensaje += ".\n\n";
                         mensaje += "✅ Se permitirá crear el conteo igualmente, ya que puede haber stock físico aunque no esté registrado virtualmente.\n\n";
-                        mensaje += "💡 El conteo servirá para verificar y ajustar el stock real.";
+                        mensaje += "💡 El conteo servirá para verificar y ajustar el stock real.\n\n";
+                        mensaje += "¿Deseas agregarlo a la lista?";
                         
-                        var infoDialog = new WarningDialog("Artículo sin stock virtual", mensaje);
-                        infoDialog.ShowDialog();
+                        var confirmacion = new ConfirmationDialog("Artículo sin stock virtual", mensaje);
+                        confirmacion.ShowDialog();
+                        
+                        // Si el usuario confirma, agregar directamente
+                        if (confirmacion.DialogResult == true)
+                        {
+                            // Verificar si ya está en la lista
+                            if (!ArticulosSeleccionados.Any(a => a.CodigoArticulo == ArticuloSeleccionado!.CodigoArticulo))
+                            {
+                                ArticulosSeleccionados.Add(ArticuloSeleccionado);
+                                ArticuloSeleccionado = null; // Limpiar selección
+                                ArticuloBuscado = string.Empty; // Limpiar búsqueda
+                                ArticulosEncontrados.Clear();
+                                
+                                OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+                                OnPropertyChanged(nameof(MostrarListaArticulos));
+                                OnPropertyChanged(nameof(MostrarInfoArticulo));
+                            }
+                            else
+                            {
+                                var warningDialog = new WarningDialog("Artículo duplicado", $"El artículo {ArticuloSeleccionado.CodigoArticulo} ya está en la lista.");
+                                warningDialog.ShowDialog();
+                                ArticuloSeleccionado = null; // Limpiar selección
+                            }
+                        }
+                        else
+                        {
+                            // Si cancela, limpiar la selección
+                            ArticuloSeleccionado = null;
+                        }
                     }
                     else
                     {
@@ -485,6 +670,45 @@ namespace SGA_Desktop.ViewModels
         private void Cancelar()
         {
             DialogResult?.Close();
+        }
+
+        [RelayCommand]
+        private void AgregarArticulo()
+        {
+            if (ArticuloSeleccionado == null)
+            {
+                var warningDialog = new WarningDialog("Agregar artículo", "Primero busca y selecciona un artículo de la lista.");
+                warningDialog.ShowDialog();
+                return;
+            }
+
+            // Verificar que no esté ya en la lista
+            if (ArticulosSeleccionados.Any(a => a.CodigoArticulo == ArticuloSeleccionado.CodigoArticulo))
+            {
+                var warningDialog = new WarningDialog("Artículo duplicado", $"El artículo {ArticuloSeleccionado.CodigoArticulo} ya está en la lista.");
+                warningDialog.ShowDialog();
+                return;
+            }
+
+            ArticulosSeleccionados.Add(ArticuloSeleccionado);
+            
+            // Limpiar búsqueda
+            ArticuloSeleccionado = null;
+            ArticuloBuscado = string.Empty;
+            ArticulosEncontrados.Clear();
+            
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+            OnPropertyChanged(nameof(MostrarListaArticulos));
+            OnPropertyChanged(nameof(MostrarInfoArticulo));
+        }
+
+        [RelayCommand]
+        private void EliminarArticulo(ArticuloResumenDto? articulo)
+        {
+            if (articulo == null) return;
+
+            ArticulosSeleccionados.Remove(articulo);
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
         }
         #endregion
 
@@ -734,21 +958,79 @@ namespace SGA_Desktop.ViewModels
                     {
                         // Filtros por componentes de ubicación (opcionales)
                         // Si no se especifica nada, se hace conteo de todo el almacén
-                        if (Pasillo is int pasilloValor)
-                            filtros["pasillo"] = pasilloValor.ToString();
-                        if (Estanteria is int estanteriaValor)
-                            filtros["estanteria"] = estanteriaValor.ToString();
-                        if (Altura is int alturaValor)
-                            filtros["altura"] = alturaValor.ToString();
-                        if (Posicion is int posicionValor)
-                            filtros["posicion"] = posicionValor.ToString();
+                        
+                        if (UsarRangos)
+                        {
+                            // Modo rango: usar formato nuevo si hay rangos reales, formato antiguo si es valor único
+                            if (PasilloDesde.HasValue && PasilloHasta.HasValue)
+                            {
+                                if (PasilloDesde == PasilloHasta)
+                                    filtros["pasillo"] = PasilloDesde.Value.ToString(); // Formato antiguo para compatibilidad
+                                else
+                                    filtros["pasillo"] = new { desde = PasilloDesde.Value, hasta = PasilloHasta.Value };
+                            }
+                            
+                            if (EstanteriaDesde.HasValue && EstanteriaHasta.HasValue)
+                            {
+                                if (EstanteriaDesde == EstanteriaHasta)
+                                    filtros["estanteria"] = EstanteriaDesde.Value.ToString(); // Formato antiguo para compatibilidad
+                                else
+                                    filtros["estanteria"] = new { desde = EstanteriaDesde.Value, hasta = EstanteriaHasta.Value };
+                            }
+                            
+                            if (AlturaDesde.HasValue && AlturaHasta.HasValue)
+                            {
+                                if (AlturaDesde == AlturaHasta)
+                                    filtros["altura"] = AlturaDesde.Value.ToString(); // Formato antiguo para compatibilidad
+                                else
+                                    filtros["altura"] = new { desde = AlturaDesde.Value, hasta = AlturaHasta.Value };
+                            }
+                            
+                            if (PosicionDesde.HasValue && PosicionHasta.HasValue)
+                            {
+                                if (PosicionDesde == PosicionHasta)
+                                    filtros["posicion"] = PosicionDesde.Value.ToString(); // Formato antiguo para compatibilidad
+                                else
+                                    filtros["posicion"] = new { desde = PosicionDesde.Value, hasta = PosicionHasta.Value };
+                            }
+                        }
+                        else
+                        {
+                            // Modo antiguo: valores únicos (sin cambios)
+                            if (Pasillo is int pasilloValor)
+                                filtros["pasillo"] = pasilloValor.ToString();
+                            if (Estanteria is int estanteriaValor)
+                                filtros["estanteria"] = estanteriaValor.ToString();
+                            if (Altura is int alturaValor)
+                                filtros["altura"] = alturaValor.ToString();
+                            if (Posicion is int posicionValor)
+                                filtros["posicion"] = posicionValor.ToString();
+                        }
                     }
                 }
                 else
                 {
                     // FLUJO 2: Conteo por artículo
-                    if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                    if (ArticulosSeleccionados != null && ArticulosSeleccionados.Any())
+                    {
+                        // Detectar automáticamente: si hay artículos seleccionados, usarlos
+                        var codigosArticulos = ArticulosSeleccionados.Select(a => a.CodigoArticulo).ToList();
+                        if (codigosArticulos.Count == 1)
+                        {
+                            // Si hay un solo artículo, usar formato antiguo para compatibilidad
+                            filtros["articulo"] = codigosArticulos.First();
+                        }
+                        else
+                        {
+                            // Si hay múltiples artículos, usar formato nuevo
+                            filtros["articulos"] = codigosArticulos;
+                        }
+                    }
+                    else if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+                    {
+                        // Modo tradicional: un solo artículo (compatibilidad con código antiguo)
                         filtros["articulo"] = CodigoArticulo.Trim();
+                    }
                 }
 
                 return JsonSerializer.Serialize(filtros);
@@ -770,6 +1052,7 @@ namespace SGA_Desktop.ViewModels
                 ArticuloBuscado = string.Empty;
                 ArticulosEncontrados.Clear();
                 ArticuloSeleccionado = null;
+                ArticulosSeleccionados.Clear();
                 
                 // Asegurar que hay un almacén seleccionado (no "TODOS") para conteos por ubicación
                 if (AlmacenSeleccionado == null || AlmacenSeleccionado.CodigoAlmacen == "TODOS")
@@ -789,6 +1072,16 @@ namespace SGA_Desktop.ViewModels
                 Altura = null;
                 Posicion = null;
                 UbicacionDirecta = "SIN UBICAR";
+                UsarUbicacionDirecta = false;
+                UsarRangos = false;
+                PasilloDesde = null;
+                PasilloHasta = null;
+                EstanteriaDesde = null;
+                EstanteriaHasta = null;
+                AlturaDesde = null;
+                AlturaHasta = null;
+                PosicionDesde = null;
+                PosicionHasta = null;
                 
                 // Resetear estado de habilitación
                 EstanteriaHabilitada = true;
@@ -826,12 +1119,46 @@ namespace SGA_Desktop.ViewModels
         {
             if (value != null)
             {
-                CodigoArticulo = value.CodigoArticulo;
                 // Si se selecciona de la lista de encontrados, tiene stock virtual
                 // Si la descripción indica que no tiene stock, mantenerlo en false
                 if (value.DescripcionArticulo != "Artículo sin stock virtual registrado")
                 {
                     ArticuloTieneStockVirtual = true;
+                }
+                
+                // Si hay múltiples resultados, mostrar ConfirmationDialog automáticamente
+                if (ArticulosEncontrados.Count > 1)
+                {
+                    var mensaje = $"¿Deseas agregar el artículo a la lista?\n\n{value.CodigoArticulo} - {value.DescripcionArticulo}";
+                    var confirmacion = new ConfirmationDialog("Agregar artículo", mensaje);
+                    confirmacion.ShowDialog();
+                    
+                    if (confirmacion.DialogResult == true)
+                    {
+                        // Verificar si ya está en la lista
+                        if (!ArticulosSeleccionados.Any(a => a.CodigoArticulo == value.CodigoArticulo))
+                        {
+                            ArticulosSeleccionados.Add(value);
+                            ArticuloSeleccionado = null; // Limpiar selección
+                            ArticuloBuscado = string.Empty; // Limpiar búsqueda
+                            ArticulosEncontrados.Clear();
+                            
+                            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+                            OnPropertyChanged(nameof(MostrarListaArticulos));
+                            OnPropertyChanged(nameof(MostrarInfoArticulo));
+                        }
+                        else
+                        {
+                            var warningDialog = new WarningDialog("Artículo duplicado", $"El artículo {value.CodigoArticulo} ya está en la lista.");
+                            warningDialog.ShowDialog();
+                            ArticuloSeleccionado = null; // Limpiar selección para evitar confusión
+                        }
+                    }
+                    else
+                    {
+                        // Si cancela, limpiar la selección
+                        ArticuloSeleccionado = null;
+                    }
                 }
             }
             OnPropertyChanged(nameof(MostrarInfoArticulo));
@@ -848,6 +1175,33 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(MostrarAdvertenciaSinStock));
         }
 
+        partial void OnArticulosSeleccionadosChanged(ObservableCollection<ArticuloResumenDto> value)
+        {
+            OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
+        }
+
+        partial void OnUsarRangosChanged(bool value)
+        {
+            // Si se intenta activar rangos pero estamos en modo artículo, desactivarlo
+            if (value && !EsConteoUbicacion)
+            {
+                UsarRangos = false;
+                return;
+            }
+            
+            if (!value)
+            {
+                // Limpiar rangos cuando se desactiva el modo rango
+                PasilloDesde = null;
+                PasilloHasta = null;
+                EstanteriaDesde = null;
+                EstanteriaHasta = null;
+                AlturaDesde = null;
+                AlturaHasta = null;
+                PosicionDesde = null;
+                PosicionHasta = null;
+            }
+        }
 
         partial void OnAlmacenSeleccionadoChanged(AlmacenDto? value)
         {

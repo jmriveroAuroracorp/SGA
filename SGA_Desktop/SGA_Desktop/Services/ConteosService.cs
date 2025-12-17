@@ -145,7 +145,9 @@ namespace SGA_Desktop.Services
             string? estado = null, 
             string? codigoOperario = null,
             DateTime? fechaDesde = null,
-            DateTime? fechaHasta = null)
+            DateTime? fechaHasta = null,
+            string? codigoOperarioSesion = null,
+            string? creadoPorCodigo = null)
         {
             try
             {
@@ -157,6 +159,12 @@ namespace SGA_Desktop.Services
 
                 if (!string.IsNullOrEmpty(codigoOperario))
                     queryParams.Add($"codigoOperario={Uri.EscapeDataString(codigoOperario)}");
+                
+                if (!string.IsNullOrEmpty(codigoOperarioSesion))
+                    queryParams.Add($"codigoOperarioSesion={Uri.EscapeDataString(codigoOperarioSesion)}");
+                
+                if (!string.IsNullOrEmpty(creadoPorCodigo))
+                    queryParams.Add($"creadoPorCodigo={Uri.EscapeDataString(creadoPorCodigo)}");
 
                 if (fechaDesde.HasValue)
                     queryParams.Add($"fechaDesde={fechaDesde.Value:yyyy-MM-dd}");
@@ -387,6 +395,102 @@ namespace SGA_Desktop.Services
             catch (Exception ex)
             {
                 throw new Exception($"Error al reasignar línea de conteo: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Listar todos los conteos periódicos
+        /// </summary>
+        public async Task<List<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(string? codigoOperario = null)
+        {
+            try
+            {
+                var url = "conteos/periodicos";
+                if (!string.IsNullOrEmpty(codigoOperario))
+                {
+                    url += $"?codigoOperario={Uri.EscapeDataString(codigoOperario)}";
+                }
+                
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var conteos = JsonConvert.DeserializeObject<List<ConteoPeriodicoDto>>(responseContent);
+                
+                return conteos ?? new List<ConteoPeriodicoDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al listar conteos periódicos: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Activar la periodicidad de un conteo
+        /// </summary>
+        public async Task ActivarPeriodicidadAsync(Guid guid)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync($"conteos/ordenes/{guid}/activar-periodicidad", null);
+                response.EnsureSuccessStatusCode();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al activar periodicidad: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Desactivar la periodicidad de un conteo
+        /// </summary>
+        public async Task DesactivarPeriodicidadAsync(Guid guid)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync($"conteos/ordenes/{guid}/desactivar-periodicidad", null);
+                response.EnsureSuccessStatusCode();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al desactivar periodicidad: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtener el historial de renovaciones de un conteo periódico
+        /// </summary>
+        public async Task<List<OrdenConteoDto>> ObtenerRenovacionesAsync(Guid guid)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"conteos/ordenes/{guid}/renovaciones");
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var renovaciones = JsonConvert.DeserializeObject<List<OrdenConteoDto>>(responseContent);
+                
+                return renovaciones ?? new List<OrdenConteoDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener renovaciones: {ex.Message}", ex);
             }
         }
     }

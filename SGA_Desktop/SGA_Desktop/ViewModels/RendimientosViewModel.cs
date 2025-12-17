@@ -8,6 +8,10 @@ using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
+using OxyPlot;
+using OxyPlot.Axes;
+using OxyPlot.Series;
+using OxyPlot.Wpf;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -53,6 +57,18 @@ namespace SGA_Desktop.ViewModels
         public ObservableCollection<ItemComparativaDto> ItemsComparativa { get; } = new();
         
         public ObservableCollection<PuntoTendenciaDto> PuntosTendencia { get; } = new();
+
+        [ObservableProperty]
+        private VolumenMovidoDto? volumenMovido;
+
+        [ObservableProperty]
+        private PlotModel? plotModelEvolucion;
+
+        [ObservableProperty]
+        private DistribucionDto? distribucion;
+
+        [ObservableProperty]
+        private bool distribucionPorUnidades = true; // true = por unidades, false = por traspasos
 
         // Control de pestañas
         [ObservableProperty]
@@ -104,11 +120,11 @@ namespace SGA_Desktop.ViewModels
                 }
                 else if (MostrandoVolumen)
                 {
-                    // TODO: Implementar carga de volumen
+                    await CargarVolumenAsync(filtros);
                 }
                 else if (MostrandoDistribucion)
                 {
-                    // TODO: Implementar carga de distribución
+                    await CargarDistribucionAsync(filtros);
                 }
                 else if (MostrandoArticulos)
                 {
@@ -365,6 +381,120 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
+        private async Task CargarVolumenAsync(FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                var datos = await _rendimientosService.ObtenerVolumenMovidoAsync(filtros);
+                VolumenMovido = datos;
+                ActualizarGraficoEvolucion();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando volumen: {ex.Message}");
+                VolumenMovido = null;
+                PlotModelEvolucion = null;
+            }
+        }
+
+        private async Task CargarDistribucionAsync(FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                var datos = await _rendimientosService.ObtenerDistribucionAsync(filtros);
+                Distribucion = datos;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando distribución: {ex.Message}");
+                Distribucion = null;
+            }
+        }
+
+        private void ActualizarGraficoEvolucion()
+        {
+            if (VolumenMovido?.EvolucionTemporal == null || !VolumenMovido.EvolucionTemporal.Any())
+            {
+                PlotModelEvolucion = null;
+                return;
+            }
+
+            var plotModel = new PlotModel
+            {
+                Title = "Evolución Temporal",
+                TitleFontSize = 14,
+                PlotAreaBorderThickness = new OxyThickness(1, 0, 0, 1),
+                IsLegendVisible = true
+            };
+
+            // Eje X - Fechas
+            var fechaAxis = new DateTimeAxis
+            {
+                Position = AxisPosition.Bottom,
+                Title = "Fecha",
+                StringFormat = "dd/MM",
+                MajorGridlineStyle = LineStyle.Solid,
+                MinorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.LightGray,
+                MinorGridlineColor = OxyColors.LightGray,
+                MinorGridlineThickness = 0.5,
+                MajorGridlineThickness = 1
+            };
+            plotModel.Axes.Add(fechaAxis);
+
+            // Eje Y - Unidades (compartido para ambas series)
+            var unidadesAxis = new LinearAxis
+            {
+                Position = AxisPosition.Left,
+                Title = "Unidades",
+                MajorGridlineStyle = LineStyle.Solid,
+                MinorGridlineStyle = LineStyle.Dot,
+                MajorGridlineColor = OxyColors.LightGray,
+                MinorGridlineColor = OxyColors.LightGray,
+                MinorGridlineThickness = 0.5,
+                MajorGridlineThickness = 1,
+                StringFormat = "N0"
+            };
+            plotModel.Axes.Add(unidadesAxis);
+
+            // Serie de Unidades en Traspasos de Palet
+            var serieUnidadesPalet = new LineSeries
+            {
+                Title = "Unidades - Traspasos Palet",
+                MarkerType = MarkerType.Circle,
+                MarkerSize = 5,
+                MarkerStroke = OxyColors.Blue,
+                MarkerFill = OxyColors.Blue,
+                Color = OxyColors.Blue,
+                StrokeThickness = 2.5
+            };
+
+            // Serie de Unidades en Traspasos de Artículo
+            var serieUnidadesArticulo = new LineSeries
+            {
+                Title = "Unidades - Traspasos Artículo",
+                MarkerType = MarkerType.Square,
+                MarkerSize = 5,
+                MarkerStroke = OxyColors.Orange,
+                MarkerFill = OxyColors.Orange,
+                Color = OxyColors.Orange,
+                StrokeThickness = 2.5
+            };
+
+            // Agregar puntos
+            foreach (var punto in VolumenMovido.EvolucionTemporal.OrderBy(p => p.Fecha))
+            {
+                var fechaOxy = DateTimeAxis.ToDouble(punto.Fecha);
+                serieUnidadesPalet.Points.Add(new DataPoint(fechaOxy, (double)punto.UnidadesPalet));
+                serieUnidadesArticulo.Points.Add(new DataPoint(fechaOxy, (double)punto.UnidadesArticulo));
+            }
+
+            plotModel.Series.Add(serieUnidadesPalet);
+            plotModel.Series.Add(serieUnidadesArticulo);
+
+            PlotModelEvolucion = plotModel;
+        }
+
         private FiltroRendimientosDto CrearFiltros()
         {
             return new FiltroRendimientosDto
@@ -390,6 +520,96 @@ namespace SGA_Desktop.ViewModels
             if (MostrandoOperarios)
             {
                 AplicarFiltrosYOrdenacion();
+            }
+        }
+
+        partial void OnVolumenMovidoChanged(VolumenMovidoDto? value)
+        {
+            ActualizarGraficoEvolucion();
+        }
+
+        partial void OnDistribucionChanged(DistribucionDto? value)
+        {
+            OnPropertyChanged(nameof(AlmacenesOrigenOrdenados));
+            OnPropertyChanged(nameof(AlmacenesDestinoOrdenados));
+            OnPropertyChanged(nameof(UbicacionesOrigenOrdenadas));
+            OnPropertyChanged(nameof(UbicacionesDestinoOrdenadas));
+            OnPropertyChanged(nameof(FlujosOrdenados));
+        }
+
+        partial void OnDistribucionPorUnidadesChanged(bool value)
+        {
+            OnPropertyChanged(nameof(AlmacenesOrigenOrdenados));
+            OnPropertyChanged(nameof(AlmacenesDestinoOrdenados));
+            OnPropertyChanged(nameof(UbicacionesOrigenOrdenadas));
+            OnPropertyChanged(nameof(UbicacionesDestinoOrdenadas));
+            OnPropertyChanged(nameof(FlujosOrdenados));
+        }
+
+        [RelayCommand]
+        private void CambiarVistaDistribucion(string tipo)
+        {
+            DistribucionPorUnidades = tipo == "Unidades";
+        }
+
+        // Propiedades calculadas para ordenar según la vista seleccionada
+        public List<AlmacenDistribucionDto> AlmacenesOrigenOrdenados
+        {
+            get
+            {
+                if (Distribucion?.TopAlmacenesOrigen == null) return new List<AlmacenDistribucionDto>();
+                var ordenados = DistribucionPorUnidades
+                    ? Distribucion.TopAlmacenesOrigen.OrderByDescending(a => a.UnidadesMovidas).ToList()
+                    : Distribucion.TopAlmacenesOrigen.OrderByDescending(a => a.CantidadTraspasos).ToList();
+                return ordenados.Select((a, index) => { a.Posicion = index + 1; return a; }).ToList();
+            }
+        }
+
+        public List<AlmacenDistribucionDto> AlmacenesDestinoOrdenados
+        {
+            get
+            {
+                if (Distribucion?.TopAlmacenesDestino == null) return new List<AlmacenDistribucionDto>();
+                var ordenados = DistribucionPorUnidades
+                    ? Distribucion.TopAlmacenesDestino.OrderByDescending(a => a.UnidadesMovidas).ToList()
+                    : Distribucion.TopAlmacenesDestino.OrderByDescending(a => a.CantidadTraspasos).ToList();
+                return ordenados.Select((a, index) => { a.Posicion = index + 1; return a; }).ToList();
+            }
+        }
+
+        public List<UbicacionDistribucionDto> UbicacionesOrigenOrdenadas
+        {
+            get
+            {
+                if (Distribucion?.TopUbicacionesOrigen == null) return new List<UbicacionDistribucionDto>();
+                var ordenadas = DistribucionPorUnidades
+                    ? Distribucion.TopUbicacionesOrigen.OrderByDescending(u => u.UnidadesMovidas).ToList()
+                    : Distribucion.TopUbicacionesOrigen.OrderByDescending(u => u.CantidadTraspasos).ToList();
+                return ordenadas.Select((u, index) => { u.Posicion = index + 1; return u; }).ToList();
+            }
+        }
+
+        public List<UbicacionDistribucionDto> UbicacionesDestinoOrdenadas
+        {
+            get
+            {
+                if (Distribucion?.TopUbicacionesDestino == null) return new List<UbicacionDistribucionDto>();
+                var ordenadas = DistribucionPorUnidades
+                    ? Distribucion.TopUbicacionesDestino.OrderByDescending(u => u.UnidadesMovidas).ToList()
+                    : Distribucion.TopUbicacionesDestino.OrderByDescending(u => u.CantidadTraspasos).ToList();
+                return ordenadas.Select((u, index) => { u.Posicion = index + 1; return u; }).ToList();
+            }
+        }
+
+        public List<FlujoDistribucionDto> FlujosOrdenados
+        {
+            get
+            {
+                if (Distribucion?.FlujosPrincipales == null) return new List<FlujoDistribucionDto>();
+                var ordenados = DistribucionPorUnidades
+                    ? Distribucion.FlujosPrincipales.OrderByDescending(f => f.UnidadesMovidas).ToList()
+                    : Distribucion.FlujosPrincipales.OrderByDescending(f => f.CantidadTraspasos).ToList();
+                return ordenados.Select((f, index) => { f.Posicion = index + 1; return f; }).ToList();
             }
         }
     }

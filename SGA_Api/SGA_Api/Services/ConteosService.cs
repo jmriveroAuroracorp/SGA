@@ -36,6 +36,7 @@ namespace SGA_Api.Services
                 // Extraer valores del FiltrosJson
                 var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
                 var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
+                var codigosArticulos = ExtraerArticulosDelFiltro(dto.FiltrosJson); // Soporte para múltiples artículos
                
                 // Primero intentar extraer ubicación directa del filtro (para ubicaciones especiales)
                 var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
@@ -50,13 +51,25 @@ namespace SGA_Api.Services
                 // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
                 string alcanceDeterminado = "ALMACEN"; // Default
                
-                if (!string.IsNullOrEmpty(codigoArticulo) &&
+                // Verificar si hay artículos (formato antiguo o nuevo)
+                bool tieneArticulos = (!string.IsNullOrEmpty(codigoArticulo)) || 
+                                      (codigosArticulos != null && codigosArticulos.Any());
+               
+                if (tieneArticulos &&
                     string.IsNullOrEmpty(codigoUbicacion) &&
                     string.IsNullOrEmpty(pasillo) &&
                     string.IsNullOrEmpty(estanteria))
                 {
-                    // Si solo se especifica artículo (sin ubicación, pasillo, estantería), es ARTICULO
-                    alcanceDeterminado = "ARTICULO";
+                    // Si solo se especifica artículo(s) (sin ubicación, pasillo, estantería)
+                    // Distinguir entre un artículo vs múltiples artículos
+                    if (codigosArticulos != null && codigosArticulos.Count > 1)
+                    {
+                        alcanceDeterminado = "MULTIARTICULO";
+                    }
+                    else
+                    {
+                        alcanceDeterminado = "ARTICULO";
+                    }
                 }
                 else if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
                 {
@@ -100,6 +113,12 @@ namespace SGA_Api.Services
                  _logger.LogInformation("ALCANCE_AUTO: Detalles de determinación - codigoUbicacion='{CodigoUbicacion}', esVacio={EsVacio}, esNull={EsNull}",
                      codigoUbicacion, codigoUbicacion == "", codigoUbicacion == null);
  
+                // Validar periodicidad
+                if (dto.EsPeriodico && (!dto.FrecuenciaDias.HasValue || dto.FrecuenciaDias.Value <= 0))
+                {
+                    throw new InvalidOperationException("La frecuencia en días es obligatoria y debe ser mayor a 0 para conteos periódicos");
+                }
+
                 var orden = new OrdenConteo
                 {
                     CodigoEmpresa = dto.CodigoEmpresa,
@@ -119,7 +138,16 @@ namespace SGA_Api.Services
                     FechaAsignacion = !string.IsNullOrEmpty(dto.CodigoOperario) ? DateTime.Now : null,
                     CodigoAlmacen = codigoAlmacen,
                     CodigoUbicacion = codigoUbicacion,
-                    CodigoArticulo = codigoArticulo
+                    CodigoArticulo = codigoArticulo,
+                    // Propiedades de periodicidad
+                    EsPeriodico = dto.EsPeriodico,
+                    FrecuenciaDias = dto.FrecuenciaDias,
+                    Activo = dto.EsPeriodico, // Si es periódico, activo por defecto
+                    FechaProximaRenovacion = dto.EsPeriodico && dto.FrecuenciaDias.HasValue 
+                        ? (dto.FechaPlan.HasValue && dto.FechaPlan.Value.Date >= DateTime.Now.Date
+                            ? dto.FechaPlan.Value.Date.AddDays(dto.FrecuenciaDias.Value) // Desde fecha planificada si es futura
+                            : DateTime.Now.Date.AddDays(dto.FrecuenciaDias.Value)) // Desde hoy si no hay fecha plan o es pasada
+                        : null
                 };
  
                 _context.OrdenesConteo.Add(orden);
@@ -180,6 +208,7 @@ namespace SGA_Api.Services
                 // Extraer valores del FiltrosJson para actualizar campos específicos
                 var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
                 var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
+                var codigosArticulos = ExtraerArticulosDelFiltro(dto.FiltrosJson); // Soporte para múltiples artículos
                 var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
 
                 // Actualizar campos específicos
@@ -197,13 +226,25 @@ namespace SGA_Api.Services
                 // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
                 string alcanceDeterminado = "ALMACEN"; // Default
                
-                if (!string.IsNullOrEmpty(codigoArticulo) &&
+                // Verificar si hay artículos (formato antiguo o nuevo)
+                bool tieneArticulos = (!string.IsNullOrEmpty(codigoArticulo)) || 
+                                      (codigosArticulos != null && codigosArticulos.Any());
+               
+                if (tieneArticulos &&
                     string.IsNullOrEmpty(codigoUbicacion) &&
                     string.IsNullOrEmpty(pasillo) &&
                     string.IsNullOrEmpty(estanteria))
                 {
-                    // Si solo se especifica artículo (sin ubicación, pasillo, estantería), es ARTICULO
-                    alcanceDeterminado = "ARTICULO";
+                    // Si solo se especifica artículo(s) (sin ubicación, pasillo, estantería)
+                    // Distinguir entre un artículo vs múltiples artículos
+                    if (codigosArticulos != null && codigosArticulos.Count > 1)
+                    {
+                        alcanceDeterminado = "MULTIARTICULO";
+                    }
+                    else
+                    {
+                        alcanceDeterminado = "ARTICULO";
+                    }
                 }
                 else if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
                 {
@@ -310,12 +351,14 @@ namespace SGA_Api.Services
             string? estado = null, 
             string? codigoOperario = null,
             DateTime? fechaDesde = null,
-            DateTime? fechaHasta = null)
+            DateTime? fechaHasta = null,
+            string? codigoOperarioSesion = null,
+            string? creadoPorCodigo = null)
         {
             try
             {
-                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}, operario: {Operario}, fechaDesde: {FechaDesde}, fechaHasta: {FechaHasta}", 
-                    estado, codigoOperario, fechaDesde, fechaHasta);
+                _logger.LogInformation("Iniciando ListarTodasLasOrdenesAsync con estado: {Estado}, operario: {Operario}, fechaDesde: {FechaDesde}, fechaHasta: {FechaHasta}, operarioSesion: {OperarioSesion}, creadoPorCodigo: {CreadoPorCodigo}", 
+                    estado, codigoOperario, fechaDesde, fechaHasta, codigoOperarioSesion, creadoPorCodigo);
                 
                 var query = _context.OrdenesConteo.AsQueryable();
 
@@ -325,10 +368,16 @@ namespace SGA_Api.Services
                     query = query.Where(o => o.Estado == estado);
                 }
 
-                // Aplicar filtro de operario si se especifica
+                // Aplicar filtro de operario si se especifica (filtro visual)
                 if (!string.IsNullOrEmpty(codigoOperario))
                 {
                     query = query.Where(o => o.CodigoOperario == codigoOperario);
+                }
+
+                // Aplicar filtro por creador (solo propios vs ver todos)
+                if (!string.IsNullOrEmpty(creadoPorCodigo))
+                {
+                    query = query.Where(o => o.CreadoPorCodigo == creadoPorCodigo);
                 }
 
                 // Aplicar filtro de fecha desde si se especifica
@@ -343,12 +392,77 @@ namespace SGA_Api.Services
                     query = query.Where(o => o.FechaCreacion.Date <= fechaHasta.Value.Date);
                 }
 
-                var ordenes = await query
-                    .OrderByDescending(o => o.FechaCreacion)
-                    .ToListAsync();
+                // Si se proporciona el código de operario de la sesión, filtrar por almacenes autorizados
+                List<OrdenConteo> ordenes;
+                if (!string.IsNullOrEmpty(codigoOperarioSesion) && int.TryParse(codigoOperarioSesion, out int operarioIdSesion))
+                {
+                    // Obtener todas las órdenes primero para obtener el código de empresa
+                    var ordenesTemporales = await query.ToListAsync();
+                    if (!ordenesTemporales.Any())
+                    {
+                        return new List<OrdenDto>();
+                    }
+                    
+                    // Obtener el código de empresa de la primera orden (todas deberían tener el mismo)
+                    var codigoEmpresa = ordenesTemporales.First().CodigoEmpresa;
+                    if (codigoEmpresa == 0) codigoEmpresa = 1; // Por defecto empresa 1
+                    
+                    var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioIdSesion, codigoEmpresa);
+                    
+                    if (almacenesAutorizados.Any())
+                    {
+                        // Filtrar órdenes que tengan almacén en los autorizados
+                        // O que no tengan almacén específico (alcance general)
+                        ordenes = ordenesTemporales.Where(o => 
+                            (o.CodigoAlmacen != null && almacenesAutorizados.Contains(o.CodigoAlmacen)) ||
+                            (o.CodigoAlmacen == null && o.Alcance != "ALMACEN"))
+                            .OrderByDescending(o => o.FechaCreacion)
+                            .ToList();
+                    }
+                    else
+                    {
+                        // Si el operario no tiene almacenes autorizados, no mostrar ninguna orden
+                        _logger.LogWarning("Operario de sesión {Operario} no tiene almacenes autorizados para órdenes de conteo", codigoOperarioSesion);
+                        return new List<OrdenDto>();
+                    }
+                }
+                else
+                {
+                    // Si no hay filtro de operario de sesión, obtener todas las órdenes
+                    ordenes = await query
+                        .OrderByDescending(o => o.FechaCreacion)
+                        .ToListAsync();
+                }
 
                 _logger.LogInformation("Se encontraron {Count} órdenes de conteo (todas)", ordenes.Count);
-                return ordenes.Select(MapToOrdenDto);
+                
+                // Obtener conteo de lecturas para cada orden
+                var ordenGuids = ordenes.Select(o => o.GuidID).ToList();
+                var conteosLecturas = await _context.LecturasConteo
+                    .Where(l => ordenGuids.Contains(l.OrdenGuid))
+                    .GroupBy(l => l.OrdenGuid)
+                    .Select(g => new
+                    {
+                        OrdenGuid = g.Key,
+                        TotalLecturas = g.Count()
+                    })
+                    .ToListAsync();
+                
+                var conteosDict = conteosLecturas.ToDictionary(c => c.OrdenGuid, c => c.TotalLecturas);
+                
+                return ordenes.Select(orden =>
+                {
+                    var dto = MapToOrdenDto(orden);
+                    if (conteosDict.TryGetValue(orden.GuidID, out var totalLecturas))
+                    {
+                        dto.TotalLecturas = totalLecturas;
+                    }
+                    else
+                    {
+                        dto.TotalLecturas = 0;
+                    }
+                    return dto;
+                });
             }
             catch (Exception ex)
             {
@@ -476,6 +590,10 @@ namespace SGA_Api.Services
                         _logger.LogInformation("GENERACION_DEBUG: Generando lecturas por ARTICULO");
                         await GenerarLecturasPorArticuloAsync(orden, codigoAlmacen, lecturasGeneradas);
                         break;
+                    case "MULTIARTICULO":
+                        _logger.LogInformation("GENERACION_DEBUG: Generando lecturas por MULTIARTICULO");
+                        await GenerarLecturasPorArticuloAsync(orden, codigoAlmacen, lecturasGeneradas);
+                        break;
                     case "UBICACION":
                         _logger.LogInformation("GENERACION_DEBUG: Generando lecturas por UBICACION");
                         await GenerarLecturasPorUbicacionAsync(orden, codigoAlmacen, lecturasGeneradas);
@@ -525,32 +643,50 @@ namespace SGA_Api.Services
 
             if (ejercicio == 0) return;
 
-            var codigoArticulo = orden.CodigoArticulo;
-            if (string.IsNullOrEmpty(codigoArticulo))
+            // Obtener lista de artículos (soporta múltiples artículos)
+            List<string>? codigosArticulos = null;
+            
+            // Primero intentar desde CodigoArticulo (compatibilidad)
+            if (!string.IsNullOrEmpty(orden.CodigoArticulo))
             {
-                codigoArticulo = ExtraerArticuloDelFiltro(orden.FiltrosJson);
+                codigosArticulos = new List<string> { orden.CodigoArticulo };
+            }
+            else
+            {
+                // Intentar extraer desde FiltrosJson (soporta formato nuevo y antiguo)
+                codigosArticulos = ExtraerArticulosDelFiltro(orden.FiltrosJson);
             }
 
-            if (!string.IsNullOrEmpty(codigoArticulo))
+            if (codigosArticulos != null && codigosArticulos.Any())
             {
                 // Para conteos por artículo, NO filtrar por almacén - buscar en TODOS los almacenes
-                var stockArticulo = await _storageControlContext.AcumuladoStockUbicacion
+                var stockArticulos = await _storageControlContext.AcumuladoStockUbicacion
                     .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
                                x.Ejercicio == ejercicio &&
-                               x.CodigoArticulo == codigoArticulo &&
+                               codigosArticulos.Contains(x.CodigoArticulo) &&
                                x.UnidadSaldo > 0)
                     .ToListAsync();
 
-                _logger.LogInformation("ARTICULO_DEBUG: Encontrados {Count} registros de stock para artículo {CodigoArticulo} en todos los almacenes", 
-                    stockArticulo.Count, codigoArticulo);
+                _logger.LogInformation("ARTICULO_DEBUG: Encontrados {Count} registros de stock para {ArticulosCount} artículo(s) en todos los almacenes", 
+                    stockArticulos.Count, codigosArticulos.Count);
 
-                var descripcionArticulo = await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, codigoArticulo);
+                // Agrupar por artículo para obtener descripciones
+                var articulosUnicos = stockArticulos.Select(s => s.CodigoArticulo).Distinct().ToList();
+                var descripcionesArticulos = new Dictionary<string, string>();
+                
+                foreach (var codigoArticulo in articulosUnicos)
+                {
+                    var descripcion = await ObtenerDescripcionArticuloAsync(orden.CodigoEmpresa, codigoArticulo);
+                    descripcionesArticulos[codigoArticulo] = descripcion;
+                }
 
-                foreach (var stock in stockArticulo)
+                foreach (var stock in stockArticulos)
                 {
                     // Solo incluir ubicaciones válidas para conteo
                     if (EsUbicacionValidaParaConteo(stock.Ubicacion))
                     {
+                        var descripcionArticulo = descripcionesArticulos.GetValueOrDefault(stock.CodigoArticulo, stock.CodigoArticulo);
+                        
                         lecturasGeneradas.Add(new LecturaConteo
                         {
                             OrdenGuid = orden.GuidID,
@@ -646,19 +782,47 @@ namespace SGA_Api.Services
 
             if (ejercicio == 0) return;
 
-            var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
-            if (!string.IsNullOrEmpty(pasillo))
+            var rangoPasillo = ExtraerRangoPasilloDelFiltro(orden.FiltrosJson);
+            if (rangoPasillo.HasValue)
             {
-                var prefijoPasillo = $"UB{pasillo.PadLeft(3, '0')}";
+                List<AcumuladoStockUbicacion> stockPasillo;
                 
-                var stockPasillo = await _storageControlContext.AcumuladoStockUbicacion
-                    .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
-                               x.Ejercicio == ejercicio &&
-                               x.CodigoAlmacen == codigoAlmacen &&
-                               x.Ubicacion != null &&
-                               x.Ubicacion.StartsWith(prefijoPasillo) &&
-                               x.UnidadSaldo > 0)
-                    .ToListAsync();
+                // Si es valor único [1, 1], usar lógica antigua (más rápida)
+                if (rangoPasillo.Value.desde == rangoPasillo.Value.hasta)
+                {
+                    var prefijoPasillo = $"UB{rangoPasillo.Value.desde.ToString().PadLeft(3, '0')}";
+                    
+                    stockPasillo = await _storageControlContext.AcumuladoStockUbicacion
+                        .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+                                   x.Ejercicio == ejercicio &&
+                                   x.CodigoAlmacen == codigoAlmacen &&
+                                   x.Ubicacion != null &&
+                                   x.Ubicacion.StartsWith(prefijoPasillo) &&
+                                   x.UnidadSaldo > 0)
+                        .ToListAsync();
+                }
+                else
+                {
+                    // Rango real: obtener todos los pasillos y filtrar por componentes
+                    var todosLosPasillos = await _storageControlContext.AcumuladoStockUbicacion
+                        .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+                                   x.Ejercicio == ejercicio &&
+                                   x.CodigoAlmacen == codigoAlmacen &&
+                                   x.Ubicacion != null &&
+                                   x.Ubicacion.StartsWith("UB") &&
+                                   x.Ubicacion.Length >= 5 && // Al menos UB + pasillo (5 caracteres)
+                                   x.UnidadSaldo > 0)
+                        .ToListAsync();
+                    
+                    // Filtrar por rango de pasillo
+                    stockPasillo = todosLosPasillos.Where(stock =>
+                    {
+                        var componentes = ExtraerComponentesUbicacion(stock.Ubicacion);
+                        return componentes.HasValue &&
+                               componentes.Value.pasillo >= rangoPasillo.Value.desde &&
+                               componentes.Value.pasillo <= rangoPasillo.Value.hasta;
+                    }).ToList();
+                }
 
                 foreach (var stock in stockPasillo)
                 {
@@ -779,30 +943,68 @@ namespace SGA_Api.Services
 
             if (ejercicio == 0) return;
 
-            var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
-            var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
+            var rangoPasillo = ExtraerRangoPasilloDelFiltro(orden.FiltrosJson);
+            var rangoEstanteria = ExtraerRangoEstanteriaDelFiltro(orden.FiltrosJson);
             
             _logger.LogInformation("ESTANTERIA_DEBUG: FiltrosJson = '{FiltrosJson}'", orden.FiltrosJson);
-            _logger.LogInformation("ESTANTERIA_DEBUG: Pasillo extraído = '{Pasillo}', Estantería extraída = '{Estanteria}'", pasillo, estanteria);
+            _logger.LogInformation("ESTANTERIA_DEBUG: Rango pasillo = {RangoPasillo}, Rango estantería = {RangoEstanteria}", 
+                rangoPasillo.HasValue ? $"[{rangoPasillo.Value.desde}, {rangoPasillo.Value.hasta}]" : "null",
+                rangoEstanteria.HasValue ? $"[{rangoEstanteria.Value.desde}, {rangoEstanteria.Value.hasta}]" : "null");
             
-            if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+            if (rangoPasillo.HasValue && rangoEstanteria.HasValue)
             {
-                var pasilloFormateado = pasillo.PadLeft(3, '0');
-                var estanteriaFormateada = estanteria.PadLeft(3, '0');
+                List<AcumuladoStockUbicacion> stockEstanteria;
                 
-                _logger.LogInformation("ESTANTERIA_DEBUG: Pasillo formateado = '{PasilloFormateado}', Estantería formateada = '{EstanteriaFormateada}'", pasilloFormateado, estanteriaFormateada);
-                
-                var stockEstanteria = await _storageControlContext.AcumuladoStockUbicacion
-                    .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
-                               x.Ejercicio == ejercicio &&
-                               x.CodigoAlmacen == codigoAlmacen &&
-                               x.Ubicacion != null &&
-                               x.Ubicacion.StartsWith("UB") &&
-                               x.Ubicacion.Length >= 8 &&
-                               x.Ubicacion.Substring(2, 3) == pasilloFormateado &&
-                               x.Ubicacion.Substring(5, 3) == estanteriaFormateada &&
-                               x.UnidadSaldo > 0)
-                    .ToListAsync();
+                // Si ambos son valores únicos [1,1] y [5,5], usar lógica antigua (más rápida)
+                if (rangoPasillo.Value.desde == rangoPasillo.Value.hasta && 
+                    rangoEstanteria.Value.desde == rangoEstanteria.Value.hasta)
+                {
+                    var pasilloFormateado = rangoPasillo.Value.desde.ToString().PadLeft(3, '0');
+                    var estanteriaFormateada = rangoEstanteria.Value.desde.ToString().PadLeft(3, '0');
+                    
+                    _logger.LogInformation("ESTANTERIA_DEBUG: Usando lógica antigua (valores únicos). Pasillo = '{PasilloFormateado}', Estantería = '{EstanteriaFormateada}'", 
+                        pasilloFormateado, estanteriaFormateada);
+                    
+                    stockEstanteria = await _storageControlContext.AcumuladoStockUbicacion
+                        .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+                                   x.Ejercicio == ejercicio &&
+                                   x.CodigoAlmacen == codigoAlmacen &&
+                                   x.Ubicacion != null &&
+                                   x.Ubicacion.StartsWith("UB") &&
+                                   x.Ubicacion.Length >= 8 &&
+                                   x.Ubicacion.Substring(2, 3) == pasilloFormateado &&
+                                   x.Ubicacion.Substring(5, 3) == estanteriaFormateada &&
+                                   x.UnidadSaldo > 0)
+                        .ToListAsync();
+                }
+                else
+                {
+                    // Rango real: obtener todos y filtrar por componentes
+                    _logger.LogInformation("ESTANTERIA_DEBUG: Usando lógica de rangos. Pasillo [{DesdePasillo}, {HastaPasillo}], Estantería [{DesdeEstanteria}, {HastaEstanteria}]",
+                        rangoPasillo.Value.desde, rangoPasillo.Value.hasta,
+                        rangoEstanteria.Value.desde, rangoEstanteria.Value.hasta);
+                    
+                    var todosLosStock = await _storageControlContext.AcumuladoStockUbicacion
+                        .Where(x => x.CodigoEmpresa == orden.CodigoEmpresa &&
+                                   x.Ejercicio == ejercicio &&
+                                   x.CodigoAlmacen == codigoAlmacen &&
+                                   x.Ubicacion != null &&
+                                   x.Ubicacion.StartsWith("UB") &&
+                                   x.Ubicacion.Length >= 8 &&
+                                   x.UnidadSaldo > 0)
+                        .ToListAsync();
+                    
+                    // Filtrar por rangos de pasillo y estantería
+                    stockEstanteria = todosLosStock.Where(stock =>
+                    {
+                        var componentes = ExtraerComponentesUbicacion(stock.Ubicacion);
+                        return componentes.HasValue &&
+                               componentes.Value.pasillo >= rangoPasillo.Value.desde &&
+                               componentes.Value.pasillo <= rangoPasillo.Value.hasta &&
+                               componentes.Value.estanteria >= rangoEstanteria.Value.desde &&
+                               componentes.Value.estanteria <= rangoEstanteria.Value.hasta;
+                    }).ToList();
+                }
 
                 foreach (var stock in stockEstanteria)
                 {
@@ -947,7 +1149,10 @@ namespace SGA_Api.Services
                 Comentario = orden.Comentario,
                 FechaAsignacion = orden.FechaAsignacion,
                 FechaInicio = orden.FechaInicio,
-                FechaCierre = orden.FechaCierre
+                FechaCierre = orden.FechaCierre,
+                EsPeriodico = orden.EsPeriodico,
+                Activo = orden.Activo,
+                OrdenPadreGuid = orden.OrdenPadreGuid
             };
         }
 
@@ -973,6 +1178,48 @@ namespace SGA_Api.Services
             {
                 var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(filtrosJson);
                 return filtros?.GetValueOrDefault("articulo")?.ToString();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private List<string>? ExtraerArticulosDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(filtrosJson);
+                
+                // Priorizar formato nuevo: array de artículos
+                if (filtros?.ContainsKey("articulos") == true)
+                {
+                    var articulos = filtros["articulos"];
+                    if (articulos.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        return articulos.EnumerateArray()
+                            .Select(x => x.GetString())
+                            .Where(x => !string.IsNullOrEmpty(x))
+                            .ToList();
+                    }
+                }
+                
+                // Compatibilidad: formato antiguo con un solo artículo
+                if (filtros?.ContainsKey("articulo") == true)
+                {
+                    var articulo = filtros["articulo"];
+                    if (articulo.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var codigoArticulo = articulo.GetString();
+                        if (!string.IsNullOrEmpty(codigoArticulo))
+                        {
+                            return new List<string> { codigoArticulo };
+                        }
+                    }
+                }
+                
+                return null;
             }
             catch
             {
@@ -1046,6 +1293,222 @@ namespace SGA_Api.Services
             }
             catch
             {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extrae los componentes numéricos de una ubicación en formato UB001005003001
+        /// </summary>
+        private (int pasillo, int estanteria, int altura, int posicion)? ExtraerComponentesUbicacion(string? ubicacion)
+        {
+            if (string.IsNullOrEmpty(ubicacion) || !ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            // Formato esperado: UB001005003001 (14 caracteres total)
+            // UB (2) + pasillo (3) + estanteria (3) + altura (3) + posicion (3) = 14
+            if (ubicacion.Length < 14)
+                return null;
+
+            try
+            {
+                var pasilloStr = ubicacion.Substring(2, 3);
+                var estanteriaStr = ubicacion.Substring(5, 3);
+                var alturaStr = ubicacion.Substring(8, 3);
+                var posicionStr = ubicacion.Substring(11, 3);
+
+                if (int.TryParse(pasilloStr, out int pasillo) &&
+                    int.TryParse(estanteriaStr, out int estanteria) &&
+                    int.TryParse(alturaStr, out int altura) &&
+                    int.TryParse(posicionStr, out int posicion))
+                {
+                    return (pasillo, estanteria, altura, posicion);
+                }
+            }
+            catch
+            {
+                // Si falla el parsing, retornar null
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Extrae rango de pasillo del filtro JSON. Soporta formato antiguo (string) y nuevo (objeto con desde/hasta)
+        /// </summary>
+        private (int desde, int hasta)? ExtraerRangoPasilloDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(filtrosJson);
+                
+                if (!filtros.ContainsKey("pasillo")) return null;
+                
+                var pasillo = filtros["pasillo"];
+                
+                // FORMATO ANTIGUO: "pasillo": "1" (string)
+                if (pasillo.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    if (int.TryParse(pasillo.GetString(), out int valor))
+                        return (valor, valor); // Rango [1, 1]
+                }
+                
+                // FORMATO NUEVO: "pasillo": {"desde": 1, "hasta": 5} (objeto)
+                if (pasillo.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    var desde = pasillo.TryGetProperty("desde", out var desdeProp) && desdeProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? desdeProp.GetInt32() : (int?)null;
+                    var hasta = pasillo.TryGetProperty("hasta", out var hastaProp) && hastaProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? hastaProp.GetInt32() : (int?)null;
+                    
+                    if (desde.HasValue && hasta.HasValue)
+                        return (desde.Value, hasta.Value);
+                }
+                
+                return null;
+            }
+            catch
+            {
+                // Si falla, intentar con método antiguo como fallback
+                var pasilloAntiguo = ExtraerPasilloDelFiltro(filtrosJson);
+                if (!string.IsNullOrEmpty(pasilloAntiguo) && int.TryParse(pasilloAntiguo, out int valor))
+                    return (valor, valor);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extrae rango de estantería del filtro JSON. Soporta formato antiguo (string) y nuevo (objeto con desde/hasta)
+        /// </summary>
+        private (int desde, int hasta)? ExtraerRangoEstanteriaDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(filtrosJson);
+                
+                if (!filtros.ContainsKey("estanteria")) return null;
+                
+                var estanteria = filtros["estanteria"];
+                
+                // FORMATO ANTIGUO: "estanteria": "5" (string)
+                if (estanteria.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    if (int.TryParse(estanteria.GetString(), out int valor))
+                        return (valor, valor); // Rango [5, 5]
+                }
+                
+                // FORMATO NUEVO: "estanteria": {"desde": 1, "hasta": 5} (objeto)
+                if (estanteria.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    var desde = estanteria.TryGetProperty("desde", out var desdeProp) && desdeProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? desdeProp.GetInt32() : (int?)null;
+                    var hasta = estanteria.TryGetProperty("hasta", out var hastaProp) && hastaProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? hastaProp.GetInt32() : (int?)null;
+                    
+                    if (desde.HasValue && hasta.HasValue)
+                        return (desde.Value, hasta.Value);
+                }
+                
+                return null;
+            }
+            catch
+            {
+                // Si falla, intentar con método antiguo como fallback
+                var estanteriaAntigua = ExtraerEstanteriaDelFiltro(filtrosJson);
+                if (!string.IsNullOrEmpty(estanteriaAntigua) && int.TryParse(estanteriaAntigua, out int valor))
+                    return (valor, valor);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extrae rango de altura del filtro JSON. Soporta formato antiguo (string) y nuevo (objeto con desde/hasta)
+        /// </summary>
+        private (int desde, int hasta)? ExtraerRangoAlturaDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(filtrosJson);
+                
+                if (!filtros.ContainsKey("altura")) return null;
+                
+                var altura = filtros["altura"];
+                
+                // FORMATO ANTIGUO: "altura": "3" (string)
+                if (altura.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    if (int.TryParse(altura.GetString(), out int valor))
+                        return (valor, valor); // Rango [3, 3]
+                }
+                
+                // FORMATO NUEVO: "altura": {"desde": 1, "hasta": 3} (objeto)
+                if (altura.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    var desde = altura.TryGetProperty("desde", out var desdeProp) && desdeProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? desdeProp.GetInt32() : (int?)null;
+                    var hasta = altura.TryGetProperty("hasta", out var hastaProp) && hastaProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? hastaProp.GetInt32() : (int?)null;
+                    
+                    if (desde.HasValue && hasta.HasValue)
+                        return (desde.Value, hasta.Value);
+                }
+                
+                return null;
+            }
+            catch
+            {
+                // Si falla, intentar con método antiguo como fallback
+                var alturaAntigua = ExtraerAlturaDelFiltro(filtrosJson);
+                if (!string.IsNullOrEmpty(alturaAntigua) && int.TryParse(alturaAntigua, out int valor))
+                    return (valor, valor);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extrae rango de posición del filtro JSON. Soporta formato antiguo (string) y nuevo (objeto con desde/hasta)
+        /// </summary>
+        private (int desde, int hasta)? ExtraerRangoPosicionDelFiltro(string? filtrosJson)
+        {
+            if (string.IsNullOrEmpty(filtrosJson)) return null;
+            try
+            {
+                var filtros = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(filtrosJson);
+                
+                if (!filtros.ContainsKey("posicion")) return null;
+                
+                var posicion = filtros["posicion"];
+                
+                // FORMATO ANTIGUO: "posicion": "1" (string)
+                if (posicion.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    if (int.TryParse(posicion.GetString(), out int valor))
+                        return (valor, valor); // Rango [1, 1]
+                }
+                
+                // FORMATO NUEVO: "posicion": {"desde": 1, "hasta": 10} (objeto)
+                if (posicion.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    var desde = posicion.TryGetProperty("desde", out var desdeProp) && desdeProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? desdeProp.GetInt32() : (int?)null;
+                    var hasta = posicion.TryGetProperty("hasta", out var hastaProp) && hastaProp.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? hastaProp.GetInt32() : (int?)null;
+                    
+                    if (desde.HasValue && hasta.HasValue)
+                        return (desde.Value, hasta.Value);
+                }
+                
+                return null;
+            }
+            catch
+            {
+                // Si falla, intentar con método antiguo como fallback
+                var posicionAntigua = ExtraerPosicionDelFiltro(filtrosJson);
+                if (!string.IsNullOrEmpty(posicionAntigua) && int.TryParse(posicionAntigua, out int valor))
+                    return (valor, valor);
                 return null;
             }
         }
@@ -1946,10 +2409,24 @@ namespace SGA_Api.Services
                 switch (orden.Alcance?.ToUpper())
                 {
                     case "ARTICULO":
-                        var codigoArticulo = orden.CodigoArticulo ?? ExtraerArticuloDelFiltro(orden.FiltrosJson);
-                        if (!string.IsNullOrEmpty(codigoArticulo))
+                    case "MULTIARTICULO":
+                        // Obtener lista de artículos (soporta múltiples artículos)
+                        List<string>? codigosArticulos = null;
+                        
+                        // Primero intentar desde CodigoArticulo (compatibilidad)
+                        if (!string.IsNullOrEmpty(orden.CodigoArticulo))
                         {
-                            query = query.Where(x => x.CodigoArticulo == codigoArticulo);
+                            codigosArticulos = new List<string> { orden.CodigoArticulo };
+                        }
+                        else
+                        {
+                            // Intentar extraer desde FiltrosJson (soporta formato nuevo y antiguo)
+                            codigosArticulos = ExtraerArticulosDelFiltro(orden.FiltrosJson);
+                        }
+                        
+                        if (codigosArticulos != null && codigosArticulos.Any())
+                        {
+                            query = query.Where(x => codigosArticulos.Contains(x.CodigoArticulo));
                             
                             // Si se especifica almacén específico
                             if (!string.IsNullOrEmpty(codigoAlmacen))
@@ -1962,7 +2439,8 @@ namespace SGA_Api.Services
                                 }
                                 
                                 query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
-                                _logger.LogInformation("Pendientes (ARTICULO): filtrando artículo '{Articulo}' en almacén '{Almacen}'", codigoArticulo, codigoAlmacen);
+                                _logger.LogInformation("Pendientes ({Alcance}): filtrando {ArticulosCount} artículo(s) en almacén '{Almacen}': {Articulos}", 
+                                    orden.Alcance, codigosArticulos.Count, codigoAlmacen, string.Join(", ", codigosArticulos));
                             }
                             else
                             {
@@ -1970,12 +2448,13 @@ namespace SGA_Api.Services
                                 if (almacenesAutorizados.Any())
                                 {
                                     query = query.Where(x => almacenesAutorizados.Contains(x.CodigoAlmacen));
-                                    _logger.LogInformation("Pendientes (ARTICULO): filtrando artículo '{Articulo}' en almacenes autorizados: {Almacenes}", 
-                                        codigoArticulo, string.Join(", ", almacenesAutorizados));
+                                    _logger.LogInformation("Pendientes ({Alcance}): filtrando {ArticulosCount} artículo(s) en almacenes autorizados: {Almacenes}. Artículos: {Articulos}", 
+                                        orden.Alcance, codigosArticulos.Count, string.Join(", ", almacenesAutorizados), string.Join(", ", codigosArticulos));
                                 }
                                 else
                                 {
-                                    _logger.LogInformation("Pendientes (ARTICULO): filtrando artículo '{Articulo}' en TODOS los almacenes (sin restricciones)", codigoArticulo);
+                                    _logger.LogInformation("Pendientes ({Alcance}): filtrando {ArticulosCount} artículo(s) en TODOS los almacenes (sin restricciones): {Articulos}", 
+                                        orden.Alcance, codigosArticulos.Count, string.Join(", ", codigosArticulos));
                                 }
                             }
                         }
@@ -2050,14 +2529,26 @@ namespace SGA_Api.Services
 
                         query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
                         
-                        var pasillo = ExtraerPasilloDelFiltro(orden.FiltrosJson);
-                        var estanteria = ExtraerEstanteriaDelFiltro(orden.FiltrosJson);
-                        if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                        var rangoPasillo = ExtraerRangoPasilloDelFiltro(orden.FiltrosJson);
+                        var rangoEstanteria = ExtraerRangoEstanteriaDelFiltro(orden.FiltrosJson);
+                        
+                        if (rangoPasillo.HasValue && rangoEstanteria.HasValue)
                         {
-                            var pasilloFormateado = pasillo.PadLeft(3, '0');
-                            var estanteriaFormateada = estanteria.PadLeft(3, '0');
-                            var prefijoEstanteria = $"UB{pasilloFormateado}{estanteriaFormateada}";
-                            query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoEstanteria));
+                            // Si ambos son valores únicos [1,1] y [5,5], usar lógica antigua (más rápida)
+                            if (rangoPasillo.Value.desde == rangoPasillo.Value.hasta && 
+                                rangoEstanteria.Value.desde == rangoEstanteria.Value.hasta)
+                            {
+                                var pasilloFormateado = rangoPasillo.Value.desde.ToString().PadLeft(3, '0');
+                                var estanteriaFormateada = rangoEstanteria.Value.desde.ToString().PadLeft(3, '0');
+                                var prefijoEstanteria = $"UB{pasilloFormateado}{estanteriaFormateada}";
+                                query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoEstanteria));
+                            }
+                            else
+                            {
+                                // Rango real: marcar para filtrar después del switch
+                                // No aplicar filtro aquí, se hará después de obtener los datos
+                                _logger.LogInformation("Pendientes (ESTANTERIA): usando rangos. Se filtrará después de obtener datos base.");
+                            }
                         }
                         break;
                     case "PASILLO":
@@ -2073,11 +2564,21 @@ namespace SGA_Api.Services
 
                         query = query.Where(x => x.CodigoAlmacen == codigoAlmacen);
                         
-                        var pasilloFiltro = ExtraerPasilloDelFiltro(orden.FiltrosJson);
-                        if (!string.IsNullOrEmpty(pasilloFiltro))
+                        var rangoPasilloFiltro = ExtraerRangoPasilloDelFiltro(orden.FiltrosJson);
+                        if (rangoPasilloFiltro.HasValue)
                         {
-                            var prefijoPasillo = $"UB{pasilloFiltro.PadLeft(3, '0')}";
-                            query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoPasillo));
+                            // Si es valor único [1, 1], usar lógica antigua (más rápida)
+                            if (rangoPasilloFiltro.Value.desde == rangoPasilloFiltro.Value.hasta)
+                            {
+                                var prefijoPasillo = $"UB{rangoPasilloFiltro.Value.desde.ToString().PadLeft(3, '0')}";
+                                query = query.Where(x => x.Ubicacion != null && x.Ubicacion.StartsWith(prefijoPasillo));
+                            }
+                            else
+                            {
+                                // Rango real: marcar para filtrar después del switch
+                                // No aplicar filtro aquí, se hará después de obtener los datos
+                                _logger.LogInformation("Pendientes (PASILLO): usando rangos. Se filtrará después de obtener datos base.");
+                            }
                         }
                         break;
                     case "ALMACEN":
@@ -2100,6 +2601,54 @@ namespace SGA_Api.Services
 
                 // Obtener stock y generar lecturas
                 var stockData = await query.ToListAsync();
+                
+                // Aplicar filtrado por rangos si es necesario (para casos ESTANTERIA y PASILLO con rangos reales)
+                if (orden.Alcance?.ToUpper() == "ESTANTERIA" || orden.Alcance?.ToUpper() == "PASILLO")
+                {
+                    var rangoPasillo = ExtraerRangoPasilloDelFiltro(orden.FiltrosJson);
+                    var rangoEstanteria = ExtraerRangoEstanteriaDelFiltro(orden.FiltrosJson);
+                    
+                    if (orden.Alcance?.ToUpper() == "ESTANTERIA" && rangoPasillo.HasValue && rangoEstanteria.HasValue)
+                    {
+                        // Si hay rangos reales (no valores únicos), filtrar
+                        if (!(rangoPasillo.Value.desde == rangoPasillo.Value.hasta && 
+                              rangoEstanteria.Value.desde == rangoEstanteria.Value.hasta))
+                        {
+                            stockData = stockData.Where(stock =>
+                            {
+                                var componentes = ExtraerComponentesUbicacion(stock.Ubicacion);
+                                return componentes.HasValue &&
+                                       componentes.Value.pasillo >= rangoPasillo.Value.desde &&
+                                       componentes.Value.pasillo <= rangoPasillo.Value.hasta &&
+                                       componentes.Value.estanteria >= rangoEstanteria.Value.desde &&
+                                       componentes.Value.estanteria <= rangoEstanteria.Value.hasta;
+                            }).ToList();
+                            
+                            _logger.LogInformation("Pendientes (ESTANTERIA): filtrado por rangos. Pasillo [{DesdePasillo}, {HastaPasillo}], Estantería [{DesdeEstanteria}, {HastaEstanteria}]. Resultados: {Count}",
+                                rangoPasillo.Value.desde, rangoPasillo.Value.hasta,
+                                rangoEstanteria.Value.desde, rangoEstanteria.Value.hasta,
+                                stockData.Count);
+                        }
+                    }
+                    else if (orden.Alcance?.ToUpper() == "PASILLO" && rangoPasillo.HasValue)
+                    {
+                        // Si hay rango real (no valor único), filtrar
+                        if (rangoPasillo.Value.desde != rangoPasillo.Value.hasta)
+                        {
+                            stockData = stockData.Where(stock =>
+                            {
+                                var componentes = ExtraerComponentesUbicacion(stock.Ubicacion);
+                                return componentes.HasValue &&
+                                       componentes.Value.pasillo >= rangoPasillo.Value.desde &&
+                                       componentes.Value.pasillo <= rangoPasillo.Value.hasta;
+                            }).ToList();
+                            
+                            _logger.LogInformation("Pendientes (PASILLO): filtrado por rango [{DesdePasillo}, {HastaPasillo}]. Resultados: {Count}",
+                                rangoPasillo.Value.desde, rangoPasillo.Value.hasta,
+                                stockData.Count);
+                        }
+                    }
+                }
                 
                 // Obtener lecturas ya creadas para excluirlas
                 var lecturasCreadas = await _context.LecturasConteo
@@ -2575,6 +3124,154 @@ namespace SGA_Api.Services
             }
         }
 
+        // Métodos para conteos periódicos
+        public async Task<IEnumerable<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(string? codigoOperario = null)
+        {
+            try
+            {
+                var query = _context.OrdenesConteo
+                    .Where(o => o.EsPeriodico == true)
+                    .AsQueryable();
+
+                List<OrdenConteo> ordenesPeriodicas;
+
+                // Si se proporciona un código de operario, filtrar por almacenes autorizados
+                if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
+                {
+                    // Obtener todas las órdenes periódicas primero para obtener el código de empresa
+                    var ordenesTemporales = await query.ToListAsync();
+                    if (!ordenesTemporales.Any())
+                    {
+                        return new List<ConteoPeriodicoDto>();
+                    }
+                    
+                    // Obtener el código de empresa de la primera orden (todas deberían tener el mismo)
+                    var codigoEmpresa = ordenesTemporales.First().CodigoEmpresa;
+                    if (codigoEmpresa == 0) codigoEmpresa = 1; // Por defecto empresa 1
+                    
+                    var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioId, codigoEmpresa);
+                    
+                    if (almacenesAutorizados.Any())
+                    {
+                        // Filtrar conteos periódicos que tengan almacén en los autorizados
+                        // O que no tengan almacén específico (alcance general)
+                        ordenesPeriodicas = ordenesTemporales.Where(o => 
+                            (o.CodigoAlmacen != null && almacenesAutorizados.Contains(o.CodigoAlmacen)) ||
+                            (o.CodigoAlmacen == null && o.Alcance != "ALMACEN")).ToList(); // Si no tiene almacén específico y no es alcance ALMACEN, mostrarlo
+                    }
+                    else
+                    {
+                        // Si el operario no tiene almacenes autorizados, no mostrar ningún conteo
+                        _logger.LogWarning("Operario {Operario} no tiene almacenes autorizados para conteos periódicos", codigoOperario);
+                        return new List<ConteoPeriodicoDto>();
+                    }
+                }
+                else
+                {
+                    // Si no hay filtro de operario, obtener todas las órdenes periódicas
+                    ordenesPeriodicas = await query.ToListAsync();
+                }
+
+                var resultado = new List<ConteoPeriodicoDto>();
+
+                foreach (var orden in ordenesPeriodicas)
+                {
+                    // Contar renovaciones (órdenes hijas)
+                    var totalRenovaciones = await _context.OrdenesConteo
+                        .CountAsync(o => o.OrdenPadreGuid == orden.GuidID);
+
+                    resultado.Add(new ConteoPeriodicoDto
+                    {
+                        GuidID = orden.GuidID,
+                        CodigoEmpresa = orden.CodigoEmpresa,
+                        Titulo = orden.Titulo,
+                        FrecuenciaDias = orden.FrecuenciaDias,
+                        FechaUltimaRenovacion = orden.FechaUltimaRenovacion,
+                        FechaProximaRenovacion = orden.FechaProximaRenovacion,
+                        Activo = orden.Activo,
+                        Estado = orden.Estado,
+                        CodigoOperario = orden.CodigoOperario,
+                        CodigoAlmacen = orden.CodigoAlmacen,
+                        Alcance = orden.Alcance,
+                        CreadoPorCodigo = orden.CreadoPorCodigo,
+                        Prioridad = orden.Prioridad,
+                        FechaCreacion = orden.FechaCreacion,
+                        TotalRenovaciones = totalRenovaciones
+                    });
+                }
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al listar conteos periódicos");
+                throw;
+            }
+        }
+
+        public async Task ActivarPeriodicidadAsync(Guid guid)
+        {
+            try
+            {
+                var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == guid);
+                if (orden == null)
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {guid}");
+
+                if (!orden.EsPeriodico)
+                    throw new InvalidOperationException("La orden no es un conteo periódico");
+
+                orden.Activo = true;
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Periodicidad activada para orden {Guid}", guid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al activar periodicidad para orden {Guid}", guid);
+                throw;
+            }
+        }
+
+        public async Task DesactivarPeriodicidadAsync(Guid guid)
+        {
+            try
+            {
+                var orden = await _context.OrdenesConteo.FirstOrDefaultAsync(o => o.GuidID == guid);
+                if (orden == null)
+                    throw new InvalidOperationException($"No se encontró la orden con Guid {guid}");
+
+                if (!orden.EsPeriodico)
+                    throw new InvalidOperationException("La orden no es un conteo periódico");
+
+                orden.Activo = false;
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Periodicidad desactivada para orden {Guid}", guid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al desactivar periodicidad para orden {Guid}", guid);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<OrdenDto>> ObtenerRenovacionesAsync(Guid guid)
+        {
+            try
+            {
+                var renovaciones = await _context.OrdenesConteo
+                    .Where(o => o.OrdenPadreGuid == guid)
+                    .OrderByDescending(o => o.FechaCreacion)
+                    .ToListAsync();
+
+                return renovaciones.Select(MapToOrdenDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener renovaciones para orden {Guid}", guid);
+                throw;
+            }
+        }
 
     }
 

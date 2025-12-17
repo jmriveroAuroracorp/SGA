@@ -393,6 +393,30 @@ public class LoginService : ApiService
             }
         }
 
+        public async Task<List<OperariosAccesoDto>> ObtenerOperariosConAccesoInventariosAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync("OperariosAcceso/inventarios");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonContent = await response.Content.ReadAsStringAsync();
+                    var operarios = JsonSerializer.Deserialize<List<OperariosAccesoDto>>(jsonContent,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                    return operarios ?? new List<OperariosAccesoDto>();
+                }
+
+                return new List<OperariosAccesoDto>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error obteniendo operarios con acceso a inventarios: {ex.Message}");
+                return new List<OperariosAccesoDto>();
+            }
+        }
+
         /// <summary>
         /// Obtiene la lista de operarios con acceso específico a traspasos
         /// </summary>

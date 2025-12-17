@@ -33,6 +33,8 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
 		= new ObservableCollection<UbicacionDetalladaDto>();
 	[ObservableProperty] private UbicacionDetalladaDto? selectedUbicacion;
+	
+	public int TotalUbicaciones => Ubicaciones.Count;
 
 	// Filtrado
 	public ICollectionView UbicacionesView { get; }
@@ -66,6 +68,9 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	[ObservableProperty]
 	private bool isBusy;
 	
+	[ObservableProperty]
+	private bool mostrarObsoletas = false;
+	
 	// Propiedades para filtrado de almacenes
 	[ObservableProperty]
 	private string filtroAlmacenesCombo = "";
@@ -76,6 +81,12 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public ObservableCollection<int?> AlturasDisponibles { get; } = new();
 	[ObservableProperty] private int? alturaSeleccionada;
 
+	public ObservableCollection<int?> PasillosDisponibles { get; } = new();
+	[ObservableProperty] private int? pasilloSeleccionado;
+
+	public ObservableCollection<int?> EstanteriasDisponibles { get; } = new();
+	[ObservableProperty] private int? estanteriaSeleccionada;
+
 	[RelayCommand]
 	private void SeleccionarPorAltura(int? altura)
 	{
@@ -84,10 +95,40 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 			u.IsMarcada = u.Altura == altura;
 		RecalcularSeleccion();
 	}
+
+	[RelayCommand]
+	private void SeleccionarPorPasillo(int? pasillo)
+	{
+		if (pasillo == null) return;
+		foreach (var u in Ubicaciones)
+			u.IsMarcada = u.Pasillo == pasillo;
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void SeleccionarPorEstanteria(int? estanteria)
+	{
+		if (estanteria == null) return;
+		foreach (var u in Ubicaciones)
+			u.IsMarcada = u.Estanteria == estanteria;
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void LimpiarFiltros()
+	{
+		PasilloSeleccionado = null;
+		EstanteriaSeleccionada = null;
+		AlturaSeleccionada = null;
+		FiltroBusqueda = string.Empty;
+		LimpiarSeleccion();
+	}
+
 	private void RecalcularSeleccion()
 	{
 		SeleccionadasCount = Ubicaciones.Count(u => u.IsMarcada);
 		HaySeleccion = SeleccionadasCount > 0;
+		EditarSeleccionadasCommand.NotifyCanExecuteChanged();
 	}
 
 	/// <summary>Comando que carga los alérgenos de una ubicación.</summary>
@@ -97,6 +138,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public IRelayCommand<UbicacionDetalladaDto> EditarUbicacionCommand { get; }
 	public IRelayCommand<AlmacenDto> OpenMasivoCommand { get; }
 	public IRelayCommand RefrescarCommand { get; }
+	public IRelayCommand EditarSeleccionadasCommand { get; }
 
 	[RelayCommand]
 	private async Task ImprimirUbicacionAsync(UbicacionDetalladaDto ubicacion)
@@ -214,6 +256,7 @@ $"Posición: {ubicacion.Posicion}";
 		_ = InitializeAsync();
 		OpenMasivoCommand = new RelayCommand<AlmacenDto>(OpenMasivoDialog, alm => alm != null);
 		RefrescarCommand = new RelayCommand(RefrescarUbicaciones, () => SelectedAlmacenCombo != null);
+		EditarSeleccionadasCommand = new RelayCommand(OpenEditarMasivoDialog, () => HaySeleccion);
 		
 		// Solo cargar impresoras si la aplicación no se está cerrando
 		if (!SessionManager.IsClosing)
@@ -375,14 +418,18 @@ $"Posición: {ubicacion.Posicion}";
 
 	private async Task LoadUbicacionesAsync(string almacen)
 	{
-		Ubicaciones.Clear();
-		if (string.IsNullOrWhiteSpace(almacen)) return;
+		IsBusy = true;
+		try
+		{
+			Ubicaciones.Clear();
+			OnPropertyChanged(nameof(TotalUbicaciones));
+			if (string.IsNullOrWhiteSpace(almacen)) return;
 
-		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+			var empresa = SessionManager.EmpresaSeleccionada!.Value;
 
 		// Llama al endpoint ligero
 		var listaBasica = await _ubicService
-			.ObtenerUbicacionesBasicoAsync(empresa, almacen);
+			.ObtenerUbicacionesBasicoAsync(empresa, almacen, MostrarObsoletas);
 
 		foreach (var dto in listaBasica)
 		{
@@ -401,12 +448,39 @@ $"Posición: {ubicacion.Posicion}";
 		foreach (var alt in Ubicaciones
 							.Select(u => u.Altura)
 							.Distinct()
+							.Where(a => a.HasValue)
 							.OrderBy(a => a))
 		{
 			AlturasDisponibles.Add(alt);
 		}
+
+		PasillosDisponibles.Clear();
+		foreach (var pas in Ubicaciones
+							.Select(u => u.Pasillo)
+							.Distinct()
+							.Where(p => p.HasValue)
+							.OrderBy(p => p))
+		{
+			PasillosDisponibles.Add(pas);
+		}
+
+		EstanteriasDisponibles.Clear();
+		foreach (var est in Ubicaciones
+							.Select(u => u.Estanteria)
+							.Distinct()
+							.Where(e => e.HasValue)
+							.OrderBy(e => e))
+		{
+			EstanteriasDisponibles.Add(est);
+		}
+
 		SelectedUbicacion = Ubicaciones.FirstOrDefault();
 		RecalcularSeleccion();
+		}
+		finally
+		{
+			IsBusy = false;
+		}
 	}
 
 	public async Task LoadAlergenosAsync(UbicacionDetalladaDto dto)
@@ -526,6 +600,47 @@ $"Posición: {ubicacion.Posicion}";
 		}
 	}
 
+	private void OpenEditarMasivoDialog()
+	{
+		// Obtener ubicaciones seleccionadas
+		var seleccionadas = Ubicaciones.Where(u => u.IsMarcada).ToList();
+		if (!seleccionadas.Any())
+		{
+			MessageBox.Show("No hay ubicaciones seleccionadas para editar.",
+				"Edición masiva", MessageBoxButton.OK, MessageBoxImage.Information);
+			return;
+		}
+
+		// Verificar que todas sean del mismo almacén
+		var almacen = seleccionadas.First().CodigoAlmacen;
+		if (seleccionadas.Any(u => u.CodigoAlmacen != almacen))
+		{
+			MessageBox.Show("Todas las ubicaciones seleccionadas deben ser del mismo almacén.",
+				"Edición masiva", MessageBoxButton.OK, MessageBoxImage.Warning);
+			return;
+		}
+
+		var empresa = SessionManager.EmpresaSeleccionada!.Value;
+
+		// Crear y mostrar diálogo
+		var dlg = new EditarUbicacionesMasivoDialog(
+			seleccionadas,
+			_ubicService,
+			_paletService,
+			empresa);
+
+		var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			?? Application.Current.MainWindow;
+		if (owner != null && owner != dlg)
+			dlg.Owner = owner;
+
+		// Si se guardó correctamente, recargar la lista
+		if (dlg.ShowDialog() == true)
+		{
+			_ = LoadUbicacionesAsync(almacen);
+		}
+	}
+
 	private async Task LoadImpresorasAsync()
 	{
 		// Si la aplicación se está cerrando, no cargar impresoras
@@ -556,6 +671,10 @@ $"Posición: {ubicacion.Posicion}";
 	private bool FiltroUbicacion(object obj)
 	{
 		if (obj is not UbicacionDetalladaDto ubicacion) return false;
+		
+		// Si no queremos mostrar obsoletas, excluirlas
+		if (!MostrarObsoletas && ubicacion.Obsoleta == 1) return false;
+		
 		if (string.IsNullOrWhiteSpace(FiltroBusqueda)) return true;
 
 		return (ubicacion.Ubicacion?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
@@ -581,6 +700,15 @@ $"Posición: {ubicacion.Posicion}";
 	partial void OnFiltroAlmacenesComboChanged(string value)
 	{
 		AlmacenesComboView?.Refresh();
+	}
+	
+	// Método para manejar cambios en mostrar obsoletas
+	partial void OnMostrarObsoletasChanged(bool value)
+	{
+		if (SelectedAlmacenCombo != null)
+		{
+			_ = LoadUbicacionesAsync(SelectedAlmacenCombo.CodigoAlmacen);
+		}
 	}
 	
 	// Comandos para controlar dropdown

@@ -1,0 +1,249 @@
+<Window x:Class="SGA_Desktop.Dialog.EditarUbicacionesMasivoDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Editar ubicaciones en masa"
+        Width="700" Height="600"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Border CornerRadius="8"
+            Background="{StaticResource BrushFondo}"
+            BorderBrush="{StaticResource BrushPrincipal}"
+            BorderThickness="2"
+            Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Título -->
+            <TextBlock Grid.Row="0"
+                       Text="{Binding Titulo}"
+                       Style="{StaticResource LabelStyle}"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Margin="0,0,0,12"/>
+            
+            <!-- Contenido con pestañas -->
+            <TabControl Grid.Row="1">
+                <!-- Pestaña: Campos comunes -->
+                <TabItem Header="Campos comunes">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Obsoleta -->
+                            <CheckBox Grid.Row="0" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarObsoleta}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Marcar como obsoleta:" 
+                                           VerticalAlignment="Center" 
+                                           Margin="0,0,8,10"
+                                           Width="150"/>
+                                <CheckBox Content="Obsoleta"
+                                          IsChecked="{Binding EsObsoleta}"
+                                          IsEnabled="{Binding AplicarObsoleta}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,0,10"/>
+                            </StackPanel>
+                            
+                            <!-- Habilitada -->
+                            <CheckBox Grid.Row="1" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarHabilitada}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Habilitada:" 
+                                           VerticalAlignment="Center" 
+                                           Margin="0,0,8,10"
+                                           Width="150"/>
+                                <CheckBox Content="Habilitada"
+                                          IsChecked="{Binding Habilitada}"
+                                          IsEnabled="{Binding AplicarHabilitada}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,0,10"/>
+                            </StackPanel>
+                            
+                            <!-- Temperatura Mín -->
+                            <CheckBox Grid.Row="2" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarTemperaturaMin}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Temp. Mín (°C):" 
+                                           VerticalAlignment="Center" 
+                                           Margin="0,0,8,10"
+                                           Width="150"/>
+                                <TextBox Text="{Binding TemperaturaMin}"
+                                         IsEnabled="{Binding AplicarTemperaturaMin}"
+                                         Width="100"
+                                         Style="{StaticResource EstiloCajaTexto}"
+                                         Margin="0,0,0,10"/>
+                            </StackPanel>
+                            
+                            <!-- Temperatura Máx -->
+                            <CheckBox Grid.Row="3" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarTemperaturaMax}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Temp. Máx (°C):" 
+                                           VerticalAlignment="Center" 
+                                           Margin="0,0,8,10"
+                                           Width="150"/>
+                                <TextBox Text="{Binding TemperaturaMax}"
+                                         IsEnabled="{Binding AplicarTemperaturaMax}"
+                                         Width="100"
+                                         Style="{StaticResource EstiloCajaTexto}"
+                                         Margin="0,0,0,10"/>
+                            </StackPanel>
+                            
+                            <!-- Tipo Palet -->
+                            <CheckBox Grid.Row="4" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarTipoPalet}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Tipo Palet:" 
+                                           VerticalAlignment="Center" 
+                                           Margin="0,0,8,10"
+                                           Width="150"/>
+                                <ComboBox ItemsSource="{Binding TiposPaletDisponibles}"
+                                          SelectedValue="{Binding TipoPaletPermitido}"
+                                          SelectedValuePath="CodigoPalet"
+                                          DisplayMemberPath="Descripcion"
+                                          IsEnabled="{Binding AplicarTipoPalet}"
+                                          Width="200"
+                                          Style="{StaticResource EstiloComboBox}"
+                                          Margin="0,0,0,10"/>
+                            </StackPanel>
+                            
+                            <!-- Tipo Ubicación -->
+                            <CheckBox Grid.Row="5" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarTipoUbicacion}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Tipo Ubicación:" 
+                                           VerticalAlignment="Center" 
+                                           Margin="0,0,8,10"
+                                           Width="150"/>
+                                <ComboBox ItemsSource="{Binding TiposUbicacionDisponibles}"
+                                          SelectedValue="{Binding TipoUbicacionId}"
+                                          SelectedValuePath="TipoUbicacionId"
+                                          DisplayMemberPath="Descripcion"
+                                          IsEnabled="{Binding AplicarTipoUbicacion}"
+                                          Width="200"
+                                          Style="{StaticResource EstiloComboBox}"
+                                          Margin="0,0,0,10"/>
+                            </StackPanel>
+                            
+                            <!-- Alérgenos -->
+                            <CheckBox Grid.Row="6" Grid.Column="0"
+                                      Content="Aplicar"
+                                      IsChecked="{Binding AplicarAlergenos}"
+                                      VerticalAlignment="Top"
+                                      Margin="0,0,10,10"/>
+                            <StackPanel Grid.Row="6" Grid.Column="1" Margin="0,0,0,10">
+                                <TextBlock Text="Alérgenos Permitidos:" 
+                                           Style="{StaticResource LabelStyle}" 
+                                           Margin="0,0,0,8"/>
+                                <ScrollViewer MaxHeight="150" 
+                                              VerticalScrollBarVisibility="Auto"
+                                              IsEnabled="{Binding AplicarAlergenos}">
+                                    <ItemsControl ItemsSource="{Binding AlergenosDisponibles}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel IsItemsHost="True"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox Content="{Binding Descripcion}" 
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                          Margin="4,2"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+                
+                <!-- Pestaña: Preview -->
+                <TabItem Header="Preview">
+                    <DataGrid ItemsSource="{Binding PreviewCambios}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True"
+                              Margin="10">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Código"
+                                                Binding="{Binding CodigoUbicacion}"
+                                                Width="120"/>
+                            <DataGridTextColumn Header="Descripción"
+                                                Binding="{Binding DescripcionUbicacion}"
+                                                Width="*"/>
+                            <DataGridTextColumn Header="Cambios a aplicar"
+                                                Binding="{Binding CambiosTexto}"
+                                                Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+            </TabControl>
+            
+            <!-- Botones -->
+            <StackPanel Grid.Row="2" 
+                        Orientation="Horizontal" 
+                        HorizontalAlignment="Right" 
+                        Margin="0,20,0,0">
+                <Button Content="Cancelar"
+                        Width="90"
+                        Margin="0,0,8,0"
+                        Command="{Binding CancelCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+                <Button Content="Guardar"
+                        Width="90"
+                        Command="{Binding GuardarCommand}"
+                        IsEnabled="{Binding !IsBusy}"
+                        Style="{StaticResource EstiloBotonPrincipal}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+

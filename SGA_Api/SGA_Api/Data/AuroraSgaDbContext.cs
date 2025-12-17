@@ -66,6 +66,7 @@ namespace SGA_Api.Data
 		public DbSet<Notificacion> Notificaciones { get; set; }
 		public DbSet<NotificacionDestinatario> NotificacionesDestinatarios { get; set; }
 		public DbSet<NotificacionLectura> NotificacionesLecturas { get; set; }
+		public DbSet<NotificacionTeamsCola> NotificacionesTeamsCola { get; set; }
 
 		// Entidades de Roles
 		public DbSet<RolSgaTable> RolesSga { get; set; }
@@ -433,6 +434,7 @@ namespace SGA_Api.Data
                 ent.Property(i => i.CodigoPalet).HasColumnName("CodigoPalet").HasMaxLength(50).IsRequired(false);
                 ent.Property(i => i.CodigoGS1).HasColumnName("CodigoGS1").HasMaxLength(50).IsRequired(false);
                 ent.Property(i => i.ProcesadoPalet).HasColumnName("ProcesadoPalet").HasDefaultValue(false);
+                ent.Property(i => i.ErrorNotificado).HasColumnName("ErrorNotificado").HasDefaultValue(false);
                 ent.HasOne(i => i.Inventario)
                     .WithMany(ic => ic.Ajustes)
                     .HasForeignKey(i => i.IdInventario)
@@ -495,6 +497,14 @@ namespace SGA_Api.Data
                 entity.Property(e => e.FechaAsignacion).HasColumnName("FechaAsignacion");
                 entity.Property(e => e.FechaInicio).HasColumnName("FechaInicio");
                 entity.Property(e => e.FechaCierre).HasColumnName("FechaCierre");
+                
+                // Propiedades para conteos periódicos
+                entity.Property(e => e.EsPeriodico).HasColumnName("EsPeriodico").HasColumnType("bit").HasDefaultValue(false);
+                entity.Property(e => e.FrecuenciaDias).HasColumnName("FrecuenciaDias").HasColumnType("int");
+                entity.Property(e => e.FechaUltimaRenovacion).HasColumnName("FechaUltimaRenovacion");
+                entity.Property(e => e.OrdenPadreGuid).HasColumnName("OrdenPadreGuid");
+                entity.Property(e => e.FechaProximaRenovacion).HasColumnName("FechaProximaRenovacion");
+                entity.Property(e => e.Activo).HasColumnName("Activo").HasColumnType("bit").HasDefaultValue(true);
             });
 
             // LecturaConteo
@@ -688,6 +698,32 @@ namespace SGA_Api.Data
 				entity.Property(e => e.UnidadEntrada).HasColumnType("decimal(28,10)");
 				entity.Property(e => e.UnidadStock).HasColumnType("decimal(28,10)");
 				entity.Property(e => e.PrecioMedio).HasColumnType("decimal(28,10)");
+			});
+
+			// Configuración para NotificacionTeamsCola
+			modelBuilder.Entity<NotificacionTeamsCola>(entity =>
+			{
+				entity.ToTable("NotificacionesTeamsCola");
+				entity.HasKey(e => e.Id);
+				
+				entity.Property(e => e.Id).HasColumnName("Id").HasDefaultValueSql("NEWID()");
+				entity.Property(e => e.TraspasoId).HasColumnName("TraspasoId").IsRequired();
+				entity.Property(e => e.Estado).HasColumnName("Estado").HasMaxLength(20).IsRequired().HasDefaultValue("Pendiente");
+				entity.Property(e => e.Intentos).HasColumnName("Intentos").HasDefaultValue(0);
+				entity.Property(e => e.FechaCreacion).HasColumnName("FechaCreacion").HasDefaultValueSql("GETDATE()");
+				entity.Property(e => e.FechaProcesado).HasColumnName("FechaProcesado");
+				entity.Property(e => e.ErrorMensaje).HasColumnName("ErrorMensaje").HasMaxLength(500);
+				entity.Property(e => e.MensajeError).HasColumnName("MensajeError");
+				
+				// Relación con Traspaso
+				entity.HasOne(e => e.Traspaso)
+					.WithMany()
+					.HasForeignKey(e => e.TraspasoId)
+					.OnDelete(DeleteBehavior.Restrict);
+				
+				// Índice en Estado para optimizar consultas de pendientes
+				entity.HasIndex(e => e.Estado)
+					.HasFilter("[Estado] = 'Pendiente'");
 			});
 
         }

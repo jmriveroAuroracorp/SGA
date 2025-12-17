@@ -3,6 +3,7 @@ using SGA_Api.Models.Almacen;
 using SGA_Api.Models.Login;
 using SGA_Api.Models.Pesaje;
 using SGA_Api.Models.Stock;
+using SGA_Api.Models.Notificaciones;
 
 namespace SGA_Api.Data
 {
@@ -28,6 +29,10 @@ namespace SGA_Api.Data
 		public DbSet<VisArticulo> VisArticulos { get; set; } = null!;
 		public DbSet<AcumuladoStock> AcumuladoStock { get; set; } = null!;
 		public DbSet<MovimientoStock> MovimientoStock { get; set; }
+		
+		// Entidades de Notificaciones MRH
+		public DbSet<MrhTipoNotificacion> MrhTipoNotificaciones { get; set; }
+		public DbSet<MrhNotificacion> MrhNotificaciones { get; set; }
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -175,6 +180,52 @@ namespace SGA_Api.Data
 				entity.Property(e => e.UnidadEntrada).HasColumnType("decimal(28,10)");
 				entity.Property(e => e.UnidadStock).HasColumnType("decimal(28,10)");
 				entity.Property(e => e.PrecioMedio).HasColumnType("decimal(28,10)");
+			});
+
+			// Configuración para MRH_TiposNotificacione
+			// Nota: La clave primaria real es solo MRH_TipoNotificacion, pero CodigoEmpresa se obtiene del JOIN
+			modelBuilder.Entity<MrhTipoNotificacion>(entity =>
+			{
+				entity.ToTable("MRH_TiposNotificacione", "dbo");
+				entity.HasKey(e => e.TipoNotificacion);
+				
+				entity.Property(e => e.CodigoEmpresa).HasColumnName("CodigoEmpresa");
+				entity.Property(e => e.TipoNotificacion).HasColumnName("MRH_TipoNotificacion");
+				entity.Property(e => e.Email).HasColumnName("Email").HasMaxLength(200);
+				entity.Property(e => e.Telefono).HasColumnName("Telefono").HasMaxLength(50);
+				entity.Property(e => e.TelegramID).HasColumnName("TelegramID").HasMaxLength(100);
+				entity.Property(e => e.Descripcion).HasColumnName("Descripcion").HasMaxLength(200);
+				entity.Property(e => e.CanalTeams).HasColumnName("CanalTeams").HasMaxLength(500);
+				entity.Property(e => e.Departamento).HasColumnName("Departamento").HasMaxLength(100);
+			});
+
+			// Configuración para MRH_Notificaciones
+			modelBuilder.Entity<MrhNotificacion>(entity =>
+			{
+				entity.ToTable("MRH_Notificaciones");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.MovPosicion });
+				
+				entity.Property(e => e.CodigoEmpresa).HasColumnName("CodigoEmpresa");
+				entity.Property(e => e.MovPosicion).HasColumnName("MovPosicion");
+				entity.Property(e => e.OrigenNotificacion).HasColumnName("MRH_OrigenNotificacion").HasMaxLength(100);
+				entity.Property(e => e.Interno).HasColumnName("MRH_Interno");
+				entity.Property(e => e.FechaRegistro).HasColumnName("FechaRegistro");
+				entity.Property(e => e.FechaConfirmadaEnvio).HasColumnName("FechaConfirmadaEnvio");
+				entity.Property(e => e.EnviaEmail).HasColumnName("EnviaEmail");
+				entity.Property(e => e.EnviaApp).HasColumnName("EnviaApp");
+				entity.Property(e => e.Leido).HasColumnName("Leido");
+				entity.Property(e => e.Email).HasColumnName("Email").HasMaxLength(200);
+				entity.Property(e => e.Nombre).HasColumnName("Nombre").HasMaxLength(200);
+				entity.Property(e => e.Asunto).HasColumnName("Asunto").HasMaxLength(500);
+				entity.Property(e => e.Mensaje).HasColumnName("Mensaje");
+				entity.Property(e => e.ErrorEnvio).HasColumnName("ErrorEnvio").HasMaxLength(500);
+				entity.Property(e => e.EmailEmisor).HasColumnName("EmailEmisor").HasMaxLength(200);
+				entity.Property(e => e.SmtpEmisor).HasColumnName("SmtpEmisor").HasMaxLength(200);
+				entity.Property(e => e.PassEmisor).HasColumnName("PassEmisor").HasMaxLength(200);
+				entity.Property(e => e.FirmaEmisor).HasColumnName("FirmaEmisor");
+				entity.Property(e => e.TelegramID).HasColumnName("TelegramID").HasMaxLength(100);
+				entity.Property(e => e.FechaConfirmadaEnvioT).HasColumnName("FechaConfirmadaEnvioT");
+				entity.Property(e => e.CanalTeams).HasColumnName("CanalTeams").HasMaxLength(500);
 			});
 
 		}

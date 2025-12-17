@@ -3,6 +3,8 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
       xmlns:models="clr-namespace:SGA_Desktop.Models"
+      xmlns:oxy="http://oxyplot.org/wpf"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
       Title="Análisis de Rendimientos"
       Background="{StaticResource BrushFondo}">
     
@@ -11,6 +13,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <helpers:PorcentajeDistribucionConverter x:Key="PorcentajeDistribucionConverter"/>
         </ResourceDictionary>
     </Page.Resources>
 
@@ -719,80 +722,625 @@
                 </Grid>
 
                 <!-- Volumen Movido -->
-                <StackPanel VerticalAlignment="Center" 
-                            HorizontalAlignment="Center"
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              HorizontalScrollBarVisibility="Disabled"
                             Visibility="{Binding MostrandoVolumen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <TextBlock Text="📦 Volumen Movido" 
-                               FontSize="24" 
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Tarjetas de métricas -->
+                            <RowDefinition Height="Auto"/> <!-- Desglose por tipo -->
+                            <RowDefinition Height="Auto"/> <!-- Evolución temporal -->
+                            <RowDefinition Height="Auto"/> <!-- Top artículos -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Tarjetas de Métricas Principales -->
+                        <Grid Grid.Row="0" Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Unidades Movidas -->
+                            <Border Grid.Column="0" 
+                                    Background="White" 
+                                    CornerRadius="8" 
+                                    Padding="15" 
+                                    Margin="0,0,10,0"
+                                    BorderBrush="{StaticResource BrushPrincipal}"
+                                    BorderThickness="2">
+                                <StackPanel>
+                                    <TextBlock Text="Unidades Movidas" 
+                                               FontSize="12" 
+                               Foreground="Gray"
+                               Margin="0,0,0,5"/>
+                                    <TextBlock FontSize="24" 
+                                               FontWeight="Bold" 
+                                               Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:N2}">
+                                                <Binding Path="VolumenMovido.TotalUnidadesMovidas"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock FontSize="10" 
+                                               Foreground="Green"
+                                               Visibility="{Binding VolumenMovido.ComparativaPeriodoAnterior.VariacionUnidades, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:+#0.0;-#0.0;0}% vs período anterior">
+                                                <Binding Path="VolumenMovido.ComparativaPeriodoAnterior.VariacionUnidades"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Valor Económico -->
+                            <Border Grid.Column="1" 
+                                    Background="White" 
+                                    CornerRadius="8" 
+                                    Padding="15" 
+                                    Margin="0,0,10,0"
+                                    BorderBrush="{StaticResource BrushPrincipal}"
+                                    BorderThickness="2">
+                                <StackPanel>
+                                    <TextBlock Text="Valor Económico" 
+                               FontSize="12" 
+                               Foreground="Gray"
+                                               Margin="0,0,0,5"/>
+                                    <TextBlock FontSize="24" 
+                                               FontWeight="Bold" 
+                                               Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:C2}">
+                                                <Binding Path="VolumenMovido.TotalValorEconomico"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock FontSize="10" 
+                                               Foreground="Green"
+                                               Visibility="{Binding VolumenMovido.ComparativaPeriodoAnterior.VariacionValor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:+#0.0;-#0.0;0}% vs período anterior">
+                                                <Binding Path="VolumenMovido.ComparativaPeriodoAnterior.VariacionValor"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Palets Únicos -->
+                            <Border Grid.Column="2" 
+                                    Background="White" 
+                                    CornerRadius="8" 
+                                    Padding="15" 
+                                    Margin="0,0,10,0"
+                                    BorderBrush="{StaticResource BrushPrincipal}"
+                                    BorderThickness="2">
+                                <StackPanel>
+                                    <TextBlock Text="Palets Únicos" 
+                               FontSize="12" 
+                               Foreground="Gray"
+                                               Margin="0,0,0,5"/>
+                                    <TextBlock FontSize="24" 
+                                               FontWeight="Bold" 
+                                               Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:N0}">
+                                                <Binding Path="VolumenMovido.TotalPaletsUnicos"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock FontSize="10" 
+                                               Foreground="Green"
+                                               Visibility="{Binding VolumenMovido.ComparativaPeriodoAnterior.VariacionPalets, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:+#0.0;-#0.0;0}% vs período anterior">
+                                                <Binding Path="VolumenMovido.ComparativaPeriodoAnterior.VariacionPalets"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Kilos Movidos (opcional) -->
+                            <Border Grid.Column="3" 
+                                    Background="White" 
+                                    CornerRadius="8" 
+                                    Padding="15"
+                                    BorderBrush="{StaticResource BrushPrincipal}"
+                                    BorderThickness="2"
+                                    Visibility="{Binding VolumenMovido.TotalKilosMovidos, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel>
+                                    <TextBlock Text="Kilos Movidos" 
+                               FontSize="12" 
+                               Foreground="Gray"
+                                               Margin="0,0,0,5"/>
+                                    <TextBlock FontSize="24" 
+                                               FontWeight="Bold" 
+                                               Foreground="{StaticResource BrushPrincipal}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:N2} kg">
+                                                <Binding Path="VolumenMovido.TotalKilosMovidos"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Desglose por Tipo -->
+                        <GroupBox Header="Desglose por Tipo de Traspaso" 
+                                  Grid.Row="1" 
+                                  Margin="0,0,0,20"
+                                  FontSize="14"
+                                  FontWeight="Bold">
+                            <Grid Margin="10,10,10,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Traspasos Palet -->
+                                <Border Grid.Column="0" 
+                                        Background="#F5F5F5" 
+                                        CornerRadius="6" 
+                                        Padding="15" 
+                                        Margin="0,0,10,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Traspasos de Palet" 
+                                                   FontSize="14" 
                                FontWeight="Bold" 
                                Foreground="{StaticResource BrushPrincipal}"
-                               HorizontalAlignment="Center"
                                Margin="0,0,0,10"/>
-                    <TextBlock Text="Esta sección mostrará:" 
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="Unidades" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                            <TextBlock FontSize="16" FontWeight="SemiBold">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0:N2}">
+                                                        <Binding Path="VolumenMovido.DesglosePorTipo.UnidadesPalet"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="Valor" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                            <TextBlock FontSize="16" FontWeight="SemiBold">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0:C2}">
+                                                        <Binding Path="VolumenMovido.DesglosePorTipo.ValorPalet"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="Cantidad" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                            <TextBlock Text="{Binding VolumenMovido.DesglosePorTipo.CantidadTraspasosPalet}" 
+                                                       FontSize="16" 
+                                                       FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Traspasos Artículo -->
+                                <Border Grid.Column="1" 
+                                        Background="#F5F5F5" 
+                                        CornerRadius="6" 
+                                        Padding="15" 
+                                        Margin="10,0,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Traspasos de Artículo" 
                                FontSize="14" 
-                               Foreground="Gray"
+                                                   FontWeight="Bold" 
+                                                   Foreground="{StaticResource BrushPrincipal}"
+                                                   Margin="0,0,0,10"/>
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="Unidades" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                            <TextBlock FontSize="16" FontWeight="SemiBold">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0:N2}">
+                                                        <Binding Path="VolumenMovido.DesglosePorTipo.UnidadesArticulo"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="Valor" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                            <TextBlock FontSize="16" FontWeight="SemiBold">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0:C2}">
+                                                        <Binding Path="VolumenMovido.DesglosePorTipo.ValorArticulo"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="Cantidad" FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                            <TextBlock Text="{Binding VolumenMovido.DesglosePorTipo.CantidadTraspasosArticulo}" 
+                                                       FontSize="16" 
+                                                       FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </GroupBox>
+
+                        <!-- Evolución Temporal -->
+                        <GroupBox Header="Evolución Temporal" 
+                                  Grid.Row="2" 
+                                  Margin="0,0,0,20"
+                                  FontSize="14"
+                                  FontWeight="Bold">
+                            <Grid Margin="10,10,10,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <oxy:PlotView Grid.Row="0"
+                                              Model="{Binding PlotModelEvolucion}" 
+                                              Height="300"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"/>
+                                
+                                <!-- Leyenda manual -->
+                                <StackPanel Grid.Row="1" 
+                                            Orientation="Horizontal" 
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,5"/>
-                    <TextBlock Text="• Total de unidades movidas" 
+                                            Margin="0,10,0,5">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,20,0">
+                                        <Ellipse Width="12" Height="12" Fill="Blue" Margin="0,0,5,0"/>
+                                        <TextBlock Text="Unidades - Traspasos Palet" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Rectangle Width="12" Height="12" Fill="Orange" Margin="0,0,5,0"/>
+                                        <TextBlock Text="Unidades - Traspasos Artículo" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                
+                                <!-- Tabla de datos debajo del gráfico (opcional) -->
+                                <DataGrid Grid.Row="2"
+                                          ItemsSource="{Binding VolumenMovido.EvolucionTemporal}" 
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          GridLinesVisibility="All"
+                                          HeadersVisibility="Column"
+                                          Margin="0,10,0,0"
+                                          MaxHeight="150"
+                                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Fecha" Binding="{Binding Fecha, StringFormat=dd/MM/yyyy}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Período" Binding="{Binding Periodo}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Unidades Palet" Binding="{Binding UnidadesPalet, StringFormat=N2}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Unidades Artículo" Binding="{Binding UnidadesArticulo, StringFormat=N2}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Total" Binding="{Binding Unidades, StringFormat=N2}" Width="Auto"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </GroupBox>
+
+                        <!-- Top Artículos -->
+                        <GroupBox Header="Top 10 Artículos Más Movidos" 
+                                  Grid.Row="3"
+                                  FontSize="14"
+                                  FontWeight="Bold">
+                            <ItemsControl ItemsSource="{Binding VolumenMovido.TopArticulos}" 
+                                          Margin="10,10,10,10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="White"
+                                                CornerRadius="6" 
+                                                Padding="12"
+                                                Margin="0,0,0,8"
+                                                BorderThickness="1"
+                                                BorderBrush="{StaticResource BrushIntermedio}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <TextBlock Grid.Column="0" 
+                                                           Text="{Binding Posicion}" 
+                                                           FontSize="18" 
+                                                           FontWeight="Bold" 
+                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                           Margin="0,0,15,0"
+                                                           VerticalAlignment="Center"/>
+                                                
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding CodigoArticulo}" 
+                                                               FontSize="14" 
+                                                               FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding DescripcionArticulo}" 
+                                                               FontSize="11" 
+                                                               Foreground="Gray"/>
+                                                </StackPanel>
+                                                
+                                                <TextBlock Grid.Column="2" 
+                                                           FontSize="14" 
+                                                           FontWeight="SemiBold"
+                                                           Margin="20,0,20,0"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:N2} unidades">
+                                                            <Binding Path="UnidadesMovidas"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                
+                                                <TextBlock Grid.Column="3" 
                                FontSize="12" 
                                Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Total de kilos movidos" 
-                               FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Valor económico movido" 
-                               FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Palets únicos movidos" 
-                               FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,20,0,0"/>
-                    <TextBlock Text="(Próximamente)" 
-                               FontSize="12" 
-                               FontStyle="Italic"
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,10,0,0"/>
-                </StackPanel>
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:F1}%">
+                                                            <Binding Path="PorcentajeDelTotal"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </GroupBox>
+                    </Grid>
+                </ScrollViewer>
 
                 <!-- Distribución -->
-                <StackPanel VerticalAlignment="Center" 
-                            HorizontalAlignment="Center"
-                            Visibility="{Binding MostrandoDistribucion, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <TextBlock Text="📍 Distribución por Almacén/Ubicación" 
-                               FontSize="24" 
-                               FontWeight="Bold" 
-                               Foreground="{StaticResource BrushPrincipal}"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,10"/>
-                    <TextBlock Text="Esta sección mostrará:" 
-                               FontSize="14" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,5"/>
-                    <TextBlock Text="• Top almacenes origen/destino" 
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                              HorizontalScrollBarVisibility="Disabled"
+                              Visibility="{Binding MostrandoDistribucion, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Pestañas de vista -->
+                            <RowDefinition Height="Auto"/> <!-- Top Almacenes -->
+                            <RowDefinition Height="Auto"/> <!-- Top Ubicaciones -->
+                            <RowDefinition Height="Auto"/> <!-- Flujos Principales -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Pestañas para alternar entre vista por Unidades y por Traspasos -->
+                        <StackPanel Grid.Row="0" 
+                                    Orientation="Horizontal" 
+                                    Margin="0,0,0,15"
+                                    HorizontalAlignment="Center">
+                            <Button Content="Por Unidades" 
+                                    Padding="20,10"
+                                    Margin="0,0,10,0"
+                                    Command="{Binding CambiarVistaDistribucionCommand}"
+                                    CommandParameter="Unidades"
+                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                    IsEnabled="{Binding DistribucionPorUnidades, Converter={StaticResource InverseBooleanConverter}}"/>
+                            <Button Content="Por Nº Traspasos" 
+                                    Padding="20,10"
+                                    Command="{Binding CambiarVistaDistribucionCommand}"
+                                    CommandParameter="Traspasos"
+                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                    IsEnabled="{Binding DistribucionPorUnidades}"/>
+                        </StackPanel>
+
+                        <!-- Top Almacenes -->
+                        <GroupBox Header="Top 10 Almacenes" 
+                                  Grid.Row="1" 
+                                  Margin="0,0,0,20"
+                                  FontSize="14"
+                                  FontWeight="Bold">
+                            <Grid Margin="10,10,10,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Almacenes Origen -->
+                                <GroupBox Header="Origen" 
+                                          Grid.Column="0" 
+                                          Margin="0,0,10,0"
                                FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Top ubicaciones más activas" 
+                                          FontWeight="SemiBold">
+                                    <Grid Margin="5,5,5,5">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <DataGrid Grid.Row="1"
+                                                  ItemsSource="{Binding AlmacenesOrigenOrdenados}" 
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  GridLinesVisibility="All"
+                                                  HeadersVisibility="Column"
+                                                  MaxHeight="300"
+                                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Posicion}" Width="30"/>
+                                                <DataGridTextColumn Header="Almacén" Binding="{Binding CodigoAlmacen}" Width="*"/>
+                                                <DataGridTextColumn Header="Unidades" Binding="{Binding UnidadesMovidas, StringFormat=N2}" Width="Auto"/>
+                                                <DataGridTextColumn Header="Traspasos" Binding="{Binding CantidadTraspasos}" Width="Auto"/>
+                                                <DataGridTextColumn Header="%" Width="Auto">
+                                                    <DataGridTextColumn.Binding>
+                                                        <MultiBinding Converter="{StaticResource PorcentajeDistribucionConverter}">
+                                                            <Binding Path="DataContext.DistribucionPorUnidades" RelativeSource="{RelativeSource AncestorType=Page}"/>
+                                                            <Binding/>
+                                                        </MultiBinding>
+                                                    </DataGridTextColumn.Binding>
+                                                </DataGridTextColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Grid>
+                                </GroupBox>
+
+                                <!-- Almacenes Destino -->
+                                <GroupBox Header="Destino" 
+                                          Grid.Column="1"
                                FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Flujos principales (origen → destino)" 
+                                          FontWeight="SemiBold">
+                                    <Grid Margin="5,5,5,5">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <DataGrid Grid.Row="1"
+                                                  ItemsSource="{Binding AlmacenesDestinoOrdenados}" 
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  GridLinesVisibility="All"
+                                                  HeadersVisibility="Column"
+                                                  MaxHeight="300"
+                                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Posicion}" Width="30"/>
+                                                <DataGridTextColumn Header="Almacén" Binding="{Binding CodigoAlmacen}" Width="*"/>
+                                                <DataGridTextColumn Header="Unidades" Binding="{Binding UnidadesMovidas, StringFormat=N2}" Width="Auto"/>
+                                                <DataGridTextColumn Header="Traspasos" Binding="{Binding CantidadTraspasos}" Width="Auto"/>
+                                                <DataGridTextColumn Header="%" Width="Auto">
+                                                    <DataGridTextColumn.Binding>
+                                                        <MultiBinding Converter="{StaticResource PorcentajeDistribucionConverter}">
+                                                            <Binding Path="DataContext.DistribucionPorUnidades" RelativeSource="{RelativeSource AncestorType=Page}"/>
+                                                            <Binding/>
+                                                        </MultiBinding>
+                                                    </DataGridTextColumn.Binding>
+                                                </DataGridTextColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Grid>
+                                </GroupBox>
+                            </Grid>
+                        </GroupBox>
+
+                        <!-- Top Ubicaciones -->
+                        <GroupBox Header="Top 10 Ubicaciones" 
+                                  Grid.Row="2" 
+                                  Margin="0,0,0,20"
+                                  FontSize="14"
+                                  FontWeight="Bold">
+                            <Grid Margin="10,10,10,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Ubicaciones Origen -->
+                                <GroupBox Header="Origen" 
+                                          Grid.Column="0" 
+                                          Margin="0,0,10,0"
                                FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,20,0,0"/>
-                    <TextBlock Text="(Próximamente)" 
-                               FontSize="12" 
-                               FontStyle="Italic"
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,10,0,0"/>
-                </StackPanel>
+                                          FontWeight="SemiBold">
+                                    <Grid Margin="5,5,5,5">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <DataGrid Grid.Row="1"
+                                                  ItemsSource="{Binding UbicacionesOrigenOrdenadas}" 
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  GridLinesVisibility="All"
+                                                  HeadersVisibility="Column"
+                                                  MaxHeight="300"
+                                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Posicion}" Width="30"/>
+                                                <DataGridTextColumn Header="Almacén" Binding="{Binding CodigoAlmacen}" Width="Auto"/>
+                                                <DataGridTextColumn Header="Ubicación" Binding="{Binding Ubicacion}" Width="*"/>
+                                                <DataGridTextColumn Header="Unidades" Binding="{Binding UnidadesMovidas, StringFormat=N2}" Width="Auto"/>
+                                                <DataGridTextColumn Header="Traspasos" Binding="{Binding CantidadTraspasos}" Width="Auto"/>
+                                                <DataGridTextColumn Header="%" Width="Auto">
+                                                    <DataGridTextColumn.Binding>
+                                                        <MultiBinding Converter="{StaticResource PorcentajeDistribucionConverter}">
+                                                            <Binding Path="DataContext.DistribucionPorUnidades" RelativeSource="{RelativeSource AncestorType=Page}"/>
+                                                            <Binding/>
+                                                        </MultiBinding>
+                                                    </DataGridTextColumn.Binding>
+                                                </DataGridTextColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Grid>
+                                </GroupBox>
+
+                                <!-- Ubicaciones Destino -->
+                                <GroupBox Header="Destino" 
+                                          Grid.Column="1"
+                                          FontSize="12"
+                                          FontWeight="SemiBold">
+                                    <Grid Margin="5,5,5,5">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <DataGrid Grid.Row="1"
+                                                  ItemsSource="{Binding UbicacionesDestinoOrdenadas}" 
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  GridLinesVisibility="All"
+                                                  HeadersVisibility="Column"
+                                                  MaxHeight="300"
+                                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Posicion}" Width="30"/>
+                                                <DataGridTextColumn Header="Almacén" Binding="{Binding CodigoAlmacen}" Width="Auto"/>
+                                                <DataGridTextColumn Header="Ubicación" Binding="{Binding Ubicacion}" Width="*"/>
+                                                <DataGridTextColumn Header="Unidades" Binding="{Binding UnidadesMovidas, StringFormat=N2}" Width="Auto"/>
+                                                <DataGridTextColumn Header="Traspasos" Binding="{Binding CantidadTraspasos}" Width="Auto"/>
+                                                <DataGridTextColumn Header="%" Width="Auto">
+                                                    <DataGridTextColumn.Binding>
+                                                        <MultiBinding Converter="{StaticResource PorcentajeDistribucionConverter}">
+                                                            <Binding Path="DataContext.DistribucionPorUnidades" RelativeSource="{RelativeSource AncestorType=Page}"/>
+                                                            <Binding/>
+                                                        </MultiBinding>
+                                                    </DataGridTextColumn.Binding>
+                                                </DataGridTextColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Grid>
+                                </GroupBox>
+                            </Grid>
+                        </GroupBox>
+
+                        <!-- Flujos Principales -->
+                        <GroupBox Header="Top 10 Flujos Principales (Origen → Destino)" 
+                                  Grid.Row="3" 
+                                  Margin="0,0,0,20"
+                                  FontSize="14"
+                                  FontWeight="Bold">
+                            <Grid Margin="10,10,10,10">
+                                <DataGrid ItemsSource="{Binding FlujosOrdenados}" 
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          GridLinesVisibility="All"
+                                          HeadersVisibility="Column"
+                                          MaxHeight="400"
+                                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="#" Binding="{Binding Posicion}" Width="30"/>
+                                        <DataGridTextColumn Header="Almacén Origen" Binding="{Binding AlmacenOrigen}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Ubicación Origen" Binding="{Binding UbicacionOrigen}" Width="Auto"/>
+                                        <DataGridTextColumn Header="→" Width="30" IsReadOnly="True">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                    <Setter Property="FontWeight" Value="Bold"/>
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                        <DataGridTextColumn Header="Almacén Destino" Binding="{Binding AlmacenDestino}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Ubicación Destino" Binding="{Binding UbicacionDestino}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Unidades" Binding="{Binding UnidadesMovidas, StringFormat=N2}" Width="Auto"/>
+                                        <DataGridTextColumn Header="Traspasos" Binding="{Binding CantidadTraspasos}" Width="Auto"/>
+                                        <DataGridTextColumn Header="%" Binding="{Binding PorcentajeDelTotal, StringFormat='{}{0:F1}%'}" Width="Auto"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </GroupBox>
+                    </Grid>
+                </ScrollViewer>
 
                 <!-- Artículos -->
                 <StackPanel VerticalAlignment="Center" 

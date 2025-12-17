@@ -56,6 +56,9 @@ public partial class UbicacionDetalladaDto : ObservableObject
 	[JsonProperty("habilitada")]
 	public bool Habilitada { get; set; }
 
+	[JsonProperty("obsoleta")]
+	public int Obsoleta { get; set; }
+
 	[JsonProperty("alergenosPermitidos")]
 	public string AlergenosPermitidos { get; set; } = "";
 
@@ -86,4 +89,7 @@ public partial class UbicacionDetalladaDto : ObservableObject
 
 	[ObservableProperty]
 	private bool isMarcada;
+
+	[ObservableProperty]
+	private bool isExpanded;
 }

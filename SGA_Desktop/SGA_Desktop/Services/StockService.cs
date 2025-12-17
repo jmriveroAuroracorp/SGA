@@ -326,9 +326,9 @@ namespace SGA_Desktop.Services
 		/// <summary>
 		/// Obtiene los lotes activos de un artículo (incluso sin stock) con su fecha de caducidad
 		/// </summary>
-		public async Task<List<LoteDto>> ObtenerLotesActivosAsync(short codigoEmpresa, string codigoArticulo)
+		public async Task<List<LoteDto>> ObtenerLotesActivosAsync(short codigoEmpresa, string codigoArticulo, bool incluirHistoricos = false)
 		{
-			var qs = $"?codigoEmpresa={codigoEmpresa}&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}";
+			var qs = $"?codigoEmpresa={codigoEmpresa}&codigoArticulo={Uri.EscapeDataString(codigoArticulo)}&incluirHistoricos={incluirHistoricos}";
 			try
 			{
 				var response = await _httpClient.GetAsync($"Stock/articulo/lotes-activos{qs}");

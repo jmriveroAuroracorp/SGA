@@ -5,6 +5,7 @@ using SGA_Desktop.Helpers;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -33,9 +34,19 @@ namespace SGA_Desktop.ViewModels
             
             CodigoAlmacen = inventario.CodigoAlmacen;
             Ubicaciones = new ObservableCollection<UbicacionDto>();
+            AlmacenesDisponibles = new ObservableCollection<AlmacenDto>();
             
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
-                _ = CargarUbicacionesAsync();
+            {
+                if (inventario.EsMultialmacen)
+                {
+                    _ = CargarAlmacenesDelInventarioAsync();
+                }
+                else
+                {
+                    _ = CargarUbicacionesAsync();
+                }
+            }
         }
         #endregion
 
@@ -80,6 +91,16 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private string mensajeEstado = string.Empty;
+
+        // Propiedades para multialmacén
+        [ObservableProperty]
+        private ObservableCollection<AlmacenDto> almacenesDisponibles = new ObservableCollection<AlmacenDto>();
+
+        [ObservableProperty]
+        private AlmacenDto? almacenSeleccionado;
+
+        // Propiedad calculada para saber si es multialmacén
+        public bool EsMultialmacen => _inventario?.EsMultialmacen ?? false;
         #endregion
 
         #region Property Change Callbacks
@@ -114,6 +135,18 @@ namespace SGA_Desktop.ViewModels
                 // Si hay múltiples o ninguna, dejar que el usuario elija o quede vacío
             }
         }
+
+        partial void OnAlmacenSeleccionadoChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
+        {
+            if (newValue != null)
+            {
+                CodigoAlmacen = newValue.CodigoAlmacen;
+                // Limpiar selección de ubicación y recargar ubicaciones del nuevo almacén
+                UbicacionSeleccionada = null;
+                CodigoUbicacion = string.Empty;
+                _ = CargarUbicacionesAsync();
+            }
+        }
         #endregion
 
         #region Commands
@@ -124,7 +157,9 @@ namespace SGA_Desktop.ViewModels
             {
                 IsCargando = true;
                 var empresa = SessionManager.EmpresaSeleccionada ?? 1;
-                var ubicacionesList = await _stockService.ObtenerUbicacionesAsync(CodigoAlmacen, (short)empresa, soloConStock: false);
+                // Usar el almacén seleccionado si existe, sino el código de almacén
+                var codigoAlmacenParaUbicaciones = AlmacenSeleccionado?.CodigoAlmacen ?? CodigoAlmacen;
+                var ubicacionesList = await _stockService.ObtenerUbicacionesAsync(codigoAlmacenParaUbicaciones, (short)empresa, soloConStock: false);
                 
                 Ubicaciones.Clear();
                 foreach (var ubicacion in ubicacionesList.OrderBy(u => u.Ubicacion))
@@ -140,6 +175,61 @@ namespace SGA_Desktop.ViewModels
                 if (owner != null && owner != error)
                     error.Owner = owner;
                 error.ShowDialog();
+            }
+            finally
+            {
+                IsCargando = false;
+            }
+        }
+
+        private async Task CargarAlmacenesDelInventarioAsync()
+        {
+            try
+            {
+                IsCargando = true;
+                var empresa = SessionManager.EmpresaSeleccionada ?? 1;
+                var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+
+                // Obtener todos los almacenes autorizados
+                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+
+                // Filtrar solo los almacenes que están en el inventario
+                var codigosAlmacenInventario = _inventario.CodigosAlmacen ?? new List<string>();
+                var almacenesDelInventario = almacenesAutorizados
+                    .Where(a => codigosAlmacenInventario.Contains(a.CodigoAlmacen))
+                    .OrderBy(a => a.CodigoAlmacen)
+                    .ToList();
+
+                AlmacenesDisponibles.Clear();
+                foreach (var almacen in almacenesDelInventario)
+                {
+                    AlmacenesDisponibles.Add(almacen);
+                }
+
+                // Establecer el primer almacén como seleccionado por defecto
+                if (AlmacenesDisponibles.Any())
+                {
+                    AlmacenSeleccionado = AlmacenesDisponibles.First();
+                }
+                else
+                {
+                    // Si no se encontraron almacenes, usar el código del inventario como fallback
+                    CodigoAlmacen = _inventario.CodigoAlmacen;
+                    _ = CargarUbicacionesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                var error = new WarningDialog("Error", $"Error al cargar almacenes: {ex.Message}");
+                var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                         ?? Application.Current.MainWindow;
+                if (owner != null && owner != error)
+                    error.Owner = owner;
+                error.ShowDialog();
+                // Fallback: usar el código de almacén del inventario
+                CodigoAlmacen = _inventario.CodigoAlmacen;
+                _ = CargarUbicacionesAsync();
             }
             finally
             {
@@ -224,7 +314,8 @@ namespace SGA_Desktop.ViewModels
 
                 var lotes = await _stockService.ObtenerLotesActivosAsync(
                     (short)SessionManager.EmpresaSeleccionada!.Value,
-                    CodigoArticulo);
+                    CodigoArticulo,
+                    incluirHistoricos: true); // Para inventarios, incluir lotes históricos
 
                 if (lotes == null || !lotes.Any())
                 {
@@ -295,7 +386,7 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
-                if (UbicacionSeleccionada == null || string.IsNullOrWhiteSpace(CodigoUbicacion))
+                if (UbicacionSeleccionada == null)
                 {
                     var warning = new WarningDialog("Validación", "Debes seleccionar una ubicación.");
                     var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
@@ -348,6 +439,9 @@ namespace SGA_Desktop.ViewModels
                     ? FechaCaducidad.Value.Date 
                     : null;
 
+                // Usar el almacén seleccionado si existe, sino el código de almacén
+                var codigoAlmacenParaGuardar = AlmacenSeleccionado?.CodigoAlmacen ?? CodigoAlmacen;
+
                 var dto = new GuardarConteoInventarioDto
                 {
                     IdInventario = _inventario.IdInventario,
@@ -357,7 +451,7 @@ namespace SGA_Desktop.ViewModels
                         {
                             CodigoArticulo = CodigoArticulo,
                             CodigoUbicacion = CodigoUbicacion,
-                            CodigoAlmacen = CodigoAlmacen,
+                            CodigoAlmacen = codigoAlmacenParaGuardar,
                             Partida = PartidaSeleccionada ?? string.Empty,
                             FechaCaducidad = fechaCaducidadNormalizada,
                             PaletId = null,

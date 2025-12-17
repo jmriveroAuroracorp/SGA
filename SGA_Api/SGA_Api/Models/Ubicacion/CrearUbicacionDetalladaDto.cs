@@ -24,6 +24,7 @@ namespace SGA_Api.Models.Ubicacion
 		public string? TipoPaletPermitido { get; set; }
 		public bool? Habilitada { get; set; }
 		public int? Orden { get; set;}
+		public int? Obsoleta { get; set; }
 		[JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
 		public short? TipoUbicacionId { get; set; }
 		/// <summary>Códigos de alérgenos que estarán permitidos en esta ubicación.</summary>

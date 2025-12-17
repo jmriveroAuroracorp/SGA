@@ -135,7 +135,7 @@ namespace SGA_Desktop.ViewModels
 		public void IrAControlesRotativos()
 		{
 			NavigationStore.Navigate("ControlesRotativos");
-			CurrentHeader = "CONTROLES ROTATIVOS";
+			CurrentHeader = "CONTEOS ROTATIVOS";
 		}
 
 
@@ -173,6 +173,13 @@ namespace SGA_Desktop.ViewModels
 	{
 		NavigationStore.Navigate("HistorialTraspasos");
 		CurrentHeader = "HISTORIAL DE TRASPASOS";
+	}
+
+	[RelayCommand]
+	public void IrAHistorialAjustes()
+	{
+		NavigationStore.Navigate("HistorialAjustes");
+		CurrentHeader = "HISTORIAL DE AJUSTES";
 	}
 
 	[RelayCommand]

@@ -87,6 +87,38 @@ namespace SGA_Api.Controllers.Rendimientos
             }
         }
 
+        [HttpGet("volumen")]
+        public async Task<IActionResult> ObtenerVolumenMovido([FromQuery] FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                _logger.LogInformation("Obteniendo volumen movido");
+                var resultado = await _rendimientosService.ObtenerVolumenMovidoAsync(filtros);
+                return Ok(resultado);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo volumen movido");
+                return StatusCode(500, new { message = "Error al obtener volumen movido", error = ex.Message });
+            }
+        }
+
+        [HttpGet("distribucion")]
+        public async Task<IActionResult> ObtenerDistribucion([FromQuery] FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                _logger.LogInformation("Obteniendo distribución");
+                var resultado = await _rendimientosService.ObtenerDistribucionAsync(filtros);
+                return Ok(resultado);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo distribución");
+                return StatusCode(500, new { message = "Error al obtener distribución", error = ex.Message });
+            }
+        }
+
         [HttpPost("exportar")]
         public async Task<IActionResult> ExportarInforme([FromBody] ExportarInformeDto dto)
         {

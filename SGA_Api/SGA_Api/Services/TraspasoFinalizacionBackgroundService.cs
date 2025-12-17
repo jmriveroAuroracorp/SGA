@@ -259,6 +259,9 @@ namespace SGA_Api.Services
                         // 1.1. PROCESAR AJUSTES DE INVENTARIO POR PALET (COMPLETADO)
                         await ProcesarAjustesInventarioPorPaletAsync(dbContext, logger);
 
+                        // 1.2. DETECCIÓN DE ERRORES EN AJUSTES DE INVENTARIO
+                        await DetectarYNotificarErroresInventariosAsync(dbContext, notificacionesUnificadas, logger);
+
 						// 2. CONSOLIDACI�N DE PALETS - Solo para traspasos que afectan palets
 						// Obtener todos los paletId con l�neas temporales
 					var query = dbContext.TempPaletLineas.AsQueryable();
@@ -402,6 +405,20 @@ namespace SGA_Api.Services
 					// Esto limpia las líneas (positivas y negativas) cuando el traspaso falla
                     if (traspaso.CodigoEstado == "ERROR_ERP")
                     {
+                        // 🔷 PROTECCIÓN: No eliminar si el ERROR_ERP es reciente (menos de 4 horas)
+                        // Esto permite que el servicio externo haga retry y complete el traspaso
+                        var fechaError = traspaso.FechaFinalizacion ?? traspaso.FechaInicio;
+                        var horasDesdeError = (DateTime.Now - fechaError).TotalHours;
+                        
+                        if (horasDesdeError < 4)
+                        {
+                            logger.LogInformation("⏳ ERROR_ERP reciente ({Horas:F1} horas) en traspaso {TraspasoId} (Tipo: {TipoTraspaso}, Articulo: {Articulo}). Esperando retry antes de eliminar líneas temporales.",
+                                horasDesdeError, traspaso.Id, traspaso.TipoTraspaso, traspaso.CodigoArticulo);
+                            continue; // NO eliminar, esperar retry
+                        }
+                        
+                        // Si el ERROR_ERP es antiguo (>4 horas), proceder con la eliminación normal
+                        
                         // 🔷 Evitar procesar el mismo traspaso múltiples veces en esta iteración
                         if (traspasosErrorErpProcesados.Contains(traspaso.Id))
                         {
@@ -723,15 +740,17 @@ namespace SGA_Api.Services
 								paletId, ultimoTraspasoPalet.AlmacenDestino, ultimoTraspasoPalet.UbicacionDestino);
 						}
 
-						var esDestinoPulmon = await EsUbicacionPulmonAsync(
-							dbContext,
-							ultimoTraspasoPalet.AlmacenDestino,
-							ultimoTraspasoPalet.UbicacionDestino);
+					var esDestinoPulmon = await EsUbicacionPulmonAsync(
+						dbContext,
+						ultimoTraspasoPalet.AlmacenDestino,
+						ultimoTraspasoPalet.UbicacionDestino);
 
-						if (esDestinoPulmon)
-						{
-							await VaciarPaletPorDestinoPulmonAsync(dbContext, paletId, ultimoTraspasoPalet, logger);
-						}
+					// 🔷 CORRECCIÓN: Solo vaciar si el traspaso está COMPLETADO
+					// No vaciar si está PENDIENTE_ERP porque puede fallar después y pasar a ERROR_ERP
+					if (esDestinoPulmon && ultimoTraspasoPalet.CodigoEstado == "COMPLETADO")
+					{
+						await VaciarPaletPorDestinoPulmonAsync(dbContext, paletId, ultimoTraspasoPalet, logger);
+					}
 					}
 
 							// 5) Marcar VAC�ADO SOLO cuando:
@@ -748,6 +767,20 @@ namespace SGA_Api.Services
 							// Si no quedan temporales ni definitivas, marcar como vaciado directamente
 							if (!quedanTemporales && !quedanDefinitivas)
 							{
+							// 🔷 PROTECCIÓN: No vaciar si hay traspasos ERROR_ERP recientes (menos de 4 horas)
+							// Esto permite que el servicio externo haga retry y complete el traspaso antes de vaciar
+							var hace4Horas = DateTime.Now.AddHours(-4);
+							var hayTraspasosErrorErpRecientes3 = await dbContext.Traspasos
+								.AnyAsync(t => t.PaletId == paletId && 
+											   t.CodigoEstado == "ERROR_ERP" &&
+											   t.FechaFinalizacion.HasValue &&
+											   t.FechaFinalizacion.Value >= hace4Horas);
+
+								if (hayTraspasosErrorErpRecientes3)
+								{
+									logger.LogInformation("⏳ Palet {PaletId} tiene traspasos ERROR_ERP recientes. Esperando retry antes de vaciar (sin temporales ni definitivas).", paletId);
+								}
+
 								var paletConActividadReciente =
 									paletTuvoTemporalesPendientes ||
 									paletIdsConTraspasos.Contains(paletId) ||
@@ -755,7 +788,7 @@ namespace SGA_Api.Services
 
 								var puedeAplicarLimpiezaSinLineas = paletConActividadReciente || permitirLimpiezaDiariaSinLineas;
 
-								if (puedeAplicarLimpiezaSinLineas)
+								if (puedeAplicarLimpiezaSinLineas && !hayTraspasosErrorErpRecientes3)
 								{
 									var palet = await dbContext.Palets.FindAsync(paletId);
 									if (palet != null && palet.Estado != "Vaciado" && palet.Estado.ToUpper() != "VACIADO")
@@ -871,9 +904,23 @@ namespace SGA_Api.Services
 													  a.ProcesadoPalet == false);
 								}
 
+							// 🔷 PROTECCIÓN: No vaciar si hay traspasos ERROR_ERP recientes (menos de 4 horas)
+							// Esto permite que el servicio externo haga retry y complete el traspaso antes de vaciar
+							var hace4Horas = DateTime.Now.AddHours(-4);
+							var hayTraspasosErrorErpRecientes = await dbContext.Traspasos
+								.AnyAsync(t => t.PaletId == paletId && 
+											   t.CodigoEstado == "ERROR_ERP" &&
+											   t.FechaFinalizacion.HasValue &&
+											   t.FechaFinalizacion.Value >= hace4Horas);
+
+								if (hayTraspasosErrorErpRecientes)
+								{
+									logger.LogInformation("⏳ Palet {PaletId} tiene traspasos ERROR_ERP recientes. Esperando retry antes de vaciar.", paletId);
+								}
+								
 								// Si el total de temporales pendientes es 0 o negativo, no hay positivas, 
-								// y NO hay ajustes pendientes, entonces vaciar el palet
-								if (totalTemporalesPendientes <= 0m && !hayTemporalesPendientesPositivas && !hayAjustesPendientes)
+								// NO hay ajustes pendientes, y NO hay ERROR_ERP recientes, entonces vaciar el palet
+								if (totalTemporalesPendientes <= 0m && !hayTemporalesPendientesPositivas && !hayAjustesPendientes && !hayTraspasosErrorErpRecientes)
 								{
 									var palet = await dbContext.Palets.FindAsync(paletId);
 									if (palet != null && !string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
@@ -933,7 +980,21 @@ namespace SGA_Api.Services
 								var hayPositivas = await dbContext.PaletLineas
 									.AnyAsync(l => l.PaletId == paletId && l.Cantidad > 0m);
 
-								if (totalPalet <= 0m && !hayPositivas)
+							// 🔷 PROTECCIÓN: No vaciar si hay traspasos ERROR_ERP recientes (menos de 4 horas)
+							// Esto permite que el servicio externo haga retry y complete el traspaso antes de vaciar
+							var hace4Horas = DateTime.Now.AddHours(-4);
+							var hayTraspasosErrorErpRecientes2 = await dbContext.Traspasos
+								.AnyAsync(t => t.PaletId == paletId && 
+											   t.CodigoEstado == "ERROR_ERP" &&
+											   t.FechaFinalizacion.HasValue &&
+											   t.FechaFinalizacion.Value >= hace4Horas);
+
+								if (hayTraspasosErrorErpRecientes2)
+								{
+									logger.LogInformation("⏳ Palet {PaletId} tiene traspasos ERROR_ERP recientes. Esperando retry antes de vaciar (sin temporales, total={Total}).", paletId, totalPalet);
+								}
+
+								if (totalPalet <= 0m && !hayPositivas && !hayTraspasosErrorErpRecientes2)
 								{
 									var palet = await dbContext.Palets.FindAsync(paletId);
 									if (palet != null && !string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
@@ -1607,6 +1668,40 @@ namespace SGA_Api.Services
 					}
 				}
 
+				// PASO 3: Agregar a cola de notificaciones Teams si es ERROR_ERP
+				if (estadoActual == "ERROR_ERP")
+				{
+					try
+					{
+						// Obtener el traspaso completo para insertar en cola
+						var traspasoCompleto = await dbContext.Traspasos
+							.FirstOrDefaultAsync(t => t.Id == traspasoId);
+
+						if (traspasoCompleto != null)
+						{
+							var registroCola = new NotificacionTeamsCola
+							{
+								Id = Guid.NewGuid(),
+								TraspasoId = traspasoId,
+								Estado = "Pendiente",
+								Intentos = 0,
+								FechaCreacion = DateTime.Now,
+								MensajeError = traspasoCompleto.EstadoErp ?? traspasoCompleto.Comentario ?? "Error en traspaso ERP"
+							};
+
+							dbContext.NotificacionesTeamsCola.Add(registroCola);
+							await dbContext.SaveChangesAsync();
+
+							logger.LogInformation("Registro agregado a cola de notificaciones Teams para traspaso {TraspasoId}", traspasoId);
+						}
+					}
+					catch (Exception ex)
+					{
+						logger.LogError(ex, "Error al agregar registro a cola de notificaciones Teams para traspaso {TraspasoId}", traspasoId);
+						// No fallar el flujo principal si falla la inserción en cola
+					}
+				}
+
 				//// PASO 2: Enviar notificaci�n por SignalR (mantener funcionalidad existente)
 				//var maxIntentos = 3;
 				//var intento = 0;
@@ -2010,6 +2105,185 @@ namespace SGA_Api.Services
 	private void RegistrarLimpiezaDiariaSinLineas()
 	{
 		_ultimaLimpiezaDiariaSinLineas = DateTime.Now;
+	}
+
+	/// <summary>
+	/// Detecta ajustes de inventario con ERROR_ERP y notifica al usuario que creó el inventario
+	/// </summary>
+	private async Task DetectarYNotificarErroresInventariosAsync(
+		AuroraSgaDbContext dbContext, 
+		INotificacionesUnificadasService notificacionesUnificadas, 
+		ILogger<TraspasoFinalizacionBackgroundService> logger)
+	{
+		try
+		{
+			logger.LogDebug("🔍 Iniciando detección de errores en ajustes de inventario...");
+			
+			// Obtener solo ajustes con ERROR_ERP que tienen IdInventario y NO han sido notificados
+			var ajustesConError = await dbContext.InventarioAjustes
+				.Where(a => a.IdInventario != null && 
+						   a.IdInventario != Guid.Empty &&
+						   a.Estado == "ERROR_ERP" &&
+						   !a.ErrorNotificado)
+				.Select(a => new 
+				{ 
+					a.IdAjuste, 
+					a.IdInventario, 
+					a.CodigoArticulo,
+					a.CodigoUbicacion,
+					a.EstadoErp
+				})
+				.ToListAsync();
+
+			logger.LogInformation("📊 Ajustes con ERROR_ERP encontrados: {Cantidad}", ajustesConError.Count);
+
+			if (!ajustesConError.Any())
+			{
+				logger.LogDebug("✅ No hay ajustes con ERROR_ERP pendientes de notificar");
+				return;
+			}
+
+			// Agrupar por IdInventario para notificar una vez por inventario
+			var erroresPorInventario = ajustesConError
+				.GroupBy(a => a.IdInventario!.Value)
+				.ToList();
+
+			foreach (var grupoInventario in erroresPorInventario)
+			{
+				try
+				{
+					var inventarioId = grupoInventario.Key;
+					var ajustesError = grupoInventario.ToList();
+
+					// Obtener información del inventario
+					var inventario = await dbContext.InventarioCabecera
+						.Where(i => i.IdInventario == inventarioId)
+						.Select(i => new { i.UsuarioCreacionId, i.CodigoInventario, i.CodigoAlmacen })
+						.FirstOrDefaultAsync();
+
+					if (inventario == null || inventario.UsuarioCreacionId <= 0)
+					{
+						logger.LogWarning("⚠️ No se puede notificar inventario {InventarioId}: Inventario no encontrado o sin usuario", inventarioId);
+						// Marcar como notificados para no volver a intentar
+						await MarcarAjustesComoNotificadosAsync(dbContext, ajustesError.Select(a => a.IdAjuste).ToList(), logger);
+						continue;
+					}
+
+					// Obtener total de ajustes del inventario para contexto
+					var totalAjustes = await dbContext.InventarioAjustes
+						.Where(a => a.IdInventario == inventarioId)
+						.CountAsync();
+
+					var completados = await dbContext.InventarioAjustes
+						.Where(a => a.IdInventario == inventarioId && a.Estado == "COMPLETADO")
+						.CountAsync();
+
+					logger.LogInformation("❌ Error detectado en inventario {InventarioId}: {Errores} error(es) de {Total} ajustes",
+						inventarioId, ajustesError.Count, totalAjustes);
+
+					// Preparar detalles de errores (máximo 3 para no saturar)
+					var erroresDetalle = ajustesError.Take(3).Select(a => 
+						$"Artículo {a.CodigoArticulo} en {a.CodigoUbicacion}: {a.EstadoErp ?? "Error desconocido"}").ToList();
+
+					var mensaje = $"Inventario {inventario.CodigoInventario} tiene errores";
+					var informacionAdicional = $"Se encontraron {ajustesError.Count} error(es) de {totalAjustes} ajustes. " +
+						$"Completados: {completados}/{totalAjustes}. " +
+						(erroresDetalle.Any() ? $"Errores: {string.Join("; ", erroresDetalle)}" : "");
+
+					var mensajeCompleto = $"{mensaje}\n{informacionAdicional}".Trim();
+
+					// Limitar el mensaje a 500 caracteres (límite de BD)
+					if (mensajeCompleto.Length > 500)
+					{
+						mensajeCompleto = mensajeCompleto.Substring(0, 497) + "...";
+					}
+
+					logger.LogInformation("📤 Intentando crear notificación para inventario {InventarioId}, usuario {UsuarioId}, mensaje length: {Length}",
+						inventarioId, inventario.UsuarioCreacionId, mensajeCompleto.Length);
+
+					// PASO 1: Guardar notificación en base de datos para persistencia (igual que traspasos)
+					try
+					{
+						var notificacion = await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+							inventario.UsuarioCreacionId,
+							"INVENTARIO",
+							"Error en Inventario",
+							mensajeCompleto,
+							inventarioId,
+							null,
+							"ERROR_ERP",
+							"error");
+
+						// SOLO marcar como notificados si la notificación se guardó correctamente en BD
+						if (notificacion != null)
+						{
+							logger.LogInformation("✅ Notificación creada correctamente: {IdNotificacion} para inventario {InventarioId}",
+								notificacion.IdNotificacion, inventarioId);
+
+							// Ahora sí, marcar como notificados usando SQL directo para evitar problemas de tracking/concurrencia
+							var ajusteIds = ajustesError.Select(a => a.IdAjuste).ToList();
+							var idsString = string.Join(",", ajusteIds.Select(id => $"'{id}'"));
+							var filasActualizadas = await dbContext.Database.ExecuteSqlRawAsync(
+								$"UPDATE InventarioAjustes SET ErrorNotificado = 1 WHERE IdAjuste IN ({idsString}) AND ErrorNotificado = 0");
+
+							logger.LogInformation("✅ Marcados {Cantidad} ajustes como notificados para inventario {InventarioId}", 
+								filasActualizadas, inventarioId);
+
+							logger.LogInformation("✅ Notificación de error enviada para inventario {InventarioId} al usuario {UsuarioId}",
+								inventarioId, inventario.UsuarioCreacionId);
+						}
+						else
+						{
+							logger.LogWarning("⚠️ Notificación de inventario {InventarioId} retornó NULL - NO se guardó en BD, NO se marca como notificado. Se reintentará en el siguiente ciclo.", inventarioId);
+						}
+					}
+					catch (Exception ex)
+					{
+						logger.LogError(ex, "❌ EXCEPCIÓN al crear y enviar notificación unificada para inventario {InventarioId}: {MensajeError}", 
+							inventarioId, ex.Message);
+						// NO marcar como notificado si falla, para que se reintente
+					}
+				}
+				catch (Exception ex)
+				{
+					logger.LogError(ex, "Error al procesar inventario individual {InventarioId}", grupoInventario.Key);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Error al detectar errores en ajustes de inventario");
+		}
+	}
+
+	/// <summary>
+	/// Marca los ajustes como notificados para evitar notificaciones duplicadas
+	/// </summary>
+	private async Task MarcarAjustesComoNotificadosAsync(
+		AuroraSgaDbContext dbContext, 
+		List<Guid> ajusteIds, 
+		ILogger<TraspasoFinalizacionBackgroundService> logger)
+	{
+		try
+		{
+			var ajustes = await dbContext.InventarioAjustes
+				.Where(a => ajusteIds.Contains(a.IdAjuste))
+				.ToListAsync();
+
+			foreach (var ajuste in ajustes)
+			{
+				ajuste.ErrorNotificado = true;
+			}
+
+			dbContext.InventarioAjustes.UpdateRange(ajustes);
+			await dbContext.SaveChangesAsync();
+			
+			logger.LogDebug("✅ Marcados {Cantidad} ajustes como notificados", ajustes.Count);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Error al marcar ajustes como notificados");
+		}
 	}
 }
 }

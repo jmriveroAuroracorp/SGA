@@ -28,8 +28,18 @@ namespace SGA_Api.Models.Conteos
         public DateTime? FechaInicio { get; set; }
         public DateTime? FechaCierre { get; set; }
         
+        // Total de lecturas registradas para esta orden
+        public int? TotalLecturas { get; set; }
+        
         // Información adicional para la respuesta
         public List<LecturaResponseDto> Lecturas { get; set; } = new List<LecturaResponseDto>();
         public ResultadoConteoDto? Resultado { get; set; }
+        
+        // Propiedades para conteos periódicos
+        public bool EsPeriodico { get; set; } = false;
+        public bool Activo { get; set; } = true;
+        
+        // Si esta orden es una renovación de un conteo periódico, aquí está el Guid del conteo periódico original
+        public Guid? OrdenPadreGuid { get; set; }
     }
 } 

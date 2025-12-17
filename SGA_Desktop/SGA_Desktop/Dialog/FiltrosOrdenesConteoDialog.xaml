@@ -4,7 +4,7 @@
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         Title="Filtros de Órdenes de Conteo"
         Width="500"
-        Height="450"
+        Height="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize"
         WindowStyle="None"
@@ -39,6 +39,8 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -116,6 +118,27 @@
                             </ItemsPanelTemplate>
                         </ComboBox.ItemsPanel>
                     </ComboBox>
+
+                    <!-- ID Orden -->
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="ID Orden:" Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Margin="0,10,15,0"/>
+                    <TextBox Grid.Row="5" Grid.Column="1"
+                             Text="{Binding IdOrdenFiltro, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30"
+                             FontFamily="Consolas"
+                             FontSize="14"
+                             Padding="4,2"
+                             BorderThickness="1"
+                             BorderBrush="{StaticResource BrushInputBorde}"
+                             Background="White"
+                             Margin="0,10,0,0"/>
+
+                    <!-- Ver todos los conteos -->
+                    <CheckBox Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                             Content="Ver todos los conteos (no solo los propios)"
+                             IsChecked="{Binding VerTodosLosConteos}"
+                             Margin="0,15,0,0"
+                             FontSize="12"
+                             VerticalAlignment="Center"/>
                 </Grid>
             </GroupBox>
 

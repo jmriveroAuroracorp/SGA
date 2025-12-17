@@ -91,7 +91,8 @@ namespace SGA_Desktop.Services
 		bool sinCierre = false,
 		string? almacen = null,
 		string? tipoUltimaActividad = null,
-		int? usuarioUltimaActividad = null
+		int? usuarioUltimaActividad = null,
+		int? limite = null
 	)
 		{
 			var query = new List<string> { $"codigoEmpresa={codigoEmpresa}" };
@@ -109,6 +110,7 @@ namespace SGA_Desktop.Services
 			if (!string.IsNullOrWhiteSpace(almacen)) query.Add($"almacen={almacen}");
 			if (!string.IsNullOrWhiteSpace(tipoUltimaActividad)) query.Add($"tipoUltimaActividad={tipoUltimaActividad}");
 			if (usuarioUltimaActividad.HasValue) query.Add($"usuarioUltimaActividad={usuarioUltimaActividad}");
+			if (limite.HasValue) query.Add($"limite={limite.Value}");
 
 			var uri = "palet/filtros?" + string.Join("&", query);
 			return await _httpClient.GetFromJsonAsync<List<PaletDto>>(uri)
