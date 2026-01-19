@@ -18,6 +18,7 @@ namespace SGA_Desktop.ViewModels
     {
         private readonly StockService _stockService;
         private readonly LoginService _loginService;
+        private readonly ConteosService _conteosService;
 
         // Propiedades para filtros
         [ObservableProperty] private AlmacenDto? almacenSeleccionadoCombo;
@@ -27,11 +28,13 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private OperariosAccesoDto? operarioSeleccionadoCombo;
         [ObservableProperty] private string idOrdenFiltro = string.Empty;
         [ObservableProperty] private bool verTodosLosConteos = false; // Por defecto, solo ver los propios
+        [ObservableProperty] private OperariosAccesoDto? operarioCreadorSeleccionadoCombo;
 
         // Colecciones para filtros
         public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
         public ObservableCollection<string> EstadosCombo { get; } = new();
         public ObservableCollection<OperariosAccesoDto> OperariosCombo { get; } = new();
+        public ObservableCollection<OperariosAccesoDto> OperariosCreadorCombo { get; } = new();
 
         // Propiedades para autocompletado de almacenes
         [ObservableProperty] private string filtroAlmacenesTexto = "";
@@ -42,6 +45,11 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private string filtroOperariosCombo = "";
         [ObservableProperty] private bool isDropDownOpenCombo = false;
         public ICollectionView OperariosComboView { get; private set; }
+
+        // Propiedades para autocompletado de creadores
+        [ObservableProperty] private string filtroOperariosCreadorCombo = "";
+        [ObservableProperty] private bool isDropDownOpenCreadorCombo = false;
+        public ICollectionView OperariosCreadorComboView { get; private set; }
 
         // Comandos
         public IAsyncRelayCommand AplicarFiltrosCommand { get; }
@@ -56,6 +64,10 @@ namespace SGA_Desktop.ViewModels
         public IRelayCommand AbrirDropDownComboCommand { get; }
         public IRelayCommand CerrarDropDownComboCommand { get; }
 
+        // Comandos para controlar dropdown de creadores
+        public IRelayCommand AbrirDropDownCreadorComboCommand { get; }
+        public IRelayCommand CerrarDropDownCreadorComboCommand { get; }
+
         // Evento para comunicar con el diálogo
         public event Action<bool> RequestClose;
 
@@ -63,6 +75,7 @@ namespace SGA_Desktop.ViewModels
         {
             _stockService = new StockService();
             _loginService = new LoginService();
+            _conteosService = new ConteosService();
 
             // Inicializar ICollectionView para filtrado de almacenes
             AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
@@ -71,6 +84,10 @@ namespace SGA_Desktop.ViewModels
             // Inicializar ICollectionView para filtrado de operarios
             OperariosComboView = CollectionViewSource.GetDefaultView(OperariosCombo);
             OperariosComboView.Filter = FiltraOperarioCombo;
+
+            // Inicializar ICollectionView para filtrado de creadores
+            OperariosCreadorComboView = CollectionViewSource.GetDefaultView(OperariosCreadorCombo);
+            OperariosCreadorComboView.Filter = FiltraOperarioCreadorCombo;
 
             // Inicializar estados
             EstadosCombo.Add("TODOS");
@@ -109,6 +126,18 @@ namespace SGA_Desktop.ViewModels
                 IsDropDownOpenCombo = false;
             });
 
+            // Comandos para dropdown de creadores
+            AbrirDropDownCreadorComboCommand = new RelayCommand(() =>
+            {
+                FiltroOperariosCreadorCombo = "";
+                IsDropDownOpenCreadorCombo = true;
+            });
+
+            CerrarDropDownCreadorComboCommand = new RelayCommand(() =>
+            {
+                IsDropDownOpenCreadorCombo = false;
+            });
+
             // Inicialización
             _ = InitializeAsync();
         }
@@ -121,7 +150,8 @@ namespace SGA_Desktop.ViewModels
             string estadoFiltro,
             OperariosAccesoDto? operarioSeleccionado,
             string idOrdenFiltro,
-            bool verTodosLosConteos) : this()
+            bool verTodosLosConteos,
+            OperariosAccesoDto? operarioCreadorSeleccionado = null) : this()
         {
             AlmacenSeleccionadoCombo = almacenSeleccionado;
             FechaDesde = fechaDesde;
@@ -130,6 +160,7 @@ namespace SGA_Desktop.ViewModels
             OperarioSeleccionadoCombo = operarioSeleccionado;
             IdOrdenFiltro = idOrdenFiltro;
             VerTodosLosConteos = verTodosLosConteos;
+            OperarioCreadorSeleccionadoCombo = operarioCreadorSeleccionado;
         }
 
         // Validaciones de fechas
@@ -160,6 +191,11 @@ namespace SGA_Desktop.ViewModels
             OperariosComboView?.Refresh();
         }
 
+        partial void OnFiltroOperariosCreadorComboChanged(string value)
+        {
+            OperariosCreadorComboView?.Refresh();
+        }
+
         private async Task InitializeAsync()
         {
             try
@@ -184,7 +220,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesCombo.Clear();
 
@@ -238,10 +274,71 @@ namespace SGA_Desktop.ViewModels
                 {
                     OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
                 }
+
+                // Cargar también en la colección de creadores, pero solo los que han creado conteos
+                await CargarCreadoresConteosAsync();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error cargando operarios: {ex.Message}");
+            }
+        }
+
+        private async Task CargarCreadoresConteosAsync()
+        {
+            try
+            {
+                // Obtener códigos de creadores desde el backend
+                var creadoresCodigos = await _conteosService.ObtenerCreadoresConteosAsync();
+
+                // Obtener todos los operarios para mapear códigos a nombres
+                var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+
+                OperariosCreadorCombo.Clear();
+
+                // Agregar opción "Todos"
+                OperariosCreadorCombo.Add(new OperariosAccesoDto
+                {
+                    Operario = 0,
+                    NombreOperario = "TODOS",
+                    Contraseña = "",
+                    MRH_CodigoAplicacion = 0
+                });
+
+                // Filtrar solo los operarios que han creado conteos
+                var creadoresCodigosSet = creadoresCodigos.ToHashSet();
+                var creadores = operarios
+                    .Where(op => creadoresCodigosSet.Contains(op.Operario.ToString()))
+                    .OrderBy(o => o.NombreOperario);
+
+                foreach (var creador in creadores)
+                {
+                    OperariosCreadorCombo.Add(creador);
+                }
+
+                // Si no hay creador seleccionado, seleccionar "TODOS"
+                if (OperarioCreadorSeleccionadoCombo == null)
+                {
+                    OperarioCreadorSeleccionadoCombo = OperariosCreadorCombo.FirstOrDefault();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando creadores de conteos: {ex.Message}");
+                // En caso de error, mostrar todos los operarios como fallback
+                var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+                OperariosCreadorCombo.Clear();
+                OperariosCreadorCombo.Add(new OperariosAccesoDto
+                {
+                    Operario = 0,
+                    NombreOperario = "TODOS",
+                    Contraseña = "",
+                    MRH_CodigoAplicacion = 0
+                });
+                foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
+                {
+                    OperariosCreadorCombo.Add(operario);
+                }
             }
         }
 
@@ -269,6 +366,13 @@ namespace SGA_Desktop.ViewModels
             {
                 OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
                 FiltroOperariosCombo = "";
+            }
+
+            // Seleccionar "TODOS" en creadores
+            if (OperariosCreadorCombo?.Any() == true)
+            {
+                OperarioCreadorSeleccionadoCombo = OperariosCreadorCombo.FirstOrDefault();
+                FiltroOperariosCreadorCombo = "";
             }
 
             // Establecer fechas: desde hace 7 días hasta hoy
@@ -300,6 +404,16 @@ namespace SGA_Desktop.ViewModels
 
             return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
                 .IndexOf(operario.NombreOperario, FiltroOperariosCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        // Método de filtrado para creadores
+        private bool FiltraOperarioCreadorCombo(object obj)
+        {
+            if (obj is not OperariosAccesoDto operario) return false;
+            if (string.IsNullOrEmpty(FiltroOperariosCreadorCombo)) return true;
+
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(operario.NombreOperario, FiltroOperariosCreadorCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
         }
     }
 }

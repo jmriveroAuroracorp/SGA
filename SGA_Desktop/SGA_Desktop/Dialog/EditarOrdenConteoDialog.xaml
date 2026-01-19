@@ -29,6 +29,7 @@
             <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
             <helpers:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+            <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -81,41 +82,74 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
+                            <!-- Mensaje informativo para conteos periódicos activos -->
+                            <Border Grid.Row="0" Grid.ColumnSpan="2" 
+                                    Background="#E3F2FD" 
+                                    BorderBrush="#2196F3" 
+                                    BorderThickness="1" 
+                                    CornerRadius="6" 
+                                    Padding="12" 
+                                    Margin="0,0,0,15"
+                                    Visibility="{Binding EsPeriodicoActivo, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="ℹ️ Conteo Periódico Activo" 
+                                               FontWeight="Bold" 
+                                               Foreground="#1976D2" 
+                                               Margin="0,0,0,5"/>
+                                    <TextBlock Text="Este conteo periódico está activo. Solo puedes editar: Prioridad, Operario, Comentario y Fecha de Próxima Renovación. Los demás campos están bloqueados para mantener la consistencia de las renovaciones automáticas." 
+                                               FontSize="12" 
+                                               Foreground="#1976D2" 
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="⚠️ IMPORTANTE: Los cambios que realices aquí solo se aplicarán a las PRÓXIMAS renovaciones. Las órdenes de conteo ya creadas (renovaciones anteriores) no se verán afectadas." 
+                                               FontSize="11" 
+                                               Foreground="#856404" 
+                                               FontWeight="SemiBold"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Título -->
-                            <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,10">
                                 <TextBlock Text="Título *" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding Titulo, UpdateSourceTrigger=PropertyChanged}"
                                          Height="35"
                                          FontSize="14"
                                          Padding="8"
                                          BorderThickness="1"
-                                         BorderBrush="{StaticResource BrushInputBorde}"/>
+                                         BorderBrush="{StaticResource BrushInputBorde}"
+                                         IsEnabled="{Binding CamposEditables}"/>
                             </StackPanel>
 
                            <!-- Tipo de Conteo -->
-                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,10">
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10">
                                 <TextBlock Text="Tipo de Conteo *" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <StackPanel Orientation="Horizontal">
                                     <RadioButton Content="Por Ubicación" 
                                                IsChecked="{Binding EsConteoUbicacion}"
                                                GroupName="TipoConteo"
                                                Margin="0,0,15,0"
-                                               VerticalAlignment="Center"/>
+                                               VerticalAlignment="Center"
+                                               IsEnabled="{Binding CamposEditables}"/>
                                     <RadioButton Content="Por Artículo" 
                                                IsChecked="{Binding EsConteoUbicacion, Converter={StaticResource InverseBooleanConverter}, Mode=TwoWay}"
                                                GroupName="TipoConteo"
-                                               VerticalAlignment="Center"/>
+                                               VerticalAlignment="Center"
+                                               IsEnabled="{Binding CamposEditables}"/>
                                 </StackPanel>
                             </StackPanel>
 
                             <!-- Prioridad -->
-                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,10">
+                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,10">
                                 <TextBlock Text="Prioridad" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding PrioridadesDisponibles}"
                                           DisplayMemberPath="Texto"
@@ -126,7 +160,7 @@
                             </StackPanel>
 
                             <!-- Almacén -->
-                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,10,10">
+                            <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,10,10">
                                 <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
                                           DisplayMemberPath="DescripcionCombo"
@@ -134,11 +168,12 @@
                                           Height="35"
                                           FontSize="14"
                                           Padding="8"
-                                          IsEditable="True"/>
+                                          IsEditable="True"
+                                          IsEnabled="{Binding CamposEditables}"/>
                             </StackPanel>
 
                             <!-- Operario -->
-                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,10">
+                            <StackPanel Grid.Row="3" Grid.Column="1" Margin="10,0,0,10">
                                 <TextBlock Text="Operario Asignado *" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding OperariosView}"
                                           DisplayMemberPath="NombreOperario"
@@ -169,7 +204,7 @@
 
 
                             <!-- Visibilidad -->
-                            <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,10">
                                 <TextBlock Text="Visibilidad" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <ComboBox ItemsSource="{Binding VisibilidadesDisponibles}"
                                           SelectedItem="{Binding VisibilidadSeleccionada}"
@@ -177,7 +212,8 @@
                                           Height="35"
                                           FontSize="14"
                                           Padding="8"
-                                          MinWidth="200">
+                                          MinWidth="200"
+                                          IsEnabled="{Binding CamposEditables}">
                                     <ComboBox.ItemContainerStyle>
                                         <Style TargetType="ComboBoxItem">
                                             <Setter Property="ToolTip">
@@ -191,11 +227,46 @@
                             </StackPanel>
 
                             <!-- Fecha -->
-                            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,0">
+                            <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,0,0,0"
+                                        Visibility="{Binding EsPeriodico, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                 <TextBlock Text="Fecha Planificada" FontWeight="Bold" Margin="0,0,0,5"/>
                                 <DatePicker SelectedDate="{Binding FechaPlan}"
                                            Height="35"
-                                           FontSize="14"/>
+                                           FontSize="14"
+                                           IsEnabled="{Binding CamposEditables}"/>
+                            </StackPanel>
+
+                            <!-- Fecha de próxima renovación (solo para conteos periódicos) -->
+                            <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Margin="0,10,0,0"
+                                        Visibility="{Binding EsPeriodico, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Fecha de Próxima Renovación *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBlock Text="Configure la fecha en la que se ejecutará la próxima renovación del conteo periódico. Debe ser del día siguiente en adelante." 
+                                           FontSize="11" 
+                                           Foreground="#6C757D" 
+                                           FontStyle="Italic" 
+                                           Margin="0,0,0,5"
+                                           TextWrapping="Wrap"/>
+                                <DatePicker SelectedDate="{Binding FechaProximaRenovacion}"
+                                           Height="35"
+                                           FontSize="14"
+                                           DisplayDateStart="{Binding FechaMinimaRenovacion}"/>
+                            </StackPanel>
+
+                            <!-- Frecuencia (días) - solo para conteos periódicos -->
+                            <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Margin="0,10,0,0"
+                                        Visibility="{Binding EsPeriodico, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Frecuencia (días) *" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding FrecuenciaDias, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="35"
+                                         FontSize="14"
+                                         Padding="8"
+                                         BorderThickness="1"
+                                         BorderBrush="{StaticResource BrushInputBorde}"/>
+                                <TextBlock Text="Ejemplo: 7 para conteos semanales, 30 para mensuales"
+                                           FontSize="11"
+                                           Foreground="Gray"
+                                           Margin="0,5,0,0"
+                                           FontStyle="Italic"/>
                             </StackPanel>
 
                         </Grid>
@@ -244,7 +315,8 @@
                                               IsChecked="{Binding UsarUbicacionDirecta}"
                                               FontWeight="SemiBold"
                                               Foreground="#495057"
-                                              VerticalAlignment="Center"/>
+                                              VerticalAlignment="Center"
+                                              IsEnabled="{Binding CamposEditables}"/>
                                 </StackPanel>
                             </Border>
 
@@ -270,7 +342,8 @@
                                               Padding="8"
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
-                                              Background="White"/>
+                                              Background="White"
+                                              IsEnabled="{Binding CamposEditables}"/>
                                 </StackPanel>
                             </Border>
 
@@ -295,8 +368,18 @@
                                               Padding="8"
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
-                                              Background="White"
-                                              IsEnabled="{Binding EstanteriaHabilitada}"/>
+                                              Background="White">
+                                        <ComboBox.Style>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="IsEnabled" Value="{Binding EstanteriaHabilitada}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CamposEditables}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ComboBox.Style>
+                                    </ComboBox>
                                 </StackPanel>
                             </Border>
 
@@ -321,8 +404,18 @@
                                               Padding="8"
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
-                                              Background="White"
-                                              IsEnabled="{Binding AlturaHabilitada}"/>
+                                              Background="White">
+                                        <ComboBox.Style>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="IsEnabled" Value="{Binding AlturaHabilitada}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CamposEditables}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ComboBox.Style>
+                                    </ComboBox>
                                 </StackPanel>
                             </Border>
 
@@ -347,8 +440,18 @@
                                               Padding="8"
                                               IsEditable="False"
                                               BorderBrush="#CED4DA"
-                                              Background="White"
-                                              IsEnabled="{Binding PosicionHabilitada}"/>
+                                              Background="White">
+                                        <ComboBox.Style>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="IsEnabled" Value="{Binding PosicionHabilitada}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CamposEditables}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ComboBox.Style>
+                                    </ComboBox>
                                 </StackPanel>
                             </Border>
 
@@ -375,7 +478,8 @@
                                               IsEditable="True"
                                               BorderBrush="#2196F3"
                                               Background="White"
-                                              Foreground="#1976D2"/>
+                                              Foreground="#1976D2"
+                                              IsEnabled="{Binding CamposEditables}"/>
                                 </StackPanel>
                             </Border>
 
@@ -402,7 +506,8 @@
                                              Height="35"
                                              FontSize="14"
                                              Padding="8"
-                                             Margin="0,0,10,0"/>
+                                             Margin="0,0,10,0"
+                                             IsEnabled="{Binding CamposEditables}"/>
                                     
                                     <Button Grid.Column="1"
                                             Content="🔍 Buscar"
@@ -410,7 +515,8 @@
                                             Style="{StaticResource EstiloBotonPrincipal}"
                                             Width="100"
                                             Height="35"
-                                            FontSize="12"/>
+                                            FontSize="12"
+                                            IsEnabled="{Binding CamposEditables}"/>
                                 </Grid>
 
                                 <!-- Lista desplegable para múltiples resultados -->
@@ -420,7 +526,8 @@
                                     <ComboBox ItemsSource="{Binding ArticulosEncontrados}"
                                               SelectedItem="{Binding ArticuloSeleccionado}"
                                               Height="35"
-                                              FontSize="12">
+                                              FontSize="12"
+                                              IsEnabled="{Binding CamposEditables}">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal">

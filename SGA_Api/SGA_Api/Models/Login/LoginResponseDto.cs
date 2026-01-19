@@ -10,5 +10,6 @@
 		public string Token { get; set; } = string.Empty;
 
         public string? CodigoCentro { get; set; }
+        public int? IdRol { get; set; }
     }
 }

@@ -298,7 +298,7 @@ namespace SGA_Desktop.Dialog
                     Descripcion = TxtDescripcion.Text?.Trim(),
                     Permisos = _permisosActuales,
                     Empresas = _empresas.Select(e => e.EmpresaOrigen).ToList(),
-                    Almacenes = _almacenes.Select(a => a.CodigoAlmacen).ToList(),
+                    Almacenes = _almacenes.ToList(), // Enviar todos los almacenes con CodigoEmpresa
                     
                     // Límites - usar InvariantCulture para parsing consistente
                     LimiteEuros = decimal.TryParse(TxtLimiteEuros.Text?.Replace(",", "."), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var limiteEuros) ? limiteEuros : (decimal?)null,
@@ -861,7 +861,9 @@ namespace SGA_Desktop.Dialog
             if (_todosLosAlmacenes != null)
             {
                 var almacenesDisponibles = _todosLosAlmacenes
-                    .Where(a => !_almacenes.Any(alm => alm.CodigoAlmacen == a.CodigoAlmacen))
+                    .Where(a => !_almacenes.Any(alm => 
+                        alm.CodigoEmpresa == a.CodigoEmpresa && 
+                        alm.CodigoAlmacen == a.CodigoAlmacen))
                     .ToList();
                 
                 // El ComboBox fue reemplazado por el diálogo de selección múltiple

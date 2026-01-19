@@ -100,14 +100,14 @@
                     <!-- ComboBox cuando es multialmacén -->
                     <ComboBox ItemsSource="{Binding AlmacenesDisponibles}"
                               SelectedItem="{Binding AlmacenSeleccionado}"
-                              DisplayMemberPath="NombreAlmacen"
+                              DisplayMemberPath="DescripcionCombo"
                               SelectedValuePath="CodigoAlmacen"
                               IsEnabled="{Binding EsMultialmacen}"
                               Visibility="{Binding EsMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}"
                               Style="{StaticResource EstiloComboBox}"
                               Padding="5"/>
                     <!-- TextBox readonly cuando NO es multialmacén -->
-                    <TextBox Text="{Binding CodigoAlmacen, Mode=OneWay}"
+                    <TextBox Text="{Binding AlmacenDisplayText, Mode=OneWay}"
                              IsReadOnly="True"
                              Background="LightGray"
                              Padding="5"

@@ -91,6 +91,7 @@ namespace SGA_Desktop.Services
 	DateTime? fechaInicioDesde,
 	DateTime? fechaInicioHasta,
 	int? usuarioId = null,
+	short? codigoEmpresa = null,
 	int? limite = null) // Si es null, la API usará un límite más alto automáticamente
 	{
 		var query = new List<string>();
@@ -108,6 +109,10 @@ namespace SGA_Desktop.Services
 			query.Add($"fechaHasta={fechaInicioHasta:yyyy-MM-dd}"); // API ahora maneja el fin de día automáticamente
 		if (usuarioId.HasValue && usuarioId.Value > 0)
 			query.Add($"usuarioId={usuarioId.Value}");
+		if (codigoEmpresa.HasValue)
+			query.Add($"codigoEmpresa={codigoEmpresa.Value}");
+		else
+			System.Diagnostics.Debug.WriteLine("[DEBUG] codigoEmpresa es NULL - no se agregará a la query (ver todas las empresas)");
 
 		// 🚀 Calcular límite dinámico basado en el rango de fechas
 		// Si hay un rango de fechas amplio, aumentar el límite para evitar cortar resultados
@@ -131,6 +136,8 @@ namespace SGA_Desktop.Services
 			var url = "traspasos";
 			if (query.Count > 0)
 				url += "?" + string.Join("&", query);
+
+			System.Diagnostics.Debug.WriteLine($"[DEBUG] URL construida: {url}");
 
 			var resp = await _httpClient.GetAsync(url);
 			if (!resp.IsSuccessStatusCode)
@@ -313,7 +320,8 @@ namespace SGA_Desktop.Services
 			string? almacenOrigen = null,
 			string? almacenDestino = null,
 			string? codigoArticulo = null,
-			string? partida = null)
+			string? partida = null,
+			short? codigoEmpresa = null)
 		{
 			var query = new List<string>();
 			
@@ -329,6 +337,8 @@ namespace SGA_Desktop.Services
 				query.Add($"codigoArticulo={Uri.EscapeDataString(codigoArticulo)}");
 			if (!string.IsNullOrWhiteSpace(partida))
 				query.Add($"partida={Uri.EscapeDataString(partida)}");
+			if (codigoEmpresa.HasValue)
+				query.Add($"codigoEmpresa={codigoEmpresa.Value}");
 
 			var url = "traspasos/storagecontrol";
 			if (query.Count > 0)

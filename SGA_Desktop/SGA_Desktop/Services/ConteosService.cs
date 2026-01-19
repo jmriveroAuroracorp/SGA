@@ -401,14 +401,58 @@ namespace SGA_Desktop.Services
         /// <summary>
         /// Listar todos los conteos periódicos
         /// </summary>
-        public async Task<List<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(string? codigoOperario = null)
+        public async Task<List<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(
+            string? codigoAlmacen = null,
+            DateTime? fechaDesde = null,
+            DateTime? fechaHasta = null,
+            bool? activo = null,
+            string? codigoOperario = null,
+            string? codigoOperarioSesion = null,
+            string? creadoPorCodigo = null)
         {
             try
             {
-                var url = "conteos/periodicos";
+                var queryParams = new List<string>();
+                
+                if (!string.IsNullOrEmpty(codigoAlmacen) && codigoAlmacen != "Todas")
+                {
+                    queryParams.Add($"codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}");
+                }
+                
+                if (fechaDesde.HasValue)
+                {
+                    queryParams.Add($"fechaDesde={Uri.EscapeDataString(fechaDesde.Value.ToString("yyyy-MM-dd"))}");
+                }
+                
+                if (fechaHasta.HasValue)
+                {
+                    queryParams.Add($"fechaHasta={Uri.EscapeDataString(fechaHasta.Value.ToString("yyyy-MM-dd"))}");
+                }
+                
+                if (activo.HasValue)
+                {
+                    queryParams.Add($"activo={activo.Value.ToString().ToLower()}");
+                }
+                
                 if (!string.IsNullOrEmpty(codigoOperario))
                 {
-                    url += $"?codigoOperario={Uri.EscapeDataString(codigoOperario)}";
+                    queryParams.Add($"codigoOperario={Uri.EscapeDataString(codigoOperario)}");
+                }
+                
+                if (!string.IsNullOrEmpty(codigoOperarioSesion))
+                {
+                    queryParams.Add($"codigoOperarioSesion={Uri.EscapeDataString(codigoOperarioSesion)}");
+                }
+                
+                if (!string.IsNullOrEmpty(creadoPorCodigo))
+                {
+                    queryParams.Add($"creadoPorCodigo={Uri.EscapeDataString(creadoPorCodigo)}");
+                }
+                
+                var url = "conteos/periodicos";
+                if (queryParams.Any())
+                {
+                    url += "?" + string.Join("&", queryParams);
                 }
                 
                 var response = await _httpClient.GetAsync(url);
@@ -466,6 +510,56 @@ namespace SGA_Desktop.Services
             catch (Exception ex)
             {
                 throw new Exception($"Error al desactivar periodicidad: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtener códigos de operarios que han creado conteos
+        /// </summary>
+        public async Task<List<string>> ObtenerCreadoresConteosAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync("conteos/creadores");
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var creadores = JsonConvert.DeserializeObject<List<string>>(responseContent);
+                
+                return creadores ?? new List<string>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener creadores de conteos: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtener códigos de operarios que han creado conteos periódicos
+        /// </summary>
+        public async Task<List<string>> ObtenerCreadoresConteosPeriodicosAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync("conteos/creadores-periodicos");
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var creadores = JsonConvert.DeserializeObject<List<string>>(responseContent);
+                
+                return creadores ?? new List<string>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener creadores de conteos periódicos: {ex.Message}", ex);
             }
         }
 

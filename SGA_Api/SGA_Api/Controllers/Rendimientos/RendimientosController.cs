@@ -119,6 +119,22 @@ namespace SGA_Api.Controllers.Rendimientos
             }
         }
 
+        [HttpGet("articulos")]
+        public async Task<IActionResult> ObtenerRendimientoArticulos([FromQuery] FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                _logger.LogInformation("Obteniendo rendimiento de artículos");
+                var resultados = await _rendimientosService.ObtenerRendimientoArticulosAsync(filtros);
+                return Ok(resultados);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo rendimiento de artículos");
+                return StatusCode(500, new { message = "Error al obtener rendimiento de artículos", error = ex.Message });
+            }
+        }
+
         [HttpPost("exportar")]
         public async Task<IActionResult> ExportarInforme([FromBody] ExportarInformeDto dto)
         {

@@ -160,7 +160,7 @@ namespace SGA_Desktop.ViewModels
 		// 🔷 NUEVA LÓGICA: Obtener todos los almacenes autorizados (individuales + centro)
 		var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync();
 		
-		var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, almacenesAutorizados);
+		var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, almacenesAutorizados, SessionManager.Operario);
 
 		// Poblar ambas colecciones con los mismos datos
 		AlmacenesDestino.Clear();
@@ -845,7 +845,7 @@ namespace SGA_Desktop.ViewModels
 			}
 
 			// Usar el método del servicio que ya combina almacenes individuales + centro
-			var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centroLogistico, almacenesIndividuales);
+			var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centroLogistico, almacenesIndividuales, SessionManager.Operario);
 			return almacenesDto.Select(a => a.CodigoAlmacen).ToList();
 		}
 		catch (Exception ex)
@@ -1021,7 +1021,7 @@ namespace SGA_Desktop.ViewModels
 			}
 			
 			// Obtener todos los almacenes autorizados
-			var todosAlmacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+			var todosAlmacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, SessionManager.Operario);
 			
 			// Filtrar solo los almacenes que tienen stock del artículo
 			var almacenesConStock = todosAlmacenes

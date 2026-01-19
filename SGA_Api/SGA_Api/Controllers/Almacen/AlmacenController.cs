@@ -13,14 +13,17 @@ public class AlmacenController : ControllerBase
 {
 	private readonly SageDbContext _sageDBContext;
 	private readonly StorageControlDbContext _storageControlContext;
+	private readonly AuroraSgaDbContext _auroraSgaContext;
 
-	// Inyecta los dos contextos aquí
+	// Inyecta los tres contextos aquí
 	public AlmacenController(
 		SageDbContext sageDbContext,
-		StorageControlDbContext storageControlContext)
+		StorageControlDbContext storageControlContext,
+		AuroraSgaDbContext auroraSgaContext)
 	{
 		_sageDBContext = sageDbContext;
 		_storageControlContext = storageControlContext;
+		_auroraSgaContext = auroraSgaContext;
 	}
 
 	// GET api/Almacen?codigoCentro=1
@@ -79,14 +82,22 @@ public class AlmacenController : ControllerBase
 			}).ToList());
 		}
 
-		// Caso por defecto: devolvemos todas las ubicaciones
-		var lista = await _storageControlContext.Ubicaciones
-			.Where(u => u.CodigoAlmacen == codigoAlmacen)
+		// Caso por defecto: devolvemos todas las ubicaciones desde AuroraSGA
+		var query = _auroraSgaContext.Ubicaciones
+			.Where(u => u.CodigoAlmacen == codigoAlmacen && u.Obsoleta == 0);
+		
+		// Si se proporciona codigoEmpresa, filtrar también por empresa
+		if (codigoEmpresa.HasValue)
+		{
+			query = query.Where(u => u.CodigoEmpresa == codigoEmpresa.Value);
+		}
+		
+		var lista = await query
 			.Select(u => new UbicacionDto
 			{
 				CodigoEmpresa = u.CodigoEmpresa, 
 				CodigoAlmacen = u.CodigoAlmacen ?? "",
-				Ubicacion = u.Ubicacion ?? ""
+				Ubicacion = u.CodigoUbicacion ?? ""
 			})
 			.ToListAsync();
 
@@ -116,12 +127,38 @@ public class AlmacenController : ControllerBase
 				})
 				.ToListAsync();
 
-			// 2. Cargar todos los almacenes de la empresa y filtrar en memoria
+		// 2. Almacenes individuales del operario
+		List<AlmacenDto> individuales;
+		
+		if (request.OperarioId.HasValue)
+		{
+			// Si viene OperarioId, consultar OperariosAlmacenes directamente (más preciso)
+			// Hacer un join directo para evitar problemas con Contains y HashSet
+			var posibles = await (from oa in _sageDBContext.OperariosAlmacenes
+			                     join a in _sageDBContext.Almacenes 
+			                         on new { oa.CodigoEmpresa, oa.CodigoAlmacen } 
+			                         equals new { CodigoEmpresa = (short)a.CodigoEmpresa, a.CodigoAlmacen }
+			                     where oa.Operario == request.OperarioId.Value && 
+			                           oa.CodigoEmpresa == request.CodigoEmpresa
+			                     select new AlmacenDto
+			                     {
+			                         CodigoAlmacen = a.CodigoAlmacen!,
+			                         NombreAlmacen = a.Almacen!,
+			                         CodigoEmpresa = a.CodigoEmpresa ?? 0,
+			                         EsDelCentro = false
+			                     })
+			                    .ToListAsync();
+
+			individuales = posibles;
+		}
+		else
+		{
+			// Comportamiento anterior: filtrar por códigos (retrocompatibilidad)
 			var posibles = await _sageDBContext.Almacenes
 				.Where(a => a.CodigoEmpresa == request.CodigoEmpresa)
 				.ToListAsync();
 
-			var individuales = posibles
+			individuales = posibles
 				.Where(a => codigosPermitidos.Contains(a.CodigoAlmacen!))
 				.Select(a => new AlmacenDto
 				{
@@ -131,6 +168,7 @@ public class AlmacenController : ControllerBase
 					EsDelCentro = false
 				})
 				.ToList();
+		}
 
 			// Fusionar
 			var resultado = delCentro

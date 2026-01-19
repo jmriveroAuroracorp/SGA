@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace SGA_Desktop.Models
@@ -15,6 +16,9 @@ namespace SGA_Desktop.Models
 		public List<EmpresaDto> empresas { get; set; } = new();
 		public string token { get; set; }
 		public string codigoCentro { get; set; }
+		
+		[JsonPropertyName("IdRol")]
+		public int? idRol { get; set; }
 
 		public short? EmpresaPorDefecto { get; set; }   
 

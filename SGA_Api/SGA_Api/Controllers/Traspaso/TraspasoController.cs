@@ -356,11 +356,20 @@ public class TraspasosController : ControllerBase
 		[FromQuery] string? codigoPalet = null,
 		[FromQuery] string? almacenOrigen = null,
 		[FromQuery] string? almacenDestino = null,
+		[FromQuery] short? codigoEmpresa = null,
 		[FromQuery] int? limite = null) // Si es null, usar límite dinámico basado en filtros
 	{
+		_logger.LogInformation($"🔍 GetTraspasos - codigoEmpresa recibido: {(codigoEmpresa.HasValue ? codigoEmpresa.Value.ToString() : "NULL (todas las empresas)")}");
+		
 		var q = _context.Traspasos.AsQueryable();
 		
-		// 🚀 OPTIMIZACIÓN: Aplicar filtro de usuario PRIMERO si existe
+		// 🚀 OPTIMIZACIÓN: Aplicar filtro de empresa PRIMERO si existe (reduce significativamente los resultados)
+		if (codigoEmpresa.HasValue)
+		{
+			q = q.Where(t => t.CodigoEmpresa == codigoEmpresa.Value);
+		}
+		
+		// 🚀 OPTIMIZACIÓN: Aplicar filtro de usuario si existe
 		// Esto permite que SQL Server use índices de usuario y reduzca significativamente el conjunto de datos
 		// antes de aplicar otros filtros más costosos
 		if (usuarioId.HasValue)
@@ -432,7 +441,8 @@ public class TraspasosController : ControllerBase
 				Cantidad = t.Cantidad,
 				Comentarios = t.Comentario,
 				Partida = t.Partida,
-				FechaCaducidad = t.FechaCaducidad
+				FechaCaducidad = t.FechaCaducidad,
+				CodigoEmpresa = t.CodigoEmpresa
 			})
 			.Take(limiteFinal) // 🚀 Límite dinámico basado en filtros
 			.ToListAsync();
@@ -673,6 +683,44 @@ public class TraspasosController : ControllerBase
 			if ((dto.Finalizar ?? true) && string.IsNullOrWhiteSpace(dto.AlmacenDestino))
 				return BadRequest("Debe indicar el almacén de destino para finalizar el traspaso.");
 			// UbicacionDestino puede ser null o vacío (sin ubicar)
+
+			// 🔷 VALIDACIÓN DE DUPLICADOS (MODO CONSERVADOR): Evitar crear traspasos duplicados por doble clic o peticiones simultáneas
+			// Buscar traspasos similares creados en los últimos 5 segundos con los mismos parámetros clave (solo mismo usuario)
+			// Ventana reducida a 5 segundos para ser más conservador y evitar falsos positivos
+			var fechaLimite = DateTime.Now.AddSeconds(-5);
+			var traspasoDuplicado = await _context.Traspasos
+				.Where(t =>
+					t.TipoTraspaso == "ARTICULO" &&
+					t.CodigoArticulo == dto.CodigoArticulo &&
+					t.Cantidad == dto.Cantidad &&
+					t.CodigoEmpresa == dto.CodigoEmpresa &&
+					t.UsuarioInicioId == dto.UsuarioId && // Solo mismo usuario (más seguro)
+					t.AlmacenOrigen == dto.AlmacenOrigen &&
+					t.UbicacionOrigen == dto.UbicacionOrigen &&
+					(t.Partida ?? "") == (dto.Partida ?? "") &&
+					(t.PaletId == (dto.PaletIdOrigen ?? Guid.Empty) || (dto.PaletIdOrigen == null && t.PaletId == Guid.Empty)) &&
+					t.FechaInicio >= fechaLimite &&
+					(t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "PENDIENTE_ERP" || t.CodigoEstado == "COMPLETADO"))
+				.OrderByDescending(t => t.FechaInicio)
+				.FirstOrDefaultAsync();
+
+			if (traspasoDuplicado != null)
+			{
+				var segundosAtras = (DateTime.Now - traspasoDuplicado.FechaInicio).TotalSeconds;
+				_logger.LogWarning("⚠️ [DUPLICADO BLOQUEADO] Traspaso de artículo duplicado detectado y bloqueado - " +
+					"TraspasoIdExistente: {TraspasoId}, UsuarioId: {UsuarioId}, Articulo: {CodigoArticulo}, Cantidad: {Cantidad}, " +
+					"Origen: {AlmacenOrigen}-{UbicacionOrigen}, Partida: {Partida}, Creado hace: {SegundosAtras:F2} segundos, Estado: {Estado}",
+					traspasoDuplicado.Id, dto.UsuarioId, dto.CodigoArticulo, dto.Cantidad, 
+					dto.AlmacenOrigen, dto.UbicacionOrigen ?? "(null)", dto.Partida ?? "(null)", segundosAtras, traspasoDuplicado.CodigoEstado);
+				
+				// Devolver el mismo formato que la respuesta exitosa normal para mantener compatibilidad
+				return Ok(new 
+				{ 
+					message = "Traspaso de artículo creado correctamente", 
+					traspaso = new { traspasoDuplicado.Id, traspasoDuplicado.CodigoEstado },
+					paletInfo = (string)null
+				});
+			}
 
 			// Comprobación de stock disponible usando la vista vStockDisponible
 			var stock = await _context.Set<StockDisponible>()
@@ -1558,6 +1606,38 @@ public class TraspasosController : ControllerBase
 			if (paletPre != null && dto.ConfirmarAgregarAPalet != true && dto.DejarSuelto != true)
 			{
 				bool cerrado = string.Equals(paletPre.Estado ?? "", "CERRADO", StringComparison.OrdinalIgnoreCase);
+				bool vaciado = string.Equals(paletPre.Estado ?? "", "VACIADO", StringComparison.OrdinalIgnoreCase);
+				
+				// 🔷 NUEVO: Si el palet está vaciado, devolver 409 con opciones (sin opción de agregar al palet)
+				if (vaciado)
+				{
+					return StatusCode(StatusCodes.Status409Conflict, new
+					{
+						message = $"Hay un palet VACIADO en {almDestino}-{ubiDestino} (Código: {paletPre.Codigo}). No se puede agregar artículos a un palet vaciado.",
+						requiereConfirmacion = true,
+						paletDetectado = true,
+						paletCerrado = false,
+						paletVaciado = true, // 🔷 NUEVO: Indicar que está vaciado
+						paletId = paletPre.Id,
+						codigoPalet = paletPre.Codigo,
+						almacen = almDestino,
+						ubicacion = ubiDestino,
+						opciones = new[]
+						{
+							new {
+								tipo = "suelto",
+								descripcion = "Dejar material suelto en la ubicación (sin paletizar)",
+								accion = "DejarSuelto"
+							},
+							new {
+								tipo = "cancelar",
+								descripcion = "Cancelar y buscar otra ubicación",
+								accion = "Cancelar"
+							}
+						}
+					});
+				}
+				
 				string estadoTxt = cerrado ? "CERRADO" : "ABIERTO";
 
 				return StatusCode(StatusCodes.Status409Conflict, new
@@ -1640,6 +1720,13 @@ public class TraspasosController : ControllerBase
 						Accion = "Reabrir",
 						Detalle = "Reapertura automática al agregar artículo (finalización mobility)"
 					});
+				}
+
+				// 🔷 NUEVO: Bloquear agregar líneas a palets vaciados
+				if (estadoPalet == "VACIADO")
+				{
+					await tx.RollbackAsync();
+					return BadRequest($"No se puede agregar artículos a un palet vaciado (Código: {palet.Codigo}). El palet debe estar abierto o cerrado.");
 				}
 
 				traspaso.PaletId = palet.Id;
@@ -1927,6 +2014,46 @@ public class TraspasosController : ControllerBase
 						return BadRequest($"No se puede mover el palet. {resultadoValidacion.MotivoBloqueo}");
 					}
 				}
+			}
+
+			// 🔷 VALIDACIÓN DE DUPLICADOS (MODO CONSERVADOR): Evitar crear traspasos duplicados por doble clic o peticiones simultáneas
+			// Buscar traspasos similares creados en los últimos 5 segundos para el mismo palet con los mismos parámetros (solo mismo usuario)
+			// Ventana reducida a 5 segundos para ser más conservador y evitar falsos positivos
+			var fechaLimite = DateTime.Now.AddSeconds(-5);
+			var ubicacionDestinoNormalizada = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+			var traspasosDuplicados = await _context.Traspasos
+				.Where(t =>
+					t.TipoTraspaso == "PALET" &&
+					t.PaletId == dto.PaletId &&
+					t.CodigoEmpresa == dto.CodigoEmpresa &&
+					t.UsuarioInicioId == dto.UsuarioId && // Solo mismo usuario (más seguro)
+					t.AlmacenOrigen == ultimoTraspaso.AlmacenDestino &&
+					t.AlmacenDestino == dto.AlmacenDestino &&
+					(t.UbicacionDestino ?? "") == ubicacionDestinoNormalizada &&
+					t.FechaInicio >= fechaLimite &&
+					(t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "PENDIENTE_ERP" || t.CodigoEstado == "COMPLETADO"))
+				.ToListAsync();
+
+			if (traspasosDuplicados.Any())
+			{
+				var idsDuplicados = traspasosDuplicados.Select(t => t.Id).ToList();
+				var primerDuplicado = traspasosDuplicados.OrderByDescending(t => t.FechaInicio).First();
+				var segundosAtras = (DateTime.Now - primerDuplicado.FechaInicio).TotalSeconds;
+				_logger.LogWarning("⚠️ [DUPLICADO BLOQUEADO] Traspasos de palet duplicados detectados y bloqueados - " +
+					"PaletId: {PaletId}, CodigoPalet: {CodigoPalet}, UsuarioId: {UsuarioId}, TraspasosDuplicados: {Cantidad}, " +
+					"PrimerTraspasoId: {TraspasoId}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, " +
+					"Creado hace: {SegundosAtras:F2} segundos, Estado: {Estado}",
+					dto.PaletId, dto.CodigoPalet ?? "(null)", dto.UsuarioId, traspasosDuplicados.Count, primerDuplicado.Id,
+					ultimoTraspaso.AlmacenDestino ?? "(null)", ultimoTraspaso.UbicacionDestino ?? "(null)",
+					dto.AlmacenDestino, ubicacionDestinoNormalizada, segundosAtras, primerDuplicado.CodigoEstado);
+				
+				// Devolver el mismo formato que la respuesta exitosa normal para mantener compatibilidad
+				// Reutilizar la variable esFinalizado ya declarada arriba
+				return Ok(new 
+				{ 
+					message = esFinalizado ? "Traspasos de palet creados y finalizados correctamente" : "Traspasos de palet creados correctamente", 
+					traspasosIds = idsDuplicados 
+				});
 			}
 
 			var traspasosCreados = new List<Guid>();
@@ -2606,13 +2733,14 @@ public class TraspasosController : ControllerBase
 		[FromQuery] string? almacenOrigen = null,
 		[FromQuery] string? almacenDestino = null,
 		[FromQuery] string? codigoArticulo = null,
-		[FromQuery] string? partida = null)
+		[FromQuery] string? partida = null,
+		[FromQuery] short? codigoEmpresa = null)
 	{
 		try
 		{
 			var guidEmpty = Guid.Empty;
 
-			_logger.LogInformation($"🔍 Buscando traspasos AURORA (MovimientoStock) - FechaDesde: {fechaDesde}, FechaHasta: {fechaHasta}, AlmacenOrigen: {almacenOrigen}, AlmacenDestino: {almacenDestino}");
+			_logger.LogInformation($"🔍 Buscando traspasos AURORA (MovimientoStock) - FechaDesde: {fechaDesde}, FechaHasta: {fechaHasta}, AlmacenOrigen: {almacenOrigen}, AlmacenDestino: {almacenDestino}, CodigoEmpresa: {codigoEmpresa}");
 
 			// 1. Obtener TODOS los movimientos de tipo 1 (Entrada) y 2 (Salida) en el rango de fechas
 			// NOTA: En AURORA, MovTraspaso puede ser Guid.Empty, así que relacionamos por lógica de negocio
@@ -2624,6 +2752,12 @@ public class TraspasosController : ControllerBase
 				.Where(m => m.TipoMovimiento == 1 || m.TipoMovimiento == 2);
 				// NOTA: Se quitó el filtro CodigoCanal == "0" para mostrar todos los traspasos
 				// Esto puede incluir movimientos que no forman traspasos completos (1 salida = 1 entrada)
+			
+			// Aplicar filtro de empresa PRIMERO (reduce significativamente los resultados)
+			if (codigoEmpresa.HasValue)
+			{
+				query = query.Where(m => m.CodigoEmpresa == codigoEmpresa.Value);
+			}
 			
 			// Aplicar filtros de fecha (siempre requeridos para evitar cargar toda la tabla)
 			// Por defecto solo hoy si no se especifica
@@ -2966,6 +3100,33 @@ public class TraspasosController : ControllerBase
 							return;
 						}
 
+						// 🔷 DEDUPLICACIÓN: Verificar si ya existe un evento de traspaso del mismo tipo/usuario/dispositivo/identificador en los últimos 5 segundos
+						// Esto evita múltiples registros cuando la PDA hace varias llamadas API casi simultáneamente
+						var fechaLimite = DateTime.Now.AddSeconds(-5);
+						var identificadorActual = ExtraerIdentificadorDelDetalle(detalleCapturado);
+						
+						var eventoReciente = await dbContext.LogEventos
+							.Where(e => e.IdUsuario == dispositivo.IdUsuario &&
+									   e.IdDispositivo == dispositivo.Id &&
+									   e.Tipo == tipoEventoCapturado &&
+									   e.Fecha >= fechaLimite)
+							.OrderByDescending(e => e.Fecha)
+							.FirstOrDefaultAsync();
+
+						if (eventoReciente != null)
+						{
+							// Extraer identificador del detalle para comparar si es la misma acción
+							var identificadorReciente = ExtraerIdentificadorDelDetalle(eventoReciente.Detalle);
+							
+							// Si es el mismo identificador (TraspasoId o PaletId), es probablemente la misma acción del usuario
+							if (identificadorActual == identificadorReciente || (string.IsNullOrEmpty(identificadorActual) && string.IsNullOrEmpty(identificadorReciente)))
+							{
+								logger.LogInformation("⏭️ Evento de traspaso duplicado detectado y omitido: {TipoEvento}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}, Último evento: {FechaUltimo} ({OrigenUltimo})", 
+									tipoEventoCapturado, dispositivo.IdUsuario, dispositivo.Id, eventoReciente.Fecha, eventoReciente.Origen);
+								return; // Ya existe un evento similar reciente, no registrar duplicado
+							}
+						}
+
 						var logEvento = new LogEvento
 						{
 							Fecha = DateTime.Now,
@@ -3010,5 +3171,38 @@ public class TraspasosController : ControllerBase
 		{
 			_logger.LogError(ex, "❌ Error al capturar token para evento de traspaso: {Origen}", origen);
 		}
+	}
+
+	/// <summary>
+	/// Extrae el identificador (TraspasoId o PaletId) del detalle de un evento para comparación de duplicados
+	/// </summary>
+	private string? ExtraerIdentificadorDelDetalle(string? detalle)
+	{
+		if (string.IsNullOrWhiteSpace(detalle))
+			return null;
+
+		// Buscar TraspasoId primero (más específico)
+		var patronTraspasoId = "TraspasoId=";
+		var indiceTraspasoId = detalle.IndexOf(patronTraspasoId, StringComparison.OrdinalIgnoreCase);
+		if (indiceTraspasoId >= 0)
+		{
+			var inicio = indiceTraspasoId + patronTraspasoId.Length;
+			var fin = detalle.IndexOf(',', inicio);
+			if (fin < 0) fin = detalle.Length;
+			return detalle.Substring(inicio, fin - inicio).Trim();
+		}
+
+		// Si no hay TraspasoId, buscar PaletId
+		var patronPaletId = "PaletId=";
+		var indicePaletId = detalle.IndexOf(patronPaletId, StringComparison.OrdinalIgnoreCase);
+		if (indicePaletId >= 0)
+		{
+			var inicio = indicePaletId + patronPaletId.Length;
+			var fin = detalle.IndexOf(',', inicio);
+			if (fin < 0) fin = detalle.Length;
+			return detalle.Substring(inicio, fin - inicio).Trim();
+		}
+
+		return null;
 	}
 }

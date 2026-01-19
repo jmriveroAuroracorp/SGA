@@ -4,13 +4,17 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
       mc:Ignorable="d"
       d:DesignHeight="600" d:DesignWidth="900"
       Title="Gestión de Ubicaciones" Cursor="">
 
     <Page.Resources>
-        <!-- Conversor Boolean → Visibility disponible aquí -->
+        <!-- Conversores -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <helpers:IntToVisibilityConverter x:Key="IntToVisibilityConverter"/>
+        <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <helpers:ArrayConverter x:Key="ArrayConverter"/>
     </Page.Resources>
 
     <Grid Margin="10" Background="{StaticResource BrushFondo}">
@@ -31,16 +35,18 @@
             </Grid.ColumnDefinitions>
             
             <!-- Filtros a la izquierda -->
-            <StackPanel Orientation="Horizontal" Grid.Column="0">
+            <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Top">
                 <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                     <TextBlock Text="Almacén" FontWeight="Bold" Margin="0,0,0,4"/>
                     <ComboBox Width="250"
+                        Height="40"
                         Style="{StaticResource EstiloComboBox}"
                         ItemsSource="{Binding AlmacenesCombo}"
                         DisplayMemberPath="DescripcionCombo"
                         SelectedItem="{Binding SelectedAlmacenCombo, Mode=TwoWay}"
                         IsEditable="True"
-                        IsTextSearchEnabled="True">
+                        IsTextSearchEnabled="True"
+                        VerticalAlignment="Top">
                         <ComboBox.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <VirtualizingStackPanel/>
@@ -49,24 +55,40 @@
                     </ComboBox>
                 </StackPanel>
                 
-                <StackPanel Orientation="Vertical">
+                <StackPanel Orientation="Vertical" Margin="0,0,20,0">
                     <TextBlock Text="Buscar" FontWeight="Bold" Margin="0,0,0,4"/>
-                    <TextBox Width="200"
-                             Height="32"
-                             Style="{StaticResource EstiloCajaTexto}"
+                    <TextBox Width="250"
+                             Height="40"
+                             FontFamily="{StaticResource FuentePrincipal}"
+                             FontSize="14"
+                             Padding="8,4"
+                             BorderThickness="1"
+                             BorderBrush="{StaticResource BrushInputBorde}"
+                             Background="White"
                              Text="{Binding FiltroBusqueda, UpdateSourceTrigger=PropertyChanged}"
+                             VerticalAlignment="Top"
+                             VerticalContentAlignment="Center"
                              ToolTip="Buscar por ubicación, descripción, tipo, pasillo, estantería, altura o posición"/>
                 </StackPanel>
                 
                 <CheckBox Content="Mostrar obsoletas" 
                           IsChecked="{Binding MostrarObsoletas}"
-                          Margin="20,0,0,0"
-                          VerticalAlignment="Bottom"
+                          Margin="0,28,0,0"
+                          VerticalAlignment="Top"
                           VerticalContentAlignment="Center"/>
             </StackPanel>
             
             <!-- Botones a la derecha -->
-            <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Bottom">
+            <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Top" Margin="0,28,0,0">
+                <!-- Botón Editar (solo visible cuando hay más de una seleccionada) -->
+                <Button Content="Editar"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Command="{Binding EditarSeleccionadasCommand}"
+                        Padding="8,4"
+                        Width="120"
+                        Margin="0,0,10,0"
+                        ToolTip="Editar ubicaciones seleccionadas"
+                        Visibility="{Binding HayMasDeUnaSeleccionada, Converter={StaticResource BoolToVis}}"/>
                 <Button Content="Nueva ubicación"
                         Margin="0,0,10,0"
                         Padding="8,4"
@@ -93,190 +115,162 @@
         </Grid>
 
         
-        <!-- 3) ListView con virtualización y estilo de tarjeta -->
+        <!-- 3) ItemsControl con agrupación por pasillo -->
         <Grid Grid.Row="1">
-            <ListView x:Name="lvUbicaciones"
-                  ItemsSource="{Binding UbicacionesView}"
-                  SelectedItem="{Binding SelectedUbicacion}"
-                  ScrollViewer.VerticalScrollBarVisibility="Auto"
-                  BorderThickness="0"
-                  VirtualizingStackPanel.IsVirtualizing="True"
-                  VirtualizingStackPanel.VirtualizationMode="Recycling"
-                  Background="Transparent">
-
-            <!-- 3.1) Estilo de contenedor: tarjeta con hover/selección -->
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Padding" Value="0"/>
-                    <Setter Property="Margin" Value="0,0,0,8"/>
-                    <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
-                    <Setter Property="Foreground" Value="Black"/>
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="ListViewItem">
-                                <ContentPresenter/>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                    </Trigger>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </ListView.ItemContainerStyle>
-            <!-- 3.2) Plantilla de contenido -->
-            <ListView.ItemTemplate>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding UbicacionesAgrupadas}">
+                    <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border Padding="0"
-                            Background="White"
-                            BorderBrush="#E0E0E0"
-                            BorderThickness="1"
-                            CornerRadius="8">
-                        <Border.Effect>
-                            <DropShadowEffect ShadowDepth="1"
-                                              BlurRadius="4"
-                                              Opacity="0.12"
-                                              Color="#CCCCCC"/>
-                        </Border.Effect>
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Expander Grid.Column="0"
-                                      HorizontalAlignment="Stretch"
-                                      IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
-                                      Expanded="Expander_Expanded">
-                                <i:Interaction.Triggers>
-                                    <i:EventTrigger EventName="Expanded">
-                                        <i:InvokeCommandAction
-                                            Command="{Binding DataContext.LoadAlergenosCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                            CommandParameter="{Binding}" />
-                                    </i:EventTrigger>
-                                </i:Interaction.Triggers>
-
-                                <!-- HEADER: Diseño mejorado y más limpio -->
-                                <Expander.Header>
-                                    <Grid Margin="8,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
+                            <!-- Expander para cada grupo de pasillo -->
+                            <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                      Margin="0,0,0,12">
+                                        <Expander.Header>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding HeaderPasillo}"
+                                                           FontWeight="Bold"
+                                                           FontSize="14"
+                                                           Foreground="{StaticResource BrushPrincipal}"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding TotalUbicaciones, StringFormat='({0} ubicaciones)'}"
+                                                           FontSize="12"
+                                                           Foreground="#666"
+                                                           Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"/>
+                                            <Menu Grid.Column="2"
+                                                  VerticalAlignment="Center"
+                                                  Margin="8,0,0,0"
+                                                  DataContext="{Binding}">
+                                                <MenuItem Header="Seleccionar por...">
+                                                    <MenuItem Header="Todas"
+                                                              Command="{Binding DataContext.SeleccionarTodoElPasilloCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                              CommandParameter="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Expander}}"/>
+                                                    <MenuItem Header="Estantería"
+                                                              ItemsSource="{Binding EstanteriasDisponibles}">
+                                                        <MenuItem.Style>
+                                                            <Style TargetType="MenuItem">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding EsEspecial}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </MenuItem.Style>
+                                                        <MenuItem.ItemContainerStyle>
+                                                            <Style TargetType="MenuItem">
+                                                                <Setter Property="Header" Value="{Binding}"/>
+                                                                <Setter Property="Command" Value="{Binding DataContext.SeleccionarPorEstanteriaEnGrupoCommand, RelativeSource={RelativeSource AncestorType=Page}}"/>
+                                                                <Setter Property="CommandParameter">
+                                                                    <Setter.Value>
+                                                                        <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=Menu}"/>
+                                                                            <Binding/>
+                                                                        </MultiBinding>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Style>
+                                                        </MenuItem.ItemContainerStyle>
+                                                    </MenuItem>
+                                                    <MenuItem Header="Altura"
+                                                              ItemsSource="{Binding AlturasDisponibles}">
+                                                        <MenuItem.Style>
+                                                            <Style TargetType="MenuItem">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding EsEspecial}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </MenuItem.Style>
+                                                        <MenuItem.ItemContainerStyle>
+                                                            <Style TargetType="MenuItem">
+                                                                <Setter Property="Header" Value="{Binding}"/>
+                                                                <Setter Property="Command" Value="{Binding DataContext.SeleccionarPorAlturaEnGrupoCommand, RelativeSource={RelativeSource AncestorType=Page}}"/>
+                                                                <Setter Property="CommandParameter">
+                                                                    <Setter.Value>
+                                                                        <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=Menu}"/>
+                                                                            <Binding/>
+                                                                        </MultiBinding>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Style>
+                                                        </MenuItem.ItemContainerStyle>
+                                                    </MenuItem>
+                                                </MenuItem>
+                                            </Menu>
+                                            </Grid>
+                                        </Expander.Header>
+                                
+                                <!-- ItemsControl para las ubicaciones dentro del grupo -->
+                                <ItemsControl ItemsSource="{Binding Ubicaciones}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource EstiloTarjeta}" 
+                                                    Width="380" 
+                                                    Height="Auto" 
+                                                    MinHeight="200"
+                                                    Margin="6"
+                                                    Cursor="Hand">
+                                                <Grid>
                                         <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
                                         
-                                        <!-- Fila 1: Código y badges principales -->
-                                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical" Margin="0,0,16,0">
+                                                    <!-- Header con Código y Badges -->
+                                                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <!-- Código Ubicación -->
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="Ubicación: " 
+                                                                       FontWeight="Bold" 
+                                                                       Foreground="{StaticResource BrushPrincipal}"
+                                                                       FontSize="14"
+                                                                       VerticalAlignment="Center"/>
                                             <TextBlock Text="{Binding Ubicacion}"
-                                                       FontFamily="{StaticResource FuentePrincipal}"
+                                                                       FontFamily="Consolas"
                                                        FontWeight="Bold"
-                                                       FontSize="16"
-                                                       Foreground="{StaticResource BrushPrincipal}"/>
-                                            <TextBlock Text="{Binding DescripcionUbicacion}"
-                                                       FontFamily="{StaticResource FuentePrincipal}"
-                                                       FontSize="12"
-                                                       Foreground="#666"
-                                                       Margin="0,2,0,0"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       MaxWidth="250"/>
+                                                                       Foreground="#2C3E50"
+                                                                       FontSize="14"
+                                                                       VerticalAlignment="Center"/>
                                         </StackPanel>
                                         
-                                        <!-- Fila 1: Ubicación física en formato más claro -->
-                                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Border Background="#F5F5F5"
-                                                    BorderBrush="#E0E0E0"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Padding="6,3"
-                                                    Margin="0,0,6,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="P" FontWeight="Bold" FontSize="10" Foreground="#666" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Pasillo}" FontSize="12" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Background="#F5F5F5"
-                                                    BorderBrush="#E0E0E0"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Padding="6,3"
-                                                    Margin="0,0,6,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="E" FontWeight="Bold" FontSize="10" Foreground="#666" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Estanteria}" FontSize="12" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Background="#F5F5F5"
-                                                    BorderBrush="#E0E0E0"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Padding="6,3"
-                                                    Margin="0,0,6,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="A" FontWeight="Bold" FontSize="10" Foreground="#666" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Altura}" FontSize="12" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Background="#F5F5F5"
-                                                    BorderBrush="#E0E0E0"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Padding="6,3"
-                                                    Margin="0,0,6,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="Pos" FontWeight="Bold" FontSize="10" Foreground="#666" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Posicion}" FontSize="12" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-                                        
-                                        <!-- Fila 1: Badges principales -->
-                                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <!-- Badge de obsoleta -->
+                                                        <!-- Badges -->
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                             <Border Background="#D32F2F"
                                                     BorderBrush="#B71C1C"
-                                                    BorderThickness="0"
-                                                    CornerRadius="12"
-                                                    Padding="8,4"
-                                                    Margin="0,0,6,0"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="3"
+                                                                    Padding="6,3"
+                                                                    Margin="0,0,5,0"
                                                     Visibility="{Binding Obsoleta, Converter={StaticResource IntToVisibilityConverter}}">
                                                 <TextBlock Text="OBSOLETA"
-                                                           FontFamily="{StaticResource FuentePrincipal}"
                                                            FontSize="9"
                                                            FontWeight="Bold"
                                                            Foreground="White"/>
                                             </Border>
-                                            
-                                            <!-- Tipo de ubicación -->
-                                            <Border Background="#E3F2FD"
-                                                    BorderBrush="#2196F3"
-                                                    BorderThickness="0"
-                                                    CornerRadius="12"
-                                                    Padding="8,4"
-                                                    Margin="0,0,6,0"
-                                                    Visibility="{Binding TipoUbicacionDescripcion, Converter={StaticResource StringToVisibilityConverter}}">
-                                                <TextBlock Text="{Binding TipoUbicacionDescripcion}"
-                                                           FontFamily="{StaticResource FuentePrincipal}"
-                                                           FontSize="9"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="#1976D2"/>
-                                            </Border>
-                                            
-                                            <!-- Estado habilitada (solo si NO está obsoleta) -->
                                             <Border Background="#4CAF50"
-                                                    BorderThickness="0"
-                                                    CornerRadius="12"
-                                                    Padding="6,4">
+                                                                    BorderThickness="1"
+                                                                    BorderBrush="#4CAF50"
+                                                                    CornerRadius="3"
+                                                                    Padding="6,3">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -291,80 +285,132 @@
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
-                                                <TextBlock Text="✓ Activa"
+                                                                <TextBlock Text="Activa" 
                                                            FontSize="9"
                                                            FontWeight="Bold"
                                                            Foreground="White"/>
                                             </Border>
                                         </StackPanel>
+                                                    </Grid>
                                         
-                                        <!-- Fila 2: Información adicional compacta -->
-                                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,8,0,0">
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
-                                                <TextBlock Text="Temp:" FontSize="11" Foreground="#666" FontWeight="SemiBold" Margin="0,0,4,0"/>
-                                                <TextBlock Text="{Binding TemperaturaMin, StringFormat={}{0}°C}" FontSize="11" Foreground="#666"/>
-                                                <TextBlock Text=" - " FontSize="11" Foreground="#666" Visibility="{Binding TemperaturaMax, Converter={StaticResource IntToVisibilityConverter}}"/>
-                                                <TextBlock Text="{Binding TemperaturaMax, StringFormat={}{0}°C}" FontSize="11" Foreground="#666" Visibility="{Binding TemperaturaMax, Converter={StaticResource IntToVisibilityConverter}}"/>
+                                                    <!-- Contenido principal -->
+                                                    <StackPanel Grid.Row="1" Margin="0,0,0,12">
+                                                        <!-- Descripción -->
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="Descripción: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding DescripcionUbicacion}" 
+                                                                       FontWeight="Bold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#34495E"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                        </Grid>
+
+                                                        <!-- Ubicación física -->
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="Ubicación: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                                <TextBlock Text="P:" FontWeight="SemiBold" FontSize="12" Foreground="#34495E"/>
+                                                                <TextBlock Text="{Binding Pasillo}" FontSize="12" Foreground="#34495E" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="E:" FontWeight="SemiBold" FontSize="12" Foreground="#34495E"/>
+                                                                <TextBlock Text="{Binding Estanteria}" FontSize="12" Foreground="#34495E" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="A:" FontWeight="SemiBold" FontSize="12" Foreground="#34495E"/>
+                                                                <TextBlock Text="{Binding Altura}" FontSize="12" Foreground="#34495E" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="Pos:" FontWeight="SemiBold" FontSize="12" Foreground="#34495E"/>
+                                                                <TextBlock Text="{Binding Posicion}" FontSize="12" Foreground="#34495E"/>
                                             </StackPanel>
-                                            <StackPanel Orientation="Horizontal" Visibility="{Binding TipoPaletPermitido, Converter={StaticResource StringToVisibilityConverter}}">
-                                                <TextBlock Text="Palet:" FontSize="11" Foreground="#666" FontWeight="SemiBold" Margin="0,0,4,0"/>
-                                                <TextBlock Text="{Binding TipoPaletPermitido}" FontSize="11" Foreground="#666"/>
+                                                        </Grid>
+
+                                                        <!-- Temperatura -->
+                                                        <Grid Margin="0,0,0,8"
+                                                              Visibility="{Binding TemperaturaMin, Converter={StaticResource IntToVisibilityConverter}}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="Temperatura: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding TemperaturaMin, StringFormat={}{0}°C}" 
+                                                                           FontSize="12" 
+                                                                           Foreground="#34495E"/>
+                                                                <TextBlock Text=" - " 
+                                                                           FontSize="12" 
+                                                                           Foreground="#34495E"
+                                                                           Visibility="{Binding TemperaturaMax, Converter={StaticResource IntToVisibilityConverter}}"/>
+                                                                <TextBlock Text="{Binding TemperaturaMax, StringFormat={}{0}°C}" 
+                                                                           FontSize="12" 
+                                                                           Foreground="#34495E"
+                                                                           Visibility="{Binding TemperaturaMax, Converter={StaticResource IntToVisibilityConverter}}"/>
                                             </StackPanel>
-                                        </StackPanel>
+                                                        </Grid>
+
+                                                        <!-- Tipo Palet -->
+                                                        <Grid Margin="0,0,0,8"
+                                                              Visibility="{Binding TipoPaletPermitido, Converter={StaticResource StringToVisibilityConverter}}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="Tipo Palet: " 
+                                                                       FontWeight="SemiBold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#7F8C8D"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding TipoPaletPermitido}" 
+                                                                       FontWeight="Bold" 
+                                                                       FontSize="12"
+                                                                       Foreground="#34495E"/>
                                     </Grid>
+
+                                                        <!-- Expander para alérgenos (compacto) -->
+                                                        <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                                                  Margin="0,8,0,0">
+                                                            <i:Interaction.Triggers>
+                                                                <i:EventTrigger EventName="Expanded">
+                                                                    <i:InvokeCommandAction
+                                                                        Command="{Binding DataContext.LoadAlergenosCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                                        CommandParameter="{Binding}" />
+                                                                </i:EventTrigger>
+                                                            </i:Interaction.Triggers>
+                                                            
+                                                            <Expander.Header>
+                                                                <TextBlock Text="Alérgenos" 
+                                                                           FontWeight="SemiBold" 
+                                                                           FontSize="11"
+                                                                           Foreground="#7F8C8D"/>
                                 </Expander.Header>
 
-
-                                <!-- CONTENT con TODOS los datos + botón abajo-derecha -->
                             <Expander.Content>
-                                <Grid Margin="0,8,0,0">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <!-- Pasillo/Estantería/Altura/Posición -->
-                                        <RowDefinition Height="Auto"/>
-                                        <!-- Temperaturas y tipo de palet -->
-                                        <RowDefinition Height="*"/>
-                                        <!-- Alérgenos -->
-                                        <RowDefinition Height="Auto"/>
-                                        <!-- Botón Editar -->
-                                    </Grid.RowDefinitions>
+                                                                <Border BorderBrush="#E1E5E9"
+                                                                        BorderThickness="0,1,0,0"
+                                                                        Margin="0,8,0,0"
+                                                                        Padding="8,8,0,0">
+                                                                    <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2*"/>
-                                        <ColumnDefinition Width="3*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Fila 0: Ubicación física -->
-                                    <StackPanel Orientation="Horizontal"
-                                Grid.Row="0"
-                                Grid.Column="0" Grid.ColumnSpan="2">
-                                        <TextBlock Text="Pasillo:" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding Pasillo}" Margin="0,0,12,0"/>
-                                        <TextBlock Text="Estantería:" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding Estanteria}" Margin="0,0,12,0"/>
-                                        <TextBlock Text="Altura:" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding Altura}" Margin="0,0,12,0"/>
-                                        <TextBlock Text="Posición:" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding Posicion}"/>
-                                    </StackPanel>
-
-                                    <!-- Fila 1: Temperaturas y tipo de palet -->
-                                    <StackPanel Orientation="Horizontal"
-                                Grid.Row="1"
-                                Grid.Column="0" Grid.ColumnSpan="2">
-                                        <TextBlock Text="Temp. Mín (°C):" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding TemperaturaMin}" Margin="0,0,12,0"/>
-                                        <TextBlock Text="Temp. Máx (°C):" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding TemperaturaMax}" Margin="0,0,12,0"/>
-                                        <TextBlock Text="Tipo Palet:" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding TipoPaletPermitido}"/>
-                                    </StackPanel>
-
-                                    <!-- Fila 2: Alergenos Presentes -->
-                                    <GroupBox Header="Alérgenos Presentes"
-                              Grid.Row="2" Grid.Column="0"
-                              Padding="8">
-                                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Disabled">
+                                                                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                                            <TextBlock Text="Presentes" 
+                                                                                       FontWeight="Bold" 
+                                                                                       FontSize="10"
+                                                                                       Margin="0,0,0,4"/>
                                             <ItemsControl ItemsSource="{Binding AlergenosPresentesList}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
@@ -374,24 +420,37 @@
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
                                                         <Border Background="{StaticResource BrushSecundario1}"
-                                                CornerRadius="4"
+                                                                                                CornerRadius="3"
                                                 Padding="4,2"
                                                 Margin="2">
-                                                            <TextBlock Text="{Binding Descripcion}" FontSize="12"/>
+                                                                                            <TextBlock Text="{Binding Descripcion}" FontSize="10"/>
                                                         </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
-                                        </ScrollViewer>
-                                    </GroupBox>
-
-                                    <!-- Fila 2: Alergenos Permitidos -->
-                                    <GroupBox Header="Alérgenos Permitidos"
-                              Grid.Row="2" Grid.Column="1"
-                              Padding="8">
-                                        <Grid>
-                                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                          VerticalScrollBarVisibility="Disabled">
+                                                                            <TextBlock Text="Ninguno"
+                                                                                       FontStyle="Italic"
+                                                                                       Foreground="Gray"
+                                                                                       FontSize="10"
+                                                                                       Margin="0,4,0,0">
+                                                                                <TextBlock.Style>
+                                                                                    <Style TargetType="TextBlock">
+                                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding AlergenosPresentesList.Count}" Value="0">
+                                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </TextBlock.Style>
+                                                                            </TextBlock>
+                                                                        </StackPanel>
+                                                                        
+                                                                        <StackPanel Grid.Column="1">
+                                                                            <TextBlock Text="Permitidos" 
+                                                                                       FontWeight="Bold" 
+                                                                                       FontSize="10"
+                                                                                       Margin="0,0,0,4"/>
                                                 <ItemsControl ItemsSource="{Binding AlergenosPermitidosList}">
                                                     <ItemsControl.ItemsPanel>
                                                         <ItemsPanelTemplate>
@@ -401,20 +460,19 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <Border Background="{StaticResource BrushSecundario2}"
-                                                    CornerRadius="4"
+                                                                                                CornerRadius="3"
                                                     Padding="4,2"
                                                     Margin="2">
-                                                                <TextBlock Text="{Binding Descripcion}" FontSize="12"/>
+                                                                                            <TextBlock Text="{Binding Descripcion}" FontSize="10"/>
                                                             </Border>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
-                                            </ScrollViewer>
-                                            <TextBlock Text="— No hay limitación de alérgenos en esta ubicación —"
+                                                                            <TextBlock Text="Sin limitaciones"
                                        FontStyle="Italic"
                                        Foreground="Gray"
-                                       HorizontalAlignment="Left"
-                                       VerticalAlignment="Center">
+                                                                                       FontSize="10"
+                                                                                       Margin="0,4,0,0">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -426,44 +484,39 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
+                                                                        </StackPanel>
                                         </Grid>
-                                    </GroupBox>
-
-                                    <!-- Fila 3: Botón Editar, alineado abajo-derecha -->
-                                    <Button Grid.Row="3" Grid.Column="1"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                            Width="24" Height="24"
-                            HorizontalAlignment="Right"
-                            Margin="0,12,0,0"
-                            ToolTip="Editar ubicación"
-                            Content="✎"
-                            Command="{Binding DataContext.EditarUbicacionCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                            CommandParameter="{Binding}"/>
-                                    <!-- Botón Imprimir etiqueta de ubicación --><!--
-                                    <Button Grid.Row="3" Grid.Column="0"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                            Width="24" Height="24"
-                            HorizontalAlignment="Left"
-                            Margin="0,12,0,0"
-                            ToolTip="Imprimir etiqueta de ubicación"
-                            Content="🖨"
-                            Command="{Binding DataContext.ImprimirUbicacionCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                            CommandParameter="{Binding}"/>-->
-                                </Grid>
+                                                                </Border>
                             </Expander.Content>
                             </Expander>
+                                                    </StackPanel>
 
-                            <!-- Checkbox a la derecha del todo -->
-                            <CheckBox Grid.Column="1"
+                                                    <!-- Botones de acción -->
+                                                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                                        <Button Content="Editar"
+                                                                Command="{Binding DataContext.EditarUbicacionCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                                CommandParameter="{Binding}"
+                                                                Style="{StaticResource EstiloBoton}"
+                                                                Width="80"
+                                                                Height="30"
+                                                                FontSize="11"
+                                                                FontWeight="Medium"
+                                                                Margin="0,0,4,0"/>
+                                                        <CheckBox IsChecked="{Binding IsMarcada, Mode=TwoWay}"
                   VerticalAlignment="Center"
-                  HorizontalAlignment="Right"
-                  Margin="12,0,4,0"
-                  IsChecked="{Binding IsMarcada, Mode=TwoWay}"/>
+                                                                  Margin="4,0,0,0"
+                                                                  ToolTip="Seleccionar ubicación"/>
+                                                    </StackPanel>
                         </Grid>
                     </Border>
                 </DataTemplate>
-            </ListView.ItemTemplate>
-            </ListView>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Expander>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
             
             <!-- Indicador de carga -->
             <Border Background="#E0E0E0" 
@@ -494,7 +547,7 @@
                     <Style TargetType="TextBlock">
                         <Setter Property="Visibility" Value="Collapsed"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Ubicaciones.Count}" Value="0">
+                            <DataTrigger Binding="{Binding UbicacionesAgrupadas.Count}" Value="0">
                                 <Setter Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </Style.Triggers>
@@ -503,7 +556,7 @@
             </TextBlock>
         </Grid>
         
-        <!-- Barra inferior: Resumen y acciones -->
+        <!-- Barra inferior: Resumen y acciones simplificada -->
         <Grid Grid.Row="2" Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -511,122 +564,40 @@
             </Grid.ColumnDefinitions>
             
             <!-- Resumen a la izquierda -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock FontWeight="Bold" Margin="0,0,4,0">
+            <TextBlock Grid.Column="0" 
+                       FontWeight="Bold" 
+                       VerticalAlignment="Center">
                     <Run Text="{Binding SeleccionadasCount, Mode=OneWay}"/>
                     <Run Text="de"/>
                     <Run Text="{Binding TotalUbicaciones, Mode=OneWay}"/>
                     <Run Text="seleccionadas"/>
                 </TextBlock>
-            </StackPanel>
             
-            <!-- Acciones a la derecha -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <!-- Grupo: Selección rápida - Pasillo -->
-                <Border BorderBrush="{StaticResource BrushInputBorde}" 
-                        BorderThickness="1" 
-                        CornerRadius="4" 
-                        Padding="8,4" 
-                        Margin="0,0,8,0"
-                        Background="#F5F5F5">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Pasillo:" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11"/>
-                        <ComboBox ItemsSource="{Binding PasillosDisponibles}"
-                                  SelectedItem="{Binding PasilloSeleccionado}"
-                                  Width="80"
-                                  Style="{StaticResource ComboEstiloPrincipal}"
-                                  Margin="0,0,6,0"/>
-                        <Button Content="Seleccionar"
-                                Style="{StaticResource EstiloBotonPrincipal}"
-                                Command="{Binding SeleccionarPorPasilloCommand}"
-                                CommandParameter="{Binding PasilloSeleccionado}"
-                                Padding="6,2"
-                                FontSize="11"/>
-                    </StackPanel>
-                </Border>
+            <!-- Acciones a la derecha simplificadas -->
+            <StackPanel Grid.Column="1" 
+                        Orientation="Horizontal" 
+                        VerticalAlignment="Center">
                 
-                <!-- Grupo: Selección por Estantería -->
-                <Border BorderBrush="{StaticResource BrushInputBorde}" 
-                        BorderThickness="1" 
-                        CornerRadius="4" 
-                        Padding="8,4" 
-                        Margin="0,0,8,0"
-                        Background="#F5F5F5">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Estantería:" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11"/>
-                        <ComboBox ItemsSource="{Binding EstanteriasDisponibles}"
-                                  SelectedItem="{Binding EstanteriaSeleccionada}"
-                                  Width="80"
-                                  Style="{StaticResource ComboEstiloPrincipal}"
-                                  Margin="0,0,6,0"/>
-                        <Button Content="Seleccionar"
-                                Style="{StaticResource EstiloBotonPrincipal}"
-                                Command="{Binding SeleccionarPorEstanteriaCommand}"
-                                CommandParameter="{Binding EstanteriaSeleccionada}"
-                                Padding="6,2"
-                                FontSize="11"/>
-                    </StackPanel>
-                </Border>
-                
-                <!-- Grupo: Selección por Altura -->
-                <Border BorderBrush="{StaticResource BrushInputBorde}" 
-                        BorderThickness="1" 
-                        CornerRadius="4" 
-                        Padding="8,4" 
-                        Margin="0,0,8,0"
-                        Background="#F5F5F5">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Altura:" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11"/>
-                        <ComboBox ItemsSource="{Binding AlturasDisponibles}"
-                                  SelectedItem="{Binding AlturaSeleccionada}"
-                                  Width="80"
-                                  Style="{StaticResource ComboEstiloPrincipal}"
-                                  Margin="0,0,6,0"/>
-                        <Button Content="Seleccionar"
-                                Style="{StaticResource EstiloBotonPrincipal}"
-                                Command="{Binding SeleccionarPorAlturaCommand}"
-                                CommandParameter="{Binding AlturaSeleccionada}"
-                                Padding="6,2"
-                                FontSize="11"/>
-                    </StackPanel>
-                </Border>
-                
-                <!-- Botón para limpiar filtros -->
-                <Button Content="Limpiar filtros"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding LimpiarFiltrosCommand}"
-                        Padding="8,4"
-                        Margin="0,0,8,0"
-                        ToolTip="Limpiar todos los filtros de selección"/>
-                
-                <!-- Grupo: Acciones de selección -->
-                <Button Content="Todo"
+                <!-- Botones de acción -->
+                <Button Content="Seleccionar todo"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding SeleccionarTodoCommand}"
-                        Padding="8,4"
-                        Margin="0,0,4,0"
-                        ToolTip="Seleccionar todas las ubicaciones visibles"/>
-                <Button Content="Ninguna"
+                        Height="32" 
+                        Padding="8,0"
+                        Margin="0,0,6,0"/>
+                <Button Content="Limpiar selección"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding LimpiarSeleccionCommand}"
-                        Padding="8,4"
-                        Margin="0,0,8,0"
-                        ToolTip="Limpiar selección"/>
-                
-                <!-- Grupo: Acciones masivas -->
-                <Button Content="Editar seleccionadas"
-                        Style="{StaticResource EstiloBotonPrincipal}"
-                        Command="{Binding EditarSeleccionadasCommand}"
-                        Padding="8,4"
-                        Margin="0,0,4,0"
-                        IsEnabled="{Binding HaySeleccion}"
-                        ToolTip="Editar múltiples ubicaciones simultáneamente"/>
+                        Height="32" 
+                        Padding="8,0"
+                        Margin="0,0,6,0"
+                        IsEnabled="{Binding HaySeleccion}"/>
                 <Button Content="Imprimir"
                         Style="{StaticResource EstiloBotonPrincipal}"
                         Command="{Binding ImprimirSeleccionadasCommand}"
-                        Padding="8,4"
-                        IsEnabled="{Binding HaySeleccion}"
-                        ToolTip="Imprimir etiquetas de ubicaciones seleccionadas"/>
+                        Height="32" 
+                        Padding="8,0"
+                        IsEnabled="{Binding HaySeleccion}"/>
             </StackPanel>
         </Grid>
     </Grid>

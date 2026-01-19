@@ -644,164 +644,58 @@
                 Visibility="{Binding MostrandoSupervision, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid Margin="10">
                     <Grid.RowDefinitions>
-                        <!-- 0: Header con estadísticas -->
+                        <!-- 0: Indicador de filtros y botones -->
                         <RowDefinition Height="Auto" />
-                        <!-- 1: Filtros y controles -->
-                        <RowDefinition Height="Auto" />
-                        <!-- 2: Lista de resultados -->
+                        <!-- 1: Lista de resultados -->
                         <RowDefinition Height="*" />
-                        <!-- 3: Panel de acciones - ELIMINAR ESTA FILA -->
                     </Grid.RowDefinitions>
 
-                    <!-- HEADER CON ESTADÍSTICAS -->
-                    <Border Grid.Row="0" 
-                            Background="{StaticResource BrushPrincipal}" 
-                            Padding="15,10"
-                            Margin="0,0,0,12"
-                            CornerRadius="5">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="🔍 SUPERVISIÓN DE CONTEOS" 
-                                           FontSize="16" 
-                                           FontWeight="Bold" 
-                                           Foreground="White"/>
-                                <TextBlock Text="{Binding EmpresaActual}" 
-                                           FontSize="11" 
-                                           Foreground="White" 
-                                           Opacity="0.8"/>
-                            </StackPanel>
+                    <!-- INDICADOR DE FILTROS Y BOTONES -->
+                    <Grid Grid.Row="0" Margin="0,0,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Border Background="White" 
-                                        CornerRadius="12" 
-                                        Padding="10,6" 
-                                        Margin="0,0,8,0">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="📊" FontSize="14" Margin="0,0,6,0"/>
-                                        <TextBlock Text="{Binding TotalResultados}" 
-                                                   FontWeight="Bold" 
-                                                   FontSize="12" 
-                                                   Foreground="{StaticResource BrushPrincipal}"/>
-                                        <TextBlock Text=" Total" 
-                                                   FontSize="10" 
-                                                   Foreground="{StaticResource BrushSecundario}"/>
-                                    </StackPanel>
-                                </Border>
+                        <!-- Indicador de filtros activos -->
+                        <Border Grid.Column="0" 
+                                Background="#E8F4FD" 
+                                BorderBrush="#3498DB" 
+                                BorderThickness="1" 
+                                CornerRadius="5" 
+                                Padding="10,6"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Left"
+                                Visibility="{Binding TieneFiltrosActivosSupervision, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding ResumenFiltrosActivosSupervision, Mode=OneWay}" 
+                                       FontSize="11" 
+                                       Foreground="#2980B9"
+                                       TextWrapping="Wrap"/>
+                        </Border>
 
-                                <Border Background="Orange" 
-                                        CornerRadius="12" 
-                                        Padding="10,6">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⚠️" FontSize="14" Margin="0,0,6,0"/>
-                                        <TextBlock Text="{Binding ResultadosPendientes}" 
-                                                   FontWeight="Bold" 
-                                                   FontSize="12" 
-                                                   Foreground="White"/>
-                                        <TextBlock Text=" Pendientes" 
-                                                   FontSize="10" 
-                                                   Foreground="White"/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <!-- FILTROS Y CONTROLES SUPERVISIÓN -->
-                    <Border Grid.Row="1" 
-                            Background="White" 
-                            BorderBrush="{StaticResource BrushSecundario}" 
-                            BorderThickness="1" 
-                            CornerRadius="5" 
-                            Padding="10" 
-                            Margin="0,0,0,12">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Filtro Artículo -->
-                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                <TextBlock Text="Filtrar por Artículo" FontWeight="Bold" Margin="0,0,0,3" FontSize="11"/>
-                                <TextBox Text="{Binding FiltroArticuloSupervision, UpdateSourceTrigger=PropertyChanged}"
-                                         Height="30"
-                                         FontSize="12"
-                                         Padding="8"
-                                         IsEnabled="{Binding CanEnableInputs}"/>
-                            </StackPanel>
-
-                            <!-- Filtro Almacén -->
-                            <StackPanel Grid.Column="1" Margin="8,0,8,0">
-                                <TextBlock Text="Filtrar por Almacén" FontWeight="Bold" Margin="0,0,0,3" FontSize="11"/>
-                                <TextBox Text="{Binding FiltroAlmacenSupervision, UpdateSourceTrigger=PropertyChanged}"
-                                         Height="30"
-                                         FontSize="12"
-                                         Padding="8"
-                                         IsEnabled="{Binding CanEnableInputs}"/>
-                            </StackPanel>
-
-                            <!-- Operario Aprobador -->
-                            <StackPanel Grid.Column="2" Margin="8,0,8,0">
-                                <TextBlock Text="Operario Aprobador" FontWeight="Bold" Margin="0,0,0,3" FontSize="11"/>
-                                <ComboBox ItemsSource="{Binding OperariosDisponiblesView}"
-                                          DisplayMemberPath="NombreOperario"
-                                          SelectedItem="{Binding OperarioAprobadorSeleccionado}"
-                                          Text="{Binding FiltroOperariosDisponibles, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Height="30"
-                                          FontSize="12"
-                                          Padding="8"
-                                          IsEnabled="{Binding CanEnableInputs}"
-                                          IsEditable="True"
-                                          IsTextSearchEnabled="False"
-                                          StaysOpenOnEdit="True"
-                                          IsDropDownOpen="{Binding IsDropDownOpenDisponibles}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="GotFocus">
-                                            <i:InvokeCommandAction Command="{Binding AbrirDropDownDisponiblesCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="SelectionChanged">
-                                            <i:InvokeCommandAction Command="{Binding CerrarDropDownDisponiblesCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                    <ComboBox.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel/>
-                                        </ItemsPanelTemplate>
-                                    </ComboBox.ItemsPanel>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <!-- Botones -->
-                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom">
-                                <Button Content="🔄 Actualizar"
-                                        Command="{Binding CargarResultadosSupervisionCommand}"
-                                        Style="{StaticResource EstiloBotonPrincipal}"
-                                        Width="100"
-                                        Height="30"
-                                        FontSize="10"
-                                        Margin="0,0,8,0"
-                                        IsEnabled="{Binding CanEnableInputs}"/>
-                                
-                                <Button Content="🧹 Limpiar"
-                                        Command="{Binding LimpiarFiltrosSupervisionCommand}"
-                                        Style="{StaticResource EstiloBotonSecundario}"
-                                        Width="80"
-                                        Height="30"
-                                        FontSize="10"
-                                        IsEnabled="{Binding CanEnableInputs}"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                        <!-- Botones -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="🔍 Filtros"
+                                    Command="{Binding AbrirFiltrosSupervisionCommand}"
+                                    Style="{StaticResource EstiloBotonSecundario}"
+                                    Width="110"
+                                    Height="32"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    Margin="0,0,10,0"/>
+                            <Button Content="🔄 Recargar"
+                                    Command="{Binding CargarResultadosSupervisionCommand}"
+                                    Style="{StaticResource EstiloBotonPrincipal}"
+                                    Width="110"
+                                    Height="32"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    IsEnabled="{Binding CanEnableInputs}"/>
+                        </StackPanel>
+                    </Grid>
 
                     <!-- LISTA DE RESULTADOS SUPERVISIÓN -->
-                    <GroupBox Grid.Row="2" Header="🔍 Resultados de Supervisión" Margin="0,0,0,8">
+                    <GroupBox Grid.Row="1" Header="🔍 Resultados de Supervisión" Margin="0,0,0,8">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -832,7 +726,7 @@
                                         <DataTemplate>
                                             <Border Style="{StaticResource EstiloTarjeta}" 
                                 Width="400" 
-                                Height="280" 
+                                Height="320" 
                                 Margin="6"
                                 Cursor="Hand">
                             <Grid>
@@ -1051,7 +945,8 @@
                                                    Foreground="#7F8C8D"/>
                                     </Grid>
 
-                                    <Grid>
+                                    <!-- Operario y Creado por -->
+                                    <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
@@ -1061,9 +956,24 @@
                                                    FontWeight="SemiBold" 
                                                    FontSize="11"
                                                    Foreground="#7F8C8D"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding UsuarioCodigo}" 
+                                        <TextBlock Grid.Column="1" Text="{Binding OperarioDisplay, Mode=OneWay}" 
+                                                   FontSize="11"
+                                                   Foreground="#34495E"/>
+                                    </Grid>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="Creado por: " 
+                                                   FontWeight="SemiBold" 
                                                    FontSize="11"
                                                    Foreground="#7F8C8D"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding CreadorDisplay, Mode=OneWay}" 
+                                                   FontSize="11"
+                                                   Foreground="#34495E"/>
                                     </Grid>
                                 </StackPanel>
 
@@ -1116,15 +1026,44 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Header con botón recargar -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15" HorizontalAlignment="Right">
-                    <Button Content="🔄 Recargar"
-                            Command="{Binding CargarConteosPeriodicosCommand}"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                            Width="110"
-                            Height="32"
-                            Margin="0,0,10,0"/>
-                </StackPanel>
+                <!-- Header con botones -->
+                <Grid Grid.Row="0" Margin="0,0,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Indicador de filtros activos -->
+                    <Border Grid.Column="0" 
+                            Background="#E8F4FD" 
+                            BorderBrush="#3498DB" 
+                            BorderThickness="1" 
+                            CornerRadius="5" 
+                            Padding="10,6"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Left"
+                            Visibility="{Binding TieneFiltrosActivosPeriodicos, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding ResumenFiltrosActivosPeriodicos, Mode=OneWay}" 
+                                   FontSize="11" 
+                                   Foreground="#2980B9"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+                    
+                    <!-- Botones -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="🔍 Filtros"
+                                Command="{Binding AbrirFiltrosConteosPeriodicosCommand}"
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Width="110"
+                                Height="32"
+                                Margin="0,0,10,0"/>
+                        <Button Content="🔄 Recargar"
+                                Command="{Binding CargarConteosPeriodicosCommand}"
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                Width="110"
+                                Height="32"/>
+                    </StackPanel>
+                </Grid>
 
                 <!-- Lista de conteos periódicos -->
                 <GroupBox Grid.Row="1" Header="🔄 Conteos Periódicos Registrados" Margin="0,0,0,8">
@@ -1233,7 +1172,7 @@
                                                     </TextBlock>
                                                     <TextBlock Margin="0,2,0,0" Visibility="{Binding CodigoOperario, Converter={StaticResource StringToVisibilityConverter}}">
                                                         <Run Text="Operario: " FontWeight="SemiBold"/>
-                                                        <Run Text="{Binding CodigoOperario}"/>
+                                                        <Run Text="{Binding OperarioDisplay, Mode=OneWay}"/>
                                                     </TextBlock>
                                                     <TextBlock Margin="0,2,0,0" Visibility="{Binding CodigoAlmacen, Converter={StaticResource StringToVisibilityConverter}}">
                                                         <Run Text="Almacén: " FontWeight="SemiBold"/>
@@ -1245,7 +1184,7 @@
                                                     </TextBlock>
                                                     <TextBlock Margin="0,2,0,0">
                                                         <Run Text="Creado por: " FontWeight="SemiBold"/>
-                                                        <Run Text="{Binding CreadoPorCodigo}"/>
+                                                        <Run Text="{Binding CreadorDisplay, Mode=OneWay}"/>
                                                     </TextBlock>
                                                     <TextBlock Margin="0,2,0,0">
                                                         <Run Text="Prioridad: " FontWeight="SemiBold"/>

@@ -273,12 +273,12 @@ namespace SGA_Api.Controllers.Login
                     })
                     .ToListAsync();
 
-                // Obtener almacenes con descripción y nombre de empresa
+                // Obtener almacenes con descripción y nombre de empresa (de todas las empresas)
                 var almacenes = await (from oa in _context.OperariosAlmacenes
                                        join a in _context.Almacenes on new { oa.CodigoEmpresa, oa.CodigoAlmacen }
                                            equals new { CodigoEmpresa = (short)a.CodigoEmpresa, a.CodigoAlmacen }
                                        join e in _context.Empresas on oa.CodigoEmpresa equals e.CodigoEmpresa
-                                       where oa.Operario == id && oa.CodigoEmpresa == 1
+                                       where oa.Operario == id
                                        select new AlmacenOperarioDto
                                        {
                                            CodigoEmpresa = oa.CodigoEmpresa,
@@ -745,35 +745,40 @@ namespace SGA_Api.Controllers.Login
         {
             bool huboCambios = false;
 
-            // Obtener almacenes actuales del operario
+            // Obtener almacenes actuales del operario con CodigoEmpresa
             var almacenesActuales = await _context.OperariosAlmacenes
                 .Where(a => a.Operario == operarioId)
-                .Select(a => a.CodigoAlmacen ?? "")
+                .Select(a => new { a.CodigoEmpresa, CodigoAlmacen = a.CodigoAlmacen ?? "" })
                 .ToListAsync();
 
-            // Obtener códigos de almacenes deseados
+            // Crear conjunto de almacenes deseados con CodigoEmpresa + CodigoAlmacen
             var almacenesDeseados = asignar
-                .Select(a => a.CodigoAlmacen)
+                .Select(a => new { a.CodigoEmpresa, a.CodigoAlmacen })
                 .ToList();
 
             // Calcular qué almacenes quitar (están actuales pero no deseados)
             var almacenesAQuitar = almacenesActuales
-                .Where(actual => !almacenesDeseados.Contains(actual))
+                .Where(actual => !almacenesDeseados.Any(deseado => 
+                    deseado.CodigoEmpresa == actual.CodigoEmpresa && 
+                    deseado.CodigoAlmacen == actual.CodigoAlmacen))
                 .ToList();
 
             // Calcular qué almacenes agregar (están deseados pero no actuales)
             var almacenesAAgregar = almacenesDeseados
-                .Where(deseado => !almacenesActuales.Contains(deseado))
+                .Where(deseado => !almacenesActuales.Any(actual => 
+                    actual.CodigoEmpresa == deseado.CodigoEmpresa && 
+                    actual.CodigoAlmacen == deseado.CodigoAlmacen))
                 .ToList();
 
             // Quitar almacenes que ya no son necesarios
             if (almacenesAQuitar.Any())
             {
-                // Usar consultas individuales para evitar problemas con Contains
-                foreach (var codigoAlmacen in almacenesAQuitar)
+                foreach (var almacenAQuitar in almacenesAQuitar)
                 {
                     var almacenesParaEliminar = await _context.OperariosAlmacenes
-                        .Where(a => a.Operario == operarioId && a.CodigoAlmacen == codigoAlmacen)
+                        .Where(a => a.Operario == operarioId && 
+                                   a.CodigoEmpresa == almacenAQuitar.CodigoEmpresa && 
+                                   a.CodigoAlmacen == almacenAQuitar.CodigoAlmacen)
                         .ToListAsync();
 
                     if (almacenesParaEliminar.Any())
@@ -788,11 +793,11 @@ namespace SGA_Api.Controllers.Login
             if (almacenesAAgregar.Any())
             {
                 var nuevosAlmacenes = almacenesAAgregar
-                    .Select(codigoAlmacen => new OperarioAlmacen
+                    .Select(a => new OperarioAlmacen
                     {
                         Operario = operarioId,
-                        CodigoEmpresa = 1, // Siempre 1 para SGA
-                        CodigoAlmacen = codigoAlmacen
+                        CodigoEmpresa = a.CodigoEmpresa,
+                        CodigoAlmacen = a.CodigoAlmacen
                     });
 
                 _context.OperariosAlmacenes.AddRange(nuevosAlmacenes);

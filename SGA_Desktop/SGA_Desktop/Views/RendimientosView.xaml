@@ -1343,40 +1343,271 @@
                 </ScrollViewer>
 
                 <!-- Artículos -->
-                <StackPanel VerticalAlignment="Center" 
-                            HorizontalAlignment="Center"
-                            Visibility="{Binding MostrandoArticulos, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <TextBlock Text="📋 Artículos Más Movidos" 
-                               FontSize="24" 
-                               FontWeight="Bold" 
-                               Foreground="{StaticResource BrushPrincipal}"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,10"/>
-                    <TextBlock Text="Esta sección mostrará:" 
-                               FontSize="14" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,5"/>
-                    <TextBlock Text="• Top N artículos por cantidad" 
-                               FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Top N artículos por frecuencia" 
-                               FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="• Rotación de artículos" 
-                               FontSize="12" 
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,20,0,0"/>
-                    <TextBlock Text="(Próximamente)" 
-                               FontSize="12" 
-                               FontStyle="Italic"
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Margin="0,10,0,0"/>
-                </StackPanel>
+                <Grid Visibility="{Binding MostrandoArticulos, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Encabezado -->
+                    <Border Grid.Row="0" 
+                            Background="{StaticResource BrushPrincipal}"
+                            CornerRadius="6" 
+                            Padding="15" 
+                            Margin="0,0,0,15">
+                        <TextBlock Text="📋 Análisis por Código de Familia" 
+                                   FontSize="18" 
+                                   FontWeight="Bold" 
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"/>
+                    </Border>
+                    
+                    <!-- Panel de Ordenación -->
+                    <Border Grid.Row="1" 
+                            Background="{StaticResource BrushPrincipal}"
+                            CornerRadius="6" 
+                            Padding="15" 
+                            Margin="0,0,0,15">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Column="0" 
+                                       Text="Ordenar por:" 
+                                       Foreground="White" 
+                                       VerticalAlignment="Center" 
+                                       Margin="0,0,10,0"
+                                       FontWeight="SemiBold"/>
+                            
+                            <ComboBox Grid.Column="1" 
+                                      SelectedValue="{Binding CriterioOrdenacionArticulos}"
+                                      SelectedValuePath="Tag"
+                                      Height="30"
+                                      VerticalContentAlignment="Center">
+                                <ComboBoxItem Content="Cantidad Traspasos" Tag="CantidadTraspasos"/>
+                                <ComboBoxItem Content="Unidades Totales" Tag="UnidadesTotales"/>
+                                <ComboBoxItem Content="Tiempo Promedio" Tag="TiempoPromedio"/>
+                                <ComboBoxItem Content="Eficiencia" Tag="Eficiencia"/>
+                                <ComboBoxItem Content="Almacenes Únicos" Tag="AlmacenesUnicos"/>
+                                <ComboBoxItem Content="Código de Familia" Tag="CodigoFamilia"/>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Tabla de Artículos -->
+                    <DataGrid Grid.Row="2"
+                              ItemsSource="{Binding Articulos}" 
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              GridLinesVisibility="All"
+                              HeadersVisibility="Column"
+                              SelectionMode="Single"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" 
+                                                Binding="{Binding Posicion}" 
+                                                Width="40"
+                                                CanUserResize="False">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Código de Familia" 
+                                                Binding="{Binding CodigoFamilia}" 
+                                                Width="*"
+                                                MinWidth="180">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Artículos Únicos" 
+                                                Binding="{Binding CantidadArticulosUnicos, StringFormat=N0}" 
+                                                Width="120">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Traspasos" 
+                                                Binding="{Binding CantidadTraspasos, StringFormat=N0}" 
+                                                Width="80">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Unidades Totales" 
+                                                Binding="{Binding UnidadesTotalesMovidas, StringFormat=N2}" 
+                                                Width="120">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Promedio Unid/Trasp." 
+                                                Binding="{Binding PromedioUnidadesPorTraspaso, StringFormat=N2}" 
+                                                Width="130">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Tiempo Prom. (min)" 
+                                                Binding="{Binding TiempoPromedioMinutos, StringFormat=F2}" 
+                                                Width="120">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Tiempo Total (min)" 
+                                                Binding="{Binding TiempoTotalMinutos, StringFormat=F2}" 
+                                                Width="120">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Eficiencia (unid/min)" 
+                                                Binding="{Binding EficienciaUnidadesPorMinuto, StringFormat=F2}" 
+                                                Width="140">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Almacenes" 
+                                                Binding="{Binding AlmacenesUnicos, StringFormat=N0}" 
+                                                Width="80">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Ubicaciones" 
+                                                Binding="{Binding UbicacionesUnicas, StringFormat=N0}" 
+                                                Width="90">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Operarios" 
+                                                Binding="{Binding OperariosUnicos, StringFormat=N0}" 
+                                                Width="80">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="% del Total" 
+                                                Binding="{Binding PorcentajeDelTotalTraspasos, StringFormat='{}{0:F2}%'}" 
+                                                Width="100">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="MinHeight" Value="35"/>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+                </Grid>
 
                 <!-- Eficiencia -->
                 <DataGrid ItemsSource="{Binding Procesos}" 

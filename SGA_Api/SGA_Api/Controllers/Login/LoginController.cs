@@ -122,6 +122,14 @@ namespace SGA_Api.Controllers.Login
                 await _auroraSgaContext.SaveChangesAsync(); // importante guardar aquí
             }
 
+            // Obtener el IdRol del usuario
+            var usuario = await _auroraSgaContext.Usuarios
+                .Where(u => u.IdUsuario == operario.Id)
+                .Select(u => new { u.IdRol })
+                .FirstOrDefaultAsync();
+
+            var idRol = usuario?.IdRol;
+
 			//Permisos de Empresa
 			// Permisos de Empresa  (DESPUÉS)
 		var empresas = await _context.OperariosEmpresas
@@ -142,7 +150,8 @@ namespace SGA_Api.Controllers.Login
                 CodigosAlmacen = almacenes,
                 Empresas = empresas,
                 CodigoCentro = operario.CodigoCentro,
-                Token = nuevoToken 
+                Token = nuevoToken,
+                IdRol = idRol
             });
 
         }

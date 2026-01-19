@@ -138,16 +138,16 @@ namespace SGA_Api.Controllers.Login
                 }).ToList(),
                 Almacenes = configuracion.Almacenes.Select(a => new Models.Login.AlmacenConfiguracionDto
                 {
+                    CodigoEmpresa = a.CodigoEmpresa,
                     CodigoAlmacen = a.CodigoAlmacen,
                     Descripcion = _sageContext.Almacenes
-                        .Where(alm => alm.CodigoAlmacen == a.CodigoAlmacen && alm.CodigoEmpresa == 1)
+                        .Where(alm => alm.CodigoAlmacen == a.CodigoAlmacen && alm.CodigoEmpresa == a.CodigoEmpresa)
                         .Select(alm => alm.Almacen)
                         .FirstOrDefault() ?? $"Almacén {a.CodigoAlmacen}",
-                    CodigoEmpresa = 1,
                     NombreEmpresa = _sageContext.Empresas
-                        .Where(emp => emp.CodigoEmpresa == 1)
+                        .Where(emp => emp.CodigoEmpresa == a.CodigoEmpresa)
                         .Select(emp => emp.EmpresaNombre)
-                        .FirstOrDefault() ?? "Empresa 1"
+                        .FirstOrDefault() ?? $"Empresa {a.CodigoEmpresa}"
                 }).ToList()
             };
 
@@ -209,7 +209,8 @@ namespace SGA_Api.Controllers.Login
                     _auroraContext.ConfiguracionesPredefinidasAlmacenes.Add(new ConfiguracionPredefinidaAlmacen
                     {
                         ConfiguracionId = configuracion.Id,
-                        CodigoAlmacen = almacen
+                        CodigoEmpresa = almacen.CodigoEmpresa,
+                        CodigoAlmacen = almacen.CodigoAlmacen
                     });
                 }
 
@@ -313,7 +314,8 @@ namespace SGA_Api.Controllers.Login
                     _auroraContext.ConfiguracionesPredefinidasAlmacenes.Add(new ConfiguracionPredefinidaAlmacen
                     {
                         ConfiguracionId = configuracion.Id,
-                        CodigoAlmacen = almacen
+                        CodigoEmpresa = almacen.CodigoEmpresa,
+                        CodigoAlmacen = almacen.CodigoAlmacen
                     });
                 }
 
@@ -586,12 +588,12 @@ namespace SGA_Api.Controllers.Login
                     });
                 }
 
-                // Aplicar almacenes
+                // Aplicar almacenes (usar CodigoEmpresa de la plantilla)
                 foreach (var almacen in configuracion.Almacenes)
                 {
                     _sageContext.OperariosAlmacenes.Add(new OperarioAlmacen
                     {
-                        CodigoEmpresa = 1,
+                        CodigoEmpresa = almacen.CodigoEmpresa,
                         Operario = dto.OperarioId,
                         CodigoAlmacen = almacen.CodigoAlmacen
                     });
@@ -758,11 +760,17 @@ namespace SGA_Api.Controllers.Login
                 .Where(a => a.Operario == operarioId)
                 .ToListAsync();
 
-            var codigosAlmacenesPlantilla = configuracion.Almacenes.Select(a => a.CodigoAlmacen).ToList();
+            // Crear conjunto de almacenes de la plantilla con CodigoEmpresa + CodigoAlmacen
+            // Ahora la plantilla ya tiene CodigoEmpresa guardado, no necesitamos inferirlo
+            var almacenesPlantilla = configuracion.Almacenes
+                .Select(a => (CodigoEmpresa: a.CodigoEmpresa, CodigoAlmacen: a.CodigoAlmacen))
+                .ToList();
 
-            // Eliminar almacenes que ya no están en la plantilla
+            // Eliminar almacenes que ya no están en la plantilla (comparar por CodigoEmpresa + CodigoAlmacen)
             var almacenesAEliminar = almacenesActuales
-                .Where(a => !codigosAlmacenesPlantilla.Contains(a.CodigoAlmacen))
+                .Where(a => !almacenesPlantilla.Any(p => 
+                    p.CodigoEmpresa == a.CodigoEmpresa && 
+                    p.CodigoAlmacen == a.CodigoAlmacen))
                 .ToList();
 
             foreach (var almacenAEliminar in almacenesAEliminar)
@@ -770,19 +778,20 @@ namespace SGA_Api.Controllers.Login
                 _sageContext.OperariosAlmacenes.Remove(almacenAEliminar);
             }
 
-            // Agregar almacenes nuevos de la plantilla
-            foreach (var almacen in configuracion.Almacenes)
+            // Agregar almacenes nuevos de la plantilla (comparar por CodigoEmpresa + CodigoAlmacen)
+            foreach (var (codigoEmpresa, codigoAlmacen) in almacenesPlantilla)
             {
                 var almacenExistente = almacenesActuales
-                    .FirstOrDefault(a => a.CodigoAlmacen == almacen.CodigoAlmacen);
+                    .FirstOrDefault(a => a.CodigoEmpresa == codigoEmpresa && 
+                                        a.CodigoAlmacen == codigoAlmacen);
 
                 if (almacenExistente == null)
                 {
                     _sageContext.OperariosAlmacenes.Add(new OperarioAlmacen
                     {
                         Operario = operarioId,
-                        CodigoAlmacen = almacen.CodigoAlmacen,
-                        CodigoEmpresa = 1 // SGA siempre usa empresa 1
+                        CodigoEmpresa = codigoEmpresa,
+                        CodigoAlmacen = codigoAlmacen
                     });
                 }
             }

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Mysqlx.Cursor;
@@ -447,10 +447,39 @@ public class PaletController : ControllerBase
 			const string digitoExtension = "1";
 			const string prefijoEmpresa = "8410191"; // Asegúrate que este es el tuyo
 
-			// Extraer número secuencial del código: PAL25-0000029 → "0000029"
-			string secuencia = codigoGenerado.Substring(codigoGenerado.LastIndexOf('-') + 1).PadLeft(9, '0');
+			// Extraer año y número secuencial del código: PAL25-0000029 → año="25", secuencia="0000029"
+			// Formato: PALYY-NNNNNNN donde YY es el año (2 dígitos) y NNNNNNN es el número secuencial
+			string ano = "";
+			string secuencia = "";
+			
+			int guionIndex = codigoGenerado.LastIndexOf('-');
+			if (guionIndex > 0)
+			{
+				// Extraer el año: PAL25 → "25"
+				string prefijo = codigoGenerado.Substring(0, guionIndex); // "PAL25"
+				if (prefijo.Length >= 5 && prefijo.StartsWith("PAL"))
+				{
+					ano = prefijo.Substring(3); // Extrae "25" de "PAL25"
+				}
+				
+				// Extraer número secuencial: "0000029"
+				secuencia = codigoGenerado.Substring(guionIndex + 1).PadLeft(7, '0');
+			}
+			else
+			{
+				// Fallback: si no hay guion, intentar extraer de otra forma
+				secuencia = codigoGenerado.PadLeft(7, '0');
+				ano = DateTime.Now.Year.ToString().Substring(2); // Año actual como fallback
+			}
 
-			string cuerpo = digitoExtension + prefijoEmpresa + secuencia; // 17 dígitos
+			// Si no se pudo extraer el año, usar año actual
+			if (string.IsNullOrEmpty(ano) || ano.Length != 2)
+			{
+				ano = DateTime.Now.Year.ToString().Substring(2);
+			}
+
+			// Cuerpo: 1 (extensión) + 7 (prefijo) + 2 (año) + 7 (secuencia) = 17 dígitos
+			string cuerpo = digitoExtension + prefijoEmpresa + ano + secuencia; // 17 dígitos
 
 			string codigoGS1 = cuerpo + CalcularDigitoControlGs1(cuerpo); // 18 dígitos
 
@@ -516,14 +545,6 @@ public class PaletController : ControllerBase
 	[HttpPost("{id}/lineas")]
 	public async Task<IActionResult> AnhadirLineaPalet(Guid id, [FromBody] LineaPaletCrearDto dto)
 	{
-		// 🟥 Verificar que el palet existe y está abierto
-		var palet = await _auroraSgaContext.Palets.FindAsync(id);
-		if (palet == null)
-			return NotFound("Palet no encontrado");
-
-		if (palet.Estado == "Cerrado")
-			return BadRequest("No se pueden añadir líneas a un palet cerrado.");
-
 		var ejercicio = await _sageContext.Periodos
 			.Where(p => p.CodigoEmpresa == dto.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
 			.OrderByDescending(p => p.Fechainicio)
@@ -533,11 +554,31 @@ public class PaletController : ControllerBase
 		if (ejercicio == 0)
 			return BadRequest("No se encontró ejercicio válido");
 
-		// 🟦 Aquí comienza la transacción
+		// 🟦 Aquí comienza la transacción PRIMERO para evitar condiciones de carrera
 		await using var transaction = await _auroraSgaContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
 
 		try
 		{
+			// 🔷 NUEVO: Validar el estado del palet DENTRO de la transacción para evitar condiciones de carrera
+			var palet = await _auroraSgaContext.Palets.FindAsync(id);
+			if (palet == null)
+			{
+				await transaction.RollbackAsync();
+				return NotFound("Palet no encontrado");
+			}
+
+			if (palet.Estado == "Cerrado")
+			{
+				await transaction.RollbackAsync();
+				return BadRequest("No se pueden añadir líneas a un palet cerrado.");
+			}
+
+			// 🔷 NUEVO: Validar que el palet no esté vaciado
+			if (string.Equals(palet.Estado, "Vaciado", StringComparison.OrdinalIgnoreCase))
+			{
+				await transaction.RollbackAsync();
+				return BadRequest("No se pueden añadir líneas a un palet vaciado.");
+			}
 		// 🔷 Leer stock actual dentro de la transacción
 		var stock = await _auroraSgaContext.StockDisponible
 			.FirstOrDefaultAsync(s =>
@@ -561,16 +602,40 @@ public class PaletController : ControllerBase
 		// SOLO buscar palet origen si Android lo especifica explícitamente
 		if (dto.PaletIdOrigen.HasValue && dto.PaletIdOrigen.Value != Guid.Empty)
 		{
-			paletOrigen = await _auroraSgaContext.PaletLineas
-				.Include(pl => pl.Palet)
-				.Where(pl =>
-					pl.PaletId == dto.PaletIdOrigen.Value &&
-					pl.CodigoArticulo == dto.CodigoArticulo &&
-					pl.CodigoAlmacen.Trim().ToUpper() == dto.CodigoAlmacen.Trim().ToUpper() &&
-					pl.Ubicacion.Trim().ToUpper() == dto.Ubicacion.Trim().ToUpper() &&
-					(pl.Lote ?? "") == loteNormalizado &&
-					pl.Cantidad >= dto.Cantidad)
-				.FirstOrDefaultAsync();
+			// 🔷 NUEVO: Validar que el palet origen no sea el mismo que el destino
+			// Si el origen y destino son el mismo, RECHAZAR la operación para evitar crear material de la nada
+			if (dto.PaletIdOrigen.Value == id)
+			{
+				await transaction.RollbackAsync();
+				_logger.LogError(
+					"🔴 ERROR CRÍTICO - AnhadirLineaPalet: Intento de agregar material desde un palet a sí mismo. " +
+					"PaletId={PaletId}, CodigoPalet={CodigoPalet}, Articulo={Articulo}, Cantidad={Cantidad}, UsuarioId={UsuarioId}, " +
+					"Almacen={Almacen}, Ubicacion={Ubicacion}. " +
+					"OPERACIÓN RECHAZADA para evitar crear material de la nada. " +
+					"Esto indica un problema en la aplicación Android que envía el mismo palet como origen y destino.",
+					dto.PaletIdOrigen.Value,
+					palet?.Codigo ?? "N/A",
+					dto.CodigoArticulo,
+					dto.Cantidad,
+					dto.UsuarioId,
+					dto.CodigoAlmacen,
+					dto.Ubicacion
+				);
+				return BadRequest("No se puede agregar material desde un palet a sí mismo. El palet origen y destino no pueden ser el mismo.");
+			}
+			else
+			{
+				paletOrigen = await _auroraSgaContext.PaletLineas
+					.Include(pl => pl.Palet)
+					.Where(pl =>
+						pl.PaletId == dto.PaletIdOrigen.Value &&
+						pl.CodigoArticulo == dto.CodigoArticulo &&
+						pl.CodigoAlmacen.Trim().ToUpper() == dto.CodigoAlmacen.Trim().ToUpper() &&
+						pl.Ubicacion.Trim().ToUpper() == dto.Ubicacion.Trim().ToUpper() &&
+						(pl.Lote ?? "") == loteNormalizado &&
+						pl.Cantidad >= dto.Cantidad)
+					.FirstOrDefaultAsync();
+			}
 		}
 		
 		if (paletOrigen != null)
@@ -1268,6 +1333,15 @@ public class PaletController : ControllerBase
 
 			foreach (var linea in lineasParaTraspaso)
 			{
+				// 🔷 NUEVO: Omitir líneas negativas al crear traspasos
+				// Las líneas negativas son compensatorias o de origen, no deben generar traspasos en el palet destino
+				// Esto evita crear traspasos negativos cuando el origen y destino son el mismo palet
+				if (linea.Cantidad <= 0)
+				{
+					_logger.LogInformation($"ℹ️ CerrarPalet: Omitiendo línea temporal negativa o cero. PaletId={palet.Id}, Articulo={linea.CodigoArticulo}, Cantidad={linea.Cantidad}, Observaciones={linea.Observaciones}");
+					continue; // Omitir esta línea, no crear traspaso
+				}
+
 				// 🔷 VALIDACIÓN 1: Verificar si la línea temporal ya tiene un traspaso asignado
 				if (linea.TraspasoId != null && linea.TraspasoId != Guid.Empty)
 				{
@@ -1539,8 +1613,19 @@ public class PaletController : ControllerBase
 	[HttpGet("by-gs1/{codigoGS1}", Name = "GetPaletByGS1")]
 	public async Task<ActionResult<PaletDto>> GetPaletByCodigoGS1(string codigoGS1)
 	{
+		// Priorizar palets no vaciados y operativos
+		// Primero busca palets que NO estén vaciados
 		var palet = await _auroraSgaContext.Palets
-			.FirstOrDefaultAsync(p => p.CodigoGS1 == codigoGS1);
+			.Where(p => p.CodigoGS1 == codigoGS1 && (p.IsVaciado == false || p.IsVaciado == null))
+			.OrderByDescending(p => p.FechaApertura) // Priorizar el más reciente
+			.FirstOrDefaultAsync();
+
+		// Si no encuentra ningún palet no vaciado, buscar cualquier palet con ese GS1 (por compatibilidad)
+		if (palet == null)
+		{
+			palet = await _auroraSgaContext.Palets
+				.FirstOrDefaultAsync(p => p.CodigoGS1 == codigoGS1);
+		}
 
 		if (palet == null)
 			return NotFound();
@@ -1800,6 +1885,15 @@ public class PaletController : ControllerBase
 		linea.CodigoAlmacen = codigoAlmacenLinea;
 		linea.Ubicacion = ubicacionLinea;
 
+		// 🔷 NUEVO: Omitir líneas negativas al crear traspasos
+		// Las líneas negativas son compensatorias o de origen, no deben generar traspasos en el palet destino
+		// Esto evita crear traspasos negativos cuando el origen y destino son el mismo palet
+		if (linea.Cantidad <= 0)
+		{
+			_logger.LogInformation($"ℹ️ CerrarPaletMobility: Omitiendo línea temporal negativa o cero. PaletId={palet.Id}, Articulo={linea.CodigoArticulo}, Cantidad={linea.Cantidad}, Observaciones={linea.Observaciones}");
+			continue; // Omitir esta línea, no crear traspaso
+		}
+
 		// 🔷 VALIDACIÓN 1: Verificar si la línea temporal ya tiene un traspaso asignado
 		if (linea.TraspasoId != null && linea.TraspasoId != Guid.Empty)
 		{
@@ -1951,6 +2045,20 @@ public class PaletController : ControllerBase
 
 		_auroraSgaContext.Traspasos.Update(traspaso);
 		await _auroraSgaContext.SaveChangesAsync();
+
+		// 🔷 REGISTRAR EVENTO: Determinar el tipo de evento según el tipo de traspaso
+		var tipoEvento = traspaso.TipoTraspaso == "PALET" ? "TRASPASO_PALET_FINALIZACION" : "TRASPASO_FINALIZACION";
+		var detalleFinalizacion = $"TraspasoId={traspaso.Id}, PaletId={traspaso.PaletId}, UsuarioFinalizacion={traspaso.UsuarioFinalizacionId}, AlmacenDestino={traspaso.AlmacenDestino}, UbicacionDestino={traspaso.UbicacionDestino}";
+		if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
+		{
+			detalleFinalizacion += $", Articulo={traspaso.CodigoArticulo}, Cantidad={traspaso.Cantidad}";
+		}
+		
+		RegistrarEventoTraspasoAsync(
+			tipoEvento,
+			"PaletController/CompletarTraspaso",
+			traspaso.TipoTraspaso == "PALET" ? "Finalización de traspaso de palet" : "Finalización de traspaso",
+			detalleFinalizacion);
 
 		return Ok(new { message = "Traspaso completado correctamente." });
 	}
@@ -2349,6 +2457,33 @@ public class RelanzarTraspasoDto
 							return; // Dispositivo no encontrado, no registramos evento
 						}
 
+						// 🔷 DEDUPLICACIÓN: Verificar si ya existe una consulta de stock del mismo usuario/dispositivo/artículo en los últimos 5 segundos
+						// Esto evita múltiples registros cuando la PDA hace varias llamadas API casi simultáneamente
+						var fechaLimite = DateTime.Now.AddSeconds(-5);
+						var articuloActual = ExtraerArticuloDelDetalle(detalleCapturado);
+						
+						var eventoReciente = await dbContext.LogEventos
+							.Where(e => e.IdUsuario == dispositivo.IdUsuario &&
+									   e.IdDispositivo == dispositivo.Id &&
+									   e.Tipo == "CONSULTA_STOCK" &&
+									   e.Fecha >= fechaLimite)
+							.OrderByDescending(e => e.Fecha)
+							.FirstOrDefaultAsync();
+
+						if (eventoReciente != null)
+						{
+							// Extraer artículo del detalle para comparar si es la misma consulta
+							var articuloReciente = ExtraerArticuloDelDetalle(eventoReciente.Detalle);
+							
+							// Si es el mismo artículo (o ambos están vacíos), es probablemente la misma acción del usuario
+							if (articuloActual == articuloReciente || (string.IsNullOrEmpty(articuloActual) && string.IsNullOrEmpty(articuloReciente)))
+							{
+								logger.LogInformation("⏭️ Evento duplicado detectado y omitido: {TipoConsulta}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}, Último evento: {FechaUltimo} ({OrigenUltimo})", 
+									tipoConsultaCapturado, dispositivo.IdUsuario, dispositivo.Id, eventoReciente.Fecha, eventoReciente.Origen);
+								return; // Ya existe un evento similar reciente, no registrar duplicado
+							}
+						}
+
 						var logEvento = new LogEvento
 						{
 							Fecha = DateTime.Now,
@@ -2395,6 +2530,183 @@ public class RelanzarTraspasoDto
 		{
 			_logger.LogError(ex, "❌ Error al capturar token para evento de consulta stock: {TipoConsulta}", tipoConsulta);
 		}
+	}
+
+	/// <summary>
+	/// Registra un evento de traspaso en log_eventos
+	/// </summary>
+	private void RegistrarEventoTraspasoAsync(string tipoEvento, string origen, string descripcion, string? detalle = null)
+	{
+		try
+		{
+			string? token = null;
+			try
+			{
+				if (Request?.Headers != null &&
+					Request.Headers.TryGetValue("Authorization", out var authHeader) &&
+					authHeader.ToString().StartsWith("Bearer "))
+				{
+					token = authHeader.ToString().Substring("Bearer ".Length).Trim();
+					_logger.LogInformation("✅ Token capturado para evento de traspaso: {Origen}", origen);
+				}
+				else
+				{
+					_logger.LogWarning("⚠️ No se encontró header Authorization para evento de traspaso: {Origen}", origen);
+				}
+			}
+			catch (ObjectDisposedException)
+			{
+				_logger.LogWarning("⚠️ Request ya fue liberado, no se puede registrar evento de traspaso: {Origen}", origen);
+				return;
+			}
+
+			if (string.IsNullOrWhiteSpace(token))
+			{
+				_logger.LogWarning("⚠️ No se pudo obtener el token para registrar evento de traspaso: {Origen}", origen);
+				return;
+			}
+
+			var tokenCapturado = token;
+			var tipoEventoCapturado = tipoEvento;
+			var origenCapturado = origen;
+			var descripcionCapturada = descripcion;
+			var detalleCapturado = detalle;
+
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					if (_serviceProvider == null)
+						return;
+
+					IServiceScope? scope = null;
+					try
+					{
+						scope = _serviceProvider.CreateScope();
+					}
+					catch (ObjectDisposedException)
+					{
+						return;
+					}
+
+					using (scope)
+					{
+						var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+						var logger = scope.ServiceProvider.GetRequiredService<ILogger<PaletController>>();
+
+						var dispositivo = await dbContext.Dispositivos
+							.FirstOrDefaultAsync(d => d.SessionToken == tokenCapturado && d.Activo == -1);
+
+						if (dispositivo == null)
+						{
+							logger.LogWarning("⚠️ Dispositivo no encontrado para token al registrar evento de traspaso: {Origen}", origenCapturado);
+							return;
+						}
+
+						// 🔷 DEDUPLICACIÓN: Verificar si ya existe un evento de traspaso del mismo tipo/usuario/dispositivo/identificador en los últimos 5 segundos
+						// Esto evita múltiples registros cuando la PDA hace varias llamadas API casi simultáneamente
+						var fechaLimite = DateTime.Now.AddSeconds(-5);
+						var identificadorActual = ExtraerIdentificadorDelDetalle(detalleCapturado);
+						
+						var eventoReciente = await dbContext.LogEventos
+							.Where(e => e.IdUsuario == dispositivo.IdUsuario &&
+									   e.IdDispositivo == dispositivo.Id &&
+									   e.Tipo == tipoEventoCapturado &&
+									   e.Fecha >= fechaLimite)
+							.OrderByDescending(e => e.Fecha)
+							.FirstOrDefaultAsync();
+
+						if (eventoReciente != null)
+						{
+							// Extraer identificador del detalle para comparar si es la misma acción
+							var identificadorReciente = ExtraerIdentificadorDelDetalle(eventoReciente.Detalle);
+							
+							// Si es el mismo identificador (TraspasoId o PaletId), es probablemente la misma acción del usuario
+							if (identificadorActual == identificadorReciente || (string.IsNullOrEmpty(identificadorActual) && string.IsNullOrEmpty(identificadorReciente)))
+							{
+								logger.LogInformation("⏭️ Evento de traspaso duplicado detectado y omitido: {TipoEvento}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}, Último evento: {FechaUltimo} ({OrigenUltimo})", 
+									tipoEventoCapturado, dispositivo.IdUsuario, dispositivo.Id, eventoReciente.Fecha, eventoReciente.Origen);
+								return; // Ya existe un evento similar reciente, no registrar duplicado
+							}
+						}
+
+						var logEvento = new LogEvento
+						{
+							Fecha = DateTime.Now,
+							IdUsuario = dispositivo.IdUsuario,
+							IdDispositivo = dispositivo.Id,
+							Tipo = tipoEventoCapturado,
+							Origen = origenCapturado,
+							Descripcion = descripcionCapturada,
+							Detalle = detalleCapturado
+						};
+
+						dbContext.LogEventos.Add(logEvento);
+						await dbContext.SaveChangesAsync();
+
+						logger.LogInformation("✅ Evento de traspaso registrado: {Origen}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}",
+							origenCapturado, dispositivo.IdUsuario, dispositivo.Id);
+					}
+				}
+				catch (ObjectDisposedException)
+				{
+					return;
+				}
+				catch (Exception ex)
+				{
+					try
+					{
+						if (_serviceProvider != null)
+						{
+							using var scope = _serviceProvider.CreateScope();
+							var logger = scope.ServiceProvider.GetRequiredService<ILogger<PaletController>>();
+							logger.LogError(ex, "❌ Error al registrar evento de traspaso: {Origen}", origenCapturado);
+						}
+					}
+					catch
+					{
+						// Ignorar errores secundarios de logging
+					}
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "❌ Error al capturar token para evento de traspaso: {Origen}", origen);
+		}
+	}
+
+	/// <summary>
+	/// Extrae el identificador (TraspasoId o PaletId) del detalle de un evento para comparación de duplicados
+	/// </summary>
+	private string? ExtraerIdentificadorDelDetalle(string? detalle)
+	{
+		if (string.IsNullOrWhiteSpace(detalle))
+			return null;
+
+		// Buscar TraspasoId primero (más específico)
+		var patronTraspasoId = "TraspasoId=";
+		var indiceTraspasoId = detalle.IndexOf(patronTraspasoId, StringComparison.OrdinalIgnoreCase);
+		if (indiceTraspasoId >= 0)
+		{
+			var inicio = indiceTraspasoId + patronTraspasoId.Length;
+			var fin = detalle.IndexOf(',', inicio);
+			if (fin < 0) fin = detalle.Length;
+			return detalle.Substring(inicio, fin - inicio).Trim();
+		}
+
+		// Si no hay TraspasoId, buscar PaletId
+		var patronPaletId = "PaletId=";
+		var indicePaletId = detalle.IndexOf(patronPaletId, StringComparison.OrdinalIgnoreCase);
+		if (indicePaletId >= 0)
+		{
+			var inicio = indicePaletId + patronPaletId.Length;
+			var fin = detalle.IndexOf(',', inicio);
+			if (fin < 0) fin = detalle.Length;
+			return detalle.Substring(inicio, fin - inicio).Trim();
+		}
+
+		return null;
 	}
 
 	private static string BuildStockKey(short codigoEmpresa, string codigoArticulo, string codigoAlmacen, string? ubicacion, string? partida)
@@ -2757,5 +3069,29 @@ public class RelanzarTraspasoDto
 		}
 	}
 	#endregion
+
+	/// <summary>
+	/// Extrae el código de artículo del detalle de un evento para comparación de duplicados
+	/// </summary>
+	private string? ExtraerArticuloDelDetalle(string? detalle)
+	{
+		if (string.IsNullOrWhiteSpace(detalle))
+			return null;
+
+		// Buscar patrones como "Articulo=13286" o "CodigoArticulo=13286"
+		var patrones = new[] { "Articulo=", "CodigoArticulo=" };
+		foreach (var patron in patrones)
+		{
+			var indice = detalle.IndexOf(patron, StringComparison.OrdinalIgnoreCase);
+			if (indice >= 0)
+			{
+				var inicio = indice + patron.Length;
+				var fin = detalle.IndexOf(',', inicio);
+				if (fin < 0) fin = detalle.Length;
+				return detalle.Substring(inicio, fin - inicio).Trim();
+			}
+		}
+		return null;
+	}
 
 }

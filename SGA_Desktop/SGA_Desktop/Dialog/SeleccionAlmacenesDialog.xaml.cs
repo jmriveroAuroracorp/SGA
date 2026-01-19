@@ -17,7 +17,7 @@ namespace SGA_Desktop.Dialog
         private readonly List<AlmacenConfiguracionDto> _todosLosAlmacenes;
         private readonly ObservableCollection<AlmacenOperarioDto> _almacenesYaAsignados;
         private readonly ObservableCollection<AlmacenSeleccionDto> _almacenesFiltrados;
-        private readonly Dictionary<string, bool> _estadoSeleccionGlobal; // Mantener estado de selección global
+        private readonly Dictionary<(short CodigoEmpresa, string CodigoAlmacen), bool> _estadoSeleccionGlobal; // Mantener estado de selección global
 
         public List<AlmacenOperarioDto> AlmacenesSeleccionados { get; private set; }
 
@@ -30,7 +30,7 @@ namespace SGA_Desktop.Dialog
             _todosLosAlmacenes = todosLosAlmacenes ?? new List<AlmacenConfiguracionDto>();
             _almacenesYaAsignados = almacenesYaAsignados ?? new ObservableCollection<AlmacenOperarioDto>();
             _almacenesFiltrados = new ObservableCollection<AlmacenSeleccionDto>();
-            _estadoSeleccionGlobal = new Dictionary<string, bool>();
+            _estadoSeleccionGlobal = new Dictionary<(short CodigoEmpresa, string CodigoAlmacen), bool>();
             
             AlmacenesSeleccionados = new List<AlmacenOperarioDto>();
             
@@ -96,7 +96,7 @@ namespace SGA_Desktop.Dialog
                 // Inicializar estado global con los almacenes ya asignados
                 foreach (var almacen in _almacenesYaAsignados)
                 {
-                    _estadoSeleccionGlobal[almacen.CodigoAlmacen] = true;
+                    _estadoSeleccionGlobal[(almacen.CodigoEmpresa, almacen.CodigoAlmacen)] = true;
                 }
             }
             
@@ -134,15 +134,17 @@ namespace SGA_Desktop.Dialog
             {
                 var almacenSeleccion = new AlmacenSeleccionDto
                 {
+                    CodigoEmpresa = almacen.CodigoEmpresa,
                     CodigoAlmacen = almacen.CodigoAlmacen,
                     Descripcion = almacen.Descripcion,
                     NombreEmpresa = almacen.NombreEmpresa,
-                    IsSelected = _estadoSeleccionGlobal.ContainsKey(almacen.CodigoAlmacen) && _estadoSeleccionGlobal[almacen.CodigoAlmacen]
+                    IsSelected = _estadoSeleccionGlobal.ContainsKey((almacen.CodigoEmpresa, almacen.CodigoAlmacen)) && 
+                                _estadoSeleccionGlobal[(almacen.CodigoEmpresa, almacen.CodigoAlmacen)]
                 };
                 
                 // Suscribirse al evento de cambio de selección
                 almacenSeleccion.OnSelectionChanged += (sender) => {
-                    _estadoSeleccionGlobal[sender.CodigoAlmacen] = sender.IsSelected;
+                    _estadoSeleccionGlobal[(sender.CodigoEmpresa, sender.CodigoAlmacen)] = sender.IsSelected;
                     ActualizarResumenSeleccion();
                 };
                 
@@ -238,13 +240,15 @@ namespace SGA_Desktop.Dialog
                 // Usar el estado global en lugar de solo los elementos filtrados
                 foreach (var kvp in _estadoSeleccionGlobal.Where(kvp => kvp.Value))
                 {
-                    var codigoAlmacen = kvp.Key;
-                    var almacenOriginal = _todosLosAlmacenes.FirstOrDefault(a => a.CodigoAlmacen == codigoAlmacen);
+                    var (codigoEmpresa, codigoAlmacen) = kvp.Key;
+                    var almacenOriginal = _todosLosAlmacenes.FirstOrDefault(a => 
+                        a.CodigoEmpresa == codigoEmpresa && a.CodigoAlmacen == codigoAlmacen);
                     
                     if (almacenOriginal != null)
                     {
                         var almacenOperario = new AlmacenOperarioDto
                         {
+                            CodigoEmpresa = almacenOriginal.CodigoEmpresa,
                             CodigoAlmacen = almacenOriginal.CodigoAlmacen,
                             DescripcionAlmacen = almacenOriginal.Descripcion,
                             NombreEmpresa = almacenOriginal.NombreEmpresa
@@ -281,6 +285,7 @@ namespace SGA_Desktop.Dialog
     {
         private bool _isSelected;
         
+        public short CodigoEmpresa { get; set; }
         public string CodigoAlmacen { get; set; } = string.Empty;
         public string Descripcion { get; set; } = string.Empty;
         public string NombreEmpresa { get; set; } = string.Empty;

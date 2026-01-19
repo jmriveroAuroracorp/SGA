@@ -27,11 +27,33 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private DateTime? fechaHasta;
         [ObservableProperty] private string codigoArticulo = "";
         [ObservableProperty] private string codigoLote = "";
+        [ObservableProperty] private string codigoPalet = "";
+        [ObservableProperty] private string filtroObservaciones = "";
         [ObservableProperty] private AlmacenDto? almacenOrigenSeleccionado;
         [ObservableProperty] private AlmacenDto? almacenDestinoSeleccionado;
         [ObservableProperty] private EstadoTraspasoDto? estadoSeleccionado;
         [ObservableProperty] private OperariosAccesoDto? operarioSeleccionado;
         [ObservableProperty] private bool estaCargando = false;
+        [ObservableProperty] private bool verTodasLasEmpresas = false;
+        [ObservableProperty] private EmpresaDto? empresaFiltroSeleccionada;
+        
+        // Filtros específicos de ajustes
+        [ObservableProperty] private OrigenAjusteDto? origenSeleccionado;
+        public ObservableCollection<OrigenAjusteDto> Origenes { get; } = new();
+
+        // Propiedad para mostrar el checkbox solo a admins
+        public bool PuedeVerTodasLasEmpresas
+        {
+            get
+            {
+                var esAdmin = SessionManager.EsAdmin;
+                System.Diagnostics.Debug.WriteLine($"[TraspasoHistoricoDialog] PuedeVerTodasLasEmpresas: {esAdmin}, IdRol: {SessionManager.UsuarioActual?.idRol}, Operario: {SessionManager.UsuarioActual?.operario}");
+                return esAdmin;
+            }
+        }
+
+        // Colección de empresas disponibles (las del usuario)
+        public ObservableCollection<EmpresaDto> Empresas { get; } = new();
 
         // Colecciones para filtros
         public ObservableCollection<AlmacenDto> AlmacenesOrigen { get; } = new();
@@ -126,6 +148,9 @@ namespace SGA_Desktop.ViewModels
         // Datos principales
         public ObservableCollection<TraspasoDto> Traspasos { get; } = new();
         [ObservableProperty] private TraspasoDto? traspasoSeleccionado;
+        
+        // Lista privada para almacenar todos los traspasos cargados (cuando VerTodasLasEmpresas está marcado)
+        private List<TraspasoDto> _todosLosTraspasosCargados = new();
 
         // Comandos
         public IAsyncRelayCommand AplicarFiltrosCommand { get; }
@@ -162,6 +187,26 @@ namespace SGA_Desktop.ViewModels
             
             AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
             AlmacenesDestinoView.Filter = FiltraAlmacenesDestino;
+
+            // Cargar empresas disponibles (las del usuario)
+            // Agregar opción "Todas" al inicio
+            Empresas.Add(new EmpresaDto { Codigo = 0, Nombre = "Todas las empresas" });
+            
+            if (SessionManager.UsuarioActual?.empresas != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TraspasoHistoricoDialog] Cargando {SessionManager.UsuarioActual.empresas.Count} empresas del usuario");
+                foreach (var empresa in SessionManager.UsuarioActual.empresas)
+                {
+                    Empresas.Add(empresa);
+                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistoricoDialog] Agregada empresa: {empresa.Codigo} - {empresa.Nombre}");
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[TraspasoHistoricoDialog] SessionManager.UsuarioActual?.empresas es null o vacío");
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[TraspasoHistoricoDialog] Total empresas en combo: {Empresas.Count}");
 
             // Inicializar comandos
             AplicarFiltrosCommand = new AsyncRelayCommand(AplicarFiltrosAsync);
@@ -205,6 +250,9 @@ namespace SGA_Desktop.ViewModels
 
             // Inicialización
             _ = InitializeAsync();
+            
+            // Notificar cambio de PuedeVerTodasLasEmpresas después de la inicialización
+            OnPropertyChanged(nameof(PuedeVerTodasLasEmpresas));
         }
 
         public TraspasoHistoricoDialogViewModel() : this(new TraspasosService()) { }
@@ -292,6 +340,63 @@ namespace SGA_Desktop.ViewModels
             AlmacenesDestinoView?.Refresh();
         }
 
+        // Cuando se desmarca "Ver todas las empresas", limpiar la selección del combo
+        partial void OnVerTodasLasEmpresasChanged(bool oldValue, bool newValue)
+        {
+            if (!newValue)
+            {
+                // Si se desmarca, limpiar la selección del combo
+                EmpresaFiltroSeleccionada = null;
+                _todosLosTraspasosCargados.Clear();
+            }
+        }
+
+        // Cuando cambia la empresa seleccionada en el combo, filtrar la lista en memoria
+        partial void OnEmpresaFiltroSeleccionadaChanged(EmpresaDto? oldValue, EmpresaDto? newValue)
+        {
+            // Solo filtrar si "Ver todas las empresas" está marcado y hay datos cargados
+            if (VerTodasLasEmpresas && _todosLosTraspasosCargados.Any())
+            {
+                FiltrarTraspasosPorEmpresa();
+            }
+        }
+
+        // Método para filtrar los traspasos en memoria por empresa
+        private void FiltrarTraspasosPorEmpresa()
+        {
+            try
+            {
+                Traspasos.Clear();
+                
+                // Si no hay empresa seleccionada o es "Todas" (codigo 0), mostrar todos
+                if (EmpresaFiltroSeleccionada == null || EmpresaFiltroSeleccionada.Codigo == 0)
+                {
+                    foreach (var traspaso in _todosLosTraspasosCargados.OrderByDescending(t => t.FechaInicio))
+                    {
+                        Traspasos.Add(traspaso);
+                    }
+                    System.Diagnostics.Debug.WriteLine($"[Filtro empresa] Mostrando todos los traspasos: {Traspasos.Count}");
+                }
+                else
+                {
+                    // Filtrar por la empresa seleccionada
+                    var traspasosFiltrados = _todosLosTraspasosCargados
+                        .Where(t => t.CodigoEmpresa == EmpresaFiltroSeleccionada.Codigo)
+                        .OrderByDescending(t => t.FechaInicio);
+                    
+                    foreach (var traspaso in traspasosFiltrados)
+                    {
+                        Traspasos.Add(traspaso);
+                    }
+                    System.Diagnostics.Debug.WriteLine($"[Filtro empresa] Filtrando por empresa {EmpresaFiltroSeleccionada.Codigo}: {Traspasos.Count} traspasos");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error filtrando traspasos por empresa: {ex.Message}");
+            }
+        }
+
         private async Task InitializeAsync()
         {
             try
@@ -312,7 +417,17 @@ namespace SGA_Desktop.ViewModels
                 // Establecer "-- Todos los estados --" como selección por defecto
                 EstadoSeleccionado = Estados.FirstOrDefault(e => string.IsNullOrEmpty(e.CodigoEstado));
 
+                // Cargar orígenes de ajustes
+                await CargarOrigenesAsync();
+                OrigenSeleccionado = Origenes.FirstOrDefault(o => string.IsNullOrEmpty(o.CodigoOrigen));
+
+                // No establecer ninguna empresa por defecto - el usuario debe seleccionar si quiere filtrar por una específica
+                // Si no hay empresa seleccionada y VerTodasLasEmpresas está marcado, se verán todas las empresas
+
                 // No cargar traspasos automáticamente - el usuario debe presionar "Aplicar filtros"
+                
+                // Notificar cambio de PuedeVerTodasLasEmpresas después de cargar datos
+                OnPropertyChanged(nameof(PuedeVerTodasLasEmpresas));
             }
             catch (Exception ex)
             {
@@ -334,7 +449,8 @@ namespace SGA_Desktop.ViewModels
                     permisos = await _stockService.ObtenerAlmacenesAsync(centro);
                 }
 
-                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                var operarioId = SessionManager.Operario;
+                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, operarioId);
 
                 AlmacenesOrigen.Clear();
                 AlmacenesDestino.Clear();
@@ -372,12 +488,50 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
+        private async Task CargarOrigenesAsync()
+        {
+            try
+            {
+                Origenes.Clear();
+
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "", Descripcion = "-- Todos los orígenes --" });
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "TRASPASO", Descripcion = "Traspaso" });
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "INVENTARIO", Descripcion = "Inventario" });
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "CONTEO", Descripcion = "Conteo" });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando orígenes: {ex.Message}");
+            }
+        }
+
         private async Task CargarTraspasosAsync()
         {
             try
             {
                 EstaCargando = true;
-                var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                
+                // Si "Ver todas las empresas" está marcado, usar la empresa seleccionada en el combo (si hay), o null para ver todas
+                short? empresa;
+                if (VerTodasLasEmpresas)
+                {
+                    // Si hay una empresa seleccionada y no es "Todas" (codigo 0), filtrar por esa; si no, ver todas (null)
+                    if (EmpresaFiltroSeleccionada != null && EmpresaFiltroSeleccionada.Codigo != 0)
+                    {
+                        empresa = EmpresaFiltroSeleccionada.Codigo;
+                    }
+                    else
+                    {
+                        empresa = null; // Ver todas las empresas
+                    }
+                }
+                else
+                {
+                    // Si no está marcado "Ver todas", usar la empresa actual
+                    empresa = SessionManager.EmpresaSeleccionada;
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] VerTodasLasEmpresas: {VerTodasLasEmpresas}, EmpresaFiltroSeleccionada: {EmpresaFiltroSeleccionada?.Codigo}, empresa pasada a API: {(empresa.HasValue ? empresa.Value.ToString() : "NULL (todas las empresas)")}");
                 
                 // Asegurar que las fechas estén bien configuradas (misma lógica que InventarioViewModel)
                 var fechaDesde = FechaDesde ?? DateTime.Today;
@@ -407,7 +561,8 @@ namespace SGA_Desktop.ViewModels
                     almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
                     fechaInicioDesde: fechaDesde.Date, // Solo la fecha, hora 00:00:00
                     fechaInicioHasta: fechaHasta.Date, // Solo la fecha, la API se encarga de incluir todo el día
-                    usuarioId: usuarioIdFiltro
+                    usuarioId: usuarioIdFiltro,
+                    codigoEmpresa: empresa // Filtrar por empresa seleccionada
                 );
 
                 System.Diagnostics.Debug.WriteLine($"API devolvió {traspasos.Count} traspasos");
@@ -415,13 +570,35 @@ namespace SGA_Desktop.ViewModels
                 Traspasos.Clear();
                 
                 // 🔒 FILTRO DE SEGURIDAD: Aplicar filtro automático por almacenes permitidos del usuario
-                var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
-                var traspasosFiltrados = traspasos.Where(t => 
-                    almacenesPermitidos.Contains(t.AlmacenOrigen) || 
-                    almacenesPermitidos.Contains(t.AlmacenDestino)
-                ).ToList();
+                // Si "Ver todas las empresas" está marcado, no filtrar por almacenes (ver todos)
+                List<TraspasoDto> traspasosFiltrados;
+                if (VerTodasLasEmpresas)
+                {
+                    // Admin viendo todas las empresas: no filtrar por almacenes
+                    traspasosFiltrados = traspasos.ToList();
+                    // Guardar todos los traspasos cargados para poder filtrar después en memoria
+                    _todosLosTraspasosCargados = traspasosFiltrados.ToList();
+                    System.Diagnostics.Debug.WriteLine($"[Admin] Viendo todas las empresas: {traspasosFiltrados.Count} traspasos sin filtrar por almacenes");
+                }
+                else
+                {
+                    // Usuario normal: filtrar por almacenes permitidos de su empresa
+                    var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+                    traspasosFiltrados = traspasos.Where(t => 
+                        almacenesPermitidos.Contains(t.AlmacenOrigen) || 
+                        almacenesPermitidos.Contains(t.AlmacenDestino)
+                    ).ToList();
+                    // Limpiar la lista de todos los traspasos ya que no estamos en modo "todas las empresas"
+                    _todosLosTraspasosCargados.Clear();
+                    System.Diagnostics.Debug.WriteLine($"Después del filtro de almacenes permitidos: {traspasosFiltrados.Count} traspasos");
+                }
                 
-                System.Diagnostics.Debug.WriteLine($"Después del filtro de almacenes permitidos: {traspasosFiltrados.Count} traspasos");
+                // Si "Ver todas las empresas" está marcado y hay una empresa seleccionada en el combo, filtrar por empresa
+                if (VerTodasLasEmpresas && EmpresaFiltroSeleccionada != null)
+                {
+                    traspasosFiltrados = traspasosFiltrados.Where(t => t.CodigoEmpresa == EmpresaFiltroSeleccionada.Codigo).ToList();
+                    System.Diagnostics.Debug.WriteLine($"[Filtro empresa] Filtrando por empresa {EmpresaFiltroSeleccionada.Codigo}: {traspasosFiltrados.Count} traspasos");
+                }
                 
                 // Aplicar filtros adicionales (artículo, lote y operario)
                 var traspasosFiltradosFinal = traspasosFiltrados;
@@ -522,6 +699,10 @@ namespace SGA_Desktop.ViewModels
             AlmacenOrigenSeleccionado = null;
             AlmacenDestinoSeleccionado = null;
             EstadoSeleccionado = Estados.FirstOrDefault(e => string.IsNullOrEmpty(e.CodigoEstado)); // "-- Todos los estados --"
+            
+            // Desmarcar "Ver todas las empresas" y reiniciar el combo
+            VerTodasLasEmpresas = false;
+            EmpresaFiltroSeleccionada = Empresas.FirstOrDefault(e => e.Codigo == 0); // "Todas las empresas"
             
             // Notificar cambios en propiedades calculadas
             OnPropertyChanged(nameof(TieneFiltrosActivos));
@@ -683,7 +864,8 @@ namespace SGA_Desktop.ViewModels
                     permisos = await _stockService.ObtenerAlmacenesAsync(centro);
                 }
 
-                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                var operarioId = SessionManager.Operario;
+                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, operarioId);
                 
                 // Retornar solo los códigos de almacén permitidos
                 return almacenesAutorizados.Select(a => a.CodigoAlmacen).ToList();

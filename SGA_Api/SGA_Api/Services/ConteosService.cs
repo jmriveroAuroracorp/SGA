@@ -5,6 +5,7 @@ using SGA_Api.Models.Inventario;
 using SGA_Api.Models.Stock;
 using SGA_Api.Models.Almacen;
 using SGA_Api.Models.Palet;
+using System.Text.RegularExpressions;
 
 namespace SGA_Api.Services
 {
@@ -14,17 +15,20 @@ namespace SGA_Api.Services
         private readonly SageDbContext _sageDbContext;
         private readonly StorageControlDbContext _storageControlContext;
         private readonly ILogger<ConteosService> _logger;
+        private readonly INotificacionesConteosService? _notificacionesConteos;
 
         public ConteosService(
             AuroraSgaDbContext context, 
             SageDbContext sageDbContext,
             StorageControlDbContext storageControlContext,
-            ILogger<ConteosService> logger)
+            ILogger<ConteosService> logger,
+            INotificacionesConteosService? notificacionesConteos = null)
         {
             _context = context;
             _sageDbContext = sageDbContext;
             _storageControlContext = storageControlContext;
             _logger = logger;
+            _notificacionesConteos = notificacionesConteos;
         }
 
         public async Task<OrdenDto> CrearOrdenAsync(CrearOrdenDto dto)
@@ -181,111 +185,165 @@ namespace SGA_Api.Services
                 if (orden.Estado != "PLANIFICADO" && orden.Estado != "ASIGNADO")
                     throw new InvalidOperationException($"No se puede editar una orden en estado {orden.Estado}");
 
-                // Actualizar campos básicos
-                orden.Titulo = dto.Titulo;
-                orden.Prioridad = dto.Prioridad;
-                orden.FechaPlan = dto.FechaPlan;
-                orden.Comentario = dto.Comentario;
-                orden.Visibilidad = dto.Visibilidad ?? "VISIBLE";
-                orden.CodigoOperario = dto.CodigoOperario;
-                
-                // Si se asigna un operario, actualizar estado y fecha de asignación
-                if (!string.IsNullOrEmpty(dto.CodigoOperario) && string.IsNullOrEmpty(orden.CodigoOperario))
+                // Si es un conteo periódico activo, solo actualizar campos permitidos
+                // IMPORTANTE: Estos cambios solo afectan a la plantilla periódica. Las órdenes de conteo
+                // ya creadas (renovaciones anteriores) son independientes y NO se verán afectadas.
+                // Los cambios se aplicarán solo a las PRÓXIMAS renovaciones cuando se creen nuevas órdenes.
+                if (orden.EsPeriodico && orden.Activo)
                 {
-                    orden.Estado = "ASIGNADO";
-                    orden.FechaAsignacion = DateTime.Now;
-                }
-                // Si se quita el operario, cambiar a PLANIFICADO
-                else if (string.IsNullOrEmpty(dto.CodigoOperario) && !string.IsNullOrEmpty(orden.CodigoOperario))
-                {
-                    orden.Estado = "PLANIFICADO";
-                    orden.FechaAsignacion = null;
-                }
-
-                // Actualizar filtros
-                orden.FiltrosJson = dto.FiltrosJson;
-
-                // Extraer valores del FiltrosJson para actualizar campos específicos
-                var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
-                var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
-                var codigosArticulos = ExtraerArticulosDelFiltro(dto.FiltrosJson); // Soporte para múltiples artículos
-                var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
-
-                // Actualizar campos específicos
-                orden.CodigoAlmacen = codigoAlmacen;
-                orden.CodigoArticulo = codigoArticulo;
-                orden.CodigoUbicacion = codigoUbicacion;
-
-                // Determinar el alcance automáticamente
-                var pasillo = ExtraerPasilloDelFiltro(dto.FiltrosJson);
-                var estanteria = ExtraerEstanteriaDelFiltro(dto.FiltrosJson);
-                var altura = ExtraerAlturaDelFiltro(dto.FiltrosJson);
-                var posicion = ExtraerPosicionDelFiltro(dto.FiltrosJson);
-
-                // Determinar el alcance automáticamente según los componentes disponibles
-                // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
-                string alcanceDeterminado = "ALMACEN"; // Default
-               
-                // Verificar si hay artículos (formato antiguo o nuevo)
-                bool tieneArticulos = (!string.IsNullOrEmpty(codigoArticulo)) || 
-                                      (codigosArticulos != null && codigosArticulos.Any());
-               
-                if (tieneArticulos &&
-                    string.IsNullOrEmpty(codigoUbicacion) &&
-                    string.IsNullOrEmpty(pasillo) &&
-                    string.IsNullOrEmpty(estanteria))
-                {
-                    // Si solo se especifica artículo(s) (sin ubicación, pasillo, estantería)
-                    // Distinguir entre un artículo vs múltiples artículos
-                    if (codigosArticulos != null && codigosArticulos.Count > 1)
+                    _logger.LogInformation("Editando conteo periódico ACTIVO (plantilla) - Solo actualizando campos permitidos: Prioridad, Operario, Comentario, FechaProximaRenovacion, FrecuenciaDias. Los cambios solo afectarán a futuras renovaciones.");
+                    
+                    // Solo actualizar campos permitidos en la plantilla
+                    // NOTA: Las órdenes de conteo ya creadas (renovaciones) son independientes y no se ven afectadas
+                    orden.Prioridad = dto.Prioridad;
+                    orden.Comentario = dto.Comentario;
+                    orden.CodigoOperario = dto.CodigoOperario;
+                    orden.FrecuenciaDias = dto.FrecuenciaDias;
+                    
+                    // Si se asigna un operario, actualizar estado y fecha de asignación
+                    if (!string.IsNullOrEmpty(dto.CodigoOperario) && string.IsNullOrEmpty(orden.CodigoOperario))
                     {
-                        alcanceDeterminado = "MULTIARTICULO";
+                        orden.Estado = "ASIGNADO";
+                        orden.FechaAsignacion = DateTime.Now;
                     }
-                    else
+                    // Si se quita el operario, cambiar a PLANIFICADO
+                    else if (string.IsNullOrEmpty(dto.CodigoOperario) && !string.IsNullOrEmpty(orden.CodigoOperario))
                     {
-                        alcanceDeterminado = "ARTICULO";
+                        orden.Estado = "PLANIFICADO";
+                        orden.FechaAsignacion = null;
                     }
                 }
-                else if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
+                else
                 {
-                    // Si hay ubicación directa (incluyendo ubicación vacía ""), el alcance es UBICACION
-                    alcanceDeterminado = "UBICACION";
-                }
-                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
-                         !string.IsNullOrEmpty(altura) && !string.IsNullOrEmpty(posicion))
-                {
-                    // Si están todos los componentes, es UBICACION
-                    alcanceDeterminado = "UBICACION";
-                    // Construir ubicación en formato UB + pasillo + estanteria + altura + posicion
-                    var pasilloFormateado = pasillo.PadLeft(3, '0');
-                    var estanteriaFormateada = estanteria.PadLeft(3, '0');
-                    var alturaFormateada = altura.PadLeft(3, '0');
-                    var posicionFormateada = posicion.PadLeft(3, '0');
+                    // Edición normal: actualizar todos los campos
+                    orden.Titulo = dto.Titulo;
+                    orden.Prioridad = dto.Prioridad;
+                    orden.FechaPlan = dto.FechaPlan;
+                    orden.Comentario = dto.Comentario;
+                    orden.Visibilidad = dto.Visibilidad ?? "VISIBLE";
+                    orden.CodigoOperario = dto.CodigoOperario;
+                    
+                    // Si se asigna un operario, actualizar estado y fecha de asignación
+                    if (!string.IsNullOrEmpty(dto.CodigoOperario) && string.IsNullOrEmpty(orden.CodigoOperario))
+                    {
+                        orden.Estado = "ASIGNADO";
+                        orden.FechaAsignacion = DateTime.Now;
+                    }
+                    // Si se quita el operario, cambiar a PLANIFICADO
+                    else if (string.IsNullOrEmpty(dto.CodigoOperario) && !string.IsNullOrEmpty(orden.CodigoOperario))
+                    {
+                        orden.Estado = "PLANIFICADO";
+                        orden.FechaAsignacion = null;
+                    }
+
+                    // Actualizar filtros
+                    orden.FiltrosJson = dto.FiltrosJson;
+
+                    // Extraer valores del FiltrosJson para actualizar campos específicos
+                    var codigoAlmacen = ExtraerAlmacenDelFiltro(dto.FiltrosJson);
+                    var codigoArticulo = ExtraerArticuloDelFiltro(dto.FiltrosJson);
+                    var codigosArticulos = ExtraerArticulosDelFiltro(dto.FiltrosJson); // Soporte para múltiples artículos
+                    var codigoUbicacion = ExtraerUbicacionDelFiltro(dto.FiltrosJson);
+
+                    // Actualizar campos específicos
+                    orden.CodigoAlmacen = codigoAlmacen;
+                    orden.CodigoArticulo = codigoArticulo;
+                    orden.CodigoUbicacion = codigoUbicacion;
+
+                    // Determinar el alcance automáticamente
+                    var pasillo = ExtraerPasilloDelFiltro(dto.FiltrosJson);
+                    var estanteria = ExtraerEstanteriaDelFiltro(dto.FiltrosJson);
+                    var altura = ExtraerAlturaDelFiltro(dto.FiltrosJson);
+                    var posicion = ExtraerPosicionDelFiltro(dto.FiltrosJson);
+
+                    // Determinar el alcance automáticamente según los componentes disponibles
+                    // IGNORAR el alcance enviado por el cliente y determinarlo automáticamente
+                    string alcanceDeterminado = "ALMACEN"; // Default
                    
-                    codigoUbicacion = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
-                }
-                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
-                         !string.IsNullOrEmpty(altura))
-                {
-                    // Si hay pasillo, estantería y altura (sin posición), es ALTURA
-                    alcanceDeterminado = "ALTURA";
-                }
-                else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
-                {
-                    // Si hay pasillo y estantería, es ESTANTERIA
-                    alcanceDeterminado = "ESTANTERIA";
-                }
-                else if (!string.IsNullOrEmpty(pasillo))
-                {
-                    // Si solo hay pasillo, es PASILLO
-                    alcanceDeterminado = "PASILLO";
-                }
-                // Si solo hay almacén, el alcance es ALMACEN (default)
+                    // Verificar si hay artículos (formato antiguo o nuevo)
+                    bool tieneArticulos = (!string.IsNullOrEmpty(codigoArticulo)) || 
+                                          (codigosArticulos != null && codigosArticulos.Any());
+                   
+                    if (tieneArticulos &&
+                        string.IsNullOrEmpty(codigoUbicacion) &&
+                        string.IsNullOrEmpty(pasillo) &&
+                        string.IsNullOrEmpty(estanteria))
+                    {
+                        // Si solo se especifica artículo(s) (sin ubicación, pasillo, estantería)
+                        // Distinguir entre un artículo vs múltiples artículos
+                        if (codigosArticulos != null && codigosArticulos.Count > 1)
+                        {
+                            alcanceDeterminado = "MULTIARTICULO";
+                        }
+                        else
+                        {
+                            alcanceDeterminado = "ARTICULO";
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(codigoUbicacion) || codigoUbicacion == "")
+                    {
+                        // Si hay ubicación directa (incluyendo ubicación vacía ""), el alcance es UBICACION
+                        alcanceDeterminado = "UBICACION";
+                    }
+                    else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
+                             !string.IsNullOrEmpty(altura) && !string.IsNullOrEmpty(posicion))
+                    {
+                        // Si están todos los componentes, es UBICACION
+                        alcanceDeterminado = "UBICACION";
+                        // Construir ubicación en formato UB + pasillo + estanteria + altura + posicion
+                        var pasilloFormateado = pasillo.PadLeft(3, '0');
+                        var estanteriaFormateada = estanteria.PadLeft(3, '0');
+                        var alturaFormateada = altura.PadLeft(3, '0');
+                        var posicionFormateada = posicion.PadLeft(3, '0');
+                       
+                        codigoUbicacion = $"UB{pasilloFormateado}{estanteriaFormateada}{alturaFormateada}{posicionFormateada}";
+                    }
+                    else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria) &&
+                             !string.IsNullOrEmpty(altura))
+                    {
+                        // Si hay pasillo, estantería y altura (sin posición), es ALTURA
+                        alcanceDeterminado = "ALTURA";
+                    }
+                    else if (!string.IsNullOrEmpty(pasillo) && !string.IsNullOrEmpty(estanteria))
+                    {
+                        // Si hay pasillo y estantería, es ESTANTERIA
+                        alcanceDeterminado = "ESTANTERIA";
+                    }
+                    else if (!string.IsNullOrEmpty(pasillo))
+                    {
+                        // Si solo hay pasillo, es PASILLO
+                        alcanceDeterminado = "PASILLO";
+                    }
+                    // Si solo hay almacén, el alcance es ALMACEN (default)
 
-                _logger.LogInformation("ALCANCE_AUTO_UPDATE: Alcance determinado automáticamente: '{AlcanceDeterminado}' para filtros: almacen='{Almacen}', pasillo='{Pasillo}', estanteria='{Estanteria}', altura='{Altura}', posicion='{Posicion}', ubicacion='{Ubicacion}'",
-                     alcanceDeterminado, codigoAlmacen, pasillo, estanteria, altura, posicion, codigoUbicacion);
+                    _logger.LogInformation("ALCANCE_AUTO_UPDATE: Alcance determinado automáticamente: '{AlcanceDeterminado}' para filtros: almacen='{Almacen}', pasillo='{Pasillo}', estanteria='{Estanteria}', altura='{Altura}', posicion='{Posicion}', ubicacion='{Ubicacion}'",
+                         alcanceDeterminado, codigoAlmacen, pasillo, estanteria, altura, posicion, codigoUbicacion);
 
-                orden.Alcance = alcanceDeterminado;
+                    orden.Alcance = alcanceDeterminado;
+                }
+
+                // Si es un conteo periódico, actualizar FechaProximaRenovacion y activar si estaba desactivado
+                if (orden.EsPeriodico)
+                {
+                    if (dto.FechaProximaRenovacion.HasValue)
+                    {
+                        orden.FechaProximaRenovacion = dto.FechaProximaRenovacion.Value;
+                        _logger.LogInformation("Fecha de próxima renovación actualizada para orden {Guid}: {Fecha}", guid, dto.FechaProximaRenovacion.Value);
+                    }
+                    
+                    if (dto.FrecuenciaDias.HasValue)
+                    {
+                        orden.FrecuenciaDias = dto.FrecuenciaDias.Value;
+                        _logger.LogInformation("Frecuencia de días actualizada para orden {Guid}: {Frecuencia} días", guid, dto.FrecuenciaDias.Value);
+                    }
+                    
+                    // Si estaba desactivado y se está actualizando, activarlo
+                    if (!orden.Activo)
+                    {
+                        orden.Activo = true;
+                        _logger.LogInformation("Conteo periódico {Guid} activado mediante actualización", guid);
+                    }
+                }
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
@@ -1152,6 +1210,8 @@ namespace SGA_Api.Services
                 FechaCierre = orden.FechaCierre,
                 EsPeriodico = orden.EsPeriodico,
                 Activo = orden.Activo,
+                FechaProximaRenovacion = orden.FechaProximaRenovacion,
+                FrecuenciaDias = orden.FrecuenciaDias,
                 OrdenPadreGuid = orden.OrdenPadreGuid
             };
         }
@@ -2050,6 +2110,27 @@ namespace SGA_Api.Services
 
 					await _context.SaveChangesAsync();
 
+					// Si la acción es SUPERVISION, notificar
+					if (accion == "SUPERVISION" && _notificacionesConteos != null)
+					{
+						// Notificar que el conteo se envió a supervisión
+						try
+						{
+					await _notificacionesConteos.NotificarConteoSupervisionAsync(
+						resultado.GuidID,
+						resultado.CodigoArticulo ?? "Artículo desconocido",
+						resultado.CantidadContada ?? 0m,
+						resultado.UsuarioCodigo,
+						orden.SupervisorCodigo
+					);
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, "Error al notificar supervisión para resultado {ResultadoGuid}", resultado.GuidID);
+							// No fallar la operación si falla la notificación
+						}
+					}
+
 					// Si la acción es AJUSTE, crear registro en InventarioAjustes (funcionalidad básica)
 					if (accion == "AJUSTE")
 					{
@@ -2841,7 +2922,8 @@ namespace SGA_Api.Services
 				// Campos de OrdenConteo
 				CodigoEmpresa = resultado.Orden?.CodigoEmpresa ?? 0,
 				Titulo = resultado.Orden?.Titulo ?? string.Empty,
-				Visibilidad = resultado.Orden?.Visibilidad ?? string.Empty
+				Visibilidad = resultado.Orden?.Visibilidad ?? string.Empty,
+				CreadoPorCodigo = resultado.Orden?.CreadoPorCodigo
 			};
 		}
 
@@ -2873,7 +2955,7 @@ namespace SGA_Api.Services
                 var nuevaOrden = new OrdenConteo
                 {
                     CodigoEmpresa = resultado.Orden.CodigoEmpresa,
-                    Titulo = $"REASIGNACIÓN - {resultado.Orden.Titulo}",
+                    Titulo = GenerarTituloReasignacion(resultado.Orden.Titulo),
                     Visibilidad = resultado.Orden.Visibilidad,
                     ModoGeneracion = "REASIGNA", // Solo 10 caracteres máximo
                     Alcance = "UBICACION", // Mantener UBICACION pero con filtros específicos de artículo
@@ -2925,6 +3007,56 @@ namespace SGA_Api.Services
             };
 
             return System.Text.Json.JsonSerializer.Serialize(filtros);
+        }
+
+        /// <summary>
+        /// Genera el título para una reasignación con formato R, R1, R2, etc.
+        /// Detecta si el título ya tiene prefijo de reasignación y lo incrementa.
+        /// También maneja compatibilidad con el formato antiguo "REASIGNACIÓN - ".
+        /// </summary>
+        private string GenerarTituloReasignacion(string tituloOriginal)
+        {
+            if (string.IsNullOrWhiteSpace(tituloOriginal))
+            {
+                return "R - Reasignación";
+            }
+
+            // Patrón para detectar "R" o "R{N}" al inicio, seguido de " - "
+            // También detecta "REASIGNACIÓN - " para compatibilidad
+            var patronR = new Regex(@"^(R(\d+)?|REASIGNACIÓN)\s*-\s*(.+)$", RegexOptions.IgnoreCase);
+            var match = patronR.Match(tituloOriginal.Trim());
+
+            if (match.Success)
+            {
+                // Ya tiene prefijo de reasignación
+                var prefijo = match.Groups[1].Value.ToUpper();
+                var tituloBase = match.Groups[3].Value.Trim();
+
+                // Si es "REASIGNACIÓN", convertir a "R1"
+                if (prefijo == "REASIGNACIÓN")
+                {
+                    return $"R1 - {tituloBase}";
+                }
+
+                // Si es "R" (sin número), convertir a "R1"
+                if (prefijo == "R")
+                {
+                    return $"R1 - {tituloBase}";
+                }
+
+                // Si es "R{N}", extraer el número e incrementarlo
+                if (prefijo.StartsWith("R") && match.Groups[2].Success)
+                {
+                    if (int.TryParse(match.Groups[2].Value, out int numeroActual))
+                    {
+                        int nuevoNumero = numeroActual + 1;
+                        return $"R{nuevoNumero} - {tituloBase}";
+                    }
+                }
+            }
+
+            // No tiene prefijo de reasignación, primera reasignación
+            return $"R - {tituloOriginal.Trim()}";
         }
 
         private string TruncarTitulo(string titulo, int maxLength)
@@ -3125,18 +3257,63 @@ namespace SGA_Api.Services
         }
 
         // Métodos para conteos periódicos
-        public async Task<IEnumerable<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(string? codigoOperario = null)
+        public async Task<IEnumerable<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(
+            string? codigoAlmacen = null,
+            DateTime? fechaDesde = null,
+            DateTime? fechaHasta = null,
+            bool? activo = null,
+            string? codigoOperario = null,
+            string? codigoOperarioSesion = null,
+            string? creadoPorCodigo = null)
         {
             try
             {
+                _logger.LogInformation("Iniciando ListarConteosPeriodicosAsync con codigoAlmacen: {CodigoAlmacen}, fechaDesde: {FechaDesde}, fechaHasta: {FechaHasta}, activo: {Activo}, operario: {Operario}, operarioSesion: {OperarioSesion}, creadoPorCodigo: {CreadoPorCodigo}",
+                    codigoAlmacen, fechaDesde, fechaHasta, activo, codigoOperario, codigoOperarioSesion, creadoPorCodigo);
+
                 var query = _context.OrdenesConteo
                     .Where(o => o.EsPeriodico == true)
                     .AsQueryable();
 
-                List<OrdenConteo> ordenesPeriodicas;
+                // Aplicar filtro por almacén si se especifica
+                if (!string.IsNullOrEmpty(codigoAlmacen) && codigoAlmacen != "Todas")
+                {
+                    query = query.Where(o => o.CodigoAlmacen == codigoAlmacen);
+                }
 
-                // Si se proporciona un código de operario, filtrar por almacenes autorizados
-                if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
+                // Aplicar filtro de fecha desde si se especifica
+                if (fechaDesde.HasValue)
+                {
+                    query = query.Where(o => o.FechaCreacion.Date >= fechaDesde.Value.Date);
+                }
+
+                // Aplicar filtro de fecha hasta si se especifica
+                if (fechaHasta.HasValue)
+                {
+                    query = query.Where(o => o.FechaCreacion.Date <= fechaHasta.Value.Date);
+                }
+
+                // Aplicar filtro por activo/inactivo si se especifica
+                if (activo.HasValue)
+                {
+                    query = query.Where(o => o.Activo == activo.Value);
+                }
+
+                // Aplicar filtro de operario si se especifica (filtro visual)
+                if (!string.IsNullOrEmpty(codigoOperario))
+                {
+                    query = query.Where(o => o.CodigoOperario == codigoOperario);
+                }
+
+                // Aplicar filtro por creador (solo propios vs ver todos)
+                if (!string.IsNullOrEmpty(creadoPorCodigo))
+                {
+                    query = query.Where(o => o.CreadoPorCodigo == creadoPorCodigo);
+                }
+
+                // Si se proporciona el código de operario de la sesión, filtrar por almacenes autorizados
+                List<OrdenConteo> ordenesPeriodicas;
+                if (!string.IsNullOrEmpty(codigoOperarioSesion) && int.TryParse(codigoOperarioSesion, out int operarioIdSesion))
                 {
                     // Obtener todas las órdenes periódicas primero para obtener el código de empresa
                     var ordenesTemporales = await query.ToListAsync();
@@ -3149,7 +3326,7 @@ namespace SGA_Api.Services
                     var codigoEmpresa = ordenesTemporales.First().CodigoEmpresa;
                     if (codigoEmpresa == 0) codigoEmpresa = 1; // Por defecto empresa 1
                     
-                    var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioId, codigoEmpresa);
+                    var almacenesAutorizados = await ObtenerAlmacenesAutorizadosAsync(operarioIdSesion, codigoEmpresa);
                     
                     if (almacenesAutorizados.Any())
                     {
@@ -3157,18 +3334,18 @@ namespace SGA_Api.Services
                         // O que no tengan almacén específico (alcance general)
                         ordenesPeriodicas = ordenesTemporales.Where(o => 
                             (o.CodigoAlmacen != null && almacenesAutorizados.Contains(o.CodigoAlmacen)) ||
-                            (o.CodigoAlmacen == null && o.Alcance != "ALMACEN")).ToList(); // Si no tiene almacén específico y no es alcance ALMACEN, mostrarlo
+                            (o.CodigoAlmacen == null && o.Alcance != "ALMACEN")).ToList();
                     }
                     else
                     {
                         // Si el operario no tiene almacenes autorizados, no mostrar ningún conteo
-                        _logger.LogWarning("Operario {Operario} no tiene almacenes autorizados para conteos periódicos", codigoOperario);
+                        _logger.LogWarning("Operario {Operario} no tiene almacenes autorizados para conteos periódicos", codigoOperarioSesion);
                         return new List<ConteoPeriodicoDto>();
                     }
                 }
                 else
                 {
-                    // Si no hay filtro de operario, obtener todas las órdenes periódicas
+                    // Si no hay filtro de operario de sesión, obtener todas las órdenes periódicas filtradas
                     ordenesPeriodicas = await query.ToListAsync();
                 }
 
@@ -3269,6 +3446,46 @@ namespace SGA_Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al obtener renovaciones para orden {Guid}", guid);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<string>> ObtenerCreadoresConteosAsync()
+        {
+            try
+            {
+                var creadoresCodigos = await _context.OrdenesConteo
+                    .Where(o => !string.IsNullOrEmpty(o.CreadoPorCodigo) && o.CreadoPorCodigo != "0")
+                    .Select(o => o.CreadoPorCodigo!)
+                    .Distinct()
+                    .ToListAsync();
+
+                return creadoresCodigos;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener creadores de conteos");
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<string>> ObtenerCreadoresConteosPeriodicosAsync()
+        {
+            try
+            {
+                var creadoresCodigos = await _context.OrdenesConteo
+                    .Where(o => o.EsPeriodico == true && 
+                                !string.IsNullOrEmpty(o.CreadoPorCodigo) && 
+                                o.CreadoPorCodigo != "0")
+                    .Select(o => o.CreadoPorCodigo!)
+                    .Distinct()
+                    .ToListAsync();
+
+                return creadoresCodigos;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener creadores de conteos periódicos");
                 throw;
             }
         }

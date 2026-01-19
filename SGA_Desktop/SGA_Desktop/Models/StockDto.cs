@@ -1,6 +1,7 @@
-﻿using SGA_Desktop.Services;
+using SGA_Desktop.Services;
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
@@ -77,6 +78,10 @@ namespace SGA_Desktop.Models
 			get => _totalArticuloAlmacen;
 			set { _totalArticuloAlmacen = value; OnPropertyChanged(); }
 		}
+
+		// 🔷 NUEVO: Total paletizado en ubicación (suma de cantidades de todos los palets en esta ubicación)
+		[JsonIgnore]
+		public decimal TotalPaletizadoUbicacion => Palets?.Sum(p => p.Cantidad) ?? 0;
 
 		// 🔷 NUEVO: Indicador de bloqueo por calidad
 		[JsonPropertyName("isBloqueadoCalidad")]

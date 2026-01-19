@@ -101,7 +101,8 @@
                                    Margin="0,0,15,0"/>
                         
                         <!-- Icono de Campanita con contador -->
-                        <Button Command="{Binding AbrirNotificacionesCommand}" 
+                        <Button x:Name="CampanitaButton"
+                                Command="{Binding AbrirNotificacionesCommand}" 
                                 Background="Transparent" 
                                 BorderThickness="0"
                                 Padding="8"
@@ -225,87 +226,90 @@
                 </Border>
 
                 <!-- Botones -->
-                <StackPanel Grid.Row="1"
-                      Margin="0,20,0,0"
-                      VerticalAlignment="Top" Cursor="">
-                    <Button Content="Consulta de Stock"
-                    Command="{Binding IrAConsultaStockCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConsultaStock}"/>
-                    <Button Content="Ubicaciones"
-                    Command="{Binding IrAUbicacionesCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Ubicaciones}"/>
-                    <!-- Nuevo botón para traspasos de stock -->
-                    <Button Content="Traspasos de Stock"
-                    Command="{Binding IrATraspasosStockCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosStock}"/>
-                    <!-- Renombrar el botón de traspasos actual -->
-                    <Button Content="Traspasos de Palet"
-                    Command="{Binding IrATraspasosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosPalet}"/>
-                    <Button Content="Historial de Traspasos"
-                    Command="{Binding IrAHistorialTraspasosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=HistorialTraspasos}"/>
-                    <!--<Button Content="Inventario" …/>-->
-                    <Button Content="Etiquetas"
-                    Command="{Binding IrAEtiquetasCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="Collapsed"/>
-                    <Button Content="Inventario"
-                    Command="{Binding IrAInventarioCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}"/>
-                    <Button Content="Conteos Rotativos"
-                    Command="{Binding IrAControlesRotativosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}"/>
-                    <Button Content="Historial de Ajustes"
-                    Command="{Binding IrAHistorialAjustesCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=HistorialAjustes}"/>
-                    <Button Content="Órdenes de Traspaso"
-                    Command="{Binding IrAOrdenTrabajoCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=OrdenTrabajo}"/>
-                    <Button Content="Calidad"
-                    Command="{Binding IrACalidadCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Calidad}"/>
-                    <Button Content="Análisis de Rendimientos"
-                    Command="{Binding IrARendimientosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Rendimientos}"/>
-                    <Button Content="Empresa"
-                    Command="{Binding IrASeleccionEmpresaCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding TieneMultiplesEmpresas, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                    <Button Content="Configuración de Operarios"
-                    Command="{Binding IrAConfiguracionOperariosCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"
-                    Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}"/>
-                    <Button Content="Salir"
-                    Command="{Binding CerrarSesionCommand}"
-                    Style="{StaticResource EstiloBotonPrincipal}"
-                    Margin="10,5"/>
-                </StackPanel>
+                <ScrollViewer Grid.Row="1"
+                              Margin="0,20,0,0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel VerticalAlignment="Top" Cursor="">
+                        <Button Content="Consulta de Stock"
+                        Command="{Binding IrAConsultaStockCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConsultaStock}"/>
+                        <Button Content="Ubicaciones"
+                        Command="{Binding IrAUbicacionesCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Ubicaciones}"/>
+                        <!-- Nuevo botón para traspasos de stock -->
+                        <Button Content="Traspasos de Stock"
+                        Command="{Binding IrATraspasosStockCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosStock}"/>
+                        <!-- Renombrar el botón de traspasos actual -->
+                        <Button Content="Traspasos de Palet"
+                        Command="{Binding IrATraspasosCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=TraspasosPalet}"/>
+                        <Button Content="Historial de Traspasos"
+                        Command="{Binding IrAHistorialTraspasosCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=HistorialTraspasos}"/>
+                        <!--<Button Content="Inventario" …/>-->
+                        <Button Content="Etiquetas"
+                        Command="{Binding IrAEtiquetasCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="Collapsed"/>
+                        <Button Content="Inventario"
+                        Command="{Binding IrAInventarioCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}"/>
+                        <Button Content="Cambiar Artículo"
+                        Command="{Binding IrACambiarArticuloCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Inventario}"/>
+                        <Button Content="Conteos Rotativos"
+                        Command="{Binding IrAControlesRotativosCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ControlesRotativos}"/>
+                        <Button Content="Órdenes de Traspaso"
+                        Command="{Binding IrAOrdenTrabajoCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=OrdenTrabajo}"/>
+                        <Button Content="Calidad"
+                        Command="{Binding IrACalidadCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Calidad}"/>
+                        <Button Content="Análisis de Rendimientos"
+                        Command="{Binding IrARendimientosCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=Rendimientos}"/>
+                        <Button Content="Empresa"
+                        Command="{Binding IrASeleccionEmpresaCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding TieneMultiplesEmpresas, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        <Button Content="Configuración de Operarios"
+                        Command="{Binding IrAConfiguracionOperariosCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"
+                        Visibility="{Binding Converter={StaticResource PermisosToVisibilityConverter}, ConverterParameter=ConfiguracionOperarios}"/>
+                        <Button Content="Salir"
+                        Command="{Binding CerrarSesionCommand}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Margin="10,5"/>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <!-- === 3) ÁREA DE CONTENIDO (fila 1, col 1) === -->

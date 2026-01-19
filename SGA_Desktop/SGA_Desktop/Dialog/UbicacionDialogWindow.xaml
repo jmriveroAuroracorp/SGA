@@ -91,7 +91,7 @@
                             <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Vertical" Margin="0,23,0,10">
                                 <CheckBox Content="Marcar como obsoleta" 
                                           IsChecked="{Binding EsObsoleta}"
-                                          IsEnabled="{Binding !IsNew}"/>
+                                          IsEnabled="{Binding IsNew, Converter={StaticResource InverseBooleanConverter}}"/>
                             </StackPanel>
 
                             <StackPanel Grid.Row="5" Grid.Column="0" Orientation="Vertical" Margin="0,0,20,0">

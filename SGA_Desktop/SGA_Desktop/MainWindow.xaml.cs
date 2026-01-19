@@ -31,6 +31,38 @@ namespace SGA_Desktop
 
 			// Configurar notificaciones globales
 			ConfigurarNotificacionesGlobales();
+			
+			// Inicializar ToastNotificationManager después de que la ventana esté cargada
+			this.Loaded += MainWindow_Loaded;
+		}
+		
+		private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+		{
+			// Inicializar ToastNotificationManager con el botón de la campanita
+			InicializarToastNotificationManager();
+		}
+		
+		/// <summary>
+		/// Inicializa el ToastNotificationManager con la referencia al botón de la campanita
+		/// </summary>
+		private void InicializarToastNotificationManager()
+		{
+			try
+			{
+				if (CampanitaButton != null)
+				{
+					ToastNotificationManager.Instancia.Inicializar(CampanitaButton);
+					System.Diagnostics.Debug.WriteLine("✅ ToastNotificationManager inicializado");
+				}
+				else
+				{
+					System.Diagnostics.Debug.WriteLine("⚠️ ToastNotificationManager: Botón de campanita no encontrado");
+				}
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"❌ Error al inicializar ToastNotificationManager: {ex.Message}");
+			}
 		}
 
 		private void MinimizeButton_Click(object sender, RoutedEventArgs e)
@@ -174,16 +206,29 @@ namespace SGA_Desktop
 		try
 		{
 			System.Diagnostics.Debug.WriteLine($"🔔 MainWindow: Notificación global recibida: {e.Titulo} - {e.Mensaje}");
+			System.Diagnostics.Debug.WriteLine($"🔔 MainWindow: ToastNotificationManager inicializado: {CampanitaButton != null}");
 
 			// Convertir notificación SignalR a NotificacionDto
 			var notificacionDto = ConvertirANotificacionDto(e);
 			
 			// Agregar al NotificacionesManager (esto actualizará automáticamente el contador)
 			NotificacionesManager.AgregarNotificacion(notificacionDto);
+			
+			// Verificar que el manager esté inicializado
+			if (CampanitaButton == null)
+			{
+				System.Diagnostics.Debug.WriteLine("⚠️ MainWindow: CampanitaButton es null, inicializando ToastNotificationManager");
+				InicializarToastNotificationManager();
+			}
+			
+			// Mostrar toast popup
+			System.Diagnostics.Debug.WriteLine($"🔔 MainWindow: Llamando a MostrarToast");
+			ToastNotificationManager.Instancia.MostrarToast(notificacionDto);
 		}
 		catch (Exception ex)
 		{
 			System.Diagnostics.Debug.WriteLine($"❌ MainWindow: Error al procesar notificación global: {ex.Message}");
+			System.Diagnostics.Debug.WriteLine($"❌ StackTrace: {ex.StackTrace}");
 		}
 	}
 

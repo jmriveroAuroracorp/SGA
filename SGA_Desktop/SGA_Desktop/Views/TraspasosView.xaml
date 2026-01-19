@@ -1,4 +1,4 @@
-﻿<Page x:Class="SGA_Desktop.Views.TraspasosView"
+<Page x:Class="SGA_Desktop.Views.TraspasosView"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
@@ -27,6 +27,7 @@
             <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
             <helpers:UbicacionConverter x:Key="UbicacionConverter"/>
             <helpers:TipoBloqueoDisplayConverter x:Key="TipoBloqueoDisplayConverter"/>
+            <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
         </ResourceDictionary>
     </Page.Resources>
 
@@ -178,6 +179,170 @@
                                         Height="380"
                                         Margin="8"
                                         Cursor="Hand">
+                                    <Border.ContextMenu>
+                                        <ContextMenu Style="{StaticResource EstiloContextMenu}">
+                                            <MenuItem Header="Copiar código palet"
+                                                      Style="{StaticResource EstiloMenuItem}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarCodigoPaletCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="Codigo" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar estado"
+                                                      Style="{StaticResource EstiloMenuItem}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarEstadoPaletCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="Estado" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar tipo palet"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding TipoPaletCodigo, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarTipoPaletCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="TipoPaletCodigo" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Copiar fecha apertura"
+                                                      Style="{StaticResource EstiloMenuItem}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarFechaAperturaCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="FechaApertura"/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar usuario apertura"
+                                                      Style="{StaticResource EstiloMenuItem}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarUsuarioAperturaCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="UsuarioAperturaNombre" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar fecha cierre"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding FechaCierre, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarFechaCierreCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="FechaCierre"/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar usuario cierre"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding UsuarioCierreNombre, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarUsuarioCierreCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="UsuarioCierreNombre" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Copiar orden trabajo"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding OrdenTrabajoId, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarOrdenTrabajoCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="OrdenTrabajoId" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar almacén"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding AlmacenOrigen, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarAlmacenOrigenPaletCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="AlmacenOrigen" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar ubicación"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding UbicacionOrigen, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarUbicacionOrigenPaletCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="UbicacionOrigen" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar fecha último traspaso"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding FechaUltimoTraspaso, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarFechaUltimoTraspasoCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="FechaUltimoTraspaso"/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Copiar tipo última actividad"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding TipoUltimaActividad, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarTipoUltimaActividadCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="TipoUltimaActividad" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar fecha última actividad"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding FechaUltimaActividad, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarFechaUltimaActividadCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="FechaUltimaActividad"/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar usuario última actividad"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding UsuarioUltimaActividadNombre, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarUsuarioUltimaActividadCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="UsuarioUltimaActividadNombre" TargetNullValue=""/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Copiar peso"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding Peso, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarPesoCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="Peso"/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                            <MenuItem Header="Copiar altura"
+                                                      Style="{StaticResource EstiloMenuItem}"
+                                                      Visibility="{Binding Altura, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <MenuItem.Command>
+                                                    <Binding Path="Data.CopiarAlturaCommand" Source="{StaticResource VmProxy}"/>
+                                                </MenuItem.Command>
+                                                <MenuItem.CommandParameter>
+                                                    <Binding Path="Altura"/>
+                                                </MenuItem.CommandParameter>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
                                     <Grid MouseLeftButtonDown="PaletCard_MouseLeftButtonDown" Tag="{Binding}">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -290,12 +455,14 @@
                                                                     <DataTemplate>
                                                                         <TextBlock FontSize="11" Foreground="#333" TextWrapping="Wrap">
                                                                             <Run Text="{Binding CodigoArticulo}"/>
-                                                                            <Run Text=" · "/>
+                                                                            <Run Text=" - "/>
+                                                                            <Run Text="{Binding Lote, TargetNullValue='Sin lote'}"/>
+                                                                            <Run Text=" - "/>
                                                                             <Run Text="{Binding CodigoAlmacen}"/>
                                                                             <Run Text="/"/>
                                                                             <Run Text="{Binding Ubicacion}"/>
-                                                                            <Run Text=" · Faltan "/>
-                                                                            <Run Text="{Binding CantidadFaltante, StringFormat={}{0:F2}}"/>
+                                                                            <Run Text=" - "/>
+                                                                            <Run Text="{Binding CantidadFaltante, StringFormat={}{0:F6}}"/>
                                                                         </TextBlock>
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
@@ -866,6 +1033,76 @@
                                                 <Border.Effect>
                                                     <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Black"/>
                                                 </Border.Effect>
+                                                <Border.ContextMenu>
+                                                    <ContextMenu Style="{StaticResource EstiloContextMenu}">
+                                                        <MenuItem Header="Copiar código artículo"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarCodigoCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="CodigoArticulo" TargetNullValue=""/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                        <MenuItem Header="Copiar descripción"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarDescripcionCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="DescripcionArticulo" TargetNullValue=""/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                        <Separator/>
+                                                        <MenuItem Header="Copiar almacén"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarAlmacenCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="CodigoAlmacen" TargetNullValue=""/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                        <MenuItem Header="Copiar ubicación"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarUbicacionCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="Ubicacion" TargetNullValue=""/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                        <Separator/>
+                                                        <MenuItem Header="Copiar lote"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarLoteCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="Lote" TargetNullValue=""/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                        <MenuItem Header="Copiar fecha caducidad"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarFechaCaducidadCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="FechaCaducidad"/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                        <Separator/>
+                                                        <MenuItem Header="Copiar cantidad"
+                                                                  Style="{StaticResource EstiloMenuItem}">
+                                                            <MenuItem.Command>
+                                                                <Binding Path="Data.CopiarCantidadCommand" Source="{StaticResource VmProxy}"/>
+                                                            </MenuItem.Command>
+                                                            <MenuItem.CommandParameter>
+                                                                <Binding Path="Cantidad"/>
+                                                            </MenuItem.CommandParameter>
+                                                        </MenuItem>
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>

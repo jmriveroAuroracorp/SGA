@@ -60,6 +60,21 @@ namespace SGA_Desktop.Models
         
         [JsonPropertyName("visibilidad")]
         public string Visibilidad { get; set; } = string.Empty;
+        
+        [JsonPropertyName("creadoPorCodigo")]
+        public string? CreadoPorCodigo { get; set; }
+
+        // Propiedades para nombres (se asignan desde el ViewModel)
+        public string? NombreOperario { get; set; }
+        public string? NombreCreador { get; set; }
+        
+        public string OperarioDisplay => string.IsNullOrEmpty(NombreOperario) 
+            ? UsuarioCodigo ?? "N/A"
+            : NombreOperario;
+            
+        public string CreadorDisplay => string.IsNullOrEmpty(NombreCreador) 
+            ? CreadoPorCodigo ?? "N/A"
+            : NombreCreador;
 
         // Propiedades calculadas para UI
         public string AccionFormateada

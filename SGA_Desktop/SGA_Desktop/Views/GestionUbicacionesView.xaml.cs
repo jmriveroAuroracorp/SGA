@@ -28,27 +28,8 @@ namespace SGA_Desktop.Views
 		}
 		private void Expander_Expanded(object sender, RoutedEventArgs e)
 		{
-			var exp = (Expander)sender;
-
-			// 1) Deselecciona TODOS los ListViewItems salvo el actual
-			foreach (var item in lvUbicaciones.Items)
-			{
-				var container = lvUbicaciones
-					.ItemContainerGenerator
-					.ContainerFromItem(item) as ListViewItem;
-				if (container == null) continue;
-
-				// compara el DataContext, que es tu DTO
-				if (!ReferenceEquals(container.DataContext, exp.DataContext))
-					container.IsSelected = false;
-			}
-
-			// 2) Selecciona (resalta) el ListViewItem que acaba de expandirse
-			var myItem = lvUbicaciones
-				.ItemContainerGenerator
-				.ContainerFromItem(exp.DataContext) as ListViewItem;
-			if (myItem != null)
-				myItem.IsSelected = true;
+			// Método mantenido para compatibilidad con el evento Expanded de los expanders de ubicaciones
+			// La lógica de selección ya no es necesaria con ItemsControl
 		}
 
 

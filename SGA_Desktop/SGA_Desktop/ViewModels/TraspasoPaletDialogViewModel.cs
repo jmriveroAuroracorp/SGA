@@ -123,7 +123,7 @@ namespace SGA_Desktop.ViewModels
                     permisos = await _stockService.ObtenerAlmacenesAsync(centro);
                 }
                 
-                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa.Value, centro, permisos);
+                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa.Value, centro, permisos, Helpers.SessionManager.Operario);
                 
                 foreach (var a in almacenes)
                 {

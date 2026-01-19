@@ -1,4 +1,4 @@
-﻿using System.Configuration;
+using System.Configuration;
 using System.Data;
 using System.Windows;
 using System;
@@ -125,26 +125,28 @@ namespace SGA_Desktop
 			{
 				if (!string.IsNullOrWhiteSpace(Helpers.SessionManager.Token))
 				{
-					// Ejecutar logout directamente, no en background
-					using var http = new HttpClient();
-					http.Timeout = TimeSpan.FromSeconds(3);
-					http.DefaultRequestHeaders.Authorization =
-						new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Helpers.SessionManager.Token);
+					// Usar LoginService para registrar el evento (permitir durante cierre)
+					var loginService = new Services.LoginService();
+					var idDispositivo = Environment.MachineName;
+					var idUsuario = Helpers.SessionManager.UsuarioActual?.operario ?? 0;
 
-					var evento = new
+					try
 					{
-						fecha = DateTime.Now,
-						idUsuario = Helpers.SessionManager.UsuarioActual?.operario ?? 0,
-						tipo = "LOGOUT",
-						origen = "Sistema",
-						descripcion = "Sesión Cerrada por Suspensión/Bloqueo",
-						detalle = "La aplicación se cerró automáticamente por suspensión del PC o bloqueo de sesión",
-						idDispositivo = Environment.MachineName
-					};
-
-					var json = Newtonsoft.Json.JsonConvert.SerializeObject(evento);
-					var content = new StringContent(json, Encoding.UTF8, "application/json");
-					await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
+						await loginService.RegistrarLogEventoAsync(new Models.LogEvento
+						{
+							Fecha = DateTime.Now,
+							IdUsuario = idUsuario,
+							Tipo = "LOGOUT",
+							Origen = "Sistema",
+							Descripcion = "Sesión Cerrada por Suspensión/Bloqueo",
+							Detalle = "La aplicación se cerró automáticamente por suspensión del PC o bloqueo de sesión",
+							IdDispositivo = idDispositivo
+						}, permitirDuranteCierre: true);
+					}
+					catch
+					{
+						// Ignorar errores de registro de evento durante cierre
+					}
 
 					// NO desactivar dispositivo durante suspensión para evitar conflictos con HttpClient
 					// El dispositivo se desactivará automáticamente por timeout en el servidor

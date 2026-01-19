@@ -152,19 +152,35 @@ namespace SGA_Desktop.ViewModels
 			OnPropertyChanged(nameof(BotonPendientesVisibility));
 		}
 
-		private async Task LoadPaletsAsync()
+	private async Task LoadPaletsAsync()
+	{
+		if (MostrandoErrores)
 		{
-			if (MostrandoErrores)
+			// 🔷 CORREGIDO: Si ya no hay errores, resetear y cargar normal
+			if (!HayErroresErp)
+			{
+				MostrandoErrores = false;
+			}
+			else
 			{
 				await LoadTraspasosErrorAsync();
 				return;
 			}
+		}
 
-			if (MostrandoPendientesVaciado)
+		if (MostrandoPendientesVaciado)
+		{
+			// 🔷 CORREGIDO: Si ya no hay pendientes, resetear y cargar normal
+			if (!HayPaletsPendientesVaciado)
+			{
+				MostrandoPendientesVaciado = false;
+			}
+			else
 			{
 				await LoadPaletsPendientesVaciadoAsync();
 				return;
 			}
+		}
 
 		try
 		{
@@ -678,12 +694,15 @@ namespace SGA_Desktop.ViewModels
 				PaletsView.Clear();
 				PaletSeleccionado = null;
 
-				if (!pendientes.Any())
-				{
-					HayPaletsPendientesVaciado = false;
-					Mensaje = "No hay palets pendientes de vaciar.";
-					return;
-				}
+			if (!pendientes.Any())
+			{
+				HayPaletsPendientesVaciado = false;
+				MostrandoPendientesVaciado = false; // 🔷 CORREGIDO: Resetear el estado
+				Mensaje = "No hay palets pendientes de vaciar.";
+				// 🔷 CORREGIDO: Cargar palets normales en lugar de solo retornar
+				await LoadPaletsAsync();
+				return;
+			}
 
 				foreach (var pendiente in pendientes)
 				{
@@ -708,9 +727,15 @@ namespace SGA_Desktop.ViewModels
 				}
 
 				HayPaletsPendientesVaciado = PaletsView.Any();
-				Mensaje = HayPaletsPendientesVaciado
-					? $"Se encontraron {PaletsView.Count} palets pendientes de vaciar."
-					: "No hay palets pendientes de vaciar.";
+				if (!HayPaletsPendientesVaciado)
+				{
+					// 🔷 CORREGIDO: Si después de procesar no hay pendientes válidos, resetear y cargar normal
+					MostrandoPendientesVaciado = false;
+					Mensaje = "No hay palets pendientes de vaciar.";
+					await LoadPaletsAsync();
+					return;
+				}
+				Mensaje = $"Se encontraron {PaletsView.Count} palets pendientes de vaciar.";
 
 				VaciarPaletPendienteCommand.NotifyCanExecuteChanged();
 			}
@@ -761,8 +786,11 @@ namespace SGA_Desktop.ViewModels
 			if (!errores.Any())
 			{
 				HayErroresErp = false;
+				MostrandoErrores = false; // 🔷 CORREGIDO: Resetear el estado
 				Mensaje = "No hay palets con traspasos en ERROR ERP.";
 				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				// 🔷 CORREGIDO: Cargar palets normales en lugar de solo retornar
+				await LoadPaletsAsync();
 				return;
 			}
 
@@ -809,8 +837,11 @@ namespace SGA_Desktop.ViewModels
 			if (!paletIdsParaCargar.Any())
 			{
 				HayErroresErp = false;
+				MostrandoErrores = false; // 🔷 CORREGIDO: Resetear el estado
 				Mensaje = "No hay palets con traspasos en ERROR ERP.";
 				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				// 🔷 CORREGIDO: Cargar palets normales en lugar de solo retornar
+				await LoadPaletsAsync();
 				return;
 			}
 
@@ -831,8 +862,11 @@ namespace SGA_Desktop.ViewModels
 			if (!paletsValidos.Any())
 			{
 				HayErroresErp = false;
+				MostrandoErrores = false; // 🔷 CORREGIDO: Resetear el estado
 				Mensaje = "No hay palets con traspasos en ERROR ERP.";
 				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+				// 🔷 CORREGIDO: Cargar palets normales en lugar de solo retornar
+				await LoadPaletsAsync();
 				return;
 			}
 
@@ -879,8 +913,17 @@ namespace SGA_Desktop.ViewModels
 				PaletsView.Add(palet);
 			}
 
-				Mensaje = $"Se encontraron {PaletsView.Count} palets con traspasos en ERROR ERP.";
 				HayErroresErp = PaletsView.Any();
+				if (!HayErroresErp)
+				{
+					// 🔷 CORREGIDO: Si después de procesar no hay errores válidos, resetear y cargar normal
+					MostrandoErrores = false;
+					Mensaje = "No hay palets con traspasos en ERROR ERP.";
+					RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
+					await LoadPaletsAsync();
+					return;
+				}
+				Mensaje = $"Se encontraron {PaletsView.Count} palets con traspasos en ERROR ERP.";
 				ErrorMessage = null;
 				RelanzarTraspasoErrorCommand.NotifyCanExecuteChanged();
 
@@ -1017,7 +1060,7 @@ namespace SGA_Desktop.ViewModels
             }
 
             // 🔷 Cargar los almacenes disponibles
-            var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+            var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
             // 🔷 Mostrar diálogo con líneas + almacenes
             var dlg = new ConfirmationWithListDialog(
@@ -1372,6 +1415,170 @@ namespace SGA_Desktop.ViewModels
 				// En caso de error, retornar lista vacía para máxima seguridad
 				return new List<string>();
 			}
+		}
+
+		// Comandos para copiar datos al portapapeles
+		[RelayCommand]
+		private void CopiarCodigo(string codigo)
+		{
+			if (!string.IsNullOrWhiteSpace(codigo))
+				Clipboard.SetText(codigo);
+		}
+
+		[RelayCommand]
+		private void CopiarDescripcion(string descripcion)
+		{
+			if (!string.IsNullOrWhiteSpace(descripcion))
+				Clipboard.SetText(descripcion);
+		}
+
+		[RelayCommand]
+		private void CopiarAlmacen(string almacen)
+		{
+			if (!string.IsNullOrWhiteSpace(almacen))
+				Clipboard.SetText(almacen);
+		}
+
+		[RelayCommand]
+		private void CopiarUbicacion(string ubicacion)
+		{
+			if (!string.IsNullOrWhiteSpace(ubicacion))
+				Clipboard.SetText(ubicacion);
+		}
+
+		[RelayCommand]
+		private void CopiarLote(string lote)
+		{
+			if (!string.IsNullOrWhiteSpace(lote))
+				Clipboard.SetText(lote);
+		}
+
+		[RelayCommand]
+		private void CopiarFechaCaducidad(DateTime? fechaCaducidad)
+		{
+			if (fechaCaducidad.HasValue)
+				Clipboard.SetText(fechaCaducidad.Value.ToString("dd/MM/yyyy"));
+		}
+
+		[RelayCommand]
+		private void CopiarCantidad(object cantidad)
+		{
+			if (cantidad is decimal dec)
+				Clipboard.SetText(dec.ToString("0.########"));
+			else if (cantidad != null && decimal.TryParse(cantidad.ToString(), out var parsed))
+				Clipboard.SetText(parsed.ToString("0.########"));
+		}
+
+		// Comandos para copiar datos del palet
+		[RelayCommand]
+		private void CopiarCodigoPalet(string codigo)
+		{
+			if (!string.IsNullOrWhiteSpace(codigo))
+				Clipboard.SetText(codigo);
+		}
+
+		[RelayCommand]
+		private void CopiarEstadoPalet(string estado)
+		{
+			if (!string.IsNullOrWhiteSpace(estado))
+				Clipboard.SetText(estado);
+		}
+
+		[RelayCommand]
+		private void CopiarTipoPalet(string tipoPalet)
+		{
+			if (!string.IsNullOrWhiteSpace(tipoPalet))
+				Clipboard.SetText(tipoPalet);
+		}
+
+		[RelayCommand]
+		private void CopiarFechaApertura(DateTime fechaApertura)
+		{
+			Clipboard.SetText(fechaApertura.ToString("dd/MM/yyyy HH:mm"));
+		}
+
+		[RelayCommand]
+		private void CopiarFechaCierre(DateTime? fechaCierre)
+		{
+			if (fechaCierre.HasValue)
+				Clipboard.SetText(fechaCierre.Value.ToString("dd/MM/yyyy HH:mm"));
+		}
+
+		[RelayCommand]
+		private void CopiarUsuarioApertura(string usuario)
+		{
+			if (!string.IsNullOrWhiteSpace(usuario))
+				Clipboard.SetText(usuario);
+		}
+
+		[RelayCommand]
+		private void CopiarUsuarioCierre(string usuario)
+		{
+			if (!string.IsNullOrWhiteSpace(usuario))
+				Clipboard.SetText(usuario);
+		}
+
+		[RelayCommand]
+		private void CopiarOrdenTrabajo(string orden)
+		{
+			if (!string.IsNullOrWhiteSpace(orden))
+				Clipboard.SetText(orden);
+		}
+
+		[RelayCommand]
+		private void CopiarAlmacenOrigenPalet(string almacen)
+		{
+			if (!string.IsNullOrWhiteSpace(almacen))
+				Clipboard.SetText(almacen);
+		}
+
+		[RelayCommand]
+		private void CopiarUbicacionOrigenPalet(string ubicacion)
+		{
+			if (!string.IsNullOrWhiteSpace(ubicacion))
+				Clipboard.SetText(ubicacion);
+		}
+
+		[RelayCommand]
+		private void CopiarFechaUltimoTraspaso(DateTime? fecha)
+		{
+			if (fecha.HasValue)
+				Clipboard.SetText(fecha.Value.ToString("dd/MM/yyyy HH:mm"));
+		}
+
+		[RelayCommand]
+		private void CopiarTipoUltimaActividad(string tipo)
+		{
+			if (!string.IsNullOrWhiteSpace(tipo))
+				Clipboard.SetText(tipo);
+		}
+
+		[RelayCommand]
+		private void CopiarFechaUltimaActividad(DateTime? fecha)
+		{
+			if (fecha.HasValue)
+				Clipboard.SetText(fecha.Value.ToString("dd/MM/yyyy HH:mm"));
+		}
+
+		[RelayCommand]
+		private void CopiarUsuarioUltimaActividad(string usuario)
+		{
+			if (!string.IsNullOrWhiteSpace(usuario))
+				Clipboard.SetText(usuario);
+		}
+
+		[RelayCommand]
+		private void CopiarPeso(decimal? peso)
+		{
+			if (peso.HasValue)
+				Clipboard.SetText(peso.Value.ToString("F2"));
+		}
+
+		[RelayCommand]
+		private void CopiarAltura(decimal? altura)
+		{
+			if (altura.HasValue)
+				Clipboard.SetText(altura.Value.ToString("F2"));
 		}
 
 	}

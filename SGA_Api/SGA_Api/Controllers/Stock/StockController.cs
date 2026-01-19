@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
@@ -532,12 +532,8 @@ namespace SGA_Api.Controllers.Stock
 			{
 				var lista = await BuscarPorAlternativo(codigoAlternativo);
 				
-				// Registrar evento de consulta (solo una vez desde el endpoint público)
-				var detalleConsulta = $"CodigoAlternativo={codigoAlternativo}, Resultados={lista.Count}";
-				RegistrarEventoConsultaStockAsync(
-					"StockController/BuscarArticulo",
-					"Búsqueda de artículo por código alternativo",
-					detalleConsulta);
+				// 🔷 ELIMINADO: No registrar eventos en búsquedas intermedias, solo en consultas de stock reales
+				// BuscarArticulo es una búsqueda intermedia para encontrar el artículo, no la acción final del usuario
 				
 				return Ok(lista);
 			}
@@ -546,12 +542,8 @@ namespace SGA_Api.Controllers.Stock
 			{
 				var lista = await BuscarPorCodigo(codigoArticulo);
 				
-				// Registrar evento de consulta (solo una vez desde el endpoint público)
-				var detalleConsulta = $"CodigoArticulo={codigoArticulo}, Resultados={lista.Count}";
-				RegistrarEventoConsultaStockAsync(
-					"StockController/BuscarArticulo",
-					"Búsqueda de artículo por código",
-					detalleConsulta);
+				// 🔷 ELIMINADO: No registrar eventos en búsquedas intermedias, solo en consultas de stock reales
+				// BuscarArticulo es una búsqueda intermedia para encontrar el artículo, no la acción final del usuario
 				
 				return Ok(lista);
 			}
@@ -605,17 +597,8 @@ namespace SGA_Api.Controllers.Stock
 					.Where(a => codigosSet.Contains(a.CodigoArticulo))
 					.ToList();
 
-				// Registrar evento de consulta
-				var detalleConsulta = $"Empresa={codigoEmpresa}, Descripcion={descripcion}";
-				if (!string.IsNullOrWhiteSpace(partida)) detalleConsulta += $", Partida={partida}";
-				if (!string.IsNullOrWhiteSpace(codigoAlmacen)) detalleConsulta += $", Almacen={codigoAlmacen}";
-				if (!string.IsNullOrWhiteSpace(codigoUbicacion)) detalleConsulta += $", Ubicacion={codigoUbicacion}";
-				detalleConsulta += $", Resultados={resultado.Count}";
-				
-				RegistrarEventoConsultaStockAsync(
-					"StockController/BuscarArticulo",
-					"Búsqueda de artículo por descripción",
-					detalleConsulta);
+				// 🔷 ELIMINADO: No registrar eventos en búsquedas intermedias, solo en consultas de stock reales
+				// BuscarArticulo es una búsqueda intermedia para encontrar el artículo, no la acción final del usuario
 
 				return Ok(resultado);
 			}
@@ -1163,6 +1146,33 @@ namespace SGA_Api.Controllers.Stock
 								return; // Dispositivo no encontrado, no registramos evento
 							}
 
+							// 🔷 DEDUPLICACIÓN: Verificar si ya existe una consulta de stock del mismo usuario/dispositivo/artículo en los últimos 5 segundos
+							// Esto evita múltiples registros cuando la PDA hace varias llamadas API casi simultáneamente
+							var fechaLimite = DateTime.Now.AddSeconds(-5);
+							var articuloActual = ExtraerArticuloDelDetalle(detalleCapturado);
+							
+							var eventoReciente = await dbContext.LogEventos
+								.Where(e => e.IdUsuario == dispositivo.IdUsuario &&
+										   e.IdDispositivo == dispositivo.Id &&
+										   e.Tipo == "CONSULTA_STOCK" &&
+										   e.Fecha >= fechaLimite)
+								.OrderByDescending(e => e.Fecha)
+								.FirstOrDefaultAsync();
+
+							if (eventoReciente != null)
+							{
+								// Extraer artículo del detalle para comparar si es la misma consulta
+								var articuloReciente = ExtraerArticuloDelDetalle(eventoReciente.Detalle);
+								
+								// Si es el mismo artículo (o ambos están vacíos), es probablemente la misma acción del usuario
+								if (articuloActual == articuloReciente || (string.IsNullOrEmpty(articuloActual) && string.IsNullOrEmpty(articuloReciente)))
+								{
+									logger.LogInformation("⏭️ Evento duplicado detectado y omitido: {TipoConsulta}, Usuario: {UsuarioId}, Dispositivo: {DispositivoId}, Último evento: {FechaUltimo} ({OrigenUltimo})", 
+										tipoConsultaCapturado, dispositivo.IdUsuario, dispositivo.Id, eventoReciente.Fecha, eventoReciente.Origen);
+									return; // Ya existe un evento similar reciente, no registrar duplicado
+								}
+							}
+
 							var logEvento = new LogEvento
 							{
 								Fecha = DateTime.Now,
@@ -1460,6 +1470,30 @@ namespace SGA_Api.Controllers.Stock
 			}
 			
 			return resultado;
+		}
+
+		/// <summary>
+		/// Extrae el código de artículo del detalle de un evento para comparación de duplicados
+		/// </summary>
+		private string? ExtraerArticuloDelDetalle(string? detalle)
+		{
+			if (string.IsNullOrWhiteSpace(detalle))
+				return null;
+
+			// Buscar patrones como "Articulo=13286" o "CodigoArticulo=13286"
+			var patrones = new[] { "Articulo=", "CodigoArticulo=" };
+			foreach (var patron in patrones)
+			{
+				var indice = detalle.IndexOf(patron, StringComparison.OrdinalIgnoreCase);
+				if (indice >= 0)
+				{
+					var inicio = indice + patron.Length;
+					var fin = detalle.IndexOf(',', inicio);
+					if (fin < 0) fin = detalle.Length;
+					return detalle.Substring(inicio, fin - inicio).Trim();
+				}
+			}
+			return null;
 		}
 	}
 

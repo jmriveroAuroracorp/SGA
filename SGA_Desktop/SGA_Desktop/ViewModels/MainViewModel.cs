@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Newtonsoft.Json;
 using SGA_Desktop.Helpers;
@@ -176,13 +176,6 @@ namespace SGA_Desktop.ViewModels
 	}
 
 	[RelayCommand]
-	public void IrAHistorialAjustes()
-	{
-		NavigationStore.Navigate("HistorialAjustes");
-		CurrentHeader = "HISTORIAL DE AJUSTES";
-	}
-
-	[RelayCommand]
 	public void IrACalidad()
 	{
 		NavigationStore.Navigate("Calidad");
@@ -194,6 +187,13 @@ namespace SGA_Desktop.ViewModels
 	{
 		NavigationStore.Navigate("Rendimientos");
 		CurrentHeader = "ANÁLISIS DE RENDIMIENTOS";
+	}
+
+	[RelayCommand]
+	public void IrACambiarArticulo()
+	{
+		NavigationStore.Navigate("CambiarArticulo");
+		CurrentHeader = "CAMBIO DE CÓDIGO O AMPLIACIONES";
 	}
 
 		[RelayCommand]
@@ -237,30 +237,37 @@ namespace SGA_Desktop.ViewModels
 
 					if (!string.IsNullOrWhiteSpace(SessionManager.Token))
 					{
-						using var http = new HttpClient();
-						http.Timeout = TimeSpan.FromSeconds(2); // Timeout de 2 segundos
-						http.DefaultRequestHeaders.Authorization =
-							new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SessionManager.Token);
+						var idDispositivo = $"{Environment.MachineName}_{SessionManager.UsuarioActual?.operario ?? 0}";
+						var idUsuario = SessionManager.UsuarioActual?.operario ?? 0;
 
-						var evento = new
+						// Registrar evento de logout usando LoginService (permitir durante cierre)
+						try
 						{
-							fecha = DateTime.Now,
-							idUsuario = SessionManager.UsuarioActual?.operario ?? 0,
-							tipo = "LOGOUT",
-							origen = "MainWindow",
-							descripcion = "Sesión Cerrada",
-							detalle = $"El usuario cerró sesión.",
-							idDispositivo = $"{Environment.MachineName}_{SessionManager.UsuarioActual?.operario ?? 0}"
-						};
-
-						var json = Newtonsoft.Json.JsonConvert.SerializeObject(evento);
-						var content = new StringContent(json, Encoding.UTF8, "application/json");
-						await http.PostAsync("http://10.0.0.175:5234/api/LogEvento/crear", content);
+							await _login.RegistrarLogEventoAsync(new LogEvento
+							{
+								Fecha = DateTime.Now,
+								IdUsuario = idUsuario,
+								Tipo = "LOGOUT",
+								Origen = "MainWindow",
+								Descripcion = "Sesión Cerrada",
+								Detalle = "El usuario cerró sesión.",
+								IdDispositivo = idDispositivo
+							}, permitirDuranteCierre: true);
+						}
+						catch
+						{
+							// Ignorar errores de registro de evento durante cierre
+						}
 
 						// Desactivar dispositivo en tu servicio
-						var login = new Services.LoginService();
-						await login.DesactivarDispositivoAsync(
-							evento.idDispositivo!, GetTipoSO(), evento.idUsuario);
+						try
+						{
+							await _login.DesactivarDispositivoAsync(idDispositivo, GetTipoSO(), idUsuario);
+						}
+						catch
+						{
+							// Ignorar errores de desactivación durante cierre
+						}
 					}
 				}
 				catch

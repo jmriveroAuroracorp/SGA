@@ -13,6 +13,20 @@ namespace SGA_Desktop.Helpers
 		public static int Operario => UsuarioActual?.operario ?? 0;
 		public static string NombreOperario => UsuarioActual?.nombreOperario ?? string.Empty;
 
+		/// <summary>
+		/// Indica si el usuario actual es administrador y puede ver datos de todas las empresas.
+		/// Verifica si el usuario tiene rol ADMIN (IdRol == 3, que corresponde a NivelJerarquico = 30).
+		/// </summary>
+		public static bool EsAdmin
+		{
+			get
+			{
+				// Verificar si el usuario tiene rol ADMIN (IdRol == 3)
+				// Nota: IdRol 3 = ADMIN con NivelJerarquico 30
+				return UsuarioActual != null && UsuarioActual.idRol == 3;
+			}
+		}
+
 		public static short? EmpresaSeleccionada { get; private set; }
 
 		/// <summary>

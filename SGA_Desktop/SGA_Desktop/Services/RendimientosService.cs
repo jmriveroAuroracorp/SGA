@@ -248,6 +248,45 @@ namespace SGA_Desktop.Services
                 throw;
             }
         }
+
+        public async Task<List<RendimientoArticuloDto>> ObtenerRendimientoArticulosAsync(FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                var queryParams = new List<string>();
+                
+                if (filtros.FechaDesde.HasValue)
+                    queryParams.Add($"fechaDesde={Uri.EscapeDataString(filtros.FechaDesde.Value.ToString("yyyy-MM-dd"))}");
+                if (filtros.FechaHasta.HasValue)
+                    queryParams.Add($"fechaHasta={Uri.EscapeDataString(filtros.FechaHasta.Value.ToString("yyyy-MM-dd"))}");
+                if (filtros.OperarioId.HasValue)
+                    queryParams.Add($"operarioId={filtros.OperarioId.Value}");
+                if (!string.IsNullOrEmpty(filtros.TipoProceso))
+                    queryParams.Add($"tipoProceso={Uri.EscapeDataString(filtros.TipoProceso)}");
+                if (filtros.CodigoEmpresa.HasValue)
+                    queryParams.Add($"codigoEmpresa={filtros.CodigoEmpresa.Value}");
+                if (!string.IsNullOrEmpty(filtros.CodigoAlmacen))
+                    queryParams.Add($"codigoAlmacen={Uri.EscapeDataString(filtros.CodigoAlmacen)}");
+
+                var queryString = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
+                var resp = await _httpClient.GetAsync($"rendimientos/articulos{queryString}");
+                
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var errorText = await resp.Content.ReadAsStringAsync();
+                    throw new ApplicationException($"Error al obtener rendimiento de artículos: {errorText}");
+                }
+
+                var text = await resp.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<List<RendimientoArticuloDto>>(text,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? new List<RendimientoArticuloDto>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error en ObtenerRendimientoArticulosAsync: {ex.Message}");
+                throw;
+            }
+        }
     }
 }
 

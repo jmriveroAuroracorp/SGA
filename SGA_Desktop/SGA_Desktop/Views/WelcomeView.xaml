@@ -94,41 +94,497 @@
                 </StackPanel>
             </Border>
             
-            <!-- Resumen de Órdenes de Traspaso -->
-            <Border Background="White"
-                    CornerRadius="10"
-                    Padding="30,20"
-                    BorderBrush="{StaticResource BrushPrincipal}"
-                    BorderThickness="2"
-                    Margin="0,0,0,30">
-                <StackPanel>
-                    <TextBlock Text="📦 Órdenes de Traspaso"
+            <!-- Grid para colocar las tres secciones lado a lado -->
+            <Grid Margin="0,0,0,30">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Resumen de Inventarios (columna 0 - izquierda) -->
+                <Border Grid.Column="0"
+                        Background="White"
+                        CornerRadius="10"
+                        Padding="30,20"
+                        BorderBrush="{StaticResource BrushPrincipal}"
+                        BorderThickness="2">
+                    <StackPanel>
+                        <TextBlock Text="📦 Mis Inventarios"
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,15"/>
+                        
+                        <!-- Indicador de carga -->
+                        <TextBlock Text="Cargando..."
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="14"
+                                   Foreground="Gray"
+                                   HorizontalAlignment="Center"
+                                   Visibility="{Binding CargandoInventarios, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        
+                        <!-- Contadores (ahora clickeables) -->
+                        <StackPanel Visibility="{Binding CargandoInventarios, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <!-- Abiertos - clickeable -->
+                            <Button Command="{Binding IrAInventariosAbiertosCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#E8F5E9"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Abiertos: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding TotalInventariosAbiertos}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#4CAF50"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- En conteo - clickeable -->
+                            <Button Command="{Binding IrAInventariosEnConteoCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FFF9C4"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• En conteo: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding InventariosEnConteo}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#F57C00"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Consolidados - clickeable -->
+                            <Button Command="{Binding IrAInventariosConsolidadosCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#E3F2FD"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Consolidados: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding InventariosConsolidados}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Pendientes de cierre - clickeable -->
+                            <Button Command="{Binding IrAInventariosPendientesCierreCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FFF3E0"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Pendientes de cierre: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding InventariosPendientesCierre}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#FF9800"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Cerrados - clickeable -->
+                            <Button Command="{Binding IrAInventariosCerradosCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#F5F5F5"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Cerrados: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding InventariosCerrados}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#9E9E9E"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Resumen de Órdenes de Conteo (columna 2 - centro) -->
+                <Border Grid.Column="2"
+                        Background="White"
+                        CornerRadius="10"
+                        Padding="30,20"
+                        BorderBrush="{StaticResource BrushPrincipal}"
+                        BorderThickness="2">
+                    <StackPanel>
+                        <TextBlock Text="📋 Mis Órdenes de Conteo"
                                FontFamily="{StaticResource FuentePrincipal}"
                                FontSize="18"
                                FontWeight="Bold"
                                Foreground="{StaticResource BrushPrincipal}"
-                               HorizontalAlignment="Center"
-                               Margin="0,0,0,15"/>
-                    
-                    <!-- Indicador de carga -->
-                    <TextBlock Text="Cargando..."
-                               FontFamily="{StaticResource FuentePrincipal}"
-                               FontSize="14"
-                               Foreground="Gray"
-                               HorizontalAlignment="Center"
-                               Visibility="{Binding CargandoOrdenes, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                    
-                    <!-- Contadores (ahora clickeables) -->
-                    <StackPanel Visibility="{Binding CargandoOrdenes, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                        <!-- Total pendientes - clickeable -->
-                        <Button Command="{Binding IrAOrdenesPendientesCommand}"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Margin="0,0,0,8"
-                                HorizontalContentAlignment="Center"
-                                Padding="5">
-                            <Button.Style>
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,15"/>
+                        
+                        <!-- Indicador de carga -->
+                        <TextBlock Text="Cargando..."
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="14"
+                                   Foreground="Gray"
+                                   HorizontalAlignment="Center"
+                                   Visibility="{Binding CargandoConteos, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        
+                        <!-- Contadores (ahora clickeables) -->
+                        <StackPanel Visibility="{Binding CargandoConteos, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <!-- Total pendientes - clickeable -->
+                            <Button Command="{Binding IrAConteosPendientesCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#E3F2FD"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Total pendientes: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding TotalConteosPendientes}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- En proceso - clickeable -->
+                            <Button Command="{Binding IrAConteosEnProcesoCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FFF9C4"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• En proceso: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding ConteosEnProceso}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#F57C00"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Pendientes de revisión - clickeable -->
+                            <Button Command="{Binding IrAConteosPendientesRevisionCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FFF3E0"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Pendientes de revisión: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding ConteosPendientesRevision}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#FF9800"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Prioridad alta - clickeable -->
+                            <Button Command="{Binding IrAConteosPrioridadAltaCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FFEBEE"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Prioridad alta: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding ConteosPrioridadAlta}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#D32F2F"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Cerradas - clickeable -->
+                            <Button Command="{Binding IrAConteosCerradosCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#E8F5E9"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Cerradas: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding ConteosCerrados}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#4CAF50"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Resumen de Órdenes de Traspaso (columna 4 - derecha) -->
+                <Border Grid.Column="4"
+                        Background="White"
+                        CornerRadius="10"
+                        Padding="30,20"
+                        BorderBrush="{StaticResource BrushPrincipal}"
+                        BorderThickness="2">
+                    <StackPanel>
+                        <TextBlock Text="📦 Órdenes de Traspaso"
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource BrushPrincipal}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,15"/>
+                        
+                        <!-- Indicador de carga -->
+                        <TextBlock Text="Cargando..."
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontSize="14"
+                                   Foreground="Gray"
+                                   HorizontalAlignment="Center"
+                                   Visibility="{Binding CargandoOrdenes, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        
+                        <!-- Contadores (ahora clickeables) -->
+                        <StackPanel Visibility="{Binding CargandoOrdenes, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <!-- Total pendientes - clickeable -->
+                            <Button Command="{Binding IrAOrdenesPendientesCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,0,8"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="5">
+                                <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Template">
                                         <Setter.Value>
@@ -146,21 +602,21 @@
                                         </Setter.Value>
                                     </Setter>
                                 </Style>
-                            </Button.Style>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="• Total pendientes: "
-                                           FontFamily="{StaticResource FuentePrincipal}"
-                                           FontSize="15"/>
-                                <TextBlock Text="{Binding TotalOrdenesPendientes}"
-                                           FontFamily="{StaticResource FuentePrincipal}"
-                                           FontSize="15"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource BrushPrincipal}"/>
-                            </StackPanel>
-                        </Button>
-                        
-                        <!-- En proceso - clickeable -->
-                        <Button Command="{Binding IrAOrdenesEnProcesoCommand}"
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="• Total pendientes: "
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"/>
+                                    <TextBlock Text="{Binding TotalOrdenesPendientes}"
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- En proceso - clickeable -->
+                            <Button Command="{Binding IrAOrdenesEnProcesoCommand}"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Cursor="Hand"
@@ -196,10 +652,10 @@
                                            FontWeight="Bold"
                                            Foreground="#F57C00"/>
                             </StackPanel>
-                        </Button>
-                        
-                        <!-- Prioridad alta - clickeable -->
-                        <Button Command="{Binding IrAOrdenesPrioridadAltaCommand}"
+                            </Button>
+                            
+                            <!-- Prioridad alta - clickeable -->
+                            <Button Command="{Binding IrAOrdenesPrioridadAltaCommand}"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Cursor="Hand"
@@ -238,10 +694,10 @@
                                            FontSize="15"
                                            Visibility="{Binding OrdenesPrioridadAlta, Converter={StaticResource ZeroToCollapsedConverter}}"/>
                             </StackPanel>
-                        </Button>
-                        
-                        <!-- Asignadas a mí - clickeable -->
-                        <Button Command="{Binding IrAOrdenesAsignadasCommand}"
+                            </Button>
+                            
+                            <!-- Asignadas a mí - clickeable -->
+                            <Button Command="{Binding IrAOrdenesAsignadasCommand}"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Cursor="Hand"
@@ -277,10 +733,10 @@
                                            FontWeight="Bold"
                                            Foreground="{StaticResource BrushPrincipal}"/>
                             </StackPanel>
-                        </Button>
-                        
-                        <!-- Sin asignar - clickeable -->
-                        <Button Command="{Binding IrAOrdenesSinAsignarCommand}"
+                            </Button>
+                            
+                            <!-- Sin asignar - clickeable -->
+                            <Button Command="{Binding IrAOrdenesSinAsignarCommand}"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Cursor="Hand"
@@ -316,9 +772,10 @@
                                            Foreground="#FF9800"/>
                             </StackPanel>
                         </Button>
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
-            </Border>
+                </Border>
+            </Grid>
             
             <!-- Mensaje de instrucciones -->
             <TextBlock Text="Selecciona una opción del menú lateral para comenzar"

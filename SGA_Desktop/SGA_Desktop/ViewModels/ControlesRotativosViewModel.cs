@@ -60,18 +60,32 @@ namespace SGA_Desktop.ViewModels
             AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
             AlmacenesComboView.Filter = FiltraAlmacenes;
 
+            // Inicializar vistas para autocompletado de supervisión
+            AlmacenesSupervisionComboView = CollectionViewSource.GetDefaultView(AlmacenesSupervisionCombo);
+            AlmacenesSupervisionComboView.Filter = FiltraAlmacenesSupervisionCombo;
+            
+            UbicacionesSupervisionComboView = CollectionViewSource.GetDefaultView(UbicacionesSupervisionCombo);
+            UbicacionesSupervisionComboView.Filter = FiltraUbicacionesSupervisionCombo;
+            
+            OperariosSupervisionComboView = CollectionViewSource.GetDefaultView(OperariosSupervisionCombo);
+            OperariosSupervisionComboView.Filter = FiltraOperariosSupervisionCombo;
+
             EstadosCombo = new ObservableCollection<string>
             {
                 "TODOS",
                 "PLANIFICADO", 
                 "ASIGNADO",
                 "EN_PROCESO",
+                "PENDIENTE_REVISION",
                 "CERRADO",
                 "CANCELADO"
             };
 
             EstadoFiltro = "TODOS";
             ModoVisualizacion = "ORDENES"; // Por defecto mostrar órdenes
+
+            // Suscribirse a solicitudes de filtro
+            ConteoFiltroStore.FiltroSolicitado += OnFiltroSolicitado;
 
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
                 _ = InitializeAsync();
@@ -156,6 +170,9 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private bool verTodosLosConteos = false; // Por defecto, solo ver los propios
+        
+        [ObservableProperty]
+        private OperariosAccesoDto? operarioCreadorSeleccionadoCombo;
 
         partial void OnIdOrdenFiltroChanged(string value)
         {
@@ -198,11 +215,58 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private OperariosAccesoDto? operarioAprobadorSeleccionado;
 
+        // Propiedades para filtros de supervisión
         [ObservableProperty]
-        private string filtroArticuloSupervision = string.Empty;
-
+        private bool verTodosLosResultadosSupervision = false; // Por defecto, solo ver los propios
+        
         [ObservableProperty]
-        private string filtroAlmacenSupervision = string.Empty;
+        private DateTime? fechaDesdeSupervision;
+        
+        [ObservableProperty]
+        private DateTime? fechaHastaSupervision;
+        
+        [ObservableProperty]
+        private decimal? diferenciaDesdeSupervision;
+        
+        [ObservableProperty]
+        private decimal? diferenciaHastaSupervision;
+        
+        [ObservableProperty]
+        private string? almacenSupervisionSeleccionado;
+        
+        [ObservableProperty]
+        private string? ubicacionSupervisionSeleccionada;
+        
+        [ObservableProperty]
+        private OperariosAccesoDto? operarioSupervisionSeleccionado;
+        
+        [ObservableProperty]
+        private string filtroAlmacenesSupervisionCombo = "";
+        
+        [ObservableProperty]
+        private string filtroUbicacionesSupervisionCombo = "";
+        
+        [ObservableProperty]
+        private string filtroOperariosSupervisionCombo = "";
+        
+        [ObservableProperty]
+        private bool isDropDownOpenAlmacenesSupervision = false;
+        
+        [ObservableProperty]
+        private bool isDropDownOpenUbicacionesSupervision = false;
+        
+        [ObservableProperty]
+        private bool isDropDownOpenOperariosSupervision = false;
+        
+        // Colecciones para autocompletado de supervisión
+        public ObservableCollection<string> AlmacenesSupervisionCombo { get; } = new();
+        public ObservableCollection<string> UbicacionesSupervisionCombo { get; } = new();
+        public ObservableCollection<OperariosAccesoDto> OperariosSupervisionCombo { get; } = new();
+        
+        // Vistas filtrables para autocompletado
+        public ICollectionView AlmacenesSupervisionComboView { get; private set; }
+        public ICollectionView UbicacionesSupervisionComboView { get; private set; }
+        public ICollectionView OperariosSupervisionComboView { get; private set; }
         
         // Filtros para autocompletado de operarios
         [ObservableProperty]
@@ -225,6 +289,28 @@ namespace SGA_Desktop.ViewModels
         private bool isDropDownOpenAlmacenes = false;
 
         public ICollectionView OrdenesConteoView { get; }
+        
+        // Propiedades para filtros de conteos periódicos
+        [ObservableProperty]
+        private AlmacenDto? almacenSeleccionadoPeriodicos;
+        
+        [ObservableProperty]
+        private DateTime? fechaDesdePeriodicos;
+        
+        [ObservableProperty]
+        private DateTime? fechaHastaPeriodicos;
+        
+        [ObservableProperty]
+        private string estadoActivoFiltro = "TODOS"; // TODOS, ACTIVO, INACTIVO
+        
+        [ObservableProperty]
+        private OperariosAccesoDto? operarioSeleccionadoPeriodicos;
+        
+        [ObservableProperty]
+        private bool verTodosLosConteosPeriodicos = false; // Por defecto, solo ver los propios
+        
+        [ObservableProperty]
+        private OperariosAccesoDto? operarioCreadorSeleccionadoPeriodicos;
         #endregion
 
         #region Computed Properties
@@ -241,6 +327,76 @@ namespace SGA_Desktop.ViewModels
                                    ResultadoSeleccionado.RequiereAprobacion && 
                                    OperarioAprobadorSeleccionado != null &&
                                    OperarioAprobadorSeleccionado.Operario != 0;
+
+        public bool TieneFiltrosActivosSupervision
+        {
+            get
+            {
+                var verTodosActivo = VerTodosLosResultadosSupervision; // Si está en true, es un filtro activo
+                var fechaDesdeActivo = FechaDesdeSupervision.HasValue;
+                var fechaHastaActivo = FechaHastaSupervision.HasValue;
+                var diferenciaDesdeActivo = DiferenciaDesdeSupervision.HasValue;
+                var diferenciaHastaActivo = DiferenciaHastaSupervision.HasValue;
+                var almacenActivo = !string.IsNullOrEmpty(AlmacenSupervisionSeleccionado);
+                var ubicacionActiva = !string.IsNullOrEmpty(UbicacionSupervisionSeleccionada);
+                var operarioActivo = OperarioSupervisionSeleccionado != null && 
+                                     OperarioSupervisionSeleccionado.Operario > 0;
+
+                return verTodosActivo || fechaDesdeActivo || fechaHastaActivo || 
+                       diferenciaDesdeActivo || diferenciaHastaActivo || almacenActivo || 
+                       ubicacionActiva || operarioActivo;
+            }
+        }
+
+        public string ResumenFiltrosActivosSupervision
+        {
+            get
+            {
+                var filtros = new List<string>();
+
+                if (VerTodosLosResultadosSupervision)
+                {
+                    filtros.Add("Ver todos");
+                }
+
+                if (FechaDesdeSupervision.HasValue || FechaHastaSupervision.HasValue)
+                {
+                    var fechaStr = FechaDesdeSupervision.HasValue && FechaHastaSupervision.HasValue
+                        ? $"{FechaDesdeSupervision.Value:dd/MM/yyyy} - {FechaHastaSupervision.Value:dd/MM/yyyy}"
+                        : FechaDesdeSupervision.HasValue
+                            ? $"Desde {FechaDesdeSupervision.Value:dd/MM/yyyy}"
+                            : $"Hasta {FechaHastaSupervision.Value:dd/MM/yyyy}";
+                    filtros.Add($"Fecha: {fechaStr}");
+                }
+
+                if (DiferenciaDesdeSupervision.HasValue || DiferenciaHastaSupervision.HasValue)
+                {
+                    var diferenciaStr = DiferenciaDesdeSupervision.HasValue && DiferenciaHastaSupervision.HasValue
+                        ? $"{DiferenciaDesdeSupervision.Value:N2} - {DiferenciaHastaSupervision.Value:N2}"
+                        : DiferenciaDesdeSupervision.HasValue
+                            ? $"Desde {DiferenciaDesdeSupervision.Value:N2}"
+                            : $"Hasta {DiferenciaHastaSupervision.Value:N2}";
+                    filtros.Add($"Diferencia: {diferenciaStr}");
+                }
+
+                if (!string.IsNullOrEmpty(AlmacenSupervisionSeleccionado))
+                {
+                    filtros.Add($"Almacén: {AlmacenSupervisionSeleccionado}");
+                }
+
+                if (!string.IsNullOrEmpty(UbicacionSupervisionSeleccionada))
+                {
+                    filtros.Add($"Ubicación: {UbicacionSupervisionSeleccionada}");
+                }
+
+                if (OperarioSupervisionSeleccionado != null && OperarioSupervisionSeleccionado.Operario > 0)
+                {
+                    filtros.Add($"Operario: {OperarioSupervisionSeleccionado.NombreOperario}");
+                }
+
+                return string.Join(" | ", filtros);
+            }
+        }
 
         public string TotalOrdenes
         {
@@ -302,6 +458,78 @@ namespace SGA_Desktop.ViewModels
                 if (VerTodosLosConteos)
                 {
                     filtros.Add("Ver todos");
+                    // Si hay un creador seleccionado, agregarlo al resumen
+                    if (OperarioCreadorSeleccionadoCombo != null && OperarioCreadorSeleccionadoCombo.Operario > 0)
+                    {
+                        filtros.Add($"Creado por: {OperarioCreadorSeleccionadoCombo.NombreOperario}");
+                    }
+                }
+                else
+                {
+                    filtros.Add("Solo propios");
+                }
+
+                return string.Join(" | ", filtros);
+            }
+        }
+        
+        public bool TieneFiltrosActivosPeriodicos
+        {
+            get
+            {
+                var almacenActivo = AlmacenSeleccionadoPeriodicos != null && 
+                                    AlmacenSeleccionadoPeriodicos.CodigoAlmacen != "Todas";
+                var estadoActivo = !string.IsNullOrEmpty(EstadoActivoFiltro) && EstadoActivoFiltro != "TODOS";
+                var operarioActivo = OperarioSeleccionadoPeriodicos != null && 
+                                     OperarioSeleccionadoPeriodicos.Operario != 0;
+                var verTodosActivo = VerTodosLosConteosPeriodicos;
+                var fechasActivas = FechaDesdePeriodicos.HasValue || FechaHastaPeriodicos.HasValue;
+
+                return almacenActivo || estadoActivo || operarioActivo || verTodosActivo || fechasActivas;
+            }
+        }
+
+        public string ResumenFiltrosActivosPeriodicos
+        {
+            get
+            {
+                var filtros = new List<string>();
+
+                // Mostrar fechas solo si están establecidas
+                if (FechaDesdePeriodicos.HasValue || FechaHastaPeriodicos.HasValue)
+                {
+                    var fechaDesdeStr = FechaDesdePeriodicos.HasValue 
+                        ? FechaDesdePeriodicos.Value.ToString("dd/MM/yyyy") 
+                        : "...";
+                    var fechaHastaStr = FechaHastaPeriodicos.HasValue 
+                        ? FechaHastaPeriodicos.Value.ToString("dd/MM/yyyy") 
+                        : "...";
+                    filtros.Add($"Fechas: {fechaDesdeStr} - {fechaHastaStr}");
+                }
+
+                if (AlmacenSeleccionadoPeriodicos != null && AlmacenSeleccionadoPeriodicos.CodigoAlmacen != "Todas")
+                {
+                    filtros.Add($"Almacén: {AlmacenSeleccionadoPeriodicos.CodigoAlmacen}");
+                }
+
+                if (!string.IsNullOrEmpty(EstadoActivoFiltro) && EstadoActivoFiltro != "TODOS")
+                {
+                    filtros.Add($"Estado: {EstadoActivoFiltro}");
+                }
+
+                if (OperarioSeleccionadoPeriodicos != null && OperarioSeleccionadoPeriodicos.Operario != 0)
+                {
+                    filtros.Add($"Operario: {OperarioSeleccionadoPeriodicos.NombreOperario}");
+                }
+
+                if (VerTodosLosConteosPeriodicos)
+                {
+                    filtros.Add("Ver todos");
+                    // Si hay un creador seleccionado, agregarlo al resumen
+                    if (OperarioCreadorSeleccionadoPeriodicos != null && OperarioCreadorSeleccionadoPeriodicos.Operario > 0)
+                    {
+                        filtros.Add($"Creado por: {OperarioCreadorSeleccionadoPeriodicos.NombreOperario}");
+                    }
                 }
                 else
                 {
@@ -360,7 +588,8 @@ namespace SGA_Desktop.ViewModels
                     EstadoFiltro,
                     OperarioSeleccionadoCombo,
                     IdOrdenFiltro,
-                    VerTodosLosConteos
+                    VerTodosLosConteos,
+                    OperarioCreadorSeleccionadoCombo
                 );
 
                 // Crear y mostrar el diálogo
@@ -387,6 +616,7 @@ namespace SGA_Desktop.ViewModels
                     OperarioSeleccionadoCombo = dialogViewModel.OperarioSeleccionadoCombo;
                     IdOrdenFiltro = dialogViewModel.IdOrdenFiltro;
                     VerTodosLosConteos = dialogViewModel.VerTodosLosConteos;
+                    OperarioCreadorSeleccionadoCombo = dialogViewModel.OperarioCreadorSeleccionadoCombo;
 
                     // Notificar cambios en propiedades calculadas
                     OnPropertyChanged(nameof(TieneFiltrosActivos));
@@ -463,17 +693,32 @@ namespace SGA_Desktop.ViewModels
                 
                 // Obtener código del creador para filtrar por "solo propios" vs "ver todos"
                 // Si VerTodosLosConteos es false, filtrar por CreadoPorCodigo (solo los que creó el usuario)
-                // Si VerTodosLosConteos es true, no filtrar por CreadoPorCodigo (ver todos)
-                string? creadoPorCodigo = VerTodosLosConteos 
-                    ? null 
-                    : SessionManager.UsuarioActual?.operario.ToString();
+                // Si VerTodosLosConteos es true, usar el filtro de creador seleccionado (si hay uno)
+                string? creadoPorCodigo;
+                if (!VerTodosLosConteos)
+                {
+                    // Solo ver los propios
+                    creadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString();
+                }
+                else
+                {
+                    // Ver todos, pero filtrar por creador si hay uno seleccionado
+                    creadoPorCodigo = OperarioCreadorSeleccionadoCombo?.Operario > 0 
+                        ? OperarioCreadorSeleccionadoCombo.Operario.ToString() 
+                        : null;
+                }
+                
+                // Si hay un filtro especial activo (desde WelcomeView), pasar null como fechas
+                // para que el backend no filtre por fecha y cargue todos los conteos
+                DateTime? fechaDesdeParam = string.IsNullOrEmpty(_filtroEspecial) ? FechaDesde : null;
+                DateTime? fechaHastaParam = string.IsNullOrEmpty(_filtroEspecial) ? FechaHasta : null;
                 
                 // Pasar las fechas al servicio para filtrar en el backend
                 var ordenes = await _conteosService.ListarTodasLasOrdenesAsync(
                     estadoFiltro, 
                     operarioFiltro,
-                    FechaDesde,
-                    FechaHasta,
+                    fechaDesdeParam,
+                    fechaHastaParam,
                     codigoOperarioSesion,
                     creadoPorCodigo);
                 
@@ -755,6 +1000,17 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(MostrandoSupervision));
             OnPropertyChanged(nameof(MostrandoPeriodicos));
             
+            // Inicializar filtros si es la primera vez
+            if (AlmacenSeleccionadoPeriodicos == null && AlmacenesCombo.Any())
+            {
+                AlmacenSeleccionadoPeriodicos = AlmacenesCombo.FirstOrDefault();
+            }
+            
+            if (OperarioSeleccionadoPeriodicos == null && OperariosCombo.Any())
+            {
+                OperarioSeleccionadoPeriodicos = OperariosCombo.FirstOrDefault();
+            }
+            
             // Cargar conteos periódicos si es la primera vez
             if (ConteosPeriodicos.Count == 0)
             {
@@ -771,14 +1027,89 @@ namespace SGA_Desktop.ViewModels
                 MensajeEstado = "Cargando conteos periódicos...";
 
                 // Obtener código de operario del usuario actual para filtrar por almacenes autorizados
-                var codigoOperario = SessionManager.UsuarioActual?.operario.ToString();
-                var conteos = await _conteosService.ListarConteosPeriodicosAsync(codigoOperario);
+                var codigoOperarioSesion = SessionManager.UsuarioActual?.operario.ToString();
+                
+                // Obtener parámetros de filtro
+                var codigoAlmacen = AlmacenSeleccionadoPeriodicos?.CodigoAlmacen != "Todas" 
+                    ? AlmacenSeleccionadoPeriodicos?.CodigoAlmacen 
+                    : null;
+                
+                // Solo aplicar filtro de fechas si están establecidas
+                var fechaDesde = FechaDesdePeriodicos;
+                var fechaHasta = FechaHastaPeriodicos;
+                
+                // Convertir estado a bool?
+                bool? activo = EstadoActivoFiltro switch
+                {
+                    "ACTIVO" => true,
+                    "INACTIVO" => false,
+                    _ => null // TODOS
+                };
+                
+                // Obtener código de operario asignado (filtro visual)
+                var codigoOperario = OperarioSeleccionadoPeriodicos?.Operario > 0 
+                    ? OperarioSeleccionadoPeriodicos.Operario.ToString() 
+                    : null;
+                
+                // Obtener código del creador para filtrar por "solo propios" vs "ver todos"
+                // Si VerTodosLosConteosPeriodicos es false, filtrar por CreadoPorCodigo (solo los que creó el usuario)
+                // Si VerTodosLosConteosPeriodicos es true, usar el filtro de creador seleccionado (si hay uno)
+                string? creadoPorCodigo;
+                if (!VerTodosLosConteosPeriodicos)
+                {
+                    // Solo ver los propios
+                    creadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString();
+                }
+                else
+                {
+                    // Ver todos, pero filtrar por creador si hay uno seleccionado
+                    creadoPorCodigo = OperarioCreadorSeleccionadoPeriodicos?.Operario > 0 
+                        ? OperarioCreadorSeleccionadoPeriodicos.Operario.ToString() 
+                        : null;
+                }
+                
+                var conteos = await _conteosService.ListarConteosPeriodicosAsync(
+                    codigoAlmacen,
+                    fechaDesde,
+                    fechaHasta,
+                    activo,
+                    codigoOperario,
+                    codigoOperarioSesion,
+                    creadoPorCodigo);
+
+                // Asegurar que tenemos los operarios cargados para el mapeo de nombres
+                if (OperariosDisponibles.Count == 0)
+                {
+                    await CargarOperarios();
+                }
+
+                // Crear diccionario para mapear códigos a nombres de operarios
+                var operariosDict = OperariosDisponibles
+                    .Where(op => op.Operario > 0) // Excluir "Sin asignar"
+                    .ToDictionary(op => op.Operario.ToString(), op => op.NombreOperario ?? "");
 
                 ConteosPeriodicos.Clear();
                 foreach (var conteo in conteos.OrderByDescending(c => c.FechaCreacion))
                 {
+                    // Mapear nombre del operario si existe
+                    if (!string.IsNullOrEmpty(conteo.CodigoOperario) && 
+                        operariosDict.TryGetValue(conteo.CodigoOperario, out var nombreOperario))
+                    {
+                        conteo.NombreOperario = nombreOperario;
+                    }
+                    
+                    // Mapear nombre del creador si existe
+                    if (!string.IsNullOrEmpty(conteo.CreadoPorCodigo) && 
+                        operariosDict.TryGetValue(conteo.CreadoPorCodigo, out var nombreCreador))
+                    {
+                        conteo.NombreCreador = nombreCreador;
+                    }
+                    
                     ConteosPeriodicos.Add(conteo);
                 }
+
+                OnPropertyChanged(nameof(TieneFiltrosActivosPeriodicos));
+                OnPropertyChanged(nameof(ResumenFiltrosActivosPeriodicos));
 
                 MensajeEstado = $"Se cargaron {ConteosPeriodicos.Count} conteos periódicos";
             }
@@ -803,21 +1134,35 @@ namespace SGA_Desktop.ViewModels
 
             try
             {
-                await _conteosService.ActivarPeriodicidadAsync(conteo.GuidID);
+                // Abrir el diálogo de edición en lugar de activar directamente
+                var dialogViewModel = new EditarOrdenConteoDialogViewModel(_conteosService, _stockService, new LoginService(), new InventarioService(), new UbicacionesService());
                 
-                // Recargar la lista para obtener datos actualizados
-                await CargarConteosPeriodicos();
+                // Cargar los datos de la orden (todos excepto FechaProximaRenovacion si está desactivado)
+                await dialogViewModel.CargarOrdenAsync(conteo.GuidID);
                 
-                var successDialog = new WarningDialog(
-                    "Periodicidad activada",
-                    $"El conteo periódico '{conteo.Titulo}' ha sido activado correctamente.");
-                ShowCenteredDialog(successDialog);
+                // Crear y mostrar el diálogo
+                var editDialog = new EditarOrdenConteoDialog();
+                editDialog.DataContext = dialogViewModel;
+                
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                editDialog.Owner = mainWindow;
+                
+                // Mostrar el diálogo
+                var result = editDialog.ShowDialog();
+                
+                // Si se guardó correctamente, recargar la lista
+                if (result == true)
+                {
+                    await CargarConteosPeriodicos();
+                }
             }
             catch (Exception ex)
             {
                 var errorDialog = new WarningDialog(
-                    "Error al activar periodicidad",
-                    $"No se pudo activar la periodicidad: {ex.Message}");
+                    "Error al abrir diálogo de edición",
+                    $"No se pudo abrir el diálogo de edición: {ex.Message}");
                 ShowCenteredDialog(errorDialog);
             }
         }
@@ -849,39 +1194,113 @@ namespace SGA_Desktop.ViewModels
         }
 
         [RelayCommand]
+        private async Task AbrirFiltrosConteosPeriodicos()
+        {
+            try
+            {
+                // Crear el ViewModel del diálogo con los valores actuales
+                var dialogViewModel = new FiltrosConteosPeriodicosDialogViewModel(
+                    AlmacenSeleccionadoPeriodicos,
+                    FechaDesdePeriodicos,
+                    FechaHastaPeriodicos,
+                    EstadoActivoFiltro,
+                    OperarioSeleccionadoPeriodicos,
+                    VerTodosLosConteosPeriodicos,
+                    OperarioCreadorSeleccionadoPeriodicos
+                );
+
+                // Crear y mostrar el diálogo
+                var dialog = new FiltrosConteosPeriodicosDialog(dialogViewModel);
+
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+
+                if (mainWindow != null && mainWindow != dialog)
+                    dialog.Owner = mainWindow;
+
+                // Mostrar el diálogo y esperar resultado
+                var result = dialog.ShowDialog();
+
+                // Si el usuario hizo clic en "Aplicar" (result == true), aplicar los filtros
+                if (result == true)
+                {
+                    // Actualizar los filtros del ViewModel principal con los valores del diálogo
+                    AlmacenSeleccionadoPeriodicos = dialogViewModel.AlmacenSeleccionadoCombo;
+                    FechaDesdePeriodicos = dialogViewModel.FechaDesde;
+                    FechaHastaPeriodicos = dialogViewModel.FechaHasta;
+                    EstadoActivoFiltro = dialogViewModel.EstadoActivoFiltro;
+                    OperarioSeleccionadoPeriodicos = dialogViewModel.OperarioSeleccionadoCombo;
+                    VerTodosLosConteosPeriodicos = dialogViewModel.VerTodosLosConteos;
+                    OperarioCreadorSeleccionadoPeriodicos = dialogViewModel.OperarioCreadorSeleccionadoCombo;
+
+                    // Notificar cambios en propiedades calculadas
+                    OnPropertyChanged(nameof(TieneFiltrosActivosPeriodicos));
+                    OnPropertyChanged(nameof(ResumenFiltrosActivosPeriodicos));
+
+                    // Recargar los conteos periódicos con los nuevos filtros
+                    await CargarConteosPeriodicos();
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al abrir el diálogo de filtros: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+        }
+
+        [RelayCommand]
+        private void LimpiarFiltrosConteosPeriodicos()
+        {
+            EstadoActivoFiltro = "TODOS";
+            VerTodosLosConteosPeriodicos = false; // Por defecto, solo ver los propios
+            
+            // Verificar que las colecciones no estén vacías antes de acceder a FirstOrDefault()
+            if (OperariosCombo?.Any() == true)
+            {
+                OperarioSeleccionadoPeriodicos = OperariosCombo.FirstOrDefault();
+                FiltroOperariosCombo = "";
+            }
+            
+            if (AlmacenesCombo?.Any() == true)
+            {
+                AlmacenSeleccionadoPeriodicos = AlmacenesCombo.FirstOrDefault();
+                FiltroAlmacenesTexto = "";
+            }
+            
+            // Limpiar las fechas (sin filtro por defecto)
+            FechaDesdePeriodicos = null;
+            FechaHastaPeriodicos = null;
+
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivosPeriodicos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosPeriodicos));
+            
+            // Recargar conteos periódicos y refrescar vista
+            _ = CargarConteosPeriodicos();
+        }
+
+        [RelayCommand]
         private async Task VerRenovaciones(ConteoPeriodicoDto conteo)
         {
             if (conteo == null) return;
 
             try
             {
-                IsCargando = true;
-                MensajeEstado = "Cargando renovaciones...";
-
-                var renovaciones = await _conteosService.ObtenerRenovacionesAsync(conteo.GuidID);
+                // Crear y mostrar el nuevo diálogo de historial
+                var dialog = new HistorialRenovacionesDialog(conteo);
                 
-                var mensaje = $"Historial de renovaciones para '{conteo.Titulo}':\n\n";
-                mensaje += $"Total de renovaciones: {renovaciones.Count}\n\n";
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
                 
-                if (renovaciones.Any())
-                {
-                    mensaje += "Últimas renovaciones:\n";
-                    foreach (var renovacion in renovaciones.Take(10).OrderByDescending(r => r.FechaCreacion))
-                    {
-                        mensaje += $"- {renovacion.FechaCreacion:dd/MM/yyyy HH:mm} - Estado: {renovacion.Estado}\n";
-                    }
-                    if (renovaciones.Count > 10)
-                    {
-                        mensaje += $"\n... y {renovaciones.Count - 10} más";
-                    }
-                }
-                else
-                {
-                    mensaje += "Aún no se han realizado renovaciones.";
-                }
+                if (mainWindow != null && mainWindow != dialog)
+                    dialog.Owner = mainWindow;
 
-                var infoDialog = new WarningDialog("Historial de Renovaciones", mensaje);
-                ShowCenteredDialog(infoDialog);
+                // Mostrar el diálogo
+                dialog.ShowDialog();
             }
             catch (Exception ex)
             {
@@ -889,10 +1308,6 @@ namespace SGA_Desktop.ViewModels
                     "Error al obtener renovaciones",
                     $"No se pudieron obtener las renovaciones: {ex.Message}");
                 ShowCenteredDialog(errorDialog);
-            }
-            finally
-            {
-                IsCargando = false;
             }
         }
 
@@ -906,15 +1321,45 @@ namespace SGA_Desktop.ViewModels
 
                 var resultados = await _conteosService.ObtenerResultadosSupervisionAsync();
 
+                // Asegurar que tenemos los operarios cargados para el mapeo de nombres
+                if (OperariosDisponibles.Count == 0)
+                {
+                    await CargarOperarios();
+                }
+
+                // Crear diccionario para mapear códigos a nombres de operarios
+                var operariosDict = OperariosDisponibles
+                    .Where(op => op.Operario > 0) // Excluir "Sin asignar"
+                    .ToDictionary(op => op.Operario.ToString(), op => op.NombreOperario ?? "");
+
                 ResultadosSupervision.Clear();
                 foreach (var resultado in resultados.OrderByDescending(r => r.FechaEvaluacion))
                 {
+                    // Mapear nombre del operario que hizo el conteo
+                    if (!string.IsNullOrEmpty(resultado.UsuarioCodigo) && 
+                        operariosDict.TryGetValue(resultado.UsuarioCodigo, out var nombreOperario))
+                    {
+                        resultado.NombreOperario = nombreOperario;
+                    }
+                    
+                    // Mapear nombre del creador de la orden
+                    if (!string.IsNullOrEmpty(resultado.CreadoPorCodigo) && 
+                        operariosDict.TryGetValue(resultado.CreadoPorCodigo, out var nombreCreador))
+                    {
+                        resultado.NombreCreador = nombreCreador;
+                    }
+                    
                     ResultadosSupervision.Add(resultado);
                 }
+
+                // Poblar ComboBoxes con valores únicos de almacenes, ubicaciones y operarios
+                PoblarComboBoxesSupervision(resultados);
 
                 ResultadosView.Refresh();
                 OnPropertyChanged(nameof(TotalResultados));
                 OnPropertyChanged(nameof(ResultadosPendientes));
+                OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+                OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
 
                 MensajeEstado = $"Se cargaron {ResultadosSupervision.Count} resultados de supervisión";
             }
@@ -929,6 +1374,72 @@ namespace SGA_Desktop.ViewModels
             finally
             {
                 IsCargando = false;
+            }
+        }
+
+        private void PoblarComboBoxesSupervision(IEnumerable<ResultadoConteoDetalladoDto> resultados)
+        {
+            // Poblar almacenes únicos
+            var almacenesUnicos = resultados
+                .Where(r => !string.IsNullOrEmpty(r.CodigoAlmacen))
+                .Select(r => r.CodigoAlmacen!)
+                .Distinct()
+                .OrderBy(a => a)
+                .ToList();
+
+            AlmacenesSupervisionCombo.Clear();
+            foreach (var almacen in almacenesUnicos)
+            {
+                AlmacenesSupervisionCombo.Add(almacen);
+            }
+
+            // Poblar ubicaciones únicas
+            var ubicacionesUnicas = resultados
+                .Where(r => !string.IsNullOrEmpty(r.CodigoUbicacion))
+                .Select(r => r.CodigoUbicacion!)
+                .Distinct()
+                .OrderBy(u => u)
+                .ToList();
+
+            UbicacionesSupervisionCombo.Clear();
+            foreach (var ubicacion in ubicacionesUnicas)
+            {
+                UbicacionesSupervisionCombo.Add(ubicacion);
+            }
+
+            // Poblar operarios únicos (solo los que han hecho conteos)
+            var operariosCodigos = resultados
+                .Where(r => !string.IsNullOrEmpty(r.UsuarioCodigo))
+                .Select(r => r.UsuarioCodigo!)
+                .Distinct()
+                .ToList();
+
+            // Cargar operarios disponibles si no están cargados
+            if (OperariosDisponibles.Count == 0)
+            {
+                _ = CargarOperarios();
+            }
+
+            // Filtrar operarios que han hecho conteos
+            OperariosSupervisionCombo.Clear();
+            
+            // Agregar opción "Todos"
+            OperariosSupervisionCombo.Add(new OperariosAccesoDto
+            {
+                Operario = 0,
+                NombreOperario = "TODOS",
+                Contraseña = "",
+                MRH_CodigoAplicacion = 0
+            });
+
+            var operariosConConteos = OperariosDisponibles
+                .Where(op => operariosCodigos.Contains(op.Operario.ToString()))
+                .OrderBy(o => o.NombreOperario)
+                .ToList();
+
+            foreach (var operario in operariosConConteos)
+            {
+                OperariosSupervisionCombo.Add(operario);
             }
         }
 
@@ -1015,8 +1526,100 @@ namespace SGA_Desktop.ViewModels
         [RelayCommand]
         private void LimpiarFiltrosSupervision()
         {
-            FiltroArticuloSupervision = string.Empty;
-            FiltroAlmacenSupervision = string.Empty;
+            // Limpiar filtros
+            VerTodosLosResultadosSupervision = false; // Por defecto, solo ver los propios
+            FechaDesdeSupervision = null;
+            FechaHastaSupervision = null;
+            DiferenciaDesdeSupervision = null;
+            DiferenciaHastaSupervision = null;
+            AlmacenSupervisionSeleccionado = null;
+            UbicacionSupervisionSeleccionada = null;
+            
+            // Seleccionar "TODOS" en operarios
+            if (OperariosSupervisionCombo?.Any() == true)
+            {
+                OperarioSupervisionSeleccionado = OperariosSupervisionCombo.FirstOrDefault();
+                FiltroOperariosSupervisionCombo = "";
+            }
+            
+            FiltroAlmacenesSupervisionCombo = "";
+            FiltroUbicacionesSupervisionCombo = "";
+            
+            // Refrescar vista y notificar cambios
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        [RelayCommand]
+        private async Task AbrirFiltrosSupervision()
+        {
+            try
+            {
+                // Asegurar que los operarios estén cargados
+                if (OperariosDisponibles.Count == 0)
+                {
+                    await CargarOperarios();
+                }
+
+                // Crear el ViewModel del diálogo con los valores actuales
+                var dialogViewModel = new FiltrosSupervisionDialogViewModel(
+                    VerTodosLosResultadosSupervision,
+                    FechaDesdeSupervision,
+                    FechaHastaSupervision,
+                    DiferenciaDesdeSupervision,
+                    DiferenciaHastaSupervision,
+                    AlmacenSupervisionSeleccionado,
+                    UbicacionSupervisionSeleccionada,
+                    OperarioSupervisionSeleccionado,
+                    AlmacenesSupervisionCombo,
+                    UbicacionesSupervisionCombo,
+                    OperariosSupervisionCombo
+                );
+
+                // Crear y mostrar el diálogo
+                var dialog = new FiltrosSupervisionDialog(dialogViewModel);
+
+                // Configurar el owner del diálogo
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+
+                if (mainWindow != null && mainWindow != dialog)
+                    dialog.Owner = mainWindow;
+
+                // Mostrar el diálogo y esperar resultado
+                var result = dialog.ShowDialog();
+
+                // Si el usuario hizo clic en "Aplicar" (result == true), aplicar los filtros
+                if (result == true)
+                {
+                    // Actualizar los filtros del ViewModel principal con los valores del diálogo
+                    VerTodosLosResultadosSupervision = dialogViewModel.VerTodosLosResultados;
+                    FechaDesdeSupervision = dialogViewModel.FechaDesde;
+                    FechaHastaSupervision = dialogViewModel.FechaHasta;
+                    DiferenciaDesdeSupervision = dialogViewModel.DiferenciaDesde;
+                    DiferenciaHastaSupervision = dialogViewModel.DiferenciaHasta;
+                    AlmacenSupervisionSeleccionado = dialogViewModel.AlmacenSeleccionado;
+                    UbicacionSupervisionSeleccionada = dialogViewModel.UbicacionSeleccionada;
+                    OperarioSupervisionSeleccionado = dialogViewModel.OperarioSeleccionado;
+
+                    // Notificar cambios en propiedades calculadas
+                    OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+                    OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+
+                    // Refrescar la vista con los nuevos filtros
+                    ResultadosView?.Refresh();
+                    OnPropertyChanged(nameof(TotalResultados));
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error",
+                    $"Error al abrir el diálogo de filtros: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
         }
         #endregion
 
@@ -1050,9 +1653,18 @@ namespace SGA_Desktop.ViewModels
 
                 await CargarAlmacenesAsync();
                 
-                // Cargar órdenes de conteo automáticamente
-                MensajeEstado = "Cargando órdenes de conteo...";
-                await CargarControles();
+                // Solo cargar órdenes si NO hay un filtro especial pendiente
+                // (OnFiltroSolicitado se encargará de cargar con el filtro)
+                if (string.IsNullOrEmpty(_filtroEspecial))
+                {
+                    MensajeEstado = "Cargando órdenes de conteo...";
+                    await CargarControles();
+                }
+                else
+                {
+                    // Hay filtro especial, OnFiltroSolicitado cargará los datos
+                    MensajeEstado = "Aplicando filtro...";
+                }
                 
                 MensajeEstado = "Listo";
             }
@@ -1073,6 +1685,97 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
+        private string _filtroEspecial = string.Empty;
+        private bool _ajustandoFiltrosDesdeEvento = false;
+
+        private async void OnFiltroSolicitado(object? sender, FiltroConteoEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"OnFiltroSolicitado recibido: {e.TipoFiltro}");
+            
+            _ajustandoFiltrosDesdeEvento = true;
+
+            // Aplicar el filtro especial
+            _filtroEspecial = e.TipoFiltro switch
+            {
+                TipoFiltroConteo.Pendientes => "PENDIENTES",
+                TipoFiltroConteo.EnProceso => "EN_PROCESO",
+                TipoFiltroConteo.PendientesRevision => "PENDIENTE_REVISION",
+                TipoFiltroConteo.PrioridadAlta => "PRIORIDAD_ALTA",
+                TipoFiltroConteo.Cerrados => "CERRADO",
+                _ => string.Empty
+            };
+
+            System.Diagnostics.Debug.WriteLine($"Filtro especial asignado: {_filtroEspecial}");
+
+            // Ajustar el filtro de estado según el tipo de filtro solicitado
+            switch (_filtroEspecial)
+            {
+                case "PENDIENTES":
+                    // Para pendientes, necesitamos filtrar por PLANIFICADO, ASIGNADO o EN_PROCESO
+                    // Como el estado solo acepta uno, usaremos "TODOS" y el filtro especial lo manejará
+                    EstadoFiltro = "TODOS";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a TODOS para pendientes");
+                    break;
+                case "EN_PROCESO":
+                    EstadoFiltro = "EN_PROCESO";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a EN_PROCESO");
+                    break;
+                case "PENDIENTE_REVISION":
+                    EstadoFiltro = "PENDIENTE_REVISION";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a PENDIENTE_REVISION");
+                    break;
+                case "PRIORIDAD_ALTA":
+                    // Para prioridad alta, mantener TODOS y filtrar por prioridad
+                    EstadoFiltro = "TODOS";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a TODOS para prioridad alta");
+                    break;
+                case "CERRADO":
+                    EstadoFiltro = "CERRADO";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a CERRADO");
+                    break;
+                default:
+                    EstadoFiltro = "TODOS";
+                    System.Diagnostics.Debug.WriteLine("EstadoFiltro establecido a TODOS");
+                    break;
+            }
+
+            // Asegurar que se muestren solo los propios conteos del usuario
+            VerTodosLosConteos = false;
+
+            // Cuando se navega desde WelcomeView, NO modificar las fechas visuales
+            // En su lugar, marcaremos que hay un filtro especial activo
+            // y CargarControles pasará null como fechas al backend para no filtrar por fecha
+
+            // Forzar notificación de cambio de propiedad
+            OnPropertyChanged(nameof(EstadoFiltro));
+            OnPropertyChanged(nameof(VerTodosLosConteos));
+
+            _ajustandoFiltrosDesdeEvento = false;
+
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+
+            // SIEMPRE recargar los datos con el filtro aplicado
+            // Si está cargando (por ejemplo, cargando almacenes), esperar a que termine
+            if (IsCargando)
+            {
+                // Esperar a que termine la carga actual (máximo 5 segundos)
+                var intentos = 0;
+                while (IsCargando && intentos < 50)
+                {
+                    await Task.Delay(100);
+                    intentos++;
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine("Cargando datos con filtro aplicado...");
+            MensajeEstado = "Cargando órdenes de conteo...";
+            await CargarControles();
+            System.Diagnostics.Debug.WriteLine($"Datos cargados con filtro. Total órdenes: {OrdenesConteo?.Count}");
+            OrdenesConteoView?.Refresh();
+        }
+
         private async Task CargarAlmacenesAsync()
         {
             try
@@ -1081,7 +1784,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesCombo.Clear();
 
@@ -1127,16 +1830,39 @@ namespace SGA_Desktop.ViewModels
                 orden.CodigoAlmacen != AlmacenSeleccionadoCombo.CodigoAlmacen)
                 return false;
 
-            // Filtro por estado
-            if (!string.IsNullOrEmpty(EstadoFiltro) && 
-                EstadoFiltro != "TODOS" && 
-                orden.Estado != EstadoFiltro)
+            // Filtro por estado o filtro especial
+            if (!string.IsNullOrEmpty(_filtroEspecial))
+            {
+                switch (_filtroEspecial)
+                {
+                    case "PENDIENTES":
+                        // Pendientes: PLANIFICADO, ASIGNADO o EN_PROCESO
+                        if (orden.Estado != "PLANIFICADO" && 
+                            orden.Estado != "ASIGNADO" && 
+                            orden.Estado != "EN_PROCESO")
+                            return false;
+                        break;
+                    case "PRIORIDAD_ALTA":
+                        // Prioridad alta: PLANIFICADO o ASIGNADO con prioridad >= 4
+                        if ((orden.Estado != "PLANIFICADO" && orden.Estado != "ASIGNADO") || 
+                            orden.Prioridad < 4)
+                            return false;
+                        break;
+                }
+            }
+            else if (!string.IsNullOrEmpty(EstadoFiltro) && 
+                     EstadoFiltro != "TODOS" && 
+                     orden.Estado != EstadoFiltro)
                 return false;
 
-            // Filtro por fechas
-            if (orden.FechaCreacion.Date < FechaDesde.Date || 
-                orden.FechaCreacion.Date > FechaHasta.Date)
-                return false;
+            // Filtro por fechas (solo si no hay filtro especial)
+            // Cuando hay filtro especial, el backend ya no filtró por fechas, así que tampoco lo hacemos aquí
+            if (string.IsNullOrEmpty(_filtroEspecial))
+            {
+                if (orden.FechaCreacion.Date < FechaDesde.Date || 
+                    orden.FechaCreacion.Date > FechaHasta.Date)
+                    return false;
+            }
 
             return true;
         }
@@ -1223,32 +1949,83 @@ namespace SGA_Desktop.ViewModels
         {
             if (item is not ResultadoConteoDetalladoDto resultado) return false;
 
-            // Filtro por artículo
-            if (!string.IsNullOrEmpty(FiltroArticuloSupervision) && 
-                !string.IsNullOrEmpty(resultado.CodigoArticulo) &&
-                !resultado.CodigoArticulo.Contains(FiltroArticuloSupervision, StringComparison.OrdinalIgnoreCase) &&
-                !(resultado.DescripcionArticulo?.Contains(FiltroArticuloSupervision, StringComparison.OrdinalIgnoreCase) ?? false))
+            // Solo mostrar los que requieren reasignación (SUPERVISION sin AprobadoPorCodigo)
+            if (!resultado.RequiereAprobacion)
                 return false;
 
+            // Filtro por usuario actual (solo ver los propios a menos que se marque "Ver todos")
+            if (!VerTodosLosResultadosSupervision)
+            {
+                var operarioActual = SessionManager.Operario;
+                if (operarioActual > 0)
+                {
+                    // Filtrar por el creador de la orden
+                    if (!string.IsNullOrEmpty(resultado.CreadoPorCodigo))
+                    {
+                        if (!resultado.CreadoPorCodigo.Equals(operarioActual.ToString(), StringComparison.OrdinalIgnoreCase))
+                            return false;
+                    }
+                    else
+                    {
+                        // Si no hay CreadoPorCodigo, no mostrar
+                        return false;
+                    }
+                }
+            }
+
+            // Filtro por fecha de evaluación
+            if (FechaDesdeSupervision.HasValue)
+            {
+                if (resultado.FechaEvaluacion.Date < FechaDesdeSupervision.Value.Date)
+                    return false;
+            }
+
+            if (FechaHastaSupervision.HasValue)
+            {
+                if (resultado.FechaEvaluacion.Date > FechaHastaSupervision.Value.Date)
+                    return false;
+            }
+
+            // Filtro por diferencia
+            if (DiferenciaDesdeSupervision.HasValue)
+            {
+                if (resultado.Diferencia < DiferenciaDesdeSupervision.Value)
+                    return false;
+            }
+
+            if (DiferenciaHastaSupervision.HasValue)
+            {
+                if (resultado.Diferencia > DiferenciaHastaSupervision.Value)
+                    return false;
+            }
+
             // Filtro por almacén
-            if (!string.IsNullOrEmpty(FiltroAlmacenSupervision) && 
-                !resultado.CodigoAlmacen.Contains(FiltroAlmacenSupervision, StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (!string.IsNullOrEmpty(AlmacenSupervisionSeleccionado))
+            {
+                if (!resultado.CodigoAlmacen.Equals(AlmacenSupervisionSeleccionado, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            // Filtro por ubicación
+            if (!string.IsNullOrEmpty(UbicacionSupervisionSeleccionada))
+            {
+                if (string.IsNullOrEmpty(resultado.CodigoUbicacion) || 
+                    !resultado.CodigoUbicacion.Equals(UbicacionSupervisionSeleccionada, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            // Filtro por operario que hizo el conteo
+            if (OperarioSupervisionSeleccionado != null && OperarioSupervisionSeleccionado.Operario > 0)
+            {
+                if (string.IsNullOrEmpty(resultado.UsuarioCodigo) || 
+                    !resultado.UsuarioCodigo.Equals(OperarioSupervisionSeleccionado.Operario.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
 
             return true;
         }
 
-        partial void OnFiltroArticuloSupervisionChanged(string value)
-        {
-            ResultadosView?.Refresh();
-            OnPropertyChanged(nameof(TotalResultados));
-        }
 
-        partial void OnFiltroAlmacenSupervisionChanged(string value)
-        {
-            ResultadosView?.Refresh();
-            OnPropertyChanged(nameof(TotalResultados));
-        }
 
         partial void OnResultadoSeleccionadoChanged(ResultadoConteoDetalladoDto? value)
         {
@@ -1293,6 +2070,34 @@ namespace SGA_Desktop.ViewModels
             return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
                 .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
         }
+
+        // Métodos para filtrado de supervisión
+        private bool FiltraAlmacenesSupervisionCombo(object obj)
+        {
+            if (obj is not string almacen) return false;
+            if (string.IsNullOrEmpty(FiltroAlmacenesSupervisionCombo)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(almacen, FiltroAlmacenesSupervisionCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        private bool FiltraUbicacionesSupervisionCombo(object obj)
+        {
+            if (obj is not string ubicacion) return false;
+            if (string.IsNullOrEmpty(FiltroUbicacionesSupervisionCombo)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(ubicacion, FiltroUbicacionesSupervisionCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        private bool FiltraOperariosSupervisionCombo(object obj)
+        {
+            if (obj is not OperariosAccesoDto operario) return false;
+            if (string.IsNullOrEmpty(FiltroOperariosSupervisionCombo)) return true;
+            
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(operario.NombreOperario, FiltroOperariosSupervisionCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
         
         // Métodos para manejar cambios en filtros
         partial void OnFiltroOperariosComboChanged(string value)
@@ -1308,6 +2113,85 @@ namespace SGA_Desktop.ViewModels
         partial void OnFiltroAlmacenesTextoChanged(string value)
         {
             AlmacenesComboView?.Refresh();
+        }
+
+        partial void OnFiltroAlmacenesSupervisionComboChanged(string value)
+        {
+            AlmacenesSupervisionComboView?.Refresh();
+        }
+
+        partial void OnFiltroUbicacionesSupervisionComboChanged(string value)
+        {
+            UbicacionesSupervisionComboView?.Refresh();
+        }
+
+        partial void OnFiltroOperariosSupervisionComboChanged(string value)
+        {
+            OperariosSupervisionComboView?.Refresh();
+        }
+
+        partial void OnVerTodosLosResultadosSupervisionChanged(bool value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnFechaDesdeSupervisionChanged(DateTime? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnFechaHastaSupervisionChanged(DateTime? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnDiferenciaDesdeSupervisionChanged(decimal? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnDiferenciaHastaSupervisionChanged(decimal? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnAlmacenSupervisionSeleccionadoChanged(string? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnUbicacionSupervisionSeleccionadaChanged(string? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
+        }
+
+        partial void OnOperarioSupervisionSeleccionadoChanged(OperariosAccesoDto? value)
+        {
+            ResultadosView?.Refresh();
+            OnPropertyChanged(nameof(TotalResultados));
+            OnPropertyChanged(nameof(TieneFiltrosActivosSupervision));
+            OnPropertyChanged(nameof(ResumenFiltrosActivosSupervision));
         }
         
         // Comandos para controlar dropdown
@@ -1351,6 +2235,46 @@ namespace SGA_Desktop.ViewModels
         private void CerrarDropDownAlmacenes()
         {
             IsDropDownOpenAlmacenes = false;
+        }
+
+        // Comandos para controlar dropdown de supervisión
+        [RelayCommand]
+        private void AbrirDropDownAlmacenesSupervision()
+        {
+            FiltroAlmacenesSupervisionCombo = "";
+            IsDropDownOpenAlmacenesSupervision = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownAlmacenesSupervision()
+        {
+            IsDropDownOpenAlmacenesSupervision = false;
+        }
+
+        [RelayCommand]
+        private void AbrirDropDownUbicacionesSupervision()
+        {
+            FiltroUbicacionesSupervisionCombo = "";
+            IsDropDownOpenUbicacionesSupervision = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownUbicacionesSupervision()
+        {
+            IsDropDownOpenUbicacionesSupervision = false;
+        }
+
+        [RelayCommand]
+        private void AbrirDropDownOperariosSupervision()
+        {
+            FiltroOperariosSupervisionCombo = "";
+            IsDropDownOpenOperariosSupervision = true;
+        }
+
+        [RelayCommand]
+        private void CerrarDropDownOperariosSupervision()
+        {
+            IsDropDownOpenOperariosSupervision = false;
         }
 
         partial void OnIsCargandoChanged(bool value)

@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -690,7 +690,10 @@ namespace SGA_Desktop.ViewModels
 						Reservado = 0, // No tenemos esta información en StockDto
 						UnidadSaldo = s.UnidadSaldo,
 						// 🔷 NUEVAS PROPIEDADES para compatibilidad
-						Palets = s.Palets ?? new List<PaletDetalleDto>(),
+						// 🔷 NUEVO: Ordenar palets por código de palet
+						Palets = (s.Palets ?? new List<PaletDetalleDto>())
+							.OrderBy(p => p.CodigoPalet ?? "")
+							.ToList(),
 						TotalArticuloGlobal = s.TotalArticuloGlobal,
 						TotalArticuloAlmacen = s.TotalArticuloAlmacen,
 						// 🔷 ACTUALIZADO: Usar información de bloqueo que viene del backend (ya verificado por ubicación)
@@ -953,13 +956,15 @@ namespace SGA_Desktop.ViewModels
 									
 									// Buscar traspasos por código de palet para obtener los más recientes
 									var codigoPalet = palet.Codigo;
+									var empresa = SessionManager.EmpresaSeleccionada!.Value;
 									var traspasosPalet = await traspasosService.ObtenerTraspasosFiltradosAsync(
 										estado: null,
 										codigoPalet: codigoPalet,
 										almacenOrigen: null,
 										almacenDestino: null,
 										fechaInicioDesde: DateTime.MinValue,
-										fechaInicioHasta: DateTime.MaxValue
+										fechaInicioHasta: DateTime.MaxValue,
+										codigoEmpresa: empresa
 									);
 									
 									// Para cada grupo de artículo + partida, encontrar el traspaso más reciente
@@ -1115,7 +1120,11 @@ namespace SGA_Desktop.ViewModels
 						// Si tiene palets, crear una entrada por cada palet
 						if (s.Palets != null && s.Palets.Any())
 						{
-							foreach (var palet in s.Palets)
+							// 🔷 NUEVO: Ordenar palets por código de palet antes de iterar
+							var paletsOrdenados = s.Palets
+								.OrderBy(p => p.CodigoPalet ?? "")
+								.ToList();
+							foreach (var palet in paletsOrdenados)
 							{
 								stockDisponible.Add(new StockDisponibleDto
 								{
@@ -1332,7 +1341,10 @@ namespace SGA_Desktop.ViewModels
 						if (s.Palets != null && s.Palets.Any())
 						{
 							// Usar los palets que ya vienen en el DTO
-							palets = s.Palets.ToList();
+							// 🔷 NUEVO: Ordenar palets por código de palet
+							palets = s.Palets
+								.OrderBy(p => p.CodigoPalet ?? "")
+								.ToList();
 						}
 						else if (s.PaletId.HasValue || !string.IsNullOrWhiteSpace(s.CodigoPalet))
 						{
@@ -1660,13 +1672,13 @@ namespace SGA_Desktop.ViewModels
 			await _printService.InsertarRegistroImpresionAsync(dto);
 			await _loginService.RegistrarLogEventoAsync(new LogEvento
 			{
-				fecha = DateTime.Now,
-				idUsuario = SessionManager.Operario,
-				tipo = "IMPRESION_ETIQUETA",
-				origen = "ConsultaStockView",
-				descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
-				detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}, Alergenos={dto.Alergenos}",
-				idDispositivo = dto.Dispositivo
+				Fecha = DateTime.Now,
+				IdUsuario = SessionManager.Operario,
+				Tipo = "IMPRESION_ETIQUETA",
+				Origen = "ConsultaStockView",
+				Descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
+				Detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}, Alergenos={dto.Alergenos}",
+				IdDispositivo = dto.Dispositivo
 			});
 
 			// Confirmar impresión
@@ -1773,7 +1785,7 @@ namespace SGA_Desktop.ViewModels
 				var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
 
-				var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+			var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
 
 				AlmacenesCombo.Clear();

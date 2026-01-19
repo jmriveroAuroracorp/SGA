@@ -10,16 +10,35 @@ namespace SGA_Desktop.Views
             InitializeComponent();
             DataContext = new ViewModels.WelcomeViewModel();
             
-            // Recargar datos al entrar a la vista
+            // Recargar datos al entrar a la vista (primera vez)
             Loaded += WelcomeView_Loaded;
+            
+            // Recargar datos cada vez que la vista se hace visible (navegaciones subsecuentes)
+            IsVisibleChanged += WelcomeView_IsVisibleChanged;
         }
 
         private void WelcomeView_Loaded(object sender, System.Windows.RoutedEventArgs e)
         {
-            // Recargar el resumen de órdenes cada vez que se navega a esta vista
+            RecargarResumenes();
+        }
+
+        private void WelcomeView_IsVisibleChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+        {
+            // Solo recargar cuando se hace visible (evitar recargar al ocultarse)
+            if ((bool)e.NewValue && (bool)e.OldValue == false)
+            {
+                RecargarResumenes();
+            }
+        }
+
+        private void RecargarResumenes()
+        {
+            // Recargar el resumen de órdenes, conteos e inventarios cada vez que se navega a esta vista
             if (DataContext is WelcomeViewModel viewModel)
             {
                 _ = viewModel.CargarResumenOrdenesAsync();
+                _ = viewModel.CargarResumenConteosAsync();
+                _ = viewModel.CargarResumenInventariosAsync();
             }
         }
     }

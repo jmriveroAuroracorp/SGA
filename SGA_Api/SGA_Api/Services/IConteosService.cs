@@ -21,9 +21,18 @@ namespace SGA_Api.Services
         Task<List<PaletDisponibleInfo>> ObtenerPaletsDisponiblesAsync(string codigoAlmacen, string? ubicacion, string? codigoArticulo, string? lote, DateTime? fechaCaducidad);
         
         // Métodos para conteos periódicos
-        Task<IEnumerable<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(string? codigoOperario = null);
+        Task<IEnumerable<ConteoPeriodicoDto>> ListarConteosPeriodicosAsync(
+            string? codigoAlmacen = null,
+            DateTime? fechaDesde = null,
+            DateTime? fechaHasta = null,
+            bool? activo = null,
+            string? codigoOperario = null,
+            string? codigoOperarioSesion = null,
+            string? creadoPorCodigo = null);
         Task ActivarPeriodicidadAsync(Guid guid);
         Task DesactivarPeriodicidadAsync(Guid guid);
         Task<IEnumerable<OrdenDto>> ObtenerRenovacionesAsync(Guid guid);
+        Task<IEnumerable<string>> ObtenerCreadoresConteosAsync();
+        Task<IEnumerable<string>> ObtenerCreadoresConteosPeriodicosAsync();
     }
 } 

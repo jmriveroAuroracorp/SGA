@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Registro;
@@ -19,8 +19,23 @@ namespace SGA_Api.Controllers.Registro
         [HttpPost("crear")]
         public async Task<IActionResult> CrearEvento([FromBody] CrearLogEventoDto dto)
         {
+            // Validar IdDispositivo
             if (string.IsNullOrWhiteSpace(dto.IdDispositivo))
                 return BadRequest("ID de dispositivo requerido.");
+
+            // Validar que el dispositivo exista
+            var dispositivoExiste = await _context.Dispositivos
+                .AnyAsync(d => d.Id == dto.IdDispositivo);
+            
+            if (!dispositivoExiste)
+                return BadRequest($"Dispositivo con ID '{dto.IdDispositivo}' no encontrado.");
+
+            // Validar Tipo (recomendado pero no obligatorio)
+            if (string.IsNullOrWhiteSpace(dto.Tipo))
+            {
+                // Si no se proporciona Tipo, usar un valor por defecto
+                dto.Tipo = "EVENTO_GENERICO";
+            }
 
             var log = new LogEvento
             {

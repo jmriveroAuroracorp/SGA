@@ -14,12 +14,12 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se asigna un operario a una orden de conteo
         /// </summary>
-        Task NotificarOperarioAsignadoAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null);
+        Task NotificarOperarioAsignadoAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null, string? codigoAlmacen = null);
 
         /// <summary>
         /// Notifica cuando se inicia una orden de conteo
         /// </summary>
-        Task NotificarOrdenIniciadaAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null);
+        Task NotificarOrdenIniciadaAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null, string? codigoAlmacen = null);
 
         /// <summary>
         /// Notifica cuando se completa una orden de conteo
@@ -29,17 +29,17 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se cierra una orden de conteo
         /// </summary>
-        Task NotificarOrdenCerradaAsync(Guid ordenId, string? supervisorCodigo = null, int? totalResultados = null);
+        Task NotificarOrdenCerradaAsync(Guid ordenId, string? creadoPorCodigo = null, int? totalResultados = null);
 
         /// <summary>
         /// Notifica cuando se crea una nueva lectura de conteo
         /// </summary>
-        Task NotificarLecturaCreadaAsync(Guid ordenId, string codigoOperario, string codigoArticulo, decimal cantidad, string? supervisorCodigo = null);
+        Task NotificarLecturaCreadaAsync(Guid ordenId, string codigoOperario, string codigoArticulo, decimal cantidad, string? creadoPorCodigo = null);
 
         /// <summary>
         /// Notifica cuando se reasigna una línea de conteo
         /// </summary>
-        Task NotificarLineaReasignadaAsync(Guid ordenId, string codigoArticulo, string nuevoOperario, string? supervisorCodigo = null);
+        Task NotificarLineaReasignadaAsync(Guid ordenId, string codigoArticulo, string nuevoOperario, string? supervisorCodigo = null, string? codigoAlmacen = null);
 
         /// <summary>
         /// Notifica cuando se actualiza un aprobador de resultado de conteo

@@ -302,23 +302,15 @@ namespace SGA_Desktop.Dialog
                 updateDto.EmpresasAsignar = empresasParaAsignar;
                 updateDto.EmpresasQuitar = empresasParaQuitar;
                 
-                // SOLUCIÓN SEGURA: Solo hacer cambios si hay diferencias reales
+                // Calcular diferencias de almacenes usando el comparador que distingue por empresa
                 var almacenesActuales = _almacenes.ToList();
+                var almacenesParaQuitar = _almacenesOriginales.Except(almacenesActuales, new AlmacenOperarioDtoComparer()).ToList();
                 
-                // Si no hay almacenes originales, no quitar nada
-                if (_almacenesOriginales.Count == 0)
-                {
-                    updateDto.AlmacenesQuitar = new List<string>();
-                    updateDto.AlmacenesAsignar = almacenesActuales.ToList();
-                }
-                else
-                {
-                    // Quitar todos los almacenes originales
-                    updateDto.AlmacenesQuitar = _almacenesOriginales.Select(a => a.CodigoAlmacen).ToList();
-                    
-                    // Asignar todos los almacenes actuales
-                    updateDto.AlmacenesAsignar = almacenesActuales.ToList();
-                }
+                // IMPORTANTE: Enviar TODOS los almacenes actuales, no solo los nuevos
+                // El backend comparará y solo agregará los que falten, pero no eliminará los que ya existen
+                // (excepto los que estén explícitamente en almacenesParaQuitar)
+                updateDto.AlmacenesQuitar = almacenesParaQuitar.Select(a => a.CodigoAlmacen).ToList();
+                updateDto.AlmacenesAsignar = almacenesActuales; // Enviar TODOS los almacenes actuales
 
         // Guardar configuración del operario
         try
@@ -1411,6 +1403,7 @@ namespace SGA_Desktop.Dialog
             {
                 var almacenOperario = new AlmacenOperarioDto
                 {
+                    CodigoEmpresa = almacen.CodigoEmpresa,
                     CodigoAlmacen = almacen.CodigoAlmacen,
                     DescripcionAlmacen = almacen.Descripcion ?? "",
                     NombreEmpresa = almacen.NombreEmpresa

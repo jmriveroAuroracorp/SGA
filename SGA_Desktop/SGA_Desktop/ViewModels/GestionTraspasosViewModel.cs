@@ -116,13 +116,15 @@ namespace SGA_Desktop.ViewModels
 
 		private async Task AplicarFiltrosAsync(string? estado, string? codigoPalet, string? almacenOrigen, string? almacenDestino, DateTime? fechaInicioDesde, DateTime? fechaInicioHasta)
 		{
+			var empresa = SessionManager.EmpresaSeleccionada!.Value;
 			var filtrados = await _traspasosService.ObtenerTraspasosFiltradosAsync(
 				estado,
 				codigoPalet,
 				almacenOrigen,
 				almacenDestino,
 				fechaInicioDesde,
-				fechaInicioHasta);
+				fechaInicioHasta,
+				codigoEmpresa: empresa);
 
 			Traspasos.Clear();
 			var unicos = filtrados

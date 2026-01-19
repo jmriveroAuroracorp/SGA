@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Dialog;
 using SGA_Desktop.Helpers;
@@ -275,13 +275,13 @@ public partial class ImpresionEtiquetasViewModel : ObservableObject
 		await _printService.InsertarRegistroImpresionAsync(dto);
 		await _loginService.RegistrarLogEventoAsync(new LogEvento
 		{
-			fecha = DateTime.Now,
-			idUsuario = SessionManager.Operario,
-			tipo = "IMPRESION_ETIQUETA",
-			origen = "ImpresionEtiquetasView",
-			descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
-			detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}, Alergenos={dto.Alergenos}",
-			idDispositivo = dto.Dispositivo
+			Fecha = DateTime.Now,
+			IdUsuario = SessionManager.Operario,
+			Tipo = "IMPRESION_ETIQUETA",
+			Origen = "ImpresionEtiquetasView",
+			Descripcion = $"Impresión de etiqueta artículo {dto.CodigoArticulo}",
+			Detalle = $"Copias={dto.Copias}, ImpresoraId={dto.IdImpresora}, Alergenos={dto.Alergenos}",
+			IdDispositivo = dto.Dispositivo
 		});
 
 		// Confirmar impresión

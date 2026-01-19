@@ -1,0 +1,411 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows.Data;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using SGA_Desktop.Helpers;
+using SGA_Desktop.Models;
+using SGA_Desktop.Services;
+
+namespace SGA_Desktop.ViewModels
+{
+    public partial class FiltrosConteosPeriodicosDialogViewModel : ObservableObject
+    {
+        private readonly StockService _stockService;
+        private readonly LoginService _loginService;
+        private readonly ConteosService _conteosService;
+
+        // Propiedades para filtros
+        [ObservableProperty] private AlmacenDto? almacenSeleccionadoCombo;
+        [ObservableProperty] private DateTime? fechaDesde;
+        [ObservableProperty] private DateTime? fechaHasta;
+        [ObservableProperty] private string estadoActivoFiltro = "TODOS"; // TODOS, ACTIVO, INACTIVO
+        [ObservableProperty] private OperariosAccesoDto? operarioSeleccionadoCombo;
+        [ObservableProperty] private bool verTodosLosConteos = false; // Por defecto, solo ver los propios
+        [ObservableProperty] private OperariosAccesoDto? operarioCreadorSeleccionadoCombo;
+
+        // Colecciones para filtros
+        public ObservableCollection<AlmacenDto> AlmacenesCombo { get; } = new();
+        public ObservableCollection<string> EstadosCombo { get; } = new();
+        public ObservableCollection<OperariosAccesoDto> OperariosCombo { get; } = new();
+        public ObservableCollection<OperariosAccesoDto> OperariosCreadorCombo { get; } = new();
+
+        // Propiedades para autocompletado de almacenes
+        [ObservableProperty] private string filtroAlmacenesTexto = "";
+        [ObservableProperty] private bool isDropDownOpenAlmacenes = false;
+        public ICollectionView AlmacenesComboView { get; private set; }
+
+        // Propiedades para autocompletado de operarios
+        [ObservableProperty] private string filtroOperariosCombo = "";
+        [ObservableProperty] private bool isDropDownOpenCombo = false;
+        public ICollectionView OperariosComboView { get; private set; }
+
+        // Propiedades para autocompletado de creadores
+        [ObservableProperty] private string filtroOperariosCreadorCombo = "";
+        [ObservableProperty] private bool isDropDownOpenCreadorCombo = false;
+        public ICollectionView OperariosCreadorComboView { get; private set; }
+
+        // Comandos
+        public IAsyncRelayCommand AplicarFiltrosCommand { get; }
+        public IRelayCommand LimpiarFiltrosCommand { get; }
+        public IRelayCommand CerrarCommand { get; }
+
+        // Comandos para controlar dropdown de almacenes
+        public IRelayCommand AbrirDropDownAlmacenesCommand { get; }
+        public IRelayCommand CerrarDropDownAlmacenesCommand { get; }
+
+        // Comandos para controlar dropdown de operarios
+        public IRelayCommand AbrirDropDownComboCommand { get; }
+        public IRelayCommand CerrarDropDownComboCommand { get; }
+
+        // Comandos para controlar dropdown de creadores
+        public IRelayCommand AbrirDropDownCreadorComboCommand { get; }
+        public IRelayCommand CerrarDropDownCreadorComboCommand { get; }
+
+        // Evento para comunicar con el diálogo
+        public event Action<bool> RequestClose;
+
+        public FiltrosConteosPeriodicosDialogViewModel()
+        {
+            _stockService = new StockService();
+            _loginService = new LoginService();
+            _conteosService = new ConteosService();
+
+            // Inicializar ICollectionView para filtrado de almacenes
+            AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
+            AlmacenesComboView.Filter = FiltraAlmacenes;
+
+            // Inicializar ICollectionView para filtrado de operarios
+            OperariosComboView = CollectionViewSource.GetDefaultView(OperariosCombo);
+            OperariosComboView.Filter = FiltraOperarioCombo;
+
+            // Inicializar ICollectionView para filtrado de creadores
+            OperariosCreadorComboView = CollectionViewSource.GetDefaultView(OperariosCreadorCombo);
+            OperariosCreadorComboView.Filter = FiltraOperarioCreadorCombo;
+
+            // Inicializar estados (ACTIVO/INACTIVO)
+            EstadosCombo.Add("TODOS");
+            EstadosCombo.Add("ACTIVO");
+            EstadosCombo.Add("INACTIVO");
+
+            // Inicializar comandos
+            AplicarFiltrosCommand = new AsyncRelayCommand(AplicarFiltrosAsync);
+            LimpiarFiltrosCommand = new RelayCommand(LimpiarFiltros);
+            CerrarCommand = new RelayCommand(Cerrar);
+
+            // Comandos para dropdown de almacenes
+            AbrirDropDownAlmacenesCommand = new RelayCommand(() =>
+            {
+                FiltroAlmacenesTexto = "";
+                IsDropDownOpenAlmacenes = true;
+            });
+
+            CerrarDropDownAlmacenesCommand = new RelayCommand(() =>
+            {
+                IsDropDownOpenAlmacenes = false;
+            });
+
+            // Comandos para dropdown de operarios
+            AbrirDropDownComboCommand = new RelayCommand(() =>
+            {
+                FiltroOperariosCombo = "";
+                IsDropDownOpenCombo = true;
+            });
+
+            CerrarDropDownComboCommand = new RelayCommand(() =>
+            {
+                IsDropDownOpenCombo = false;
+            });
+
+            // Comandos para dropdown de creadores
+            AbrirDropDownCreadorComboCommand = new RelayCommand(() =>
+            {
+                FiltroOperariosCreadorCombo = "";
+                IsDropDownOpenCreadorCombo = true;
+            });
+
+            CerrarDropDownCreadorComboCommand = new RelayCommand(() =>
+            {
+                IsDropDownOpenCreadorCombo = false;
+            });
+
+            // Inicialización
+            _ = InitializeAsync();
+        }
+
+        // Constructor con valores iniciales desde el ViewModel principal
+        public FiltrosConteosPeriodicosDialogViewModel(
+            AlmacenDto? almacenSeleccionado,
+            DateTime? fechaDesde,
+            DateTime? fechaHasta,
+            string estadoActivoFiltro,
+            OperariosAccesoDto? operarioSeleccionado,
+            bool verTodosLosConteos,
+            OperariosAccesoDto? operarioCreadorSeleccionado = null) : this()
+        {
+            AlmacenSeleccionadoCombo = almacenSeleccionado;
+            FechaDesde = fechaDesde;
+            FechaHasta = fechaHasta;
+            EstadoActivoFiltro = estadoActivoFiltro;
+            OperarioSeleccionadoCombo = operarioSeleccionado;
+            VerTodosLosConteos = verTodosLosConteos;
+            OperarioCreadorSeleccionadoCombo = operarioCreadorSeleccionado;
+        }
+
+        // Validaciones de fechas
+        partial void OnFechaDesdeChanged(DateTime? value)
+        {
+            if (FechaHasta.HasValue && value.HasValue && FechaHasta < value)
+            {
+                FechaHasta = value;
+            }
+        }
+
+        partial void OnFechaHastaChanged(DateTime? value)
+        {
+            if (value.HasValue && FechaDesde.HasValue && value < FechaDesde)
+            {
+                FechaHasta = FechaDesde;
+            }
+        }
+
+        // Métodos para manejar cambios en los filtros
+        partial void OnFiltroAlmacenesTextoChanged(string value)
+        {
+            AlmacenesComboView?.Refresh();
+        }
+
+        partial void OnFiltroOperariosComboChanged(string value)
+        {
+            OperariosComboView?.Refresh();
+        }
+
+        partial void OnFiltroOperariosCreadorComboChanged(string value)
+        {
+            OperariosCreadorComboView?.Refresh();
+        }
+
+        private async Task InitializeAsync()
+        {
+            try
+            {
+                // Cargar almacenes
+                await CargarAlmacenesAsync();
+
+                // Cargar operarios
+                await CargarOperariosAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error en inicialización: {ex.Message}");
+            }
+        }
+
+        private async Task CargarAlmacenesAsync()
+        {
+            try
+            {
+                var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
+
+                AlmacenesCombo.Clear();
+
+                // Añadir opción "Todas"
+                AlmacenesCombo.Add(new AlmacenDto
+                {
+                    CodigoAlmacen = "Todas",
+                    NombreAlmacen = "Todas",
+                    CodigoEmpresa = empresa
+                });
+
+                foreach (var a in resultado)
+                    AlmacenesCombo.Add(a);
+
+                // Si no hay almacén seleccionado, seleccionar "Todas"
+                if (AlmacenSeleccionadoCombo == null)
+                {
+                    AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando almacenes: {ex.Message}");
+            }
+        }
+
+        private async Task CargarOperariosAsync()
+        {
+            try
+            {
+                var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+
+                OperariosCombo.Clear();
+
+                // Agregar opción "Todos"
+                OperariosCombo.Add(new OperariosAccesoDto
+                {
+                    Operario = 0,
+                    NombreOperario = "TODOS",
+                    Contraseña = "",
+                    MRH_CodigoAplicacion = 0
+                });
+
+                foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
+                {
+                    OperariosCombo.Add(operario);
+                }
+
+                // Si no hay operario seleccionado, seleccionar "TODOS"
+                if (OperarioSeleccionadoCombo == null)
+                {
+                    OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
+                }
+
+                // Cargar también en la colección de creadores, pero solo los que han creado conteos periódicos
+                await CargarCreadoresConteosPeriodicosAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando operarios: {ex.Message}");
+            }
+        }
+
+        private async Task CargarCreadoresConteosPeriodicosAsync()
+        {
+            try
+            {
+                // Obtener códigos de creadores desde el backend
+                var creadoresCodigos = await _conteosService.ObtenerCreadoresConteosPeriodicosAsync();
+
+                // Obtener todos los operarios para mapear códigos a nombres
+                var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+
+                OperariosCreadorCombo.Clear();
+
+                // Agregar opción "Todos"
+                OperariosCreadorCombo.Add(new OperariosAccesoDto
+                {
+                    Operario = 0,
+                    NombreOperario = "TODOS",
+                    Contraseña = "",
+                    MRH_CodigoAplicacion = 0
+                });
+
+                // Filtrar solo los operarios que han creado conteos periódicos
+                var creadoresCodigosSet = creadoresCodigos.ToHashSet();
+                var creadores = operarios
+                    .Where(op => creadoresCodigosSet.Contains(op.Operario.ToString()))
+                    .OrderBy(o => o.NombreOperario);
+
+                foreach (var creador in creadores)
+                {
+                    OperariosCreadorCombo.Add(creador);
+                }
+
+                // Si no hay creador seleccionado, seleccionar "TODOS"
+                if (OperarioCreadorSeleccionadoCombo == null)
+                {
+                    OperarioCreadorSeleccionadoCombo = OperariosCreadorCombo.FirstOrDefault();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando creadores de conteos periódicos: {ex.Message}");
+                // En caso de error, mostrar todos los operarios como fallback
+                var operarios = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+                OperariosCreadorCombo.Clear();
+                OperariosCreadorCombo.Add(new OperariosAccesoDto
+                {
+                    Operario = 0,
+                    NombreOperario = "TODOS",
+                    Contraseña = "",
+                    MRH_CodigoAplicacion = 0
+                });
+                foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
+                {
+                    OperariosCreadorCombo.Add(operario);
+                }
+            }
+        }
+
+        private async Task AplicarFiltrosAsync()
+        {
+            // Cerrar el diálogo con resultado true (aplicar filtros)
+            RequestClose?.Invoke(true);
+        }
+
+        private void LimpiarFiltros()
+        {
+            EstadoActivoFiltro = "TODOS";
+            VerTodosLosConteos = false; // Por defecto, solo ver los propios
+
+            // Seleccionar "Todas" en almacenes
+            if (AlmacenesCombo?.Any() == true)
+            {
+                AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault();
+                FiltroAlmacenesTexto = "";
+            }
+
+            // Seleccionar "TODOS" en operarios
+            if (OperariosCombo?.Any() == true)
+            {
+                OperarioSeleccionadoCombo = OperariosCombo.FirstOrDefault();
+                FiltroOperariosCombo = "";
+            }
+
+            // Seleccionar "TODOS" en creadores
+            if (OperariosCreadorCombo?.Any() == true)
+            {
+                OperarioCreadorSeleccionadoCombo = OperariosCreadorCombo.FirstOrDefault();
+                FiltroOperariosCreadorCombo = "";
+            }
+
+            // Limpiar las fechas (sin filtro por defecto)
+            FechaDesde = null;
+            FechaHasta = null;
+        }
+
+        private void Cerrar()
+        {
+            // Cerrar el diálogo sin aplicar filtros
+            RequestClose?.Invoke(false);
+        }
+
+        // Método de filtrado para almacenes
+        private bool FiltraAlmacenes(object obj)
+        {
+            if (obj is not AlmacenDto almacen) return false;
+            if (string.IsNullOrEmpty(FiltroAlmacenesTexto)) return true;
+
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(almacen.DescripcionCombo, FiltroAlmacenesTexto, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        // Método de filtrado para operarios
+        private bool FiltraOperarioCombo(object obj)
+        {
+            if (obj is not OperariosAccesoDto operario) return false;
+            if (string.IsNullOrEmpty(FiltroOperariosCombo)) return true;
+
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(operario.NombreOperario, FiltroOperariosCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+
+        // Método de filtrado para creadores
+        private bool FiltraOperarioCreadorCombo(object obj)
+        {
+            if (obj is not OperariosAccesoDto operario) return false;
+            if (string.IsNullOrEmpty(FiltroOperariosCreadorCombo)) return true;
+
+            return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
+                .IndexOf(operario.NombreOperario, FiltroOperariosCreadorCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        }
+    }
+}

@@ -272,7 +272,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesCombo.Clear();
 
@@ -344,7 +344,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesOrigenCombo.Clear();
 

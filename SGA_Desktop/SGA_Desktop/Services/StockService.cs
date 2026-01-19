@@ -190,13 +190,14 @@ namespace SGA_Desktop.Services
 		//	return dtoList.Select(x => x.Ubicacion).ToList();
 		//}
 
-		public async Task<List<AlmacenDto>> ObtenerAlmacenesAutorizadosAsync(short empresa, string centro, List<string> codigos)
+	public async Task<List<AlmacenDto>> ObtenerAlmacenesAutorizadosAsync(short empresa, string centro, List<string> codigos, int? operarioId = null)
 		{
 			var request = new AlmacenesAutorizadosRequest
 			{
 				CodigoEmpresa = empresa,
 				CodigoCentro = centro,
-				CodigosAlmacen = codigos
+			CodigosAlmacen = codigos,
+			OperarioId = operarioId
 			};
 
 			var resp = await _httpClient.PostAsJsonAsync("Almacen/Combos/Autorizados", request);

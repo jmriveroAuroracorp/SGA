@@ -344,7 +344,8 @@ namespace SGA_Desktop.ViewModels
             var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(
                 SessionManager.EmpresaSeleccionada!.Value, 
                 SessionManager.UsuarioActual?.codigoCentro ?? "0", 
-                almacenesAutorizados
+                almacenesAutorizados,
+                SessionManager.Operario
             );
             
             var vm = new TraspasoStockDialogViewModel(StockSeleccionado, _traspasosService, _fechaUltimaBusqueda)
@@ -426,7 +427,7 @@ namespace SGA_Desktop.ViewModels
                 }
 
                 // Usar el método del servicio que ya combina almacenes individuales + centro
-                var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centroLogistico, almacenesIndividuales);
+                var almacenesDto = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centroLogistico, almacenesIndividuales, SessionManager.Operario);
                 return almacenesDto.Select(a => a.CodigoAlmacen).ToList();
             }
             catch (Exception ex)
@@ -596,7 +597,7 @@ namespace SGA_Desktop.ViewModels
                 }
                 
                 // Obtener todos los almacenes autorizados
-                var todosAlmacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                var todosAlmacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, SessionManager.Operario);
                 
                 // Filtrar solo los almacenes que tienen stock del artículo
                 var almacenesConStock = todosAlmacenes

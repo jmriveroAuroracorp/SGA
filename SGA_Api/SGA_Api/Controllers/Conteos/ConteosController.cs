@@ -234,7 +234,8 @@ namespace SGA_Api.Controllers
                 await _notificacionesConteosService.NotificarOrdenIniciadaAsync(
                     guid, 
                     codigoOperario, 
-                    orden.SupervisorCodigo
+                    orden.SupervisorCodigo,
+                    orden.CodigoAlmacen
                 );
                 
                 return Ok(orden);
@@ -281,7 +282,8 @@ namespace SGA_Api.Controllers
                 await _notificacionesConteosService.NotificarOperarioAsignadoAsync(
                     guid, 
                     dto.CodigoOperario, 
-                    dto.SupervisorCodigo
+                    dto.SupervisorCodigo,
+                    orden.CodigoAlmacen
                 );
                 
                 return Ok(orden);
@@ -324,13 +326,16 @@ namespace SGA_Api.Controllers
             {
                 var lectura = await _conteosService.CrearLecturaAsync(guid, dto);
                 
-                // Notificar a supervisores y administradores sobre la nueva lectura
+                // Obtener orden para obtener CreadoPorCodigo
+                var orden = await _conteosService.ObtenerOrdenAsync(guid);
+                
+                // Notificar al supervisor creador y administradores sobre la nueva lectura
                 await _notificacionesConteosService.NotificarLecturaCreadaAsync(
                     guid, 
                     dto.UsuarioCodigo, 
                     dto.CodigoArticulo, 
                     dto.CantidadContada ?? 0,
-                    null // TODO: Obtener supervisor de la orden si es necesario
+                    orden?.CreadoPorCodigo
                 );
                 
                 return CreatedAtAction(nameof(ObtenerOrden), new { guid = guid }, lectura);
@@ -372,10 +377,13 @@ namespace SGA_Api.Controllers
             {
                 var resultado = await _conteosService.CerrarOrdenAsync(guid);
                 
-                // Notificar a supervisores y administradores sobre el cierre de la orden
+                // Obtener orden para obtener CreadoPorCodigo
+                var orden = await _conteosService.ObtenerOrdenAsync(guid);
+                
+                // Notificar al supervisor creador y administradores sobre el cierre de la orden
                 await _notificacionesConteosService.NotificarOrdenCerradaAsync(
                     guid, 
-                    null, // TODO: Obtener supervisor de la orden si es necesario
+                    orden?.CreadoPorCodigo,
                     resultado.ResultadosCreados
                 );
                 
@@ -548,12 +556,16 @@ namespace SGA_Api.Controllers
             {
                 var nuevaOrden = await _conteosService.ReasignarLineaAsync(resultadoGuid, dto);
                 
+                // Obtener la orden completa para pasar codigoAlmacen y codigoArticulo
+                var ordenCompleta = await _conteosService.ObtenerOrdenAsync(nuevaOrden.GuidID);
+                
                 // Notificar a supervisores y administradores sobre la reasignación
                 await _notificacionesConteosService.NotificarLineaReasignadaAsync(
                     nuevaOrden.GuidID, 
-                    "N/A", // No tenemos código de artículo en ReasignarLineaDto
+                    ordenCompleta?.CodigoArticulo ?? "N/A",
                     dto.CodigoOperario, 
-                    dto.SupervisorCodigo
+                    dto.SupervisorCodigo,
+                    ordenCompleta?.CodigoAlmacen
                 );
                 
                 return CreatedAtAction(nameof(ObtenerOrden), new { guid = nuevaOrden.GuidID }, nuevaOrden);
@@ -657,11 +669,25 @@ namespace SGA_Api.Controllers
         /// <returns>Lista de conteos periódicos con información de renovaciones</returns>
         [HttpGet("periodicos")]
         [ProducesResponseType(typeof(IEnumerable<ConteoPeriodicoDto>), 200)]
-        public async Task<IActionResult> ListarConteosPeriodicos([FromQuery] string? codigoOperario = null)
+        public async Task<IActionResult> ListarConteosPeriodicos(
+            [FromQuery] string? codigoAlmacen = null,
+            [FromQuery] DateTime? fechaDesde = null,
+            [FromQuery] DateTime? fechaHasta = null,
+            [FromQuery] bool? activo = null,
+            [FromQuery] string? codigoOperario = null,
+            [FromQuery] string? codigoOperarioSesion = null,
+            [FromQuery] string? creadoPorCodigo = null)
         {
             try
             {
-                var conteos = await _conteosService.ListarConteosPeriodicosAsync(codigoOperario);
+                var conteos = await _conteosService.ListarConteosPeriodicosAsync(
+                    codigoAlmacen,
+                    fechaDesde,
+                    fechaHasta,
+                    activo,
+                    codigoOperario,
+                    codigoOperarioSesion,
+                    creadoPorCodigo);
                 return Ok(conteos);
             }
             catch (Exception ex)
@@ -671,6 +697,56 @@ namespace SGA_Api.Controllers
                 {
                     Title = "Error interno del servidor",
                     Detail = "Ocurrió un error al listar los conteos periódicos",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Obtener códigos de operarios que han creado conteos
+        /// </summary>
+        /// <returns>Lista de códigos de operarios que han creado conteos</returns>
+        [HttpGet("creadores")]
+        [ProducesResponseType(typeof(IEnumerable<string>), 200)]
+        public async Task<IActionResult> ObtenerCreadoresConteos()
+        {
+            try
+            {
+                var creadores = await _conteosService.ObtenerCreadoresConteosAsync();
+                return Ok(creadores);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener creadores de conteos");
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al obtener los creadores de conteos",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Obtener códigos de operarios que han creado conteos periódicos
+        /// </summary>
+        /// <returns>Lista de códigos de operarios que han creado conteos periódicos</returns>
+        [HttpGet("creadores-periodicos")]
+        [ProducesResponseType(typeof(IEnumerable<string>), 200)]
+        public async Task<IActionResult> ObtenerCreadoresConteosPeriodicos()
+        {
+            try
+            {
+                var creadores = await _conteosService.ObtenerCreadoresConteosPeriodicosAsync();
+                return Ok(creadores);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener creadores de conteos periódicos");
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al obtener los creadores de conteos periódicos",
                     Status = 500
                 });
             }

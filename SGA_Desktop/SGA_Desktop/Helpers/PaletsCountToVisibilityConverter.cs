@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -14,6 +14,7 @@ namespace SGA_Desktop.Helpers
 	{
 		// parámetro: "One" → visible solo si hay 1 palet
 		// parámetro: "Many" → visible solo si hay >1
+		// parámetro: "Any" → visible si hay al menos 1 palet
 		public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
 		{
 			if (value is IEnumerable list)
@@ -26,6 +27,9 @@ namespace SGA_Desktop.Helpers
 
 				if ((string)parameter == "Many")
 					return count > 1 ? Visibility.Visible : Visibility.Collapsed;
+
+				if ((string)parameter == "Any")
+					return count > 0 ? Visibility.Visible : Visibility.Collapsed;
 			}
 			return Visibility.Collapsed;
 		}

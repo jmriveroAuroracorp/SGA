@@ -453,7 +453,7 @@ namespace SGA_Desktop.ViewModels
 			}
 
 			// 🔷 Cargar los almacenes disponibles
-			var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+			var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
 			// 🔷 Mostrar diálogo con líneas + almacenes
 			var dlg = new ConfirmationWithListDialog(

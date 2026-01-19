@@ -23,6 +23,7 @@ namespace SGA_Desktop.ViewModels
         private readonly TraspasosService _traspasosService;
         private readonly StockService _stockService;
         private readonly LoginService _loginService;
+        private readonly InventarioService _inventarioService;
 
         // Propiedades para filtros
         [ObservableProperty] private DateTime? fechaDesde;
@@ -36,6 +37,15 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty] private EstadoTraspasoDto? estadoSeleccionado;
         [ObservableProperty] private OperariosAccesoDto? operarioSeleccionado;
         [ObservableProperty] private bool estaCargando = false;
+        [ObservableProperty] private bool debeHacerScrollAlInicio = false;
+        [ObservableProperty] private bool verTodasLasEmpresas = false;
+        [ObservableProperty] private EmpresaDto? empresaFiltroSeleccionada;
+
+        // Propiedad para mostrar el checkbox solo a admins
+        public bool PuedeVerTodasLasEmpresas => SessionManager.EsAdmin;
+        
+        // Colección de empresas disponibles (las del usuario)
+        public ObservableCollection<EmpresaDto> Empresas { get; } = new();
 
         // Colecciones para filtros
         public ObservableCollection<AlmacenDto> AlmacenesOrigen { get; } = new();
@@ -75,9 +85,11 @@ namespace SGA_Desktop.ViewModels
                 var observacionesActivo = !string.IsNullOrWhiteSpace(FiltroObservaciones);
                 var fechaDesdeActiva = FechaDesde.HasValue && FechaDesde.Value != DateTime.Today;
                 var fechaHastaActiva = FechaHasta.HasValue && FechaHasta.Value != DateTime.Today;
+                var origenActivo = OrigenSeleccionado != null && !string.IsNullOrEmpty(OrigenSeleccionado.CodigoOrigen);
+                var verTodasLasEmpresasActivo = VerTodasLasEmpresas;
 
                 return almacenOrigenActivo || almacenDestinoActivo || estadoActivo || operarioActivo || 
-                       articuloActivo || loteActivo || paletActivo || observacionesActivo || fechaDesdeActiva || fechaHastaActiva;
+                       articuloActivo || loteActivo || paletActivo || observacionesActivo || fechaDesdeActiva || fechaHastaActiva || origenActivo || verTodasLasEmpresasActivo;
             }
         }
 
@@ -141,35 +153,98 @@ namespace SGA_Desktop.ViewModels
                     filtros.Add($"Observaciones: {FiltroObservaciones}");
                 }
 
+                if (OrigenSeleccionado != null && !string.IsNullOrEmpty(OrigenSeleccionado.CodigoOrigen))
+                {
+                    filtros.Add($"Origen: {OrigenSeleccionado.Descripcion}");
+                }
+
+                // Agregar información sobre el filtro de empresas
+                if (VerTodasLasEmpresas)
+                {
+                    if (EmpresaFiltroSeleccionada != null && EmpresaFiltroSeleccionada.Codigo != 0)
+                    {
+                        filtros.Add($"Empresa: {EmpresaFiltroSeleccionada.Nombre}");
+                    }
+                    else
+                    {
+                        filtros.Add("Todas las empresas");
+                    }
+                }
+
                 return filtros.Count > 0 ? string.Join(" | ", filtros) : "Sin filtros";
             }
         }
 
-        // Datos principales
+        // Datos principales (colecciones públicas filtradas)
         public ObservableCollection<TraspasoDto> Traspasos { get; } = new();
         [ObservableProperty] private TraspasoDto? traspasoSeleccionado;
         
         // Pestañas
-        [ObservableProperty] private bool mostrandoSgaActual = true;
+        [ObservableProperty] private bool mostrandoAuroraSga = true;
         [ObservableProperty] private bool mostrandoStorageControl = false;
-        [ObservableProperty] private bool mostrandoCombinado = false;
         
         // Datos para StorageControl
         public ObservableCollection<TraspasoStorageControlDto> TraspasosStorageControl { get; } = new();
         [ObservableProperty] private TraspasoStorageControlDto? traspasoStorageControlSeleccionado;
         
-        // Datos combinados (SGA Actual + StorageControl)
-        public ObservableCollection<object> TraspasosCombinados { get; } = new();
-        [ObservableProperty] private object? traspasoCombinadoSeleccionado;
+        // Datos para Ajustes (colección pública filtrada)
+        public ObservableCollection<AjusteDto> Ajustes { get; } = new();
+        [ObservableProperty] private AjusteDto? ajusteSeleccionado;
+        
+        // Datos combinados (SGA Actual + Ajustes)
+        public ObservableCollection<object> TraspasosYAjustes { get; } = new();
+        [ObservableProperty] private object? traspasoOAjusteSeleccionado;
+        
+        // Colecciones privadas para almacenar TODOS los datos sin filtrar (para filtrado en memoria)
+        private List<TraspasoDto> _todosLosTraspasos = new();
+        private List<AjusteDto> _todosLosAjustes = new();
+        private DateTime? _ultimaFechaDesdeCargada;
+        private DateTime? _ultimaFechaHastaCargada;
+        
+        // Cache para almacenes permitidos (evitar llamadas duplicadas)
+        private List<string>? _almacenesPermitidosCache = null;
+        private DateTime? _ultimaActualizacionAlmacenes = null;
+        
+        // Protección para evitar ejecuciones simultáneas de AplicarFiltrosEnMemoria
+        private bool _aplicandoFiltros = false;
+        
+        // Estados finales que no necesitan actualizarse (ya son definitivos)
+        // ERROR_ERP NO es final porque se pueden hacer reintentos y cambiar de estado
+        private static readonly HashSet<string> EstadosFinalesTraspasos = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "COMPLETADO",
+            "CANCELADO"
+        };
+        
+        private static readonly HashSet<string> EstadosFinalesAjustes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "COMPLETADO",
+            "CANCELADO"
+        };
+        
+        private bool EsEstadoFinalTraspaso(string? codigoEstado)
+        {
+            return !string.IsNullOrWhiteSpace(codigoEstado) && 
+                   EstadosFinalesTraspasos.Contains(codigoEstado);
+        }
+        
+        private bool EsEstadoFinalAjuste(string? estado)
+        {
+            return !string.IsNullOrWhiteSpace(estado) && 
+                   EstadosFinalesAjustes.Contains(estado);
+        }
+        
+        // Filtros específicos de ajustes
+        [ObservableProperty] private OrigenAjusteDto? origenSeleccionado;
+        public ObservableCollection<OrigenAjusteDto> Origenes { get; } = new();
 
         // Comandos
         public IRelayCommand AbrirFiltrosCommand { get; }
         public IAsyncRelayCommand AplicarFiltrosCommand { get; }
         public IRelayCommand LimpiarFiltrosCommand { get; }
         public IRelayCommand VerDetallesCommand { get; }
-        public IRelayCommand CambiarASgaActualCommand { get; }
+        public IRelayCommand CambiarAAuroraSgaCommand { get; }
         public IRelayCommand CambiarAStorageControlCommand { get; }
-        public IRelayCommand CambiarACombinadoCommand { get; }
         public IAsyncRelayCommand AplicarFiltrosStorageControlCommand { get; }
         
         // Comandos para manejo del dropdown de almacenes origen
@@ -187,6 +262,7 @@ namespace SGA_Desktop.ViewModels
             _traspasosService = traspasosService;
             _stockService = new StockService();
             _loginService = new LoginService();
+            _inventarioService = new InventarioService();
 
             // Inicializar ICollectionView para filtrado de operarios
             OperariosView = CollectionViewSource.GetDefaultView(OperariosDisponibles);
@@ -199,14 +275,25 @@ namespace SGA_Desktop.ViewModels
             AlmacenesDestinoView = CollectionViewSource.GetDefaultView(AlmacenesDestino);
             AlmacenesDestinoView.Filter = FiltraAlmacenesDestino;
 
+            // Cargar empresas disponibles (las del usuario)
+            // Agregar opción "Todas" al inicio
+            Empresas.Add(new EmpresaDto { Codigo = 0, Nombre = "Todas las empresas" });
+            
+            if (SessionManager.UsuarioActual?.empresas != null)
+            {
+                foreach (var empresa in SessionManager.UsuarioActual.empresas)
+                {
+                    Empresas.Add(empresa);
+                }
+            }
+
             // Inicializar comandos
             AbrirFiltrosCommand = new RelayCommand(AbrirFiltros);
             AplicarFiltrosCommand = new AsyncRelayCommand(AplicarFiltrosAsync);
             LimpiarFiltrosCommand = new RelayCommand(LimpiarFiltros);
             VerDetallesCommand = new RelayCommand(VerDetalles, PuedeVerDetalles);
-            CambiarASgaActualCommand = new RelayCommand(CambiarASgaActual);
+            CambiarAAuroraSgaCommand = new RelayCommand(CambiarAAuroraSga);
             CambiarAStorageControlCommand = new RelayCommand(CambiarAStorageControl);
-            CambiarACombinadoCommand = new RelayCommand(CambiarACombinado);
             AplicarFiltrosStorageControlCommand = new AsyncRelayCommand(AplicarFiltrosStorageControlAsync);
             
             // Inicializar comandos para dropdown de almacenes origen
@@ -284,48 +371,89 @@ namespace SGA_Desktop.ViewModels
             }
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnCodigoLoteChanged(string value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnCodigoPaletChanged(string value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnFiltroObservacionesChanged(string value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados (solo si tiene al menos 5 caracteres o está vacío)
+            if ((_todosLosTraspasos.Any() || _todosLosAjustes.Any()) && 
+                (string.IsNullOrWhiteSpace(value) || value.Trim().Length >= 5))
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnAlmacenOrigenSeleccionadoChanged(AlmacenDto? value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnAlmacenDestinoSeleccionadoChanged(AlmacenDto? value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnEstadoSeleccionadoChanged(EstadoTraspasoDto? value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
 
         partial void OnOperarioSeleccionadoChanged(OperariosAccesoDto? value)
         {
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
         }
         
         partial void OnFiltroOperariosChanged(string value)
@@ -344,6 +472,39 @@ namespace SGA_Desktop.ViewModels
             AlmacenesDestinoView?.Refresh();
         }
 
+        partial void OnVerTodasLasEmpresasChanged(bool oldValue, bool newValue)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
+        }
+
+        partial void OnEmpresaFiltroSeleccionadaChanged(EmpresaDto? oldValue, EmpresaDto? newValue)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados y "Ver todas las empresas" está marcado
+            if (VerTodasLasEmpresas && (_todosLosTraspasos.Any() || _todosLosAjustes.Any()))
+            {
+                AplicarFiltrosEnMemoria();
+            }
+        }
+
+        partial void OnOrigenSeleccionadoChanged(OrigenAjusteDto? value)
+        {
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            // Aplicar filtros en memoria si ya hay datos cargados
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
+        }
+
         private async Task InitializeAsync()
         {
             try
@@ -357,6 +518,17 @@ namespace SGA_Desktop.ViewModels
 
                 // Cargar operarios
                 await CargarOperariosAsync();
+                
+                // Asegurar que el filtro de operarios esté vacío para mostrar todos
+                FiltroOperarios = "";
+                
+                // Establecer "Todos" como selección por defecto en operarios
+                // Usar el objeto exacto de la colección para asegurar que el binding funcione
+                var todosOperario = OperariosDisponibles.FirstOrDefault(o => o.Operario == 0);
+                if (todosOperario != null)
+                {
+                    OperarioSeleccionado = todosOperario;
+                }
 
                 // Cargar estados
                 await CargarEstadosAsync();
@@ -364,8 +536,16 @@ namespace SGA_Desktop.ViewModels
                 // Establecer "-- Todos los estados --" como selección por defecto
                 EstadoSeleccionado = Estados.FirstOrDefault(e => string.IsNullOrEmpty(e.CodigoEstado));
 
-                // Cargar automáticamente los traspasos del día actual
+                // Cargar orígenes de ajustes
+                await CargarOrigenesAsync();
+                OrigenSeleccionado = Origenes.FirstOrDefault(o => string.IsNullOrEmpty(o.CodigoOrigen));
+
+                // Cargar automáticamente los traspasos y ajustes del día actual
                 await CargarTraspasosAsync();
+                await CargarAjustesAsync();
+                
+                // Aplicar filtros en memoria para mostrar los datos en la UI
+                AplicarFiltrosEnMemoria();
             }
             catch (Exception ex)
             {
@@ -387,7 +567,8 @@ namespace SGA_Desktop.ViewModels
                     permisos = await _stockService.ObtenerAlmacenesAsync(centro);
                 }
 
-                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                var operarioId = SessionManager.Operario;
+                var almacenes = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, operarioId);
 
                 AlmacenesOrigen.Clear();
                 AlmacenesDestino.Clear();
@@ -430,7 +611,27 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 EstaCargando = true;
-                var empresa = SessionManager.EmpresaSeleccionada!.Value;
+                // Si "Ver todas las empresas" está marcado, usar la empresa seleccionada en el combo (si hay), o null para ver todas
+                short? empresa;
+                if (VerTodasLasEmpresas)
+                {
+                    // Si hay una empresa seleccionada y no es "Todas" (codigo 0), filtrar por esa; si no, ver todas (null)
+                    if (EmpresaFiltroSeleccionada != null && EmpresaFiltroSeleccionada.Codigo != 0)
+                    {
+                        empresa = EmpresaFiltroSeleccionada.Codigo;
+                    }
+                    else
+                    {
+                        empresa = null; // Ver todas las empresas
+                    }
+                }
+                else
+                {
+                    // Si no está marcado "Ver todas", usar la empresa actual
+                    empresa = SessionManager.EmpresaSeleccionada;
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] VerTodasLasEmpresas: {VerTodasLasEmpresas}, empresa pasada a API: {(empresa.HasValue ? empresa.Value.ToString() : "NULL (todas las empresas)")}");
                 
                 // Asegurar que las fechas estén bien configuradas (misma lógica que InventarioViewModel)
                 var fechaDesde = FechaDesde ?? DateTime.Today;
@@ -438,164 +639,123 @@ namespace SGA_Desktop.ViewModels
                 
                 System.Diagnostics.Debug.WriteLine($"Cargando traspasos desde: {fechaDesde:yyyy-MM-dd} hasta: {fechaHasta:yyyy-MM-dd}");
                 
-                // Determinar el estado para el filtro (si es vacío, no filtrar por estado)
-                var estadoFiltro = EstadoSeleccionado?.CodigoEstado;
+                // Si ya hay datos cargados (refresh), cargar sin filtros adicionales para obtener todos los registros
+                // y luego aplicar filtros en memoria. Si es la primera carga, aplicar filtros en el API.
+                var esRefresh = _todosLosTraspasos.Any();
+                
+                string? estadoFiltro = null;
+                string? codigoPaletFiltro = null;
+                string? almacenOrigenFiltro = null;
+                string? almacenDestinoFiltro = null;
+                
+                if (!esRefresh)
+                {
+                    // Primera carga: aplicar filtros en el API para optimizar
+                    estadoFiltro = EstadoSeleccionado?.CodigoEstado;
                 if (string.IsNullOrEmpty(estadoFiltro))
                 {
                     estadoFiltro = null; // No filtrar por estado
                 }
                 
-                var codigoPaletFiltro = !string.IsNullOrWhiteSpace(CodigoPalet) && CodigoPalet.Trim().Length >= 3
+                    codigoPaletFiltro = !string.IsNullOrWhiteSpace(CodigoPalet) && CodigoPalet.Trim().Length >= 3
                     ? CodigoPalet.Trim()
                     : null;
-                var observacionesFiltro = !string.IsNullOrWhiteSpace(FiltroObservaciones) && FiltroObservaciones.Trim().Length >= 5
-                    ? FiltroObservaciones.Trim()
-                    : null;
+                    
+                    almacenOrigenFiltro = AlmacenOrigenSeleccionado?.CodigoAlmacen;
+                    almacenDestinoFiltro = AlmacenDestinoSeleccionado?.CodigoAlmacen;
+                }
+                // Si es refresh, todos los filtros son null, se cargarán todos los registros del rango de fechas
 
                 var traspasos = await _traspasosService.ObtenerTraspasosFiltradosAsync(
                     estado: estadoFiltro,
                     codigoPalet: codigoPaletFiltro,
-                    almacenOrigen: AlmacenOrigenSeleccionado?.CodigoAlmacen,
-                    almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
+                    almacenOrigen: almacenOrigenFiltro,
+                    almacenDestino: almacenDestinoFiltro,
                     fechaInicioDesde: fechaDesde.Date, // Solo la fecha, hora 00:00:00
-                    fechaInicioHasta: fechaHasta.Date // Solo la fecha, la API se encarga de incluir todo el día
+                    fechaInicioHasta: fechaHasta.Date, // Solo la fecha, la API se encarga de incluir todo el día
+                    codigoEmpresa: empresa // Filtrar por empresa seleccionada
                 );
 
                 System.Diagnostics.Debug.WriteLine($"API devolvió {traspasos.Count} traspasos");
-
-                Traspasos.Clear();
                 
                 // 🔒 FILTRO DE SEGURIDAD: Aplicar filtro automático por almacenes permitidos del usuario
-                var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
-                var traspasosFiltrados = traspasos.Where(t => 
-                    almacenesPermitidos.Contains(t.AlmacenOrigen) || 
-                    almacenesPermitidos.Contains(t.AlmacenDestino)
-                ).ToList();
-                
-                System.Diagnostics.Debug.WriteLine($"Después del filtro de almacenes permitidos: {traspasosFiltrados.Count} traspasos");
-                
-                // Aplicar filtros adicionales (artículo y operario)
-                var traspasosFiltradosFinal = traspasosFiltrados;
-                
-                if (codigoPaletFiltro != null)
+                // Si "Ver todas las empresas" está marcado, no filtrar por almacenes (ver todos)
+                List<TraspasoDto> traspasosFiltrados;
+                if (VerTodasLasEmpresas)
                 {
-                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t =>
-                        !string.IsNullOrWhiteSpace(t.CodigoPalet) &&
-                        t.CodigoPalet.Contains(codigoPaletFiltro, StringComparison.OrdinalIgnoreCase)
-                    ).ToList();
-
-                    System.Diagnostics.Debug.WriteLine($"Después del filtro de palet: {traspasosFiltradosFinal.Count} traspasos");
-                }
-                else if (!string.IsNullOrWhiteSpace(CodigoPalet))
-                {
-                    System.Diagnostics.Debug.WriteLine($"Filtro de palet ignorado: se necesitan al menos 3 caracteres (actual: {CodigoPalet.Trim().Length})");
-                }
-
-                if (observacionesFiltro != null)
-                {
-                    var observacionesFiltroNormalizado = NormalizarIdentificadorOrden(observacionesFiltro);
-
-                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t =>
-                    {
-                        bool coincideComentario = !string.IsNullOrWhiteSpace(t.Comentarios) &&
-                            (t.Comentarios.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
-                             NormalizarIdentificadorOrden(t.Comentarios).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
-
-                        bool coincideOrdenTrabajo = !string.IsNullOrWhiteSpace(t.OrdenTrabajoId) &&
-                            (t.OrdenTrabajoId.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
-                             NormalizarIdentificadorOrden(t.OrdenTrabajoId).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
-
-                        return coincideComentario || coincideOrdenTrabajo;
-                    }).ToList();
-
-                    System.Diagnostics.Debug.WriteLine($"Después del filtro de observaciones: {traspasosFiltradosFinal.Count}");
-                }
-                else if (!string.IsNullOrWhiteSpace(FiltroObservaciones))
-                {
-                    System.Diagnostics.Debug.WriteLine($"Filtro de observaciones ignorado: se necesitan al menos 5 caracteres (actual: {FiltroObservaciones.Trim().Length})");
-                }
-                
-                // Filtro por código de artículo
-                if (!string.IsNullOrWhiteSpace(CodigoArticulo))
-                {
-                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
-                        !string.IsNullOrWhiteSpace(t.CodigoArticulo) && 
-                        t.CodigoArticulo.Contains(CodigoArticulo, StringComparison.OrdinalIgnoreCase)
-                    ).ToList();
-                    
-                    System.Diagnostics.Debug.WriteLine($"Después del filtro de artículo: {traspasosFiltradosFinal.Count} traspasos");
-                }
-                
-                // Filtro por lote (solo si hay artículo escrito)
-                if (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo))
-                {
-                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
-                        (!string.IsNullOrWhiteSpace(t.Partida) && 
-                        t.Partida.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)) ||
-                        (t.LineasPalet != null && t.LineasPalet.Any(l => 
-                            !string.IsNullOrWhiteSpace(l.Lote) && 
-                            l.Lote.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)))
-                    ).ToList();
-                    
-                    System.Diagnostics.Debug.WriteLine($"Después del filtro de lote: {traspasosFiltradosFinal.Count} traspasos");
-                }
-                
-                // Filtro por operario seleccionado
-                if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Aplicando filtro de operario: {OperarioSeleccionado.Operario}");
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] OperarioSeleccionado.Operario tipo: {OperarioSeleccionado.Operario.GetType()}");
-                    
-                    // Log de los usuarios que tienen los traspasos antes del filtro
-                    var usuariosEnTraspasos = traspasosFiltradosFinal.Select(t => t.UsuarioInicioId).Distinct().Take(10).ToList();
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Usuarios en traspasos (primeros 10): {string.Join(", ", usuariosEnTraspasos)}");
-                    
-                    // Log de tipos de datos para debugging
-                    if (traspasosFiltradosFinal.Any())
-                    {
-                        var primerTraspaso = traspasosFiltradosFinal.First();
-                        System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Primer traspaso UsuarioInicioId: {primerTraspaso.UsuarioInicioId} (tipo: {primerTraspaso.UsuarioInicioId.GetType()})");
-                    }
-                    
-                    traspasosFiltradosFinal = traspasosFiltradosFinal.Where(t => 
-                        t.UsuarioInicioId == OperarioSeleccionado.Operario
-                    ).ToList();
-                    
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Después del filtro de operario: {traspasosFiltradosFinal.Count} traspasos");
+                    // Admin viendo todas las empresas: no filtrar por almacenes
+                    traspasosFiltrados = traspasos.ToList();
+                    System.Diagnostics.Debug.WriteLine($"[Admin] Viendo todas las empresas: {traspasosFiltrados.Count} traspasos sin filtrar por almacenes");
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] No se aplica filtro de operario (OperarioSeleccionado: {OperarioSeleccionado?.Operario})");
-                }
-
-                // Resolver nombres de operarios
-                var operariosDict = OperariosDisponibles.ToDictionary(o => o.Operario.ToString(), o => ExtraerSoloNombre(o.NombreCompleto ?? "Sin nombre"));
-
-                foreach (var traspaso in traspasosFiltradosFinal.OrderByDescending(t => t.FechaInicio))
-                {
-                    // Resolver nombre del operario de inicio
-                    if (traspaso.UsuarioInicioId > 0 && string.IsNullOrEmpty(traspaso.UsuarioInicioNombre))
-                    {
-                        traspaso.UsuarioInicioNombre = operariosDict.GetValueOrDefault(traspaso.UsuarioInicioId.ToString(), $"ID: {traspaso.UsuarioInicioId}");
-                    }
-
-                    // Resolver nombre del operario de finalización si existe
-                    if (traspaso.UsuarioFinalizacionId.HasValue && traspaso.UsuarioFinalizacionId > 0 && string.IsNullOrEmpty(traspaso.UsuarioFinalizacionNombre))
-                    {
-                        traspaso.UsuarioFinalizacionNombre = operariosDict.GetValueOrDefault(traspaso.UsuarioFinalizacionId.ToString(), $"ID: {traspaso.UsuarioFinalizacionId}");
-                    }
-
-                    Traspasos.Add(traspaso);
-                    System.Diagnostics.Debug.WriteLine($"Traspaso: {traspaso.CodigoArticulo} - {traspaso.FechaInicio:yyyy-MM-dd HH:mm}");
+                    // Usuario normal: filtrar por almacenes permitidos de su empresa
+                var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+                    traspasosFiltrados = traspasos.Where(t => 
+                    almacenesPermitidos.Contains(t.AlmacenOrigen) || 
+                    almacenesPermitidos.Contains(t.AlmacenDestino)
+                ).ToList();
+                System.Diagnostics.Debug.WriteLine($"Después del filtro de almacenes permitidos: {traspasosFiltrados.Count} traspasos");
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"Total final: {Traspasos.Count} traspasos");
-                
-                // Si la pestaña combinada está visible, actualizar la lista combinada
-                if (MostrandoCombinado)
+                // Si ya hay datos cargados, actualizar existentes y añadir nuevos (refresh)
+                if (_todosLosTraspasos.Any())
                 {
-                    ActualizarTraspasosCombinados();
+                    var traspasosDict = _todosLosTraspasos.ToDictionary(t => t.Id);
+                    var idsDelApi = new HashSet<Guid>(traspasosFiltrados.Select(t => t.Id));
+                    var traspasosActualizados = 0;
+                    var traspasosNuevos = 0;
+                    var traspasosEliminados = 0;
+                    
+                    // Actualizar existentes y añadir nuevos
+                    foreach (var traspaso in traspasosFiltrados)
+                    {
+                        if (traspasosDict.TryGetValue(traspaso.Id, out var traspasoExistente))
+                        {
+                            // Solo actualizar si NO está en estado final (los completados no cambian)
+                            if (!EsEstadoFinalTraspaso(traspasoExistente.CodigoEstado))
+                            {
+                                // Actualizar registro existente (copiar propiedades)
+                                // Optimización: usar FindIndex con ID en lugar de IndexOf (más eficiente)
+                                var index = _todosLosTraspasos.FindIndex(t => t.Id == traspaso.Id);
+                                if (index >= 0)
+                                {
+                                    _todosLosTraspasos[index] = traspaso;
+                                    traspasosActualizados++;
+                                }
+                            }
+                            // Si está en estado final, no actualizar (ya es definitivo)
+                        }
+                        else
+                        {
+                            // Añadir nuevo registro (siempre añadir nuevos, incluso si están completados)
+                            _todosLosTraspasos.Add(traspaso);
+                            traspasosNuevos++;
+                        }
+                    }
+                    
+                    // Eliminar registros que ya no están en el rango de fechas (no vinieron del API)
+                    var traspasosAEliminar = _todosLosTraspasos
+                        .Where(t => !idsDelApi.Contains(t.Id) && 
+                                    (t.FechaInicio.Date < fechaDesde.Date || t.FechaInicio.Date > fechaHasta.Date))
+                        .ToList();
+                    
+                    foreach (var traspaso in traspasosAEliminar)
+                    {
+                        _todosLosTraspasos.Remove(traspaso);
+                        traspasosEliminados++;
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"Refresh: {traspasosActualizados} traspasos actualizados, {traspasosNuevos} nuevos añadidos, {traspasosEliminados} eliminados (fuera de rango)");
                 }
+                else
+                {
+                    // Primera carga: guardar todos los traspasos
+                    _todosLosTraspasos = traspasosFiltrados.ToList();
+                    System.Diagnostics.Debug.WriteLine($"Carga inicial: {_todosLosTraspasos.Count} traspasos");
+                }
+                
+                // NO aplicar filtros aquí - se aplicarán desde AplicarFiltrosAsync() para evitar duplicados
             }
             catch (Exception ex)
             {
@@ -613,8 +773,24 @@ namespace SGA_Desktop.ViewModels
             if (!ValidarFiltroObservacionesMinimo())
                 return;
 
-            // Aplicar filtros a ambas pestañas
-            await CargarTraspasosAsync(); // SGA Actual
+            var fechaDesde = FechaDesde ?? DateTime.Today;
+            var fechaHasta = FechaHasta ?? DateTime.Today;
+            
+            // Cuando se pulsa "Recargar" (AplicarFiltrosCommand), SIEMPRE hacer refresh del API
+            // para obtener los datos más recientes (actualizar existentes y añadir nuevos)
+            var fechasCambiaron = _ultimaFechaDesdeCargada != fechaDesde || _ultimaFechaHastaCargada != fechaHasta;
+            
+            // Si las fechas cambiaron, limpiar las colecciones para recargar todo desde cero
+            if (fechasCambiaron)
+            {
+                _todosLosTraspasos.Clear();
+                _todosLosAjustes.Clear();
+            }
+            
+            // Recargar traspasos (siempre hacer refresh cuando se pulsa el botón)
+            await CargarTraspasosAsync();
+            _ultimaFechaDesdeCargada = fechaDesde;
+            _ultimaFechaHastaCargada = fechaHasta;
             
             // Si la pestaña StorageControl está visible o tiene datos, también aplicar filtros ahí
             if (MostrandoStorageControl || TraspasosStorageControl.Any())
@@ -622,15 +798,23 @@ namespace SGA_Desktop.ViewModels
                 await CargarTraspasosStorageControlAsync();
             }
             
-            // Si la pestaña combinada está visible, actualizar la lista combinada
-            if (MostrandoCombinado)
+            // Recargar ajustes (siempre hacer refresh cuando se pulsa el botón)
+            if (MostrandoAuroraSga || TraspasosYAjustes.Any())
             {
-                ActualizarTraspasosCombinados();
+                await CargarAjustesAsync();
             }
+            
+            // Aplicar filtros en memoria una sola vez después de cargar todo
+            AplicarFiltrosEnMemoria();
 
             // Notificar cambios en propiedades calculadas después de aplicar filtros
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
+            
+            // Notificar que se debe hacer scroll al inicio después de recargar
+            DebeHacerScrollAlInicio = true;
+            // Resetear inmediatamente para que se pueda detectar el cambio la próxima vez
+            DebeHacerScrollAlInicio = false;
         }
 
         private void LimpiarFiltros()
@@ -641,53 +825,86 @@ namespace SGA_Desktop.ViewModels
             CodigoLote = "";
             CodigoPalet = "";
             FiltroObservaciones = "";
-            OperarioSeleccionado = null;
+            OperarioSeleccionado = OperariosDisponibles.FirstOrDefault(o => o.Operario == 0); // "Todos"
             AlmacenOrigenSeleccionado = null;
             AlmacenDestinoSeleccionado = null;
             EstadoSeleccionado = Estados.FirstOrDefault(e => string.IsNullOrEmpty(e.CodigoEstado)); // "-- Todos los estados --"
+            OrigenSeleccionado = Origenes.FirstOrDefault(o => string.IsNullOrEmpty(o.CodigoOrigen)); // "-- Todos los orígenes --"
+            
+            // Desmarcar "Ver todas las empresas" y reiniciar el combo
+            VerTodasLasEmpresas = false;
+            EmpresaFiltroSeleccionada = Empresas.FirstOrDefault(e => e.Codigo == 0); // "Todas las empresas"
+            
+            // Limpiar colecciones completas para forzar recarga
+            _todosLosTraspasos.Clear();
+            _todosLosAjustes.Clear();
+            _ultimaFechaDesdeCargada = null;
+            _ultimaFechaHastaCargada = null;
             
             // Notificar cambios en propiedades calculadas
             OnPropertyChanged(nameof(TieneFiltrosActivos));
             OnPropertyChanged(nameof(ResumenFiltrosActivos));
             
-            // Limpiar la lista de traspasos
+            // Limpiar las listas
             Traspasos.Clear();
+            Ajustes.Clear();
+            TraspasosYAjustes.Clear();
         }
 
         private async Task CargarOperariosAsync()
         {
             try
             {
-                // Intentar permiso específico para traspasos (permiso 12)
-                var operarios = await _loginService.ObtenerOperariosConAccesoTraspasosAsync();
+                // Cargar operarios con CUALQUIERA de los permisos: 12 (traspasos), 13 (conteos) o 14 (inventarios)
+                var operariosTraspasos = await _loginService.ObtenerOperariosConAccesoTraspasosAsync();
+                var operariosConteos = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+                var operariosInventarios = await _loginService.ObtenerOperariosConAccesoInventariosAsync();
 
-                System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Operarios con permiso 12: {operarios.Count}");
+                System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Operarios con permiso 12 (traspasos): {operariosTraspasos.Count}");
+                System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Operarios con permiso 13 (conteos): {operariosConteos.Count}");
+                System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Operarios con permiso 14 (inventarios): {operariosInventarios.Count}");
 
                 OperariosDisponibles.Clear();
 
-                // Si no hay operarios con permiso 12, usar fallback automáticamente
-                if (operarios.Count == 0)
-                {
-                    System.Diagnostics.Debug.WriteLine("[TraspasoHistorico] No hay operarios con permiso 12, usando fallback a permiso 13");
-                    var operariosFallback = await _loginService.ObtenerOperariosConAccesoConteosAsync();
-                    operarios = operariosFallback;
-                }
+                // Agregar opción "Todos" como primera opción
+                OperariosDisponibles.Add(new OperariosAccesoDto 
+                { 
+                    Operario = 0, 
+                    NombreOperario = "Todos",
+                    MRH_CodigoAplicacion = 0
+                });
 
-                foreach (var operario in operarios.OrderBy(o => o.NombreOperario))
+                // Combinar todas las listas y eliminar duplicados (OR: si tiene cualquiera de los permisos, aparece)
+                var todosOperarios = operariosTraspasos
+                    .Concat(operariosConteos)
+                    .Concat(operariosInventarios)
+                    .GroupBy(o => o.Operario)
+                    .Select(g => g.First())
+                    .OrderBy(o => o.NombreOperario)
+                    .ToList();
+
+                foreach (var operario in todosOperarios)
                 {
                     OperariosDisponibles.Add(operario);
                 }
 
-                System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Total operarios cargados: {OperariosDisponibles.Count}");
+                System.Diagnostics.Debug.WriteLine($"[TraspasoHistorico] Total operarios cargados (permisos 12, 13 o 14): {OperariosDisponibles.Count}");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error cargando operarios: {ex.Message}");
-                // Fallback final: usar operarios de conteos
+                // Fallback: intentar solo con traspasos
                 try
                 {
-                    var operariosFallback = await _loginService.ObtenerOperariosConAccesoConteosAsync();
+                    var operariosFallback = await _loginService.ObtenerOperariosConAccesoTraspasosAsync();
                     OperariosDisponibles.Clear();
+                    // Agregar opción "Todos" como primera opción
+                    OperariosDisponibles.Add(new OperariosAccesoDto 
+                    { 
+                        Operario = 0, 
+                        NombreOperario = "Todos",
+                        MRH_CodigoAplicacion = 0
+                    });
                     foreach (var operario in operariosFallback.OrderBy(o => o.NombreOperario))
                     {
                         OperariosDisponibles.Add(operario);
@@ -697,6 +914,13 @@ namespace SGA_Desktop.ViewModels
                 catch
                 {
                     OperariosDisponibles.Clear();
+                    // Aún así, agregar la opción "Todos"
+                    OperariosDisponibles.Add(new OperariosAccesoDto 
+                    { 
+                        Operario = 0, 
+                        NombreOperario = "Todos",
+                        MRH_CodigoAplicacion = 0
+                    });
                     System.Diagnostics.Debug.WriteLine("[TraspasoHistorico] Error total: No se pudieron cargar operarios");
                 }
             }
@@ -718,6 +942,24 @@ namespace SGA_Desktop.ViewModels
 
         private void AbrirFiltros()
         {
+            // Asegurar que "Todos" esté seleccionado por defecto en operarios al abrir el diálogo
+            if (OperarioSeleccionado == null || OperarioSeleccionado.Operario != 0)
+            {
+                var todosOperario = OperariosDisponibles.FirstOrDefault(o => o.Operario == 0);
+                if (todosOperario != null)
+                {
+                    OperarioSeleccionado = todosOperario;
+                    // Establecer el texto del ComboBox para que muestre "Todos" (el ComboBox es editable)
+                    FiltroOperarios = todosOperario.NombreOperario ?? "Todos";
+                }
+            }
+            else if (OperarioSeleccionado.Operario == 0)
+            {
+                // Si ya está seleccionado "Todos", asegurar que el texto también muestre "Todos"
+                FiltroOperarios = OperarioSeleccionado.NombreOperario ?? "Todos";
+            }
+            
+            // Usar el ViewModel principal directamente como DataContext para que los cambios se reflejen automáticamente
             var dlg = new HistorialTraspasosFiltrosDialog
             {
                 DataContext = this
@@ -753,7 +995,8 @@ namespace SGA_Desktop.ViewModels
         [RelayCommand]
         private void AbrirDropDownOperarios()
         {
-            FiltroOperarios = ""; // Limpiar el filtro para permitir escribir desde cero
+            // Limpiar el filtro cada vez que se despliega el combo para mostrar todos los operarios
+            FiltroOperarios = "";
             IsDropDownOpenOperarios = true;
         }
 
@@ -761,13 +1004,23 @@ namespace SGA_Desktop.ViewModels
         private void CerrarDropDownOperarios()
         {
             IsDropDownOpenOperarios = false;
+            
+            // Cuando se cierra el dropdown, si hay un operario seleccionado, mostrar su nombre en el texto
+            if (OperarioSeleccionado != null)
+            {
+                FiltroOperarios = OperarioSeleccionado.NombreOperario ?? "";
+            }
         }
 
         // Método de filtrado para operarios (búsqueda en cualquier parte del texto)
         private bool FiltraOperario(object obj)
         {
-            if (string.IsNullOrWhiteSpace(FiltroOperarios)) return true;
             if (obj is not OperariosAccesoDto operario) return false;
+            
+            // "Todos" siempre se muestra (Operario = 0)
+            if (operario.Operario == 0) return true;
+            
+            if (string.IsNullOrWhiteSpace(FiltroOperarios)) return true;
 
             // Búsqueda acento-insensible, sin mayúsc/minúsc, en cualquier parte del texto
             var compare = CultureInfo.CurrentCulture.CompareInfo;
@@ -801,8 +1054,17 @@ namespace SGA_Desktop.ViewModels
         }
 
         // 🔒 MÉTODO DE SEGURIDAD: Obtener almacenes permitidos del usuario
-        private async Task<List<string>> ObtenerAlmacenesPermitidosAsync()
+        private async Task<List<string>> ObtenerAlmacenesPermitidosAsync(bool forzarRefresh = false)
         {
+            // Si hay cache válido y no se fuerza refresh, devolver cache
+            if (!forzarRefresh && _almacenesPermitidosCache != null && 
+                _ultimaActualizacionAlmacenes.HasValue &&
+                (DateTime.Now - _ultimaActualizacionAlmacenes.Value).TotalMinutes < 5)
+            {
+                System.Diagnostics.Debug.WriteLine("[Cache] Devolviendo almacenes permitidos desde cache");
+                return _almacenesPermitidosCache;
+            }
+            
             try
             {
                 var empresa = SessionManager.EmpresaSeleccionada!.Value;
@@ -814,32 +1076,48 @@ namespace SGA_Desktop.ViewModels
                     permisos = await _stockService.ObtenerAlmacenesAsync(centro);
                 }
 
-                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                var operarioId = SessionManager.Operario;
+                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, operarioId);
                 
-                // Retornar solo los códigos de almacén permitidos
-                return almacenesAutorizados.Select(a => a.CodigoAlmacen).ToList();
+                // Guardar en cache
+                _almacenesPermitidosCache = almacenesAutorizados.Select(a => a.CodigoAlmacen).ToList();
+                _ultimaActualizacionAlmacenes = DateTime.Now;
+                
+                System.Diagnostics.Debug.WriteLine($"[Cache] Almacenes permitidos actualizados: {_almacenesPermitidosCache.Count} almacenes");
+                
+                return _almacenesPermitidosCache;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error obteniendo almacenes permitidos: {ex.Message}");
-                // En caso de error, retornar lista vacía para máxima seguridad
-                return new List<string>();
+                // Si hay error pero tenemos cache, devolver cache
+                return _almacenesPermitidosCache ?? new List<string>();
             }
         }
 
         // Comandos para cambiar de pestaña
-        private void CambiarASgaActual()
+        private void CambiarAAuroraSga()
         {
-            MostrandoSgaActual = true;
+            MostrandoAuroraSga = true;
             MostrandoStorageControl = false;
-            MostrandoCombinado = false;
+            
+            // Si ya hay datos cargados, aplicar filtros en memoria
+            if (_todosLosTraspasos.Any() || _todosLosAjustes.Any())
+            {
+                AplicarFiltrosEnMemoria();
+            }
+            else
+            {
+                // Cargar datos si no hay nada cargado
+                _ = CargarTraspasosAsync();
+                _ = CargarAjustesAsync();
+            }
         }
 
         private void CambiarAStorageControl()
         {
-            MostrandoSgaActual = false;
+            MostrandoAuroraSga = false;
             MostrandoStorageControl = true;
-            MostrandoCombinado = false;
             
             // Cargar traspasos de StorageControl si la colección está vacía
             if (!TraspasosStorageControl.Any())
@@ -848,50 +1126,294 @@ namespace SGA_Desktop.ViewModels
             }
         }
         
-        private void CambiarACombinado()
+        /// <summary>
+        /// Método público para activar la pestaña de Aurora SGA desde fuera (por ejemplo, desde navegación)
+        /// </summary>
+        public void ActivarPestañaAjustes()
         {
-            MostrandoSgaActual = false;
-            MostrandoStorageControl = false;
-            MostrandoCombinado = true;
-            ActualizarTraspasosCombinados();
+            CambiarAAuroraSga();
         }
         
-        private void ActualizarTraspasosCombinados()
+        /// <summary>
+        /// Aplica todos los filtros en memoria sobre las colecciones completas cargadas
+        /// </summary>
+        private void AplicarFiltrosEnMemoria()
         {
-            TraspasosCombinados.Clear();
+            // Protección: evitar ejecuciones simultáneas (si ya se está aplicando, salir)
+            if (_aplicandoFiltros)
+            {
+                System.Diagnostics.Debug.WriteLine("[Filtros] AplicarFiltrosEnMemoria ya en ejecución, ignorando llamada duplicada");
+                return;
+            }
             
-            // Agregar traspasos de SGA Actual
+            _aplicandoFiltros = true;
+            try
+            {
+                // ========== FILTRAR TRASPASOS ==========
+                var traspasosFiltrados = _todosLosTraspasos.AsEnumerable();
+            
+            // Filtro por empresa (si "Ver todas las empresas" está marcado y hay una empresa seleccionada que no sea "Todas")
+            if (VerTodasLasEmpresas && EmpresaFiltroSeleccionada != null && EmpresaFiltroSeleccionada.Codigo != 0)
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t => t.CodigoEmpresa == EmpresaFiltroSeleccionada.Codigo);
+            }
+            
+            // Filtro por estado
+            var estadoFiltro = EstadoSeleccionado?.CodigoEstado;
+            if (!string.IsNullOrEmpty(estadoFiltro))
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    !string.IsNullOrWhiteSpace(t.CodigoEstado) &&
+                    t.CodigoEstado.Equals(estadoFiltro, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por código de artículo
+            if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    !string.IsNullOrWhiteSpace(t.CodigoArticulo) &&
+                    t.CodigoArticulo.Contains(CodigoArticulo, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por lote (solo si hay artículo)
+            if (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo))
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    (!string.IsNullOrWhiteSpace(t.Partida) &&
+                    t.Partida.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)) ||
+                    (t.LineasPalet != null && t.LineasPalet.Any(l =>
+                        !string.IsNullOrWhiteSpace(l.Lote) &&
+                        l.Lote.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)))
+                );
+            }
+            
+            // Filtro por palet
+            var codigoPaletFiltro = !string.IsNullOrWhiteSpace(CodigoPalet) && CodigoPalet.Trim().Length >= 3
+                ? CodigoPalet.Trim()
+                : null;
+            if (codigoPaletFiltro != null)
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    !string.IsNullOrWhiteSpace(t.CodigoPalet) &&
+                    t.CodigoPalet.Contains(codigoPaletFiltro, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por observaciones
+            var observacionesFiltro = !string.IsNullOrWhiteSpace(FiltroObservaciones) && FiltroObservaciones.Trim().Length >= 5
+                ? FiltroObservaciones.Trim()
+                : null;
+            if (observacionesFiltro != null)
+            {
+                var observacionesFiltroNormalizado = NormalizarIdentificadorOrden(observacionesFiltro);
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                {
+                    bool coincideComentario = !string.IsNullOrWhiteSpace(t.Comentarios) &&
+                        (t.Comentarios.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                         NormalizarIdentificadorOrden(t.Comentarios).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
+                    bool coincideOrdenTrabajo = !string.IsNullOrWhiteSpace(t.OrdenTrabajoId) &&
+                        (t.OrdenTrabajoId.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                         NormalizarIdentificadorOrden(t.OrdenTrabajoId).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
+                    return coincideComentario || coincideOrdenTrabajo;
+                });
+            }
+            
+            // Filtro por almacén origen
+            if (AlmacenOrigenSeleccionado != null && !string.IsNullOrWhiteSpace(AlmacenOrigenSeleccionado.CodigoAlmacen))
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    !string.IsNullOrWhiteSpace(t.AlmacenOrigen) &&
+                    t.AlmacenOrigen.Equals(AlmacenOrigenSeleccionado.CodigoAlmacen, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por almacén destino
+            if (AlmacenDestinoSeleccionado != null && !string.IsNullOrWhiteSpace(AlmacenDestinoSeleccionado.CodigoAlmacen))
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    !string.IsNullOrWhiteSpace(t.AlmacenDestino) &&
+                    t.AlmacenDestino.Equals(AlmacenDestinoSeleccionado.CodigoAlmacen, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por operario
+            if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
+            {
+                traspasosFiltrados = traspasosFiltrados.Where(t =>
+                    t.UsuarioInicioId == OperarioSeleccionado.Operario
+                );
+            }
+            
+            // Resolver nombres de operarios y actualizar colección de traspasos
+            var operariosDict = OperariosDisponibles.ToDictionary(o => o.Operario.ToString(), o => ExtraerSoloNombre(o.NombreCompleto ?? "Sin nombre"));
+            Traspasos.Clear();
+            foreach (var traspaso in traspasosFiltrados.OrderByDescending(t => t.FechaInicio))
+            {
+                // Resolver nombre del operario de inicio
+                if (traspaso.UsuarioInicioId > 0 && string.IsNullOrEmpty(traspaso.UsuarioInicioNombre))
+                {
+                    traspaso.UsuarioInicioNombre = operariosDict.GetValueOrDefault(traspaso.UsuarioInicioId.ToString(), $"ID: {traspaso.UsuarioInicioId}");
+                }
+                // Resolver nombre del operario de finalización si existe
+                if (traspaso.UsuarioFinalizacionId.HasValue && traspaso.UsuarioFinalizacionId > 0 && string.IsNullOrEmpty(traspaso.UsuarioFinalizacionNombre))
+                {
+                    traspaso.UsuarioFinalizacionNombre = operariosDict.GetValueOrDefault(traspaso.UsuarioFinalizacionId.ToString(), $"ID: {traspaso.UsuarioFinalizacionId}");
+                }
+                Traspasos.Add(traspaso);
+            }
+            
+            // ========== FILTRAR AJUSTES ==========
+            var ajustesFiltrados = _todosLosAjustes.AsEnumerable();
+            
+            // Filtro por empresa (si "Ver todas las empresas" está marcado y hay una empresa seleccionada que no sea "Todas")
+            if (VerTodasLasEmpresas && EmpresaFiltroSeleccionada != null && EmpresaFiltroSeleccionada.Codigo != 0)
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a => a.CodigoEmpresa == EmpresaFiltroSeleccionada.Codigo);
+            }
+            
+            // Filtro por estado
+            if (!string.IsNullOrEmpty(estadoFiltro))
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    !string.IsNullOrWhiteSpace(a.Estado) &&
+                    a.Estado.Equals(estadoFiltro, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por código de artículo
+            if (!string.IsNullOrWhiteSpace(CodigoArticulo))
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    !string.IsNullOrWhiteSpace(a.CodigoArticulo) &&
+                    a.CodigoArticulo.Contains(CodigoArticulo, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por lote (solo si hay artículo)
+            if (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo))
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    !string.IsNullOrWhiteSpace(a.Partida) &&
+                    a.Partida.Contains(CodigoLote, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por palet
+            if (codigoPaletFiltro != null)
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    !string.IsNullOrWhiteSpace(a.CodigoPalet) &&
+                    a.CodigoPalet.Contains(codigoPaletFiltro, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por observaciones (buscar en CodigoInventario y CodigoConteo)
+            if (observacionesFiltro != null)
+            {
+                var observacionesFiltroNormalizado = NormalizarIdentificadorOrden(observacionesFiltro);
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                {
+                    bool coincideInventario = !string.IsNullOrWhiteSpace(a.CodigoInventario) &&
+                        (a.CodigoInventario.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                         NormalizarIdentificadorOrden(a.CodigoInventario).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
+                    bool coincideConteo = !string.IsNullOrWhiteSpace(a.CodigoConteo) &&
+                        (a.CodigoConteo.Contains(observacionesFiltro, StringComparison.OrdinalIgnoreCase) ||
+                         NormalizarIdentificadorOrden(a.CodigoConteo).Contains(observacionesFiltroNormalizado, StringComparison.OrdinalIgnoreCase));
+                    return coincideInventario || coincideConteo;
+                });
+            }
+            
+            // Filtro por almacén (origen o destino, para ajustes solo hay uno)
+            var almacenFiltro = AlmacenOrigenSeleccionado?.CodigoAlmacen ?? AlmacenDestinoSeleccionado?.CodigoAlmacen;
+            if (!string.IsNullOrWhiteSpace(almacenFiltro))
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    !string.IsNullOrWhiteSpace(a.CodigoAlmacen) &&
+                    a.CodigoAlmacen.Equals(almacenFiltro, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+            
+            // Filtro por operario
+            if (OperarioSeleccionado != null && OperarioSeleccionado.Operario > 0)
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    a.UsuarioId == OperarioSeleccionado.Operario
+                );
+            }
+            
+            // Filtro por origen (Inventario, Conteo)
+            var origenFiltro = OrigenSeleccionado?.CodigoOrigen;
+            if (!string.IsNullOrEmpty(origenFiltro) && origenFiltro != "TRASPASO")
+            {
+                ajustesFiltrados = ajustesFiltrados.Where(a =>
+                    a.Origen == origenFiltro
+                );
+            }
+            
+            // Actualizar colección de ajustes
+            Ajustes.Clear();
+            foreach (var ajuste in ajustesFiltrados.OrderByDescending(a => a.Fecha))
+            {
+                Ajustes.Add(ajuste);
+            }
+            
+            // Actualizar lista combinada
+            ActualizarTraspasosYAjustes();
+            }
+            finally
+            {
+                _aplicandoFiltros = false;
+            }
+        }
+        
+        private void ActualizarTraspasosYAjustes()
+        {
+            TraspasosYAjustes.Clear();
+            
+            // Aplicar filtro de origen si está seleccionado
+            var origenFiltro = OrigenSeleccionado?.CodigoOrigen;
+            var mostrarTraspasos = string.IsNullOrEmpty(origenFiltro) || origenFiltro == "TRASPASO";
+            var mostrarAjustes = string.IsNullOrEmpty(origenFiltro) || origenFiltro == "INVENTARIO" || origenFiltro == "CONTEO";
+            
+            // Agregar traspasos de SGA Actual (si corresponde)
+            if (mostrarTraspasos)
+            {
             foreach (var traspaso in Traspasos)
             {
                 traspaso.Fuente = "SGA_Actual";
-                TraspasosCombinados.Add(traspaso);
+                    TraspasosYAjustes.Add(traspaso);
+                }
             }
             
-            // Agregar traspasos de StorageControl
-            foreach (var traspaso in TraspasosStorageControl)
+            // Agregar ajustes (si corresponde)
+            // Los ajustes ya vienen filtrados por origen desde AplicarFiltrosEnMemoria()
+            if (mostrarAjustes)
             {
-                traspaso.Fuente = "SAGE";
-                TraspasosCombinados.Add(traspaso);
+                foreach (var ajuste in Ajustes)
+                {
+                    TraspasosYAjustes.Add(ajuste);
+                }
             }
             
-            // Ordenar por fecha descendente (más recientes primero)
-            // Para SGA Actual: usar FechaInicio
-            // Para StorageControl: usar FechaRegistro o Fecha
-            var traspasosOrdenados = TraspasosCombinados
+            // Ordenar por fecha descendente (más recientes primero) - optimizado
+            var itemsOrdenados = TraspasosYAjustes
                 .OrderByDescending(t => 
                 {
                     if (t is TraspasoDto traspasoSga)
                         return traspasoSga.FechaInicio;
-                    if (t is TraspasoStorageControlDto traspasoStorage)
-                        return traspasoStorage.FechaRegistro ?? traspasoStorage.Fecha;
+                    if (t is AjusteDto ajuste)
+                        return ajuste.Fecha;
                     return DateTime.MinValue;
                 })
                 .ToList();
             
-            TraspasosCombinados.Clear();
-            foreach (var traspaso in traspasosOrdenados)
+            // Reemplazar la colección de una vez en lugar de limpiar y añadir uno por uno
+            TraspasosYAjustes.Clear();
+            foreach (var item in itemsOrdenados)
             {
-                TraspasosCombinados.Add(traspaso);
+                TraspasosYAjustes.Add(item);
             }
         }
 
@@ -915,23 +1437,37 @@ namespace SGA_Desktop.ViewModels
                     ? CodigoLote
                     : null;
 
+                // Si "Ver todas las empresas" está marcado, pasar null para ver todas
+                var empresa = VerTodasLasEmpresas ? null : SessionManager.EmpresaSeleccionada;
                 var traspasos = await _traspasosService.ObtenerTraspasosStorageControlAsync(
                     fechaDesde: fechaDesde.Date,
                     fechaHasta: fechaHasta.Date,
                     almacenOrigen: AlmacenOrigenSeleccionado?.CodigoAlmacen,
                     almacenDestino: AlmacenDestinoSeleccionado?.CodigoAlmacen,
                     codigoArticulo: string.IsNullOrWhiteSpace(CodigoArticulo) ? null : CodigoArticulo,
-                    partida: partidaFiltro
+                    partida: partidaFiltro,
+                    codigoEmpresa: empresa // Filtrar por empresa seleccionada
                 );
 
                 TraspasosStorageControl.Clear();
                 
                 // 🔒 FILTRO DE SEGURIDAD: Aplicar filtro automático por almacenes permitidos del usuario
+                // Si "Ver todas las empresas" está marcado, no filtrar por almacenes (ver todos)
+                List<TraspasoStorageControlDto> traspasosFiltrados;
+                if (VerTodasLasEmpresas)
+                {
+                    // Admin viendo todas las empresas: no filtrar por almacenes
+                    traspasosFiltrados = traspasos.ToList();
+                    System.Diagnostics.Debug.WriteLine($"[StorageControl Admin] Viendo todas las empresas: {traspasosFiltrados.Count} traspasos sin filtrar por almacenes");
+                }
+                else
+                {
+                    // Usuario normal: filtrar por almacenes permitidos de su empresa
                 var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
                 System.Diagnostics.Debug.WriteLine($"[StorageControl] Traspasos recibidos del API: {traspasos.Count}");
                 System.Diagnostics.Debug.WriteLine($"[StorageControl] Almacenes permitidos: {string.Join(", ", almacenesPermitidos)}");
                 
-                var traspasosFiltrados = traspasos.Where(t => 
+                    traspasosFiltrados = traspasos.Where(t => 
                     (t.AlmacenOrigen != null && almacenesPermitidos.Contains(t.AlmacenOrigen)) || 
                     (t.AlmacenDestino != null && almacenesPermitidos.Contains(t.AlmacenDestino))
                 ).ToList();
@@ -939,6 +1475,7 @@ namespace SGA_Desktop.ViewModels
                 var traspasosDescartados = traspasos.Count - traspasosFiltrados.Count;
                 System.Diagnostics.Debug.WriteLine($"[StorageControl] Traspasos después del filtro de almacenes: {traspasosFiltrados.Count}");
                 System.Diagnostics.Debug.WriteLine($"[StorageControl] Traspasos descartados por filtro de almacenes: {traspasosDescartados}");
+                }
 
                 if (codigoPaletFiltro != null)
                 {
@@ -987,10 +1524,10 @@ namespace SGA_Desktop.ViewModels
                     TraspasosStorageControl.Add(traspaso);
                 }
                 
-                // Si la pestaña combinada está visible, actualizar la lista combinada
-                if (MostrandoCombinado)
+                // Si la pestaña Aurora SGA está visible, actualizar la lista combinada
+                if (MostrandoAuroraSga)
                 {
-                    ActualizarTraspasosCombinados();
+                    ActualizarTraspasosYAjustes();
                 }
             }
             catch (Exception ex)
@@ -1041,8 +1578,23 @@ namespace SGA_Desktop.ViewModels
             if (string.IsNullOrWhiteSpace(valor))
                 return string.Empty;
 
-            var builder = new System.Text.StringBuilder(valor.Length);
-            foreach (var ch in valor)
+            // Primero quitar acentos y tildes
+            var textoNormalizado = valor.Normalize(System.Text.NormalizationForm.FormD);
+            var sinAcentos = new System.Text.StringBuilder();
+            
+            foreach (char c in textoNormalizado)
+            {
+                var categoria = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+                // Mantener solo caracteres que no sean marcas diacríticas (tildes, acentos)
+                if (categoria != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    sinAcentos.Append(c);
+                }
+            }
+
+            // Luego quitar signos de puntuación y espacios, mantener solo letras y dígitos
+            var builder = new System.Text.StringBuilder(sinAcentos.Length);
+            foreach (var ch in sinAcentos.ToString())
             {
                 if (char.IsLetterOrDigit(ch))
                     builder.Append(char.ToUpperInvariant(ch));
@@ -1154,6 +1706,214 @@ namespace SGA_Desktop.ViewModels
         {
             if (fecha.HasValue)
                 Clipboard.SetText(fecha.Value.ToString("dd/MM/yyyy HH:mm"));
+        }
+
+        [RelayCommand]
+        private void CopiarDiferencia(object diferencia)
+        {
+            if (diferencia is decimal dec)
+                Clipboard.SetText(dec.ToString("0.######"));
+            else if (diferencia != null && decimal.TryParse(diferencia.ToString(), out var parsed))
+                Clipboard.SetText(parsed.ToString("0.######"));
+        }
+
+        [RelayCommand]
+        private void CopiarAlmacen(string almacen)
+        {
+            if (!string.IsNullOrWhiteSpace(almacen))
+                Clipboard.SetText(almacen);
+        }
+
+        [RelayCommand]
+        private void CopiarUbicacion(string ubicacion)
+        {
+            if (!string.IsNullOrWhiteSpace(ubicacion))
+                Clipboard.SetText(ubicacion);
+        }
+
+        [RelayCommand]
+        private void CopiarCodigoInventario(string codigoInventario)
+        {
+            if (!string.IsNullOrWhiteSpace(codigoInventario))
+                Clipboard.SetText(codigoInventario);
+        }
+
+        // Métodos para cargar ajustes
+        private async Task CargarOrigenesAsync()
+        {
+            try
+            {
+                Origenes.Clear();
+
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "", Descripcion = "-- Todos los orígenes --" });
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "TRASPASO", Descripcion = "Traspaso" });
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "INVENTARIO", Descripcion = "Inventario" });
+                Origenes.Add(new OrigenAjusteDto { CodigoOrigen = "CONTEO", Descripcion = "Conteo" });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando orígenes: {ex.Message}");
+            }
+        }
+
+        private async Task CargarAjustesAsync()
+        {
+            try
+            {
+                EstaCargando = true;
+                // Si "Ver todas las empresas" está marcado, usar la empresa seleccionada en el combo (si hay), o null para ver todas
+                short? empresa;
+                if (VerTodasLasEmpresas)
+                {
+                    // Si hay una empresa seleccionada y no es "Todas" (codigo 0), filtrar por esa; si no, ver todas (null)
+                    if (EmpresaFiltroSeleccionada != null && EmpresaFiltroSeleccionada.Codigo != 0)
+                    {
+                        empresa = EmpresaFiltroSeleccionada.Codigo;
+                    }
+                    else
+                    {
+                        empresa = null; // Ver todas las empresas
+                    }
+                }
+                else
+                {
+                    // Si no está marcado "Ver todas", usar la empresa actual
+                    empresa = SessionManager.EmpresaSeleccionada;
+                }
+
+                var fechaDesde = FechaDesde ?? DateTime.Today;
+                var fechaHasta = FechaHasta ?? DateTime.Today;
+
+                // Si ya hay datos cargados (refresh), cargar sin filtros adicionales para obtener todos los registros
+                // y luego aplicar filtros en memoria. Si es la primera carga, aplicar filtros en el API.
+                var esRefresh = _todosLosAjustes.Any();
+                
+                string? estadoFiltro = null;
+                string? codigoArticuloFiltro = null;
+                string? almacenFiltro = null;
+                int? usuarioIdFiltro = null;
+                string? partidaFiltro = null;
+                string? codigoPaletFiltro = null;
+                
+                if (!esRefresh)
+                {
+                    // Primera carga: aplicar filtros en el API para optimizar
+                    estadoFiltro = EstadoSeleccionado?.CodigoEstado;
+                    if (string.IsNullOrEmpty(estadoFiltro))
+                    {
+                        estadoFiltro = null;
+                    }
+
+                    codigoPaletFiltro = !string.IsNullOrWhiteSpace(CodigoPalet) && CodigoPalet.Trim().Length >= 3
+                        ? CodigoPalet.Trim()
+                        : null;
+
+                    // Usar AlmacenOrigenSeleccionado o AlmacenDestinoSeleccionado para ajustes (solo hay un almacén)
+                    almacenFiltro = AlmacenOrigenSeleccionado?.CodigoAlmacen ?? AlmacenDestinoSeleccionado?.CodigoAlmacen;
+                    codigoArticuloFiltro = string.IsNullOrWhiteSpace(CodigoArticulo) ? null : CodigoArticulo;
+                    usuarioIdFiltro = OperarioSeleccionado?.Operario > 0 ? OperarioSeleccionado.Operario : null;
+                    partidaFiltro = (!string.IsNullOrWhiteSpace(CodigoLote) && !string.IsNullOrWhiteSpace(CodigoArticulo)) ? CodigoLote : null;
+                }
+                // Si es refresh, todos los filtros son null, se cargarán todos los registros del rango de fechas
+
+                var ajustes = await _inventarioService.ObtenerAjustesFiltradosAsync(
+                    codigoEmpresa: empresa,
+                    fechaDesde: fechaDesde.Date,
+                    fechaHasta: fechaHasta.Date,
+                    codigoArticulo: codigoArticuloFiltro,
+                    codigoAlmacen: almacenFiltro,
+                    estado: estadoFiltro,
+                    usuarioId: usuarioIdFiltro,
+                    partida: partidaFiltro,
+                    codigoPalet: codigoPaletFiltro
+                );
+
+                // Filtrar por almacenes permitidos del usuario
+                // Si "Ver todas las empresas" está marcado, no filtrar por almacenes (ver todos)
+                List<AjusteDto> ajustesFiltradosPorSeguridad;
+                if (VerTodasLasEmpresas)
+                {
+                    // Admin viendo todas las empresas: no filtrar por almacenes
+                    ajustesFiltradosPorSeguridad = ajustes.ToList();
+                    System.Diagnostics.Debug.WriteLine($"[Admin] Viendo todas las empresas: {ajustesFiltradosPorSeguridad.Count} ajustes sin filtrar por almacenes");
+                }
+                else
+                {
+                    // Usuario normal: filtrar por almacenes permitidos de su empresa
+                var almacenesPermitidos = await ObtenerAlmacenesPermitidosAsync();
+                    ajustesFiltradosPorSeguridad = ajustes.Where(a =>
+                    almacenesPermitidos.Contains(a.CodigoAlmacen)
+                ).ToList();
+                System.Diagnostics.Debug.WriteLine($"Después del filtro de almacenes permitidos: {ajustesFiltradosPorSeguridad.Count} ajustes");
+                }
+                
+                // Si ya hay datos cargados, actualizar existentes y añadir nuevos (refresh)
+                if (_todosLosAjustes.Any())
+                {
+                    var ajustesDict = _todosLosAjustes.ToDictionary(a => a.IdAjuste);
+                    var idsDelApi = new HashSet<Guid>(ajustesFiltradosPorSeguridad.Select(a => a.IdAjuste));
+                    var ajustesActualizados = 0;
+                    var ajustesNuevos = 0;
+                    var ajustesEliminados = 0;
+                    
+                    // Actualizar existentes y añadir nuevos
+                    foreach (var ajuste in ajustesFiltradosPorSeguridad)
+                    {
+                        if (ajustesDict.TryGetValue(ajuste.IdAjuste, out var ajusteExistente))
+                        {
+                            // Solo actualizar si NO está en estado final (los completados no cambian)
+                            if (!EsEstadoFinalAjuste(ajusteExistente.Estado))
+                            {
+                                // Actualizar registro existente (copiar propiedades)
+                                // Optimización: usar FindIndex con ID en lugar de IndexOf (más eficiente)
+                                var index = _todosLosAjustes.FindIndex(a => a.IdAjuste == ajuste.IdAjuste);
+                                if (index >= 0)
+                                {
+                                    _todosLosAjustes[index] = ajuste;
+                                    ajustesActualizados++;
+                                }
+                            }
+                            // Si está en estado final, no actualizar (ya es definitivo)
+                        }
+                        else
+                        {
+                            // Añadir nuevo registro (siempre añadir nuevos, incluso si están completados)
+                            _todosLosAjustes.Add(ajuste);
+                            ajustesNuevos++;
+                        }
+                    }
+                    
+                    // Eliminar registros que ya no están en el rango de fechas (no vinieron del API)
+                    var ajustesAEliminar = _todosLosAjustes
+                        .Where(a => !idsDelApi.Contains(a.IdAjuste) && 
+                                    (a.Fecha.Date < fechaDesde.Date || a.Fecha.Date > fechaHasta.Date))
+                        .ToList();
+                    
+                    foreach (var ajuste in ajustesAEliminar)
+                    {
+                        _todosLosAjustes.Remove(ajuste);
+                        ajustesEliminados++;
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"Refresh: {ajustesActualizados} ajustes actualizados, {ajustesNuevos} nuevos añadidos, {ajustesEliminados} eliminados (fuera de rango)");
+                }
+                else
+                {
+                    // Primera carga: guardar todos los ajustes
+                    _todosLosAjustes = ajustesFiltradosPorSeguridad.ToList();
+                    System.Diagnostics.Debug.WriteLine($"Carga inicial: {_todosLosAjustes.Count} ajustes");
+                }
+                
+                // NO aplicar filtros aquí - se aplicarán desde AplicarFiltrosAsync() para evitar duplicados
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando ajustes: {ex.Message}");
+            }
+            finally
+            {
+                EstaCargando = false;
+            }
         }
     }
 }

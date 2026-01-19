@@ -16,7 +16,7 @@ namespace SGA_Desktop.Converters
             {
                 return origen switch
                 {
-                    "INVENTARIO" => new SolidColorBrush(Color.FromRgb(52, 152, 219)),   // Azul
+                    "INVENTARIO" => new SolidColorBrush(Color.FromRgb(255, 152, 0)),   // Naranja
                     "CONTEO" => new SolidColorBrush(Color.FromRgb(155, 89, 182)),        // Morado
                     "MANUAL" => new SolidColorBrush(Color.FromRgb(149, 165, 166)),       // Gris
                     _ => new SolidColorBrush(Color.FromRgb(149, 165, 166))

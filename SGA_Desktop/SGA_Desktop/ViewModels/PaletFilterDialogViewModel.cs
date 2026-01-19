@@ -341,7 +341,7 @@ namespace SGA_Desktop.ViewModels
 					permisos = await stockService.ObtenerAlmacenesAsync(centro);
 				}
 				
-				var almacenes = await new StockService().ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+				var almacenes = await new StockService().ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, SessionManager.Operario);
 				
 				await Application.Current.Dispatcher.InvokeAsync(() =>
 				{

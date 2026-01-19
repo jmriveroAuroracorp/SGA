@@ -1,5 +1,6 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Collections.ObjectModel;
 using SGA_Desktop.Models;
@@ -109,6 +110,8 @@ public class StockDisponibleDto : INotifyPropertyChanged
     public List<PaletDetalleDto> Palets { get; set; } = new();
     public decimal? TotalArticuloGlobal { get; set; }
     public decimal? TotalArticuloAlmacen { get; set; }
+    // 🔷 NUEVO: Total paletizado en ubicación (suma de cantidades de todos los palets en esta ubicación)
+    public decimal TotalPaletizadoUbicacion => Palets?.Sum(p => p.Cantidad) ?? 0;
     public ObservableCollection<PaletDto> PaletsDisponibles { get; set; } = new();
     
     private PaletDto? _paletDestinoSeleccionado;

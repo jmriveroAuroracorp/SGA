@@ -102,13 +102,13 @@ namespace SGA_Desktop.ViewModels
 				{
 					await loginService.RegistrarLogEventoAsync(new LogEvento
 					{
-						fecha = DateTime.Now,
-						idUsuario = operario,
-						tipo = "LOGIN",
-						origen = "PantallaLogin",
-						descripcion = "Inicio de sesión correcto",
-						detalle = $"El usuario accedió desde dispositivo {tipo.ToLower()}",
-						idDispositivo = idDispositivo
+						Fecha = DateTime.Now,
+						IdUsuario = operario,
+						Tipo = "LOGIN",
+						Origen = "PantallaLogin",
+						Descripcion = "Inicio de sesión correcto",
+						Detalle = $"El usuario accedió desde dispositivo {tipo.ToLower()}",
+						IdDispositivo = idDispositivo
 					});
 				}
 				catch (Exception ex)

@@ -77,6 +77,12 @@ namespace SGA_Api.Models.Inventario
         [JsonPropertyName("creadorConteoNombre")]
         public string? CreadorConteoNombre { get; set; }
 
+        [JsonPropertyName("idCambioArticulo")]
+        public Guid? IdCambioArticulo { get; set; }
+
+        [JsonPropertyName("tipoCambioArticulo")]
+        public string? TipoCambioArticulo { get; set; } // "CAMBIO_CODIGO" o "AMPLIACION"
+
         // Propiedad calculada para el origen
         [JsonPropertyName("origen")]
         public string Origen
@@ -87,6 +93,8 @@ namespace SGA_Api.Models.Inventario
                     return "INVENTARIO";
                 if (IdConteo.HasValue && IdConteo.Value != Guid.Empty)
                     return "CONTEO";
+                if (IdCambioArticulo.HasValue && IdCambioArticulo.Value != Guid.Empty)
+                    return "CAMBIO_ARTICULO";
                 return "";
             }
         }

@@ -20,6 +20,20 @@ namespace SGA_Desktop.Models
         public DateTime FechaCreacion { get; set; }
         public int TotalRenovaciones { get; set; }
         
+        // Propiedad para el nombre del operario (se asigna desde el ViewModel)
+        public string? NombreOperario { get; set; }
+        
+        // Propiedad para el nombre del creador (se asigna desde el ViewModel)
+        public string? NombreCreador { get; set; }
+        
+        public string OperarioDisplay => string.IsNullOrEmpty(NombreOperario) 
+            ? "Sin asignar"
+            : NombreOperario;
+            
+        public string CreadorDisplay => string.IsNullOrEmpty(NombreCreador) 
+            ? CreadoPorCodigo ?? "N/A"
+            : NombreCreador;
+        
         // Propiedades calculadas para la UI
         public string AlcanceFormateado
         {

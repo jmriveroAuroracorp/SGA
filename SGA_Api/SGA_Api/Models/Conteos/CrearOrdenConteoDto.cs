@@ -63,5 +63,7 @@ namespace SGA_Api.Models.Conteos
         
         [Range(1, int.MaxValue, ErrorMessage = "La frecuencia debe ser mayor a 0")]
         public int? FrecuenciaDias { get; set; }
+        
+        public DateTime? FechaProximaRenovacion { get; set; }
     }
 }

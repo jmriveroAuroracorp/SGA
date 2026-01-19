@@ -772,7 +772,8 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                ShowDialog(new WarningDialog("Error", $"Error al crear inventario: {ex.Message}"));
+                // Mostrar el mensaje tal cual viene (el servicio ya maneja los prefijos cuando es necesario)
+                ShowDialog(new WarningDialog("Error", ex.Message));
             }
         }
 
@@ -1035,7 +1036,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesDisponibles.Clear();
                 

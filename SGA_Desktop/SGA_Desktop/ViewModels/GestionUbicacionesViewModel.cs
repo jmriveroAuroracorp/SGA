@@ -14,6 +14,26 @@ using System.Windows;
 using System.Windows.Data;
 using System.Linq;
 
+public partial class UbicacionPasilloGroup : ObservableObject
+{
+	public int? Pasillo { get; set; }
+	public bool EsEspecial { get; set; } = false; // Indica si es el grupo de ubicaciones especiales
+	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; set; } = new();
+	public ObservableCollection<int?> EstanteriasDisponibles { get; set; } = new();
+	public ObservableCollection<int?> AlturasDisponibles { get; set; } = new();
+	public string HeaderPasillo 
+	{ 
+		get 
+		{
+			if (EsEspecial) return "Ubicaciones especiales";
+			return Pasillo.HasValue ? $"Pasillo {Pasillo}" : "Sin pasillo";
+		}
+	}
+	public int TotalUbicaciones => Ubicaciones?.Count ?? 0;
+	
+	[ObservableProperty]
+	private bool isExpanded = false; // Por defecto colapsado
+}
 
 public partial class GestionUbicacionesViewModel : ObservableObject
 {
@@ -26,15 +46,28 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	public ObservableCollection<AlmacenDto> AlmacenesCombo { get; }
 		= new ObservableCollection<AlmacenDto>();
 	[ObservableProperty] private AlmacenDto? selectedAlmacenCombo;
-	
-	// Vista filtrable para almacenes combo
-	public ICollectionView AlmacenesComboView { get; private set; }
 
 	public ObservableCollection<UbicacionDetalladaDto> Ubicaciones { get; }
 		= new ObservableCollection<UbicacionDetalladaDto>();
 	[ObservableProperty] private UbicacionDetalladaDto? selectedUbicacion;
 	
-	public int TotalUbicaciones => Ubicaciones.Count;
+	public int TotalUbicaciones 
+	{ 
+		get 
+		{
+			// Si hay grupos, sumar las ubicaciones de todos los grupos (ya están filtradas)
+			if (UbicacionesAgrupadas.Count > 0)
+			{
+				return UbicacionesAgrupadas.Sum(g => g.TotalUbicaciones);
+			}
+			// Si no hay grupos, devolver el total sin filtrar (por si acaso)
+			return Ubicaciones.Count;
+		}
+	}
+
+	// Agrupación por pasillo
+	public ObservableCollection<UbicacionPasilloGroup> UbicacionesAgrupadas { get; }
+		= new ObservableCollection<UbicacionPasilloGroup>();
 
 	// Filtrado
 	public ICollectionView UbicacionesView { get; }
@@ -47,6 +80,8 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 			if (SetProperty(ref _filtroBusqueda, value))
 			{
 				UbicacionesView.Refresh();
+				// Reagrupar cuando cambia el filtro
+				ReagruparUbicaciones();
 			}
 		}
 	}
@@ -61,6 +96,9 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 
 	[ObservableProperty]
 	private bool haySeleccion;
+	
+	[ObservableProperty]
+	private bool hayMasDeUnaSeleccionada;
 
 	[ObservableProperty]
 	private int seleccionadasCount;
@@ -70,13 +108,6 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	
 	[ObservableProperty]
 	private bool mostrarObsoletas = false;
-	
-	// Propiedades para filtrado de almacenes
-	[ObservableProperty]
-	private string filtroAlmacenesCombo = "";
-	
-	[ObservableProperty]
-	private bool isDropDownOpenAlmacenes = false;
 
 	public ObservableCollection<int?> AlturasDisponibles { get; } = new();
 	[ObservableProperty] private int? alturaSeleccionada;
@@ -91,7 +122,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	private void SeleccionarPorAltura(int? altura)
 	{
 		if (altura == null) return;
-		foreach (var u in Ubicaciones)
+		foreach (var u in UbicacionesView.Cast<UbicacionDetalladaDto>())
 			u.IsMarcada = u.Altura == altura;
 		RecalcularSeleccion();
 	}
@@ -100,7 +131,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	private void SeleccionarPorPasillo(int? pasillo)
 	{
 		if (pasillo == null) return;
-		foreach (var u in Ubicaciones)
+		foreach (var u in UbicacionesView.Cast<UbicacionDetalladaDto>())
 			u.IsMarcada = u.Pasillo == pasillo;
 		RecalcularSeleccion();
 	}
@@ -109,7 +140,7 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 	private void SeleccionarPorEstanteria(int? estanteria)
 	{
 		if (estanteria == null) return;
-		foreach (var u in Ubicaciones)
+		foreach (var u in UbicacionesView.Cast<UbicacionDetalladaDto>())
 			u.IsMarcada = u.Estanteria == estanteria;
 		RecalcularSeleccion();
 	}
@@ -121,13 +152,15 @@ public partial class GestionUbicacionesViewModel : ObservableObject
 		EstanteriaSeleccionada = null;
 		AlturaSeleccionada = null;
 		FiltroBusqueda = string.Empty;
-		LimpiarSeleccion();
+		// No deseleccionamos las ubicaciones, solo limpiamos los filtros
 	}
 
 	private void RecalcularSeleccion()
 	{
+		// Contar TODAS las ubicaciones seleccionadas, no solo las visibles (filtradas)
 		SeleccionadasCount = Ubicaciones.Count(u => u.IsMarcada);
 		HaySeleccion = SeleccionadasCount > 0;
+		HayMasDeUnaSeleccionada = SeleccionadasCount > 1;
 		EditarSeleccionadasCommand.NotifyCanExecuteChanged();
 	}
 
@@ -172,7 +205,7 @@ $"Posición: {ubicacion.Posicion}";
 		var dlgVm = new ConfirmarImpresionDialogViewModel(
 			ImpresorasDisponibles,
 			preNombre,
-			_loginService ?? new LoginService()
+			_loginService
 		);
 
 		var dlg = new ConfirmarImpresionDialog
@@ -239,10 +272,14 @@ $"Posición: {ubicacion.Posicion}";
 		_ubicService = ubicService;
 		_paletService = paletService;
 		_printService = new PrintQueueService();
+		_loginService = new LoginService();
 		
 		// Inicializar CollectionView para filtrado
 		UbicacionesView = CollectionViewSource.GetDefaultView(Ubicaciones);
 		UbicacionesView.Filter = FiltroUbicacion;
+		
+		// Suscribirse a cambios en la colección para actualizar TotalUbicaciones
+		Ubicaciones.CollectionChanged += (s, e) => OnPropertyChanged(nameof(TotalUbicaciones));
 		
 		LoadAlergenosCommand = new AsyncRelayCommand<UbicacionDetalladaDto>(LoadAlergenosAsync);
 		CreateUbicacionCommand = new RelayCommand<AlmacenDto>(
@@ -269,15 +306,201 @@ $"Posición: {ubicacion.Posicion}";
 	[RelayCommand]
 	private void SeleccionarTodo()
 	{
-		foreach (var u in Ubicaciones)
+		foreach (var u in UbicacionesView.Cast<UbicacionDetalladaDto>())
 			u.IsMarcada = true;
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void SeleccionarTodoElPasillo(UbicacionPasilloGroup grupo)
+	{
+		if (grupo == null || grupo.Ubicaciones == null) return;
+		
+		foreach (var ubicacion in grupo.Ubicaciones)
+		{
+			ubicacion.IsMarcada = true;
+		}
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void SeleccionarPorEstanteriaEnGrupo(object[] parametros)
+	{
+		Debug.WriteLine("=== SeleccionarPorEstanteriaEnGrupo ===");
+		Debug.WriteLine($"Parametros: {parametros?.Length ?? 0}");
+		
+		if (parametros == null || parametros.Length < 2)
+		{
+			Debug.WriteLine("Parametros nulos o insuficientes");
+			return;
+		}
+		
+		Debug.WriteLine($"Parametros[0]: {parametros[0]} (tipo: {parametros[0]?.GetType().Name ?? "null"})");
+		Debug.WriteLine($"Parametros[1]: {parametros[1]} (tipo: {parametros[1]?.GetType().Name ?? "null"})");
+		
+		var grupo = parametros[0] as UbicacionPasilloGroup;
+		Debug.WriteLine($"Grupo después de cast: {grupo?.HeaderPasillo ?? "null"} con {grupo?.Ubicaciones?.Count ?? 0} ubicaciones");
+		
+		// Si el cast falla, intentar obtener el grupo de otra manera
+		if (grupo == null && parametros[0] != null)
+		{
+			Debug.WriteLine($"El cast falló. Tipo real: {parametros[0].GetType().FullName}");
+			// Intentar obtener el grupo desde UbicacionesAgrupadas
+			var estanteriaTemp = parametros[1] is int intValTemp ? intValTemp : (int.TryParse(parametros[1]?.ToString(), out int parsedTemp) ? parsedTemp : (int?)null);
+			if (estanteriaTemp.HasValue)
+			{
+				Debug.WriteLine($"Intentando encontrar grupo por estantería {estanteriaTemp.Value}");
+				// Buscar en todos los grupos
+				foreach (var g in UbicacionesAgrupadas)
+				{
+					if (g.Ubicaciones.Any(u => u.Estanteria == estanteriaTemp.Value))
+					{
+						grupo = g;
+						Debug.WriteLine($"Grupo encontrado: {grupo.HeaderPasillo}");
+						break;
+					}
+				}
+			}
+		}
+		
+		if (grupo == null || grupo.Ubicaciones == null)
+		{
+			Debug.WriteLine("Grupo nulo o sin ubicaciones - ABORTANDO");
+			return;
+		}
+		
+		// Convertir el segundo parámetro a int?
+		int? estanteria = null;
+		var valor = parametros[1];
+		Debug.WriteLine($"Valor recibido: {valor} (tipo: {valor?.GetType().Name ?? "null"})");
+		
+		if (valor is int intVal)
+		{
+			estanteria = intVal;
+		}
+		else if (valor != null)
+		{
+			// Intentar conversión desde string o nullable
+			if (int.TryParse(valor.ToString(), out int parsed))
+			{
+				estanteria = parsed;
+			}
+		}
+		
+		Debug.WriteLine($"Estanteria a seleccionar: {estanteria}");
+		
+		if (!estanteria.HasValue)
+		{
+			Debug.WriteLine("No se pudo obtener valor de estantería");
+			return;
+		}
+		
+		int seleccionadas = 0;
+		foreach (var ubicacion in grupo.Ubicaciones)
+		{
+			// Solo seleccionar las que coinciden, sin deseleccionar las demás
+			if (ubicacion.Estanteria == estanteria)
+			{
+				ubicacion.IsMarcada = true;
+				seleccionadas++;
+				Debug.WriteLine($"  Seleccionada: {ubicacion.Ubicacion} (Est: {ubicacion.Estanteria})");
+			}
+		}
+		Debug.WriteLine($"Total seleccionadas: {seleccionadas}");
+		RecalcularSeleccion();
+	}
+
+	[RelayCommand]
+	private void SeleccionarPorAlturaEnGrupo(object[] parametros)
+	{
+		Debug.WriteLine("=== SeleccionarPorAlturaEnGrupo ===");
+		Debug.WriteLine($"Parametros: {parametros?.Length ?? 0}");
+		
+		if (parametros == null || parametros.Length < 2)
+		{
+			Debug.WriteLine("Parametros nulos o insuficientes");
+			return;
+		}
+		
+		Debug.WriteLine($"Parametros[0]: {parametros[0]} (tipo: {parametros[0]?.GetType().Name ?? "null"})");
+		Debug.WriteLine($"Parametros[1]: {parametros[1]} (tipo: {parametros[1]?.GetType().Name ?? "null"})");
+		
+		var grupo = parametros[0] as UbicacionPasilloGroup;
+		Debug.WriteLine($"Grupo después de cast: {grupo?.HeaderPasillo ?? "null"} con {grupo?.Ubicaciones?.Count ?? 0} ubicaciones");
+		
+		// Si el cast falla, intentar obtener el grupo de otra manera
+		if (grupo == null && parametros[0] != null)
+		{
+			Debug.WriteLine($"El cast falló. Tipo real: {parametros[0].GetType().FullName}");
+			// Intentar obtener el grupo desde UbicacionesAgrupadas
+			var alturaTemp = parametros[1] is int intValTemp ? intValTemp : (int.TryParse(parametros[1]?.ToString(), out int parsedTemp) ? parsedTemp : (int?)null);
+			if (alturaTemp.HasValue)
+			{
+				Debug.WriteLine($"Intentando encontrar grupo por altura {alturaTemp.Value}");
+				// Buscar en todos los grupos
+				foreach (var g in UbicacionesAgrupadas)
+				{
+					if (g.Ubicaciones.Any(u => u.Altura == alturaTemp.Value))
+					{
+						grupo = g;
+						Debug.WriteLine($"Grupo encontrado: {grupo.HeaderPasillo}");
+						break;
+					}
+				}
+			}
+		}
+		
+		if (grupo == null || grupo.Ubicaciones == null)
+		{
+			Debug.WriteLine("Grupo nulo o sin ubicaciones - ABORTANDO");
+			return;
+		}
+		
+		// Convertir el segundo parámetro a int?
+		int? altura = null;
+		var valor = parametros[1];
+		Debug.WriteLine($"Valor recibido: {valor} (tipo: {valor?.GetType().Name ?? "null"})");
+		
+		if (valor is int intVal)
+		{
+			altura = intVal;
+		}
+		else if (valor != null)
+		{
+			// Intentar conversión desde string o nullable
+			if (int.TryParse(valor.ToString(), out int parsed))
+			{
+				altura = parsed;
+			}
+		}
+		
+		Debug.WriteLine($"Altura a seleccionar: {altura}");
+		
+		if (!altura.HasValue)
+		{
+			Debug.WriteLine("No se pudo obtener valor de altura");
+			return;
+		}
+		
+		int seleccionadas = 0;
+		foreach (var ubicacion in grupo.Ubicaciones)
+		{
+			// Solo seleccionar las que coinciden, sin deseleccionar las demás
+			if (ubicacion.Altura == altura)
+			{
+				ubicacion.IsMarcada = true;
+				seleccionadas++;
+				Debug.WriteLine($"  Seleccionada: {ubicacion.Ubicacion} (Alt: {ubicacion.Altura})");
+			}
+		}
+		Debug.WriteLine($"Total seleccionadas: {seleccionadas}");
 		RecalcularSeleccion();
 	}
 
 	[RelayCommand]
 	private void LimpiarSeleccion()
 	{
-		foreach (var u in Ubicaciones)
+		foreach (var u in UbicacionesView.Cast<UbicacionDetalladaDto>())
 			u.IsMarcada = false;
 		RecalcularSeleccion();
 	}
@@ -325,7 +548,7 @@ $"Posición: {ubicacion.Posicion}";
 		var dlgVm = new ConfirmarImpresionDialogViewModel(
 			ImpresorasDisponibles,
 			preNombre,
-			_loginService ?? new LoginService()
+			_loginService
 		);
 
 		var dlg = new ConfirmarImpresionDialog
@@ -391,7 +614,7 @@ $"Posición: {ubicacion.Posicion}";
 
 		// 1) Filtramos almacenes
 		var autorizados = await _stockService
-			.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+			.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
 		AlmacenesCombo.Clear();
 		foreach (var a in autorizados)
@@ -399,11 +622,6 @@ $"Posición: {ubicacion.Posicion}";
 
 		// 2) Seleccionamos el primero y disparamos carga de ubicaciones
 		SelectedAlmacenCombo = AlmacenesCombo.FirstOrDefault();
-		
-		// 🔷 NUEVO: Inicializar la vista filtrable después de cargar los datos
-		AlmacenesComboView = CollectionViewSource.GetDefaultView(AlmacenesCombo);
-		AlmacenesComboView.Filter = FiltraAlmacenesCombo;
-		OnPropertyChanged(nameof(AlmacenesComboView));
 	}
 
 	partial void OnSelectedAlmacenComboChanged(
@@ -422,6 +640,7 @@ $"Posición: {ubicacion.Posicion}";
 		try
 		{
 			Ubicaciones.Clear();
+			UbicacionesAgrupadas.Clear();
 			OnPropertyChanged(nameof(TotalUbicaciones));
 			if (string.IsNullOrWhiteSpace(almacen)) return;
 
@@ -444,6 +663,63 @@ $"Posición: {ubicacion.Posicion}";
 			};
 			Ubicaciones.Add(dto);
 		}
+
+		// Aplicar filtro antes de agrupar
+		var ubicacionesFiltradas = Ubicaciones.Where(u => FiltroUbicacion(u)).ToList();
+
+		// Separar ubicaciones especiales (que no empiezan por "UB" o son cadena vacía)
+		var ubicacionesEspeciales = ubicacionesFiltradas
+			.Where(u => string.IsNullOrWhiteSpace(u.Ubicacion) || 
+			           !u.Ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase))
+			.OrderBy(u => u.Ubicacion)
+			.ToList();
+
+		// Ubicaciones normales (que empiezan por "UB")
+		var ubicacionesNormales = ubicacionesFiltradas
+			.Where(u => !string.IsNullOrWhiteSpace(u.Ubicacion) && 
+			           u.Ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase))
+			.ToList();
+
+		// Crear grupo de ubicaciones especiales si hay alguna
+		if (ubicacionesEspeciales.Any())
+		{
+			var grupoEspecial = new UbicacionPasilloGroup
+			{
+				EsEspecial = true,
+				Pasillo = null,
+				IsExpanded = true, // Las ubicaciones especiales siempre expandidas
+				Ubicaciones = new ObservableCollection<UbicacionDetalladaDto>(ubicacionesEspeciales)
+			};
+			UbicacionesAgrupadas.Add(grupoEspecial);
+		}
+
+		// Agrupar ubicaciones normales por pasillo
+		var grupos = ubicacionesNormales
+			.GroupBy(u => u.Pasillo)
+			.OrderBy(g => g.Key ?? int.MaxValue)
+			.Select(g =>
+			{
+				var ubicacionesGrupo = g.OrderBy(u => u.Estanteria).ThenBy(u => u.Altura).ThenBy(u => u.Posicion).ToList();
+				var grupo = new UbicacionPasilloGroup
+				{
+					EsEspecial = false,
+					Pasillo = g.Key,
+					IsExpanded = false, // Los pasillos colapsados por defecto
+					Ubicaciones = new ObservableCollection<UbicacionDetalladaDto>(ubicacionesGrupo)
+				};
+				// Cargar estanterías y alturas disponibles de este pasillo
+				grupo.EstanteriasDisponibles = new ObservableCollection<int?>(
+					ubicacionesGrupo.Select(u => u.Estanteria).Distinct().Where(e => e.HasValue).OrderBy(e => e));
+				grupo.AlturasDisponibles = new ObservableCollection<int?>(
+					ubicacionesGrupo.Select(u => u.Altura).Distinct().Where(a => a.HasValue).OrderBy(a => a));
+				return grupo;
+			});
+
+		foreach (var grupo in grupos)
+		{
+			UbicacionesAgrupadas.Add(grupo);
+		}
+
 		AlturasDisponibles.Clear();
 		foreach (var alt in Ubicaciones
 							.Select(u => u.Altura)
@@ -476,6 +752,8 @@ $"Posición: {ubicacion.Posicion}";
 
 		SelectedUbicacion = Ubicaciones.FirstOrDefault();
 		RecalcularSeleccion();
+		OnPropertyChanged(nameof(TotalUbicaciones));
+		OnPropertyChanged(nameof(UbicacionesAgrupadas));
 		}
 		finally
 		{
@@ -685,22 +963,6 @@ $"Posición: {ubicacion.Posicion}";
 			   (ubicacion.Altura?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false) ||
 			   (ubicacion.Posicion?.ToString().Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
 	}
-
-	// Métodos para filtrado de almacenes combo
-	private bool FiltraAlmacenesCombo(object obj)
-	{
-		if (obj is not AlmacenDto almacen) return false;
-		if (string.IsNullOrEmpty(FiltroAlmacenesCombo)) return true;
-		
-		return System.Globalization.CultureInfo.CurrentCulture.CompareInfo
-			.IndexOf(almacen.DescripcionCombo, FiltroAlmacenesCombo, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
-	}
-	
-	// Método para manejar cambios en el filtro
-	partial void OnFiltroAlmacenesComboChanged(string value)
-	{
-		AlmacenesComboView?.Refresh();
-	}
 	
 	// Método para manejar cambios en mostrar obsoletas
 	partial void OnMostrarObsoletasChanged(bool value)
@@ -711,19 +973,74 @@ $"Posición: {ubicacion.Posicion}";
 		}
 	}
 	
-	// Comandos para controlar dropdown
-	[RelayCommand]
-	private void AbrirDropDownAlmacenes()
+	// Método para reagrupar ubicaciones cuando cambia el filtro
+	private void ReagruparUbicaciones()
 	{
-		// Limpiar el filtro para permitir escribir desde cero
-		FiltroAlmacenesCombo = "";
-		IsDropDownOpenAlmacenes = true;
+		UbicacionesAgrupadas.Clear();
+		
+		// Aplicar filtro antes de agrupar
+		var ubicacionesFiltradas = Ubicaciones.Where(u => FiltroUbicacion(u)).ToList();
+
+		// Separar ubicaciones especiales (que no empiezan por "UB" o son cadena vacía)
+		var ubicacionesEspeciales = ubicacionesFiltradas
+			.Where(u => string.IsNullOrWhiteSpace(u.Ubicacion) || 
+			           !u.Ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase))
+			.OrderBy(u => u.Ubicacion)
+			.ToList();
+
+		// Ubicaciones normales (que empiezan por "UB")
+		var ubicacionesNormales = ubicacionesFiltradas
+			.Where(u => !string.IsNullOrWhiteSpace(u.Ubicacion) && 
+			           u.Ubicacion.StartsWith("UB", StringComparison.OrdinalIgnoreCase))
+			.ToList();
+
+		// Crear grupo de ubicaciones especiales si hay alguna
+		if (ubicacionesEspeciales.Any())
+		{
+			var grupoEspecial = new UbicacionPasilloGroup
+			{
+				EsEspecial = true,
+				Pasillo = null,
+				IsExpanded = true, // Las ubicaciones especiales siempre expandidas
+				Ubicaciones = new ObservableCollection<UbicacionDetalladaDto>(ubicacionesEspeciales)
+			};
+			// Cargar estanterías y alturas disponibles del grupo especial
+			grupoEspecial.EstanteriasDisponibles = new ObservableCollection<int?>(
+				ubicacionesEspeciales.Select(u => u.Estanteria).Distinct().Where(e => e.HasValue).OrderBy(e => e));
+			grupoEspecial.AlturasDisponibles = new ObservableCollection<int?>(
+				ubicacionesEspeciales.Select(u => u.Altura).Distinct().Where(a => a.HasValue).OrderBy(a => a));
+			UbicacionesAgrupadas.Add(grupoEspecial);
 	}
 	
-	[RelayCommand]
-	private void CerrarDropDownAlmacenes()
-	{
-		IsDropDownOpenAlmacenes = false;
+		// Agrupar ubicaciones normales por pasillo
+		var grupos = ubicacionesNormales
+			.GroupBy(u => u.Pasillo)
+			.OrderBy(g => g.Key ?? int.MaxValue)
+			.Select(g =>
+			{
+				var ubicacionesGrupo = g.OrderBy(u => u.Estanteria).ThenBy(u => u.Altura).ThenBy(u => u.Posicion).ToList();
+				var grupo = new UbicacionPasilloGroup
+				{
+					EsEspecial = false,
+					Pasillo = g.Key,
+					IsExpanded = false, // Los pasillos colapsados por defecto
+					Ubicaciones = new ObservableCollection<UbicacionDetalladaDto>(ubicacionesGrupo)
+				};
+				// Cargar estanterías y alturas disponibles de este pasillo
+				grupo.EstanteriasDisponibles = new ObservableCollection<int?>(
+					ubicacionesGrupo.Select(u => u.Estanteria).Distinct().Where(e => e.HasValue).OrderBy(e => e));
+				grupo.AlturasDisponibles = new ObservableCollection<int?>(
+					ubicacionesGrupo.Select(u => u.Altura).Distinct().Where(a => a.HasValue).OrderBy(a => a));
+				return grupo;
+			});
+
+		foreach (var grupo in grupos)
+		{
+			UbicacionesAgrupadas.Add(grupo);
+		}
+		
+		OnPropertyChanged(nameof(UbicacionesAgrupadas));
+		OnPropertyChanged(nameof(TotalUbicaciones));
 	}
 
 }

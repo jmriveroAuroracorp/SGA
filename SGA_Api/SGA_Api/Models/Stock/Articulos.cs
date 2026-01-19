@@ -13,6 +13,7 @@ namespace SGA_Api.Models.Stock
 		public string? ReferenciaEdi_ { get; set; }
 		public string? MRHCodigoAlternativo3 { get; set; }
 		public string? VCodigoDUN14 { get; set; }
+		public string? CodigoFamilia { get; set; }
 
 	}
 }

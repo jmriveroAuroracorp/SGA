@@ -146,14 +146,44 @@ namespace SGA_Desktop.Services
             try
             {
                 var response = await _httpClient.PostAsJsonAsync("Inventario/crear", inventario);
-                response.EnsureSuccessStatusCode();
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Capturar el mensaje específico del error del backend
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    var errorMessage = !string.IsNullOrEmpty(errorContent) ? errorContent : response.ReasonPhrase;
+                    
+                    // Si el error viene como string JSON, intentar extraer el mensaje
+                    if (errorContent.StartsWith("\"") && errorContent.EndsWith("\""))
+                    {
+                        try
+                        {
+                            errorMessage = JsonConvert.DeserializeObject<string>(errorContent) ?? errorMessage;
+                        }
+                        catch
+                        {
+                            // Si no se puede deserializar, usar el contenido tal cual
+                        }
+                    }
+                    
+                    // Lanzar excepción con el mensaje del servidor tal cual (sin prefijos)
+                    throw new Exception(errorMessage);
+                }
                 
                 var json = await response.Content.ReadAsStringAsync();
                 var resultado = JsonConvert.DeserializeObject<CrearInventarioResponseDto>(json);
                 return resultado;
             }
+            catch (Exception ex) when (ex.Message.Contains("Inventarios abiertos") || 
+                                       ex.Message.Contains("solapamiento") ||
+                                       ex.Message.Contains("No se puede crear"))
+            {
+                // Si el mensaje ya viene del servidor con información descriptiva, re-lanzarlo tal cual
+                throw;
+            }
             catch (Exception ex)
             {
+                // Para otros errores, agregar prefijo genérico
                 throw new Exception($"Error al crear inventario: {ex.Message}", ex);
             }
         }
@@ -270,7 +300,7 @@ namespace SGA_Desktop.Services
         /// Obtiene ajustes filtrados para el historial
         /// </summary>
         public async Task<List<AjusteDto>> ObtenerAjustesFiltradosAsync(
-            int codigoEmpresa,
+            int? codigoEmpresa = null,
             DateTime? fechaDesde = null,
             DateTime? fechaHasta = null,
             string? codigoArticulo = null,
@@ -285,7 +315,8 @@ namespace SGA_Desktop.Services
             try
             {
                 var query = new List<string>();
-                query.Add($"codigoEmpresa={codigoEmpresa}");
+                if (codigoEmpresa.HasValue)
+                    query.Add($"codigoEmpresa={codigoEmpresa.Value}");
 
                 if (fechaDesde.HasValue)
                     query.Add($"fechaDesde={fechaDesde.Value:yyyy-MM-dd}");
@@ -478,6 +509,22 @@ namespace SGA_Desktop.Services
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
             return JsonConvert.DeserializeObject<T>(json)!;
+        }
+
+        /// <summary>
+        /// Cambia el código de artículo o fecha de caducidad mediante ajustes de inventario
+        /// </summary>
+        public async Task<bool> CambiarArticuloAsync(CambioArticuloDto dto)
+        {
+            try
+            {
+                var json = await PostAsync("Inventario/cambiar-articulo", dto);
+                return !string.IsNullOrWhiteSpace(json);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error al cambiar artículo: {ex.Message}", ex);
+            }
         }
     }
 

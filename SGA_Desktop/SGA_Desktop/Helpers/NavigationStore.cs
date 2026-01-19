@@ -34,13 +34,13 @@ namespace SGA_Desktop.Helpers
 					"Paletizacion" => new PaletizacionView(),
 					"TraspasosStock" => new TraspasosStockView(),
 					"HistorialTraspasos" => new HistorialTraspasosView(),
-					"HistorialAjustes" => new HistorialAjustesView(),
 					"Inventario" => new InventarioView(),
 					"OrdenTraspaso" => new OrdenTraspasoView(),
 					"ControlesRotativos" => new ControlesRotativosView(),
 					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
 					"Calidad" => new CalidadView(),
 					"Rendimientos" => new RendimientosView(),
+					"CambiarArticulo" => new CambiarArticuloView(),
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};
 
@@ -71,13 +71,13 @@ namespace SGA_Desktop.Helpers
 					"Paletizacion" => new PaletizacionView(),
 					"TraspasosStock" => new TraspasosStockView(),
 					"HistorialTraspasos" => new HistorialTraspasosView(),
-					"HistorialAjustes" => new HistorialAjustesView(),
 					"Inventario" => new InventarioView(),
 					"OrdenTraspaso" => new OrdenTraspasoView(),
 					"ControlesRotativos" => new ControlesRotativosView(),
 					"ConfiguracionOperarios" => new ConfiguracionOperariosView(),
 					"Calidad" => new CalidadView(),
 					"Rendimientos" => new RendimientosView(),
+					"CambiarArticulo" => new CambiarArticuloView(),
 
 					_ => throw new ArgumentException($"Página desconocida: {pageKey}")
 				};

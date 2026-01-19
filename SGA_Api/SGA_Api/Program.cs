@@ -105,11 +105,13 @@ builder.Services.AddScoped<IConteosService>(provider =>
         provider.GetRequiredService<AuroraSgaDbContext>(),
         provider.GetRequiredService<SageDbContext>(),
         provider.GetRequiredService<StorageControlDbContext>(),
-        provider.GetRequiredService<ILogger<ConteosService>>()
+        provider.GetRequiredService<ILogger<ConteosService>>(),
+        provider.GetRequiredService<INotificacionesConteosService>()
     ));
 builder.Services.AddScoped<IOrdenTraspasoService, OrdenTraspasoService>();
 builder.Services.AddScoped<INotificacionesTraspasosService, NotificacionesTraspasosService>();
 builder.Services.AddScoped<INotificacionesConteosService, NotificacionesConteosService>();
+builder.Services.AddScoped<INotificacionesOrdenTraspasoService, NotificacionesOrdenTraspasoService>();
 builder.Services.AddScoped<INotificacionesService, NotificacionesService>();
 builder.Services.AddScoped<INotificacionesUnificadasService, NotificacionesUnificadasService>();
 builder.Services.AddScoped<INotificacionesTeamsService, NotificacionesTeamsService>();

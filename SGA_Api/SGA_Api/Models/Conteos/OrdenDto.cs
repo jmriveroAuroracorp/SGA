@@ -38,6 +38,8 @@ namespace SGA_Api.Models.Conteos
         // Propiedades para conteos periódicos
         public bool EsPeriodico { get; set; } = false;
         public bool Activo { get; set; } = true;
+        public DateTime? FechaProximaRenovacion { get; set; }
+        public int? FrecuenciaDias { get; set; }
         
         // Si esta orden es una renovación de un conteo periódico, aquí está el Guid del conteo periódico original
         public Guid? OrdenPadreGuid { get; set; }

@@ -36,6 +36,7 @@ namespace SGA_Desktop.Models
 		public string? Partida { get; set; }
 		public DateTime? FechaCaducidad { get; set; }
 		public string? OrdenTrabajoId { get; set; }
+		public short CodigoEmpresa { get; set; }
 		
 		// Líneas del palet
 		public List<LineaPaletDto> LineasPalet { get; set; } = new List<LineaPaletDto>();

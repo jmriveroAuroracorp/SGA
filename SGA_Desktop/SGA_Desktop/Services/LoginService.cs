@@ -33,13 +33,16 @@ public class LoginService : ApiService
 
 		// 🔹 Si todo OK → deserializar respuesta
 		var result = await response.Content.ReadAsStringAsync();
+		System.Diagnostics.Debug.WriteLine($"[LoginService] Respuesta del login: {result}");
 		var loginResp = JsonSerializer.Deserialize<LoginResponse>(result,
 							new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
 		if (loginResp != null)
 		{
+			System.Diagnostics.Debug.WriteLine($"[LoginService] LoginResponse deserializado - Operario: {loginResp.operario}, IdRol: {loginResp.idRol}");
 			// Guardamos sesión
 			SessionManager.UsuarioActual = loginResp;
+			System.Diagnostics.Debug.WriteLine($"[LoginService] SessionManager.UsuarioActual.idRol: {SessionManager.UsuarioActual.idRol}");
 
 			// Cargar impresora preferida del usuario
 			var (okPrn, printerName) = await ObtenerImpresoraPreferidaAsync(loginResp.operario);

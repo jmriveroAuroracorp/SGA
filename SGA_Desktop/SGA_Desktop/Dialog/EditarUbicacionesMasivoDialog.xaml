@@ -240,7 +240,7 @@
                 <Button Content="Guardar"
                         Width="90"
                         Command="{Binding GuardarCommand}"
-                        IsEnabled="{Binding !IsBusy}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanConverter}}"
                         Style="{StaticResource EstiloBotonPrincipal}"/>
             </StackPanel>
         </Grid>

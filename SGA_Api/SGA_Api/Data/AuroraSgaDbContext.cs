@@ -51,6 +51,7 @@ namespace SGA_Api.Data
 		public DbSet<InventarioLineas> InventarioLineas { get; set; }
 		public DbSet<InventarioAjustes> InventarioAjustes { get; set; }
 		public DbSet<InventarioAlmacenes> InventarioAlmacenes { get; set; }
+		public DbSet<CambioArticulo> CambioArticulo { get; set; }
 		
 		// Entidades de Conteos
 		public DbSet<OrdenConteo> OrdenesConteo { get; set; }
@@ -423,6 +424,7 @@ namespace SGA_Api.Data
                 ent.Property(i => i.UsuarioId).HasColumnName("UsuarioId");
                 ent.Property(i => i.Fecha).HasColumnName("Fecha").HasColumnType("DATETIME");
                 ent.Property(i => i.IdConteo).HasColumnName("IdConteo");
+                ent.Property(i => i.IdCambioArticulo).HasColumnName("IdCambioArticulo").IsRequired(false);
                 ent.Property(i => i.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
                 ent.Property(i => i.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
                 //ent.Property(i => i.Estado).HasColumnName("Estado").HasMaxLength(20).HasDefaultValue("PENDIENTE_ERP");
@@ -439,6 +441,35 @@ namespace SGA_Api.Data
                     .WithMany(ic => ic.Ajustes)
                     .HasForeignKey(i => i.IdInventario)
                     .OnDelete(DeleteBehavior.Cascade);
+                
+                ent.HasOne(i => i.CambioArticulo)
+                    .WithMany(ca => ca.Ajustes)
+                    .HasForeignKey(i => i.IdCambioArticulo)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
+
+            modelBuilder.Entity<CambioArticulo>(ent =>
+            {
+                ent.ToTable("CambioArticulo");
+                ent.HasKey(c => c.IdCambioArticulo);
+                
+                ent.Property(c => c.IdCambioArticulo).HasColumnName("IdCambioArticulo");
+                ent.Property(c => c.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
+                ent.Property(c => c.UsuarioId).HasColumnName("UsuarioId");
+                ent.Property(c => c.Fecha).HasColumnName("Fecha").HasColumnType("DATETIME");
+                ent.Property(c => c.CodigoArticuloOrigen).HasColumnName("CodigoArticuloOrigen").HasMaxLength(30);
+                ent.Property(c => c.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
+                ent.Property(c => c.Ubicacion).HasColumnName("Ubicacion").HasMaxLength(30).IsRequired(false);
+                ent.Property(c => c.PartidaOrigen).HasColumnName("PartidaOrigen").HasMaxLength(50).IsRequired(false);
+                ent.Property(c => c.FechaCaducidadOrigen).HasColumnName("FechaCaducidadOrigen").HasColumnType("DATETIME").IsRequired(false);
+                ent.Property(c => c.Cantidad).HasColumnName("Cantidad").HasColumnType("DECIMAL(18,6)");
+                ent.Property(c => c.PaletId).HasColumnName("PaletId").IsRequired(false);
+                ent.Property(c => c.CodigoArticuloDestino).HasColumnName("CodigoArticuloDestino").HasMaxLength(30).IsRequired(false);
+                ent.Property(c => c.FechaCaducidadDestino).HasColumnName("FechaCaducidadDestino").HasColumnType("DATETIME").IsRequired(false);
+                ent.Property(c => c.PartidaDestino).HasColumnName("PartidaDestino").HasMaxLength(50).IsRequired(false);
+                ent.Property(c => c.TipoCambio).HasColumnName("TipoCambio").HasMaxLength(20);
+                ent.Property(c => c.Comentario).HasColumnName("Comentario").HasMaxLength(500).IsRequired(false);
+                ent.Property(c => c.Estado).HasColumnName("Estado").HasMaxLength(20);
             });
 
             modelBuilder.Entity<InventarioAlmacenes>(ent =>

@@ -58,6 +58,11 @@ namespace SGA_Desktop.ViewModels
         
         public ObservableCollection<PuntoTendenciaDto> PuntosTendencia { get; } = new();
 
+        public ObservableCollection<RendimientoArticuloDto> Articulos { get; } = new();
+        
+        [ObservableProperty]
+        private string criterioOrdenacionArticulos = "CantidadTraspasos";
+
         [ObservableProperty]
         private VolumenMovidoDto? volumenMovido;
 
@@ -128,7 +133,7 @@ namespace SGA_Desktop.ViewModels
                 }
                 else if (MostrandoArticulos)
                 {
-                    // TODO: Implementar carga de artículos
+                    await CargarArticulosAsync(filtros);
                 }
                 else if (MostrandoEficiencia)
                 {
@@ -408,6 +413,57 @@ namespace SGA_Desktop.ViewModels
             {
                 System.Diagnostics.Debug.WriteLine($"Error cargando distribución: {ex.Message}");
                 Distribucion = null;
+            }
+        }
+
+        private async Task CargarArticulosAsync(FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                var datos = await _rendimientosService.ObtenerRendimientoArticulosAsync(filtros);
+                Articulos.Clear();
+                foreach (var articulo in datos)
+                {
+                    Articulos.Add(articulo);
+                }
+                
+                // Aplicar ordenación si es necesario
+                AplicarOrdenacionArticulos();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error cargando artículos: {ex.Message}");
+                Articulos.Clear();
+            }
+        }
+        
+        private void AplicarOrdenacionArticulos()
+        {
+            var articulosOrdenados = CriterioOrdenacionArticulos switch
+            {
+                "CantidadTraspasos" => Articulos.OrderByDescending(a => a.CantidadTraspasos).ToList(),
+                "UnidadesTotales" => Articulos.OrderByDescending(a => a.UnidadesTotalesMovidas).ToList(),
+                "TiempoPromedio" => Articulos.OrderByDescending(a => a.TiempoPromedioMinutos ?? 0).ToList(),
+                "Eficiencia" => Articulos.OrderByDescending(a => a.EficienciaUnidadesPorMinuto ?? 0).ToList(),
+                "AlmacenesUnicos" => Articulos.OrderByDescending(a => a.AlmacenesUnicos).ToList(),
+                "CodigoFamilia" => Articulos.OrderBy(a => a.CodigoFamilia).ToList(),
+                _ => Articulos.OrderByDescending(a => a.CantidadTraspasos).ToList()
+            };
+            
+            Articulos.Clear();
+            // Reasignar posiciones después de ordenar
+            for (int i = 0; i < articulosOrdenados.Count; i++)
+            {
+                articulosOrdenados[i].Posicion = i + 1;
+                Articulos.Add(articulosOrdenados[i]);
+            }
+        }
+        
+        partial void OnCriterioOrdenacionArticulosChanged(string value)
+        {
+            if (MostrandoArticulos)
+            {
+                AplicarOrdenacionArticulos();
             }
         }
 

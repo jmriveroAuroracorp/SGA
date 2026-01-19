@@ -284,7 +284,7 @@ namespace SGA_Desktop.ViewModels
                 {
                     permisos = await new StockService().ObtenerAlmacenesAsync(centro);
                 }
-                var almacenes = await new StockService().ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos);
+                var almacenes = await new StockService().ObtenerAlmacenesAutorizadosAsync(empresa, centro, permisos, SessionManager.Operario);
                 AlmacenesDestino.Clear();
                 foreach (var a in almacenes)
                     AlmacenesDestino.Add(a);

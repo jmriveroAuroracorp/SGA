@@ -34,6 +34,7 @@ namespace SGA_Api.Models.Traspasos
 		public string? Partida { get; set; }
 		public DateTime? FechaCaducidad { get; set; }
 		public string? OrdenTrabajoId { get; set; }
+		public short CodigoEmpresa { get; set; }
 
 		
 		// Líneas del palet

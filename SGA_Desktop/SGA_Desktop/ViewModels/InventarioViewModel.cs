@@ -43,6 +43,9 @@ namespace SGA_Desktop.ViewModels
             InventariosView = CollectionViewSource.GetDefaultView(Inventarios);
             InventariosView.Filter = new Predicate<object>(FiltroInventario);
 
+            // Suscribirse a solicitudes de filtro
+            InventarioFiltroStore.FiltroSolicitado += OnFiltroSolicitado;
+
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
                 _ = InitializeAsync();
         }
@@ -248,10 +251,20 @@ namespace SGA_Desktop.ViewModels
 
                 await CargarAlmacenesAsync();
                 
-                // Solo cargar inventarios si hay un almacén seleccionado
-                if (AlmacenSeleccionadoCombo != null)
+                // Solo cargar inventarios si NO hay un filtro especial pendiente
+                // (OnFiltroSolicitado se encargará de cargar con el filtro)
+                if (string.IsNullOrEmpty(_filtroEspecial))
                 {
-                await CargarInventariosAsync();
+                    // Solo cargar inventarios si hay un almacén seleccionado
+                    if (AlmacenSeleccionadoCombo != null)
+                    {
+                        await CargarInventariosAsync();
+                    }
+                }
+                else
+                {
+                    // Hay filtro especial, OnFiltroSolicitado cargará los datos
+                    MensajeEstado = "Aplicando filtro...";
                 }
 
                 MensajeEstado = "Listo";
@@ -280,11 +293,24 @@ namespace SGA_Desktop.ViewModels
                 IsCargando = true;
                 MensajeEstado = "Cargando inventarios...";
 
+                // Si hay un filtro especial activo (desde WelcomeView), usar "Todas" automáticamente
                 // Si selecciona "Todas", enviar la lista de almacenes autorizados
                 string? codigoAlmacen = null;
                 List<string>? codigosAlmacen = null;
                 
-                if (AlmacenSeleccionadoCombo?.CodigoAlmacen == "Todas")
+                // Si hay filtro especial o si no hay almacén seleccionado, usar todos los almacenes
+                if (!string.IsNullOrEmpty(_filtroEspecial) || AlmacenSeleccionadoCombo == null)
+                {
+                    // Si los almacenes ya están cargados, usar todos
+                    if (AlmacenesCombo?.Any() == true)
+                    {
+                        codigosAlmacen = AlmacenesCombo
+                            .Where(a => a.CodigoAlmacen != "Todas")
+                            .Select(a => a.CodigoAlmacen)
+                            .ToList();
+                    }
+                }
+                else if (AlmacenSeleccionadoCombo.CodigoAlmacen == "Todas")
                 {
                     // Enviar lista de almacenes autorizados (excluyendo "Todas")
                     codigosAlmacen = AlmacenesCombo
@@ -294,16 +320,21 @@ namespace SGA_Desktop.ViewModels
                 }
                 else
                 {
-                    codigoAlmacen = AlmacenSeleccionadoCombo?.CodigoAlmacen;
+                    codigoAlmacen = AlmacenSeleccionadoCombo.CodigoAlmacen;
                 }
 
+                // Si hay un filtro especial activo (desde WelcomeView), pasar null como fechas
+                // para que el backend no filtre por fecha y cargue todos los inventarios
+                DateTime? fechaDesdeParam = string.IsNullOrEmpty(_filtroEspecial) ? FechaDesde.Date : null;
+                DateTime? fechaHastaParam = string.IsNullOrEmpty(_filtroEspecial) ? FechaHasta.Date.AddDays(1).AddSeconds(-1) : null;
+                
                 var filtro = new FiltroInventarioDto
                 {
                     CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
                     CodigoAlmacen = codigoAlmacen,
                     CodigosAlmacen = codigosAlmacen,
-                    FechaDesde = FechaDesde.Date, // Solo la fecha, hora 00:00:00
-                    FechaHasta = FechaHasta.Date.AddDays(1).AddSeconds(-1), // Último segundo del día (23:59:59)
+                    FechaDesde = fechaDesdeParam,
+                    FechaHasta = fechaHastaParam,
                     EstadoInventario = EstadoFiltro == "TODOS" ? null : EstadoFiltro,
                     // Enviar el usuario actual solo si NO está marcado "Ver todos"
                     UsuarioCreacionId = VerTodosLosInventarios ? null : SessionManager.UsuarioActual?.operario
@@ -772,7 +803,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesCombo.Clear();
 
@@ -805,6 +836,71 @@ namespace SGA_Desktop.ViewModels
             return SessionManager.EmpresaSeleccionada?.ToString() ?? "Sin empresa";
         }
 
+        private string _filtroEspecial = string.Empty;
+        private bool _ajustandoFiltrosDesdeEvento = false;
+
+        private async void OnFiltroSolicitado(object? sender, FiltroInventarioEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"OnFiltroSolicitado recibido: {e.TipoFiltro}");
+            
+            _ajustandoFiltrosDesdeEvento = true;
+
+            // Aplicar el filtro especial
+            _filtroEspecial = e.TipoFiltro switch
+            {
+                TipoFiltroInventario.Abiertos => "ABIERTO",
+                TipoFiltroInventario.EnConteo => "EN_CONTEO",
+                TipoFiltroInventario.Consolidados => "CONSOLIDADO",
+                TipoFiltroInventario.PendientesCierre => "PENDIENTE_CIERRE",
+                TipoFiltroInventario.Cerrados => "CERRADO",
+                _ => string.Empty
+            };
+
+            System.Diagnostics.Debug.WriteLine($"Filtro especial asignado: {_filtroEspecial}");
+
+            // Ajustar el filtro de estado según el tipo de filtro solicitado
+            EstadoFiltro = _filtroEspecial;
+
+            // Asegurar que se muestren solo los propios inventarios del usuario
+            VerTodosLosInventarios = false;
+
+            // Forzar notificación de cambio de propiedad
+            OnPropertyChanged(nameof(EstadoFiltro));
+            OnPropertyChanged(nameof(VerTodosLosInventarios));
+
+            _ajustandoFiltrosDesdeEvento = false;
+
+            // Notificar cambios en propiedades calculadas
+            OnPropertyChanged(nameof(TieneFiltrosActivos));
+            OnPropertyChanged(nameof(ResumenFiltrosActivos));
+
+            // Asegurar que los almacenes estén cargados antes de cargar inventarios
+            if (AlmacenesCombo?.Any() != true)
+            {
+                System.Diagnostics.Debug.WriteLine("Almacenes no cargados, cargando primero...");
+                await CargarAlmacenesAsync();
+            }
+            
+            // SIEMPRE recargar los datos con el filtro aplicado
+            // Si está cargando (por ejemplo, cargando almacenes), esperar a que termine
+            if (IsCargando)
+            {
+                // Esperar a que termine la carga actual (máximo 5 segundos)
+                var intentos = 0;
+                while (IsCargando && intentos < 50)
+                {
+                    await Task.Delay(100);
+                    intentos++;
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine("Cargando datos con filtro aplicado...");
+            MensajeEstado = "Cargando inventarios...";
+            await CargarInventariosAsync();
+            System.Diagnostics.Debug.WriteLine($"Datos cargados con filtro. Total inventarios: {Inventarios?.Count}");
+            InventariosView?.Refresh();
+        }
+
         private bool FiltroInventario(object item)
         {
             if (item is not InventarioCabeceraDto inventario) return false;
@@ -816,7 +912,15 @@ namespace SGA_Desktop.ViewModels
                     return false;
             }
 
-            // TODO: Implementar otros filtros si es necesario
+            // Filtro por fechas (solo si no hay filtro especial)
+            // Cuando hay filtro especial, el backend ya no filtró por fechas, así que tampoco lo hacemos aquí
+            if (string.IsNullOrEmpty(_filtroEspecial))
+            {
+                if (inventario.FechaCreacion.Date < FechaDesde.Date || 
+                    inventario.FechaCreacion.Date > FechaHasta.Date)
+                    return false;
+            }
+
             return true;
         }
 

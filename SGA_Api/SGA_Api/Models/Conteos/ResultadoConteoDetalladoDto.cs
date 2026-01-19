@@ -24,5 +24,6 @@ namespace SGA_Api.Models.Conteos
 		public int CodigoEmpresa { get; set; }
 		public string Titulo { get; set; } = string.Empty;
 		public string Visibilidad { get; set; } = string.Empty;
+		public string? CreadoPorCodigo { get; set; }
 	}
 }

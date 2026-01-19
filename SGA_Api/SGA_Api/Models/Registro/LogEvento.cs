@@ -1,4 +1,4 @@
-﻿namespace SGA_Api.Models.Registro
+namespace SGA_Api.Models.Registro
 {
     public class LogEvento
     {
@@ -6,7 +6,7 @@
         public DateTime? Fecha { get; set; }
         public int? IdUsuario { get; set; }
 
-        public string? IdDispositivo { get; set; } 
+        public string IdDispositivo { get; set; } = string.Empty;
 
         public string? Tipo { get; set; }
         public string? Origen { get; set; }

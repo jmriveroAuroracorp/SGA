@@ -62,7 +62,7 @@ namespace SGA_Api.Models.Login
         public string? Descripcion { get; set; }
         public List<short> Permisos { get; set; } = new List<short>();
         public List<short> Empresas { get; set; } = new List<short>();
-        public List<string> Almacenes { get; set; } = new List<string>();
+        public List<AlmacenConfiguracionDto> Almacenes { get; set; } = new List<AlmacenConfiguracionDto>();
         
         // Límites
         public decimal? LimiteEuros { get; set; }

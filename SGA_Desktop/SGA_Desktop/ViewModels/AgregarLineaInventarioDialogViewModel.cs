@@ -44,6 +44,7 @@ namespace SGA_Desktop.ViewModels
                 }
                 else
                 {
+                    _ = CargarAlmacenCompletoAsync();
                     _ = CargarUbicacionesAsync();
                 }
             }
@@ -99,8 +100,17 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private AlmacenDto? almacenSeleccionado;
 
+        // Propiedad para almacén completo cuando NO es multialmacén
+        [ObservableProperty]
+        private AlmacenDto? almacenCompleto;
+
         // Propiedad calculada para saber si es multialmacén
         public bool EsMultialmacen => _inventario?.EsMultialmacen ?? false;
+
+        // Propiedad calculada para mostrar "código - descripción" en ambos casos
+        public string AlmacenDisplayText => EsMultialmacen 
+            ? (AlmacenSeleccionado?.DescripcionCombo ?? CodigoAlmacen)
+            : (AlmacenCompleto?.DescripcionCombo ?? CodigoAlmacen);
         #endregion
 
         #region Property Change Callbacks
@@ -144,8 +154,14 @@ namespace SGA_Desktop.ViewModels
                 // Limpiar selección de ubicación y recargar ubicaciones del nuevo almacén
                 UbicacionSeleccionada = null;
                 CodigoUbicacion = string.Empty;
+                OnPropertyChanged(nameof(AlmacenDisplayText));
                 _ = CargarUbicacionesAsync();
             }
+        }
+
+        partial void OnAlmacenCompletoChanged(AlmacenDto? oldValue, AlmacenDto? newValue)
+        {
+            OnPropertyChanged(nameof(AlmacenDisplayText));
         }
         #endregion
 
@@ -182,6 +198,27 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
+        private async Task CargarAlmacenCompletoAsync()
+        {
+            if (EsMultialmacen) return; // Ya se carga en CargarAlmacenesDelInventarioAsync
+            
+            try
+            {
+                var empresa = SessionManager.EmpresaSeleccionada ?? 1;
+                var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
+                var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
+
+                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
+                AlmacenCompleto = almacenesAutorizados.FirstOrDefault(a => a.CodigoAlmacen == CodigoAlmacen);
+                OnPropertyChanged(nameof(AlmacenDisplayText));
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, continuar sin nombre (solo mostrará el código)
+                System.Diagnostics.Debug.WriteLine($"Error al cargar almacén completo: {ex.Message}");
+            }
+        }
+
         private async Task CargarAlmacenesDelInventarioAsync()
         {
             try
@@ -192,7 +229,7 @@ namespace SGA_Desktop.ViewModels
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
                 // Obtener todos los almacenes autorizados
-                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var almacenesAutorizados = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 // Filtrar solo los almacenes que están en el inventario
                 var codigosAlmacenInventario = _inventario.CodigosAlmacen ?? new List<string>();
@@ -430,6 +467,18 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
+                // 🔷 CORREGIDO: Validar almacén en inventarios multialmacén
+                if (EsMultialmacen && AlmacenSeleccionado == null)
+                {
+                    var warning = new WarningDialog("Validación", "Debes seleccionar un almacén.");
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (owner != null && owner != warning)
+                        warning.Owner = owner;
+                    warning.ShowDialog();
+                    return;
+                }
+
                 IsCargando = true;
                 MensajeEstado = "Guardando línea...";
 
@@ -439,8 +488,16 @@ namespace SGA_Desktop.ViewModels
                     ? FechaCaducidad.Value.Date 
                     : null;
 
-                // Usar el almacén seleccionado si existe, sino el código de almacén
-                var codigoAlmacenParaGuardar = AlmacenSeleccionado?.CodigoAlmacen ?? CodigoAlmacen;
+                // 🔷 CORREGIDO: Asegurar que siempre se use el almacén correcto
+                string codigoAlmacenParaGuardar;
+                if (EsMultialmacen)
+                {
+                    codigoAlmacenParaGuardar = AlmacenSeleccionado!.CodigoAlmacen;
+                }
+                else
+                {
+                    codigoAlmacenParaGuardar = CodigoAlmacen;
+                }
 
                 var dto = new GuardarConteoInventarioDto
                 {

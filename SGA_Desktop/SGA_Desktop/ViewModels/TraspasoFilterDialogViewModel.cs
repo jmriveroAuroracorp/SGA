@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using SGA_Desktop.Dialog;
+using SGA_Desktop.Helpers;
 
 namespace SGA_Desktop.ViewModels
 {
@@ -26,8 +27,15 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty] private string? almacenDestino;
 		[ObservableProperty] private DateTime? fechaInicioDesde;
 		[ObservableProperty] private DateTime? fechaInicioHasta;
+		[ObservableProperty] private bool verTodasLasEmpresas = false;
 
-		// ▶️ Comando para “Aplicar”
+		// Propiedad para mostrar el checkbox solo a admins
+		public bool PuedeVerTodasLasEmpresas
+		{
+			get => SessionManager.EsAdmin;
+		}
+
+		// ▶️ Comando para "Aplicar"
 		public IRelayCommand AplicarFiltrosCommand { get; }
 
 		public TraspasoFilterDialogViewModel(TraspasosService traspasoService)
@@ -37,13 +45,16 @@ namespace SGA_Desktop.ViewModels
 			AplicarFiltrosCommand = new AsyncRelayCommand(async () =>
 			{
 				// Llama a la API con el estado seleccionado
+				// Si "Ver todas las empresas" está marcado, pasar null para ver todas
+				var empresa = VerTodasLasEmpresas ? null : SessionManager.EmpresaSeleccionada;
 				var filtrados = await _traspasoService.ObtenerTraspasosFiltradosAsync(
 					EstadoSeleccionado?.CodigoEstado,
 					CodigoPalet,
 					AlmacenOrigen,
 					AlmacenDestino,
 					FechaInicioDesde,
-					FechaInicioHasta
+					FechaInicioHasta,
+					codigoEmpresa: empresa
 				);
 
 				// Agrupa por movimiento de palet

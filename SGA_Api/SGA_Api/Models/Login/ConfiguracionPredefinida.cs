@@ -91,6 +91,9 @@ namespace SGA_Api.Models.Login
         public int ConfiguracionId { get; set; }
         
         [Required]
+        public short CodigoEmpresa { get; set; }
+        
+        [Required]
         [MaxLength(50)]
         public string CodigoAlmacen { get; set; } = string.Empty;
         

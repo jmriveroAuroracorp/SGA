@@ -96,12 +96,47 @@ namespace SGA_Api.Controllers.Inventario
                 var inventarios = await query
                     .Include(i => i.Almacenes)  // ← NUEVO: Incluir almacenes del inventario
                     .OrderByDescending(i => i.FechaCreacion)
-                    .Take(100)
                     .ToListAsync();
 
                 // Crear diccionario de usuarios para mapear IDs a nombres (igual que en Palets)
                 var nombreDict = await _context.vUsuariosConNombre
                     .ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+
+                // 🚀 OPTIMIZACIÓN: Obtener IDs de inventarios primero
+                var inventarioIds = inventarios.Select(i => i.IdInventario).ToList();
+
+                // 🚀 OPTIMIZACIÓN: Calcular TODAS las estadísticas en 2 consultas agrupadas (en lugar de N*3)
+                // Esto reduce de 300 consultas (100 inventarios * 3) a solo 2 consultas totales
+                var estadisticasTemp = await _context.InventarioLineasTemp
+                    .Where(lt => inventarioIds.Contains(lt.IdInventario))
+                    .GroupBy(lt => lt.IdInventario)
+                    .Select(g => new
+                    {
+                        IdInventario = g.Key,
+                        TotalLineas = g.Count(),
+                        // 🔷 CORREGIDO: Solo contar líneas realmente modificadas (donde hubo un cambio)
+                        // Esto evita contar líneas inicializadas a 0 que nunca se modificaron
+                        LineasContadas = g.Count(lt => lt.CantidadContada.HasValue && 
+                                                       lt.CantidadContada.Value != lt.StockActual)
+                    })
+                    .ToListAsync();
+
+                var estadisticasLineas = await _context.InventarioLineas
+                    .Where(l => inventarioIds.Contains(l.IdInventario) && 
+                                l.StockTeorico == 0 && 
+                                l.StockContado != null &&
+                                l.StockContado > 0)
+                    .GroupBy(l => l.IdInventario)
+                    .Select(g => new
+                    {
+                        IdInventario = g.Key,
+                        LineasCreadas = g.Count()
+                    })
+                    .ToListAsync();
+
+                // 🚀 OPTIMIZACIÓN: Crear diccionarios para acceso rápido O(1)
+                var statsTempDict = estadisticasTemp.ToDictionary(s => s.IdInventario);
+                var statsLineasDict = estadisticasLineas.ToDictionary(s => s.IdInventario);
 
                 // Asignar nombres de usuarios y estadísticas a cada inventario
                 foreach (var inventario in inventarios)
@@ -113,29 +148,26 @@ namespace SGA_Api.Controllers.Inventario
                         nombreDict.TryGetValue(inventario.UsuarioProcesamientoId.Value, out var nombreProcesamiento))
                         inventario.UsuarioProcesamientoNombre = nombreProcesamiento;
 
-                    // Calcular estadísticas de líneas
-                    var totalLineas = await _context.InventarioLineasTemp
-                        .Where(lt => lt.IdInventario == inventario.IdInventario)
-                        .CountAsync();
-                    
-                    // 🔷 CORREGIDO: Solo contar líneas realmente modificadas (donde hubo un cambio)
-                    // Esto evita contar líneas inicializadas a 0 que nunca se modificaron
-                    var lineasContadas = await _context.InventarioLineasTemp
-                        .Where(lt => lt.IdInventario == inventario.IdInventario && 
-                                     lt.CantidadContada.HasValue && 
-                                     lt.CantidadContada.Value != lt.StockActual)
-                        .CountAsync();
+                    // 🚀 OPTIMIZACIÓN: Asignar estadísticas desde diccionarios (O(1) en lugar de N consultas)
+                    if (statsTempDict.TryGetValue(inventario.IdInventario, out var statsTemp))
+                    {
+                        inventario.TotalLineas = statsTemp.TotalLineas;
+                        inventario.LineasContadas = statsTemp.LineasContadas;
+                    }
+                    else
+                    {
+                        inventario.TotalLineas = 0;
+                        inventario.LineasContadas = 0;
+                    }
 
-                    // Contar líneas creadas manualmente (StockTeorico = 0 y StockContado > 0)
-                    var lineasCreadas = await _context.InventarioLineas
-                        .Where(l => l.IdInventario == inventario.IdInventario && 
-                                   l.StockTeorico == 0 && 
-                                   l.StockContado > 0)
-                        .CountAsync();
-
-                    inventario.TotalLineas = totalLineas;
-                    inventario.LineasContadas = lineasContadas;
-                    inventario.LineasCreadas = lineasCreadas;
+                    if (statsLineasDict.TryGetValue(inventario.IdInventario, out var statsLineas))
+                    {
+                        inventario.LineasCreadas = statsLineas.LineasCreadas;
+                    }
+                    else
+                    {
+                        inventario.LineasCreadas = 0;
+                    }
                 }
 
                 // Mapear información de almacenes para cada inventario
@@ -248,6 +280,36 @@ namespace SGA_Api.Controllers.Inventario
                     almacenesAIncluir.Add(dto.CodigoAlmacen);
                 }
 
+                // 🔷 NUEVO: Validar solapamiento con inventarios abiertos
+                // Considera los filtros de artículos para evitar conflictos cuando los artículos son diferentes
+                // COMENTADO TEMPORALMENTE - Validación deshabilitada para permitir funcionamiento normal
+                /*
+                var rangosNuevoInventario = ParsearRangoUbicaciones(rangoFormateado);
+                var (hayConflicto, inventariosConflictivos) = await VerificarSolapamientoInventariosAsync(
+                    dto.CodigoEmpresa,
+                    almacenesAIncluir,
+                    rangosNuevoInventario,
+                    dto.CodigosArticuloFiltro,
+                    dto.ArticuloDesde,
+                    dto.ArticuloHasta);
+
+                if (hayConflicto)
+                {
+                    var mensaje = "Inventarios abiertos con solapamiento de ubicaciones:\n\n";
+                    
+                    foreach (var conflicto in inventariosConflictivos)
+                    {
+                        mensaje += $"• {conflicto.Inventario.CodigoInventario}\n";
+                        mensaje += $"  - Creador: {(string.IsNullOrWhiteSpace(conflicto.NombreCreador) ? "No disponible" : conflicto.NombreCreador)}\n";
+                        mensaje += $"  - Estado: {conflicto.Inventario.Estado}\n\n";
+                    }
+                    
+                    mensaje += "Por favor, cierre o finalice los inventarios conflictivos antes de crear uno nuevo.";
+                    
+                    return BadRequest(mensaje);
+                }
+                */
+
                 var inventario = new InventarioCabecera
                 {
                     IdInventario = Guid.NewGuid(),
@@ -279,6 +341,9 @@ namespace SGA_Api.Controllers.Inventario
                 
                 await _context.SaveChangesAsync();
 
+                // Notificar creación de inventario (se enviará después de generar líneas si aplica)
+                int lineasGeneradas = 0;
+
                 // Generar líneas temporales automáticamente (solo si no se solicita crear vacío)
                 if (!dto.NoGenerarLineas)
                 {
@@ -289,12 +354,16 @@ namespace SGA_Api.Controllers.Inventario
                     var resultadoGeneracion = await GenerarLineasTemporalesInterno(inventario.IdInventario, dto.IncluirUnidadesCero, dto.IncluirArticulosConStockCero, dto.IncluirUbicacionesEspeciales, dto.CodigosArticuloFiltro, dto.ArticuloDesde, dto.ArticuloHasta);
                         if (resultadoGeneracion.Exito)
                         {
+                            lineasGeneradas = resultadoGeneracion.LineasGeneradas;
                             var detalleCreacion = $"IdInventario={inventario.IdInventario}, CodigoInventario={inventario.CodigoInventario}, TipoInventario={inventario.TipoInventario}, Almacenes={string.Join(",", almacenesAIncluir)}, LineasGeneradas={resultadoGeneracion.LineasGeneradas}, UsuarioCreacion={dto.UsuarioCreacionId}";
                             RegistrarEventoInventarioAsync(
                                 "INVENTARIO_CREACION",
                                 "InventarioController/CrearInventario",
                                 "Inventario creado correctamente",
                                 detalleCreacion);
+                            
+                            // Notificar creación de inventario
+                            await NotificarInventarioCreadoAsync(inventario, almacenesAIncluir, lineasGeneradas, dto);
                             
                             return Ok(new { 
                                 Id = inventario.IdInventario, 
@@ -308,6 +377,9 @@ namespace SGA_Api.Controllers.Inventario
                         }
                         else
                         {
+                            // Notificar creación de inventario incluso si falló la generación de líneas
+                            await NotificarInventarioCreadoAsync(inventario, almacenesAIncluir, 0, dto);
+                            
                             return Ok(new { 
                                 Id = inventario.IdInventario, 
                                 Mensaje = "Inventario creado correctamente, pero no se pudieron generar líneas temporales",
@@ -320,6 +392,10 @@ namespace SGA_Api.Controllers.Inventario
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Inventario creado pero error al generar líneas temporales");
+                        
+                        // Notificar creación de inventario incluso si falló la generación de líneas
+                        await NotificarInventarioCreadoAsync(inventario, almacenesAIncluir, 0, dto);
+                        
                         return Ok(new { 
                             Id = inventario.IdInventario, 
                             Mensaje = "Inventario creado correctamente, pero error al generar líneas temporales",
@@ -337,6 +413,9 @@ namespace SGA_Api.Controllers.Inventario
                         "InventarioController/CrearInventario",
                         "Inventario vacío creado correctamente",
                         detalleCreacion);
+                    
+                    // Notificar creación de inventario
+                    await NotificarInventarioCreadoAsync(inventario, almacenesAIncluir, 0, dto);
                     
                     return Ok(new { 
                         Id = inventario.IdInventario, 
@@ -486,6 +565,10 @@ namespace SGA_Api.Controllers.Inventario
                 // 1) Crear AJUSTES POR PALET (solo SGA) para que el delta se agregue al propio palet
                 var tolPalet = 0.000001m; // Reducido a 0.000001 para permitir diferencias muy pequeñas
                 _logger.LogInformation("🔍 CerrarInventario: Procesando {Cantidad} líneas para crear ajustes", lineas.Count);
+                
+                // 🔷 NUEVO: Recopilar ajustes de palet en lista temporal para detectar conflictos
+                var ajustesPaletTemporales = new List<InventarioAjustes>();
+                
                 foreach (var linea in lineas)
                 {
                     if (!linea.PaletId.HasValue)
@@ -539,7 +622,7 @@ namespace SGA_Api.Controllers.Inventario
                         ProcesadoPalet = false
                     };
 
-                    _context.InventarioAjustes.Add(ajustePalet);
+                    ajustesPaletTemporales.Add(ajustePalet);
 
                     // 🔷 NUEVO: Crear TempPaletLinea para trazabilidad (igual que en conteos)
                     // Esto permite ver los ajustes pendientes en el contenido del palet
@@ -597,10 +680,12 @@ namespace SGA_Api.Controllers.Inventario
                     .Select(p => p.Ejercicio)
                     .FirstOrDefaultAsync();
 
-                // 🔷 CORREGIDO: Agrupar solo líneas SUELTAS (sin PaletId) para calcular ajuste de stock suelto
+                // 🔷 CORREGIDO: Agrupar solo líneas SUELTAS (sin PaletId) que fueron REALMENTE AJUSTADAS por el usuario
+                // Solo crear ajustes para líneas donde StockContado difiere de StockActual
                 // Los palets ya tienen sus propios ajustes creados arriba
                 var grupos = lineas
                     .Where(l => !l.PaletId.HasValue) // Solo líneas sueltas
+                    .Where(l => l.StockContado.HasValue && Math.Abs((l.StockContado ?? 0m) - l.StockActual) >= tolerancia) // 🔷 NUEVO: Solo líneas con diferencia significativa
                     .GroupBy(l => new {
                         l.CodigoArticulo,
                         Ubicacion = l.CodigoUbicacion,
@@ -614,9 +699,13 @@ namespace SGA_Api.Controllers.Inventario
                         g.Key.Almacen,
                         g.Key.Partida,
                         g.Key.FechaCaducidad,
-                        ContadoTotal = g.Sum(x => x.StockContado ?? 0m) // Solo suma de líneas sueltas
+                        ContadoTotal = g.Sum(x => x.StockContado ?? 0m), // Solo suma de líneas sueltas ajustadas
+                        StockActualTotal = g.Sum(x => x.StockActual) // 🔷 NUEVO: Usar StockActual de las líneas ajustadas
                     })
                     .ToList();
+
+                // 🔷 NUEVO: Recopilar ajustes sueltos en lista temporal para detectar conflictos
+                var ajustesSueltosTemporales = new List<InventarioAjustes>();
 
                 foreach (var g in grupos)
                 {
@@ -642,14 +731,10 @@ namespace SGA_Api.Controllers.Inventario
                                      (pl.FechaCaducidad == g.FechaCaducidad || (pl.FechaCaducidad == null && g.FechaCaducidad == null)))
                         .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
 
-                    // Stock suelto actual = Total - Paletizado
-                    var actualSueltoErp = totalErp - paletizadoActual;
-                    // Para inventarios TOTAL, permitir valores negativos en el cálculo de ajustes
-                    var esInventarioTotal = inventario.TipoInventario?.ToUpper() == "TOTAL";
-                    if (!esInventarioTotal && actualSueltoErp < 0) actualSueltoErp = 0; // No permitir negativos en PARCIAL
-
+                    // 🔷 CORREGIDO: Usar StockActualTotal de las líneas ajustadas en lugar de recalcular desde ERP
+                    // Esto evita inconsistencias y solo crea ajustes para líneas realmente ajustadas por el usuario
                     // Diferencia solo para stock suelto
-                    var diferencia = g.ContadoTotal - actualSueltoErp;
+                    var diferencia = g.ContadoTotal - g.StockActualTotal;
                     if (Math.Abs(diferencia) < tolerancia)
                         continue; // No ajustar si el total no cambia
 
@@ -678,7 +763,83 @@ namespace SGA_Api.Controllers.Inventario
                         ProcesadoPalet = false
                     };
 
+                    ajustesSueltosTemporales.Add(ajuste);
+                }
+
+                // 🔷 NUEVO: Detectar conflictos (negativos y positivos simultáneos) por artículo, lote y almacén
+                var todosAjustes = ajustesPaletTemporales.Concat(ajustesSueltosTemporales).ToList();
+
+                // Agrupar por artículo, lote (partida) y almacén
+                var gruposAjustes = todosAjustes
+                    .GroupBy(a => new 
+                    { 
+                        a.CodigoArticulo, 
+                        Partida = a.Partida ?? "", 
+                        a.CodigoAlmacen 
+                    })
+                    .ToList();
+
+                // Identificar qué grupos tienen conflictos (negativos y positivos simultáneos)
+                var gruposConConflicto = gruposAjustes
+                    .Where(g => g.Any(a => a.Diferencia < 0) && g.Any(a => a.Diferencia > 0))
+                    .Select(g => new { g.Key.CodigoArticulo, g.Key.Partida, g.Key.CodigoAlmacen })
+                    .ToList();
+
+                // Separar ajustes: positivos (arreglan negativos del inventario), negativos sin conflicto y negativos con conflicto
+                var ajustesPositivos = todosAjustes.Where(a => a.Diferencia > 0).ToList();
+                
+                var ajustesNegativosSinConflicto = todosAjustes
+                    .Where(a => a.Diferencia < 0 && 
+                           !gruposConConflicto.Any(g => 
+                               g.CodigoArticulo == a.CodigoArticulo &&
+                               g.Partida == (a.Partida ?? "") &&
+                               g.CodigoAlmacen == a.CodigoAlmacen))
+                    .ToList();
+
+                var ajustesNegativosConConflicto = todosAjustes
+                    .Where(a => a.Diferencia < 0 && 
+                           gruposConConflicto.Any(g => 
+                               g.CodigoArticulo == a.CodigoArticulo &&
+                               g.Partida == (a.Partida ?? "") &&
+                               g.CodigoAlmacen == a.CodigoAlmacen))
+                    .ToList();
+
+                // PASO 1: Guardar primero todos los positivos (arreglan negativos del inventario) y negativos sin conflicto
+                foreach (var ajuste in ajustesPositivos)
+                {
                     _context.InventarioAjustes.Add(ajuste);
+                }
+
+                foreach (var ajuste in ajustesNegativosSinConflicto)
+                {
+                    _context.InventarioAjustes.Add(ajuste);
+                }
+
+                // Guardar estos ajustes inmediatamente
+                await _context.SaveChangesAsync();
+
+                // PASO 2: Si hay negativos con conflicto (arreglan positivos del inventario), esperar 30 segundos antes de crearlos
+                if (ajustesNegativosConConflicto.Any())
+                {
+                    _logger.LogInformation("⏳ Detectados {Cantidad} ajustes negativos con conflictos (arreglan positivos del inventario). Esperando 30 segundos antes de crearlos.", 
+                        ajustesNegativosConConflicto.Count);
+                    
+                    foreach (var grupo in gruposConConflicto)
+                    {
+                        _logger.LogInformation("🔍 Conflicto detectado: Artículo={Articulo}, Lote={Lote}, Almacen={Almacen}", 
+                            grupo.CodigoArticulo, grupo.Partida, grupo.CodigoAlmacen);
+                    }
+                    
+                    await Task.Delay(30000); // Delay real de 30 segundos
+                    
+                    // Ahora crear los negativos con conflicto (arreglan positivos del inventario)
+                    foreach (var ajuste in ajustesNegativosConConflicto)
+                    {
+                        _context.InventarioAjustes.Add(ajuste);
+                        _logger.LogInformation("✅ Creando ajuste negativo {AjusteId} después del delay (arregla positivo del inventario)", ajuste.IdAjuste);
+                    }
+                    
+                    await _context.SaveChangesAsync();
                 }
 
                 // Cambiar el estado a CERRADO
@@ -690,6 +851,9 @@ namespace SGA_Api.Controllers.Inventario
                 await _context.SaveChangesAsync();
 
                 var ajustesCount = await _context.InventarioAjustes.CountAsync(a => a.IdInventario == idInventario);
+                
+                // Notificar cierre de inventario
+                await NotificarInventarioCerradoAsync(inventario, ajustesCount);
                 var detalleCierre = $"IdInventario={idInventario}, CodigoInventario={inventario.CodigoInventario}, AjustesGenerados={ajustesCount}, UsuarioCierre={inventario.UsuarioCierreId}";
                 RegistrarEventoInventarioAsync(
                     "INVENTARIO_CIERRE",
@@ -964,7 +1128,7 @@ namespace SGA_Api.Controllers.Inventario
         /// </summary>
         [HttpGet("ajustes")]
         public async Task<IActionResult> ObtenerAjustesFiltrados(
-            [FromQuery] int codigoEmpresa,
+            [FromQuery] int? codigoEmpresa = null,
             [FromQuery] DateTime? fechaDesde = null,
             [FromQuery] DateTime? fechaHasta = null,
             [FromQuery] string? codigoArticulo = null,
@@ -980,8 +1144,11 @@ namespace SGA_Api.Controllers.Inventario
             {
                 var query = _context.InventarioAjustes.AsQueryable();
 
-                // Filtro por empresa (obligatorio)
-                query = query.Where(a => a.CodigoEmpresa == codigoEmpresa);
+                // Filtro por empresa (opcional - si es null, ver todas las empresas)
+                if (codigoEmpresa.HasValue)
+                {
+                    query = query.Where(a => a.CodigoEmpresa == codigoEmpresa.Value);
+                }
 
                 // Filtro por usuario (aplicar primero para optimización)
                 if (usuarioId.HasValue)
@@ -1104,6 +1271,24 @@ namespace SGA_Api.Controllers.Inventario
                     creadoresDict = usuarios.ToDictionary(u => u.UsuarioId.ToString(), u => u.NombreOperario);
                 }
 
+                // Obtener información de cambios de artículo
+                var cambioArticuloIds = await query
+                    .Where(a => a.IdCambioArticulo.HasValue && a.IdCambioArticulo.Value != Guid.Empty)
+                    .Select(a => a.IdCambioArticulo!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                var cambioArticuloDict = new Dictionary<Guid, string>();
+                if (cambioArticuloIds.Any())
+                {
+                    var cambios = await _context.CambioArticulo
+                        .Where(c => cambioArticuloIds.Contains(c.IdCambioArticulo))
+                        .Select(c => new { c.IdCambioArticulo, c.TipoCambio })
+                        .ToListAsync();
+
+                    cambioArticuloDict = cambios.ToDictionary(c => c.IdCambioArticulo, c => c.TipoCambio);
+                }
+
                 // Obtener ajustes
                 var lista = await query
                     .OrderByDescending(a => a.Fecha)
@@ -1113,6 +1298,7 @@ namespace SGA_Api.Controllers.Inventario
                         IdAjuste = a.IdAjuste,
                         IdInventario = a.IdInventario,
                         IdConteo = a.IdConteo,
+                        IdCambioArticulo = a.IdCambioArticulo,
                         CodigoArticulo = a.CodigoArticulo,
                         CodigoUbicacion = a.CodigoUbicacion,
                         CodigoAlmacen = a.CodigoAlmacen,
@@ -1206,6 +1392,13 @@ namespace SGA_Api.Controllers.Inventario
                         {
                             ajuste.CreadorConteoNombre = nombreCreador;
                         }
+                    }
+
+                    // Tipo de cambio de artículo
+                    if (ajuste.IdCambioArticulo.HasValue && ajuste.IdCambioArticulo.Value != Guid.Empty &&
+                        cambioArticuloDict.TryGetValue(ajuste.IdCambioArticulo.Value, out var tipoCambio))
+                    {
+                        ajuste.TipoCambioArticulo = tipoCambio;
                     }
                 }
 
@@ -1463,12 +1656,13 @@ namespace SGA_Api.Controllers.Inventario
                 // Procesar cada artículo del conteo
                 foreach (var articulo in conteo.Articulos)
                 {
-                    // Buscar línea temporal existente para este artículo/ubicación/partida/fecha/PALET
+                    // Buscar línea temporal existente para este artículo/ubicación/partida/fecha/PALET/ALMACÉN
                     var lineaTempExistente = await _context.InventarioLineasTemp
                         .FirstOrDefaultAsync(lt => 
                             lt.IdInventario == inventario.IdInventario &&
                             lt.CodigoArticulo == articulo.CodigoArticulo &&
                             lt.CodigoUbicacion == articulo.CodigoUbicacion &&
+                            lt.CodigoAlmacen == articulo.CodigoAlmacen && // 🔷 CORREGIDO: Filtrar por almacén
                             (lt.Partida == articulo.Partida || (lt.Partida == null && articulo.Partida == null)) &&
                             (lt.FechaCaducidad == articulo.FechaCaducidad || (lt.FechaCaducidad == null && articulo.FechaCaducidad == null)) &&
                             (lt.PaletId == articulo.PaletId || (lt.PaletId == null && articulo.PaletId == null)) && // ← AGREGAR: Diferenciar por palet
@@ -1476,12 +1670,13 @@ namespace SGA_Api.Controllers.Inventario
 
                     if (lineaTempExistente != null)
                     {
-                        // Actualizar línea existente
+                        // 🔷 CORREGIDO: Actualizar también el almacén por si cambió
+                        lineaTempExistente.CodigoAlmacen = articulo.CodigoAlmacen;
                         lineaTempExistente.CantidadContada = articulo.CantidadInventario;
                         lineaTempExistente.UsuarioConteoId = articulo.UsuarioConteo;
                         lineaTempExistente.FechaConteo = DateTime.Now; // Siempre usar la hora del servidor/API
                         
-                        _logger.LogInformation($"Línea temporal actualizada: {articulo.CodigoArticulo} en {articulo.CodigoUbicacion}. " +
+                        _logger.LogInformation($"Línea temporal actualizada: {articulo.CodigoArticulo} en {articulo.CodigoUbicacion}, Almacén: {articulo.CodigoAlmacen}. " +
                                               $"StockActual: {lineaTempExistente.StockActual}, CantidadContada: {articulo.CantidadInventario}");
                     }
                     else
@@ -2058,6 +2253,213 @@ namespace SGA_Api.Controllers.Inventario
         }
 
         /// <summary>
+        /// Detecta si hay solapamiento entre dos rangos de ubicaciones
+        /// </summary>
+        private bool HaySolapamientoRangos(
+            (int desde, int hasta)[]? rango1, 
+            (int desde, int hasta)[]? rango2)
+        {
+            // Si ambos son null, ambos son "todas las ubicaciones" -> hay solapamiento
+            if (rango1 == null && rango2 == null)
+                return true;
+            
+            // Si uno es null (todas las ubicaciones) y el otro tiene rango específico -> hay solapamiento
+            if (rango1 == null || rango2 == null)
+                return true;
+            
+            // Comparar cada dimensión (P, E, A, O)
+            for (int i = 0; i < 4; i++)
+            {
+                var r1 = rango1[i];
+                var r2 = rango2[i];
+                
+                // Si ninguno tiene rango en esta dimensión (desde = 0), se considera que coincide
+                if (r1.desde == 0 && r2.desde == 0)
+                    continue;
+                
+                // Si uno no tiene rango pero el otro sí, hay solapamiento (el sin rango incluye todo)
+                if (r1.desde == 0 || r2.desde == 0)
+                    continue; // Ambos incluyen esta dimensión
+                
+                // Si ambos tienen rango, verificar solapamiento
+                // Hay solapamiento si: r1.desde <= r2.hasta && r2.desde <= r1.hasta
+                if (r1.desde <= r2.hasta && r2.desde <= r1.hasta)
+                    continue; // Hay solapamiento en esta dimensión
+                else
+                    return false; // No hay solapamiento en esta dimensión -> no hay solapamiento total
+            }
+            
+            return true; // Hay solapamiento en todas las dimensiones
+        }
+
+        /// <summary>
+        /// Verifica si hay líneas temporales en ubicaciones comunes entre dos inventarios
+        /// Considera los filtros de artículos para evitar conflictos cuando los artículos son diferentes
+        /// </summary>
+        private async Task<bool> VerificarLineasTemporalesComunesAsync(
+            Guid idInventarioExistente,
+            List<string> almacenesNuevo,
+            List<string> almacenesExistente,
+            (int desde, int hasta)[]? rangosNuevo,
+            (int desde, int hasta)[]? rangosExistente,
+            List<string>? codigosArticuloFiltroNuevo = null,
+            string? articuloDesdeNuevo = null,
+            string? articuloHastaNuevo = null)
+        {
+            // Obtener almacenes comunes
+            var almacenesComunes = almacenesNuevo
+                .Intersect(almacenesExistente)
+                .ToList();
+            
+            if (!almacenesComunes.Any())
+                return false;
+            
+            // Obtener inventario existente
+            var inventarioExistente = await _context.InventarioCabecera
+                .FirstOrDefaultAsync(i => i.IdInventario == idInventarioExistente);
+            
+            if (inventarioExistente == null)
+                return false;
+            
+            // Obtener ubicaciones en rango del inventario existente
+            var ubicacionesExistente = new HashSet<string>();
+            foreach (var almacen in almacenesComunes)
+            {
+                var ubicaciones = await ObtenerUbicacionesEnRangoAsync(
+                    inventarioExistente.CodigoEmpresa,
+                    almacen,
+                    rangosExistente);
+                foreach (var ubicacion in ubicaciones)
+                {
+                    ubicacionesExistente.Add(ubicacion);
+                }
+            }
+            
+            // Obtener artículos del inventario existente en esas ubicaciones
+            var articulosExistente = await _context.InventarioLineasTemp
+                .Where(lt => lt.IdInventario == idInventarioExistente &&
+                            !lt.Consolidado &&
+                            almacenesComunes.Contains(lt.CodigoAlmacen ?? "") &&
+                            ubicacionesExistente.Contains(lt.CodigoUbicacion))
+                .Select(lt => lt.CodigoArticulo)
+                .Distinct()
+                .ToListAsync();
+            
+            if (!articulosExistente.Any())
+                return false; // No hay líneas en esas ubicaciones
+            
+            // Si el nuevo inventario tiene filtro de artículos específicos, verificar intersección
+            if (codigosArticuloFiltroNuevo != null && codigosArticuloFiltroNuevo.Any())
+            {
+                // Hay conflicto solo si hay artículos en común
+                var hayArticulosComunes = articulosExistente
+                    .Any(art => codigosArticuloFiltroNuevo.Contains(art));
+                
+                if (!hayArticulosComunes)
+                    return false; // No hay artículos en común, no hay conflicto
+            }
+            
+            // Si el nuevo inventario tiene rango de artículos, verificar intersección
+            if (!string.IsNullOrWhiteSpace(articuloDesdeNuevo) && !string.IsNullOrWhiteSpace(articuloHastaNuevo))
+            {
+                var hayArticulosEnRango = articulosExistente
+                    .Any(art => string.Compare(art, articuloDesdeNuevo, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                               string.Compare(art, articuloHastaNuevo, StringComparison.OrdinalIgnoreCase) <= 0);
+                
+                if (!hayArticulosEnRango)
+                    return false; // No hay artículos en el rango, no hay conflicto
+            }
+            
+            // Si el nuevo inventario no tiene filtros de artículos, considerar conflicto
+            // (porque el nuevo inventario incluiría todos los artículos, incluyendo los del existente)
+            return true;
+        }
+
+        /// <summary>
+        /// Verifica si hay inventarios abiertos con solapamiento de ubicaciones
+        /// Retorna información sobre los inventarios conflictivos incluyendo nombres de creadores
+        /// Considera los filtros de artículos para evitar conflictos cuando los artículos son diferentes
+        /// </summary>
+        private async Task<(bool HayConflicto, List<(InventarioCabecera Inventario, string? NombreCreador)> InventariosConflictivos)> 
+            VerificarSolapamientoInventariosAsync(
+                short codigoEmpresa,
+                List<string> almacenesAIncluir,
+                (int desde, int hasta)[]? rangosNuevoInventario,
+                List<string>? codigosArticuloFiltroNuevo = null,
+                string? articuloDesdeNuevo = null,
+                string? articuloHastaNuevo = null)
+        {
+            var inventariosConflictivos = new List<(InventarioCabecera Inventario, string? NombreCreador)>();
+            
+            // Obtener todos los inventarios ABIERTO o EN_CONTEO en la misma empresa
+            var inventariosAbiertos = await _context.InventarioCabecera
+                .Include(i => i.Almacenes)
+                .Where(i => i.CodigoEmpresa == codigoEmpresa &&
+                           (i.Estado == "ABIERTO" || i.Estado == "EN_CONTEO"))
+                .ToListAsync();
+            
+            // Obtener nombres de usuarios creadores en una sola consulta
+            var usuarioIds = inventariosAbiertos.Select(i => i.UsuarioCreacionId).Distinct().ToList();
+            var nombreDict = await _context.vUsuariosConNombre
+                .Where(u => usuarioIds.Contains(u.UsuarioId))
+                .ToDictionaryAsync(x => x.UsuarioId, x => x.NombreOperario);
+            
+            foreach (var inventarioExistente in inventariosAbiertos)
+            {
+                // Verificar si hay almacenes en común
+                var almacenesInventarioExistente = inventarioExistente.Almacenes
+                    .Select(a => a.CodigoAlmacen)
+                    .ToList();
+                
+                if (!almacenesInventarioExistente.Any())
+                {
+                    // Compatibilidad hacia atrás: usar almacén de la cabecera
+                    almacenesInventarioExistente.Add(inventarioExistente.CodigoAlmacen);
+                }
+                
+                // Verificar si hay almacenes en común
+                var hayAlmacenesComunes = almacenesAIncluir
+                    .Any(a => almacenesInventarioExistente.Contains(a));
+                
+                if (!hayAlmacenesComunes)
+                    continue; // No hay almacenes en común, no hay conflicto
+                
+                // Parsear rango del inventario existente
+                var rangosExistente = ParsearRangoUbicaciones(inventarioExistente.RangoUbicaciones);
+                
+                // Verificar solapamiento de rangos
+                if (HaySolapamientoRangos(rangosNuevoInventario, rangosExistente))
+                {
+                    // Verificar si realmente hay líneas temporales en ubicaciones comunes
+                    // Esto es importante porque un inventario puede tener filtros de artículos
+                    // o puede estar vacío (sin líneas generadas aún)
+                    // Ahora también considera los filtros de artículos del nuevo inventario
+                    var hayLineasComunes = await VerificarLineasTemporalesComunesAsync(
+                        inventarioExistente.IdInventario,
+                        almacenesAIncluir,
+                        almacenesInventarioExistente,
+                        rangosNuevoInventario,
+                        rangosExistente,
+                        codigosArticuloFiltroNuevo,
+                        articuloDesdeNuevo,
+                        articuloHastaNuevo);
+                    
+                    if (hayLineasComunes)
+                    {
+                        // Obtener nombre del creador
+                        var nombreCreador = nombreDict.TryGetValue(inventarioExistente.UsuarioCreacionId, out var nombre) 
+                            ? nombre 
+                            : null;
+                        
+                        inventariosConflictivos.Add((inventarioExistente, nombreCreador));
+                    }
+                }
+            }
+            
+            return (inventariosConflictivos.Any(), inventariosConflictivos);
+        }
+
+        /// <summary>
         /// Método interno para generar líneas temporales (usado por CrearInventario)
         /// </summary>
                 private async Task<(bool Exito, int LineasGeneradas, int UbicacionesEnRango, int StockEncontrado, string Mensaje)>
@@ -2236,25 +2638,32 @@ namespace SGA_Api.Controllers.Inventario
 
                 foreach (var k in claves)
                 {
-                    // 5.1. Obtener líneas de palet (definitivas y temporales no procesadas) que coincidan exactamente con la posición lógica
+                    // 5.1. Obtener líneas de palet (definitivas y temporales no procesadas) que coincidan con la posición lógica
+                    // 🔷 CORREGIDO: Quitamos el filtro de FechaCaducidad para detectar palets con fechas diferentes
                     var lineasPaletDef = await _context.PaletLineas
                         .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa
                                      && pl.CodigoAlmacen == k.CodigoAlmacen
                                      && pl.Ubicacion == k.Ubicacion
                                      && pl.CodigoArticulo == k.CodigoArticulo
                                      && (pl.Lote == k.Partida || (pl.Lote == null && k.Partida == null))
-                                     && (pl.FechaCaducidad == k.FechaCaducidad || (pl.FechaCaducidad == null && k.FechaCaducidad == null))
+                                     // 🔷 QUITADO: Filtro de FechaCaducidad para detectar palets con fechas diferentes
                                      && pl.Cantidad > 0)
-                        .Select(pl => new { pl.PaletId, pl.Cantidad })
+                        .Select(pl => new { pl.PaletId, pl.Cantidad, pl.Lote, pl.FechaCaducidad })
                         .ToListAsync();
 
                     // Importante: Para el inventario usamos SOLO líneas definitivas del palet,
                     // las temporales pueden distorsionar el stock real (aún no aplicadas)
                     var lineasPalet = lineasPaletDef;
 
+                    // 🔷 CORREGIDO: Agrupar por PaletId, Lote y FechaCaducidad para obtener la fecha correcta del palet
                     var porPalet = lineasPalet
-                        .GroupBy(x => x.PaletId)
-                        .Select(g => new { PaletId = g.Key, Cantidad = g.Sum(x => (decimal)x.Cantidad) })
+                        .GroupBy(x => new { x.PaletId, x.Lote, x.FechaCaducidad })
+                        .Select(g => new { 
+                            PaletId = g.Key.PaletId, 
+                            Cantidad = g.Sum(x => (decimal)x.Cantidad),
+                            Lote = g.Key.Lote,
+                            FechaCaducidad = g.Key.FechaCaducidad
+                        })
                         .ToList();
 
                     // 🔷 CORREGIDO: Forzar precisión completa en los cálculos
@@ -2274,8 +2683,9 @@ namespace SGA_Api.Controllers.Inventario
                             CodigoArticulo = k.CodigoArticulo ?? "",
                             CodigoUbicacion = k.Ubicacion ?? "",
                             CodigoAlmacen = k.CodigoAlmacen,
-                            Partida = k.Partida,
-                            FechaCaducidad = k.FechaCaducidad,
+                            // 🔷 CORREGIDO: Usar la partida y fecha de caducidad del palet, no de la clave k
+                            Partida = pp.Lote,
+                            FechaCaducidad = pp.FechaCaducidad,
                             CantidadContada = null,
                             StockActual = (decimal)pp.Cantidad,
                             UsuarioConteoId = inventario.UsuarioCreacionId,
@@ -2547,14 +2957,14 @@ namespace SGA_Api.Controllers.Inventario
             if (lineaTemp.PaletId.HasValue)
             {
                 // Stock actual del palet específico
+                // 🔷 CORREGIDO: Quitamos el filtro de FechaCaducidad para ser consistente con la generación de líneas temporales
                 var paletActual = await _context.PaletLineas
                     .Where(pl => pl.PaletId == lineaTemp.PaletId.Value &&
                                  pl.CodigoEmpresa == codigoEmpresa &&
                                  pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
                                  pl.Ubicacion == lineaTemp.CodigoUbicacion &&
                                  pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                                 (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
-                                 (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                                 (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)))
                     .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
                 
                 // Para inventarios TOTAL, si el original era negativo y el cálculo también da negativo, preservar
@@ -2576,13 +2986,13 @@ namespace SGA_Api.Controllers.Inventario
                             (s.FechaCaducidad == lineaTemp.FechaCaducidad || (s.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
                 .SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
 
+            // 🔷 CORREGIDO: Quitamos el filtro de FechaCaducidad para ser consistente con la generación de líneas temporales
             var paletizadoActual = await _context.PaletLineas
                 .Where(pl => pl.CodigoEmpresa == codigoEmpresa &&
                              pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
                              pl.Ubicacion == lineaTemp.CodigoUbicacion &&
                              pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                             (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
-                             (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                             (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)))
                 .SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
 
             var suelto = totalSistema - paletizadoActual;
@@ -3494,10 +3904,519 @@ namespace SGA_Api.Controllers.Inventario
             }
         }
 
+		/// <summary>
+		/// POST /api/Inventario/cambiar-articulo
+		/// Crea ajustes de inventario para cambiar código de artículo o fecha de caducidad
+		/// Genera una salida del artículo/fecha origen y una entrada del artículo/fecha destino
+		/// </summary>
+		[HttpPost("cambiar-articulo")]
+		public async Task<IActionResult> CambiarArticulo([FromBody] CambioArticuloDto dto)
+		{
+			using var transaction = await _context.Database.BeginTransactionAsync();
+			try
+			{
+				// Validar que se especifique cambio de código o fecha
+				bool cambioCodigo = !string.IsNullOrWhiteSpace(dto.CodigoArticuloDestino);
+				bool cambioFecha = dto.FechaCaducidadDestino.HasValue;
 
+				if (!cambioCodigo && !cambioFecha)
+				{
+					return BadRequest("Debe especificarse un cambio de código o de fecha de caducidad");
+				}
 
+				if (cambioCodigo && cambioFecha)
+				{
+					return BadRequest("No se puede cambiar código y fecha simultáneamente");
+				}
 
+				// Validar existencia del artículo origen
+				var articuloOrigen = await _sageDbContext.Articulos
+					.FirstOrDefaultAsync(a => a.CodigoEmpresa == dto.CodigoEmpresa &&
+											   a.CodigoArticulo == dto.CodigoArticuloOrigen);
 
+				if (articuloOrigen == null)
+				{
+					return NotFound($"Artículo origen no encontrado: {dto.CodigoArticuloOrigen}");
+				}
 
-    }
+				// Si es cambio de código, validar existencia del artículo destino
+				if (cambioCodigo)
+				{
+					var articuloDestino = await _sageDbContext.Articulos
+						.FirstOrDefaultAsync(a => a.CodigoEmpresa == dto.CodigoEmpresa &&
+												   a.CodigoArticulo == dto.CodigoArticuloDestino);
+
+					if (articuloDestino == null)
+					{
+						return NotFound($"Artículo destino no encontrado: {dto.CodigoArticuloDestino}");
+					}
+				}
+
+				// Obtener ejercicio actual
+				var ejercicio = await _sageDbContext.Periodos
+					.Where(p => p.CodigoEmpresa == dto.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+
+				if (ejercicio == 0)
+				{
+					return BadRequest("Sin ejercicio válido");
+				}
+
+				// Validar stock disponible del artículo origen
+				decimal stockDisponible = 0;
+
+				if (dto.PaletId.HasValue)
+				{
+					// Stock del palet específico
+					stockDisponible = await _context.PaletLineas
+						.Where(pl => pl.PaletId == dto.PaletId.Value &&
+									 pl.CodigoEmpresa == dto.CodigoEmpresa &&
+									 pl.CodigoArticulo == dto.CodigoArticuloOrigen &&
+									 pl.CodigoAlmacen == dto.CodigoAlmacen &&
+									 (pl.Ubicacion == dto.Ubicacion || (pl.Ubicacion == null && dto.Ubicacion == null)) &&
+									 (pl.Lote == dto.Partida || (pl.Lote == null && dto.Partida == null)) &&
+									 (pl.FechaCaducidad == dto.FechaCaducidadOrigen || (pl.FechaCaducidad == null && dto.FechaCaducidadOrigen == null)))
+						.SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+				}
+				else
+				{
+					// Stock suelto en la ubicación
+					var totalUbicacion = await _storageContext.AcumuladoStockUbicacion
+						.Where(s => s.CodigoEmpresa == dto.CodigoEmpresa &&
+									s.Ejercicio == ejercicio &&
+									s.CodigoAlmacen == dto.CodigoAlmacen &&
+									s.CodigoArticulo == dto.CodigoArticuloOrigen &&
+									s.Ubicacion == dto.Ubicacion &&
+									(s.Partida == dto.Partida || (s.Partida == null && dto.Partida == null)) &&
+									(s.FechaCaducidad == dto.FechaCaducidadOrigen || (s.FechaCaducidad == null && dto.FechaCaducidadOrigen == null)))
+						.SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+					var paletizado = await _context.PaletLineas
+						.Where(pl => pl.CodigoEmpresa == dto.CodigoEmpresa &&
+									 pl.CodigoAlmacen == dto.CodigoAlmacen &&
+									 pl.Ubicacion == dto.Ubicacion &&
+									 pl.CodigoArticulo == dto.CodigoArticuloOrigen &&
+									 (pl.Lote == dto.Partida || (pl.Lote == null && dto.Partida == null)) &&
+									 (pl.FechaCaducidad == dto.FechaCaducidadOrigen || (pl.FechaCaducidad == null && dto.FechaCaducidadOrigen == null)))
+						.SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+					stockDisponible = totalUbicacion - paletizado;
+				}
+
+				if (stockDisponible < dto.Cantidad)
+				{
+					return BadRequest($"Stock insuficiente. Disponible: {stockDisponible:N2}, Solicitado: {dto.Cantidad:N2}");
+				}
+
+				// Normalizar fechas para evitar problemas de conversión en SQL
+				DateTime? fechaCaducidadOrigen = dto.FechaCaducidadOrigen?.Date;
+				DateTime? fechaCaducidadDestino = dto.FechaCaducidadDestino?.Date;
+
+				// Obtener código de palet si existe
+				string? codigoPalet = null;
+				if (dto.PaletId.HasValue)
+				{
+					try
+					{
+						codigoPalet = await _context.Palets
+							.Where(p => p.Id == dto.PaletId.Value)
+							.Select(p => p.Codigo)
+							.FirstOrDefaultAsync();
+					}
+					catch { }
+				}
+
+				// Crear registro en CambioArticulo
+				var cambioArticulo = new CambioArticulo
+				{
+					IdCambioArticulo = Guid.NewGuid(),
+					CodigoEmpresa = dto.CodigoEmpresa,
+					UsuarioId = dto.UsuarioId,
+					Fecha = DateTime.Now,
+					CodigoArticuloOrigen = dto.CodigoArticuloOrigen,
+					CodigoAlmacen = dto.CodigoAlmacen,
+					Ubicacion = dto.Ubicacion,
+					PartidaOrigen = dto.Partida,
+					FechaCaducidadOrigen = fechaCaducidadOrigen,
+					Cantidad = dto.Cantidad,
+					PaletId = dto.PaletId,
+					CodigoArticuloDestino = cambioCodigo ? dto.CodigoArticuloDestino : null,
+					FechaCaducidadDestino = cambioFecha ? fechaCaducidadDestino : null,
+					PartidaDestino = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : null,
+					TipoCambio = cambioCodigo ? "CAMBIO_CODIGO" : "AMPLIACION",
+					Comentario = dto.Comentario,
+					Estado = "PENDIENTE"
+				};
+
+				_context.CambioArticulo.Add(cambioArticulo);
+
+				// Crear ajuste negativo (salida) del artículo origen
+				var ajusteSalida = new InventarioAjustes
+				{
+					IdAjuste = Guid.NewGuid(),
+					IdInventario = null, // Ajuste sin inventario asociado
+					CodigoArticulo = dto.CodigoArticuloOrigen,
+					CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+					Diferencia = -dto.Cantidad, // Negativo = salida
+					UsuarioId = dto.UsuarioId,
+					Fecha = DateTime.Now,
+					IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+					IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+					CodigoEmpresa = dto.CodigoEmpresa,
+					CodigoAlmacen = dto.CodigoAlmacen,
+					Estado = "PENDIENTE_ERP",
+					FechaCaducidad = fechaCaducidadOrigen,
+					Partida = dto.Partida,
+					PaletId = dto.PaletId,
+					CodigoPalet = codigoPalet,
+					ProcesadoPalet = false
+				};
+
+				// Crear ajuste positivo (entrada) del artículo destino
+				var ajusteEntrada = new InventarioAjustes
+				{
+					IdAjuste = Guid.NewGuid(),
+					IdInventario = null, // Ajuste sin inventario asociado
+					CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
+					CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+					Diferencia = dto.Cantidad, // Positivo = entrada
+					UsuarioId = dto.UsuarioId,
+					Fecha = DateTime.Now,
+					IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+					IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+					CodigoEmpresa = dto.CodigoEmpresa,
+					CodigoAlmacen = dto.CodigoAlmacen,
+					Estado = "PENDIENTE_ERP",
+					FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+					Partida = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : dto.Partida,
+					PaletId = dto.PaletId,
+					CodigoPalet = codigoPalet,
+					ProcesadoPalet = false
+				};
+
+				_context.InventarioAjustes.Add(ajusteSalida);
+				_context.InventarioAjustes.Add(ajusteEntrada);
+
+				await _context.SaveChangesAsync();
+				await transaction.CommitAsync();
+
+				_logger.LogInformation(
+					"Cambio de artículo creado: Origen={CodigoOrigen}, Destino={CodigoDestino}, Cantidad={Cantidad}, Usuario={UsuarioId}",
+					dto.CodigoArticuloOrigen,
+					cambioCodigo ? dto.CodigoArticuloDestino : "Mismo código",
+					dto.Cantidad,
+					dto.UsuarioId);
+
+				return Ok(new
+				{
+					IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+					AjusteSalidaId = ajusteSalida.IdAjuste,
+					AjusteEntradaId = ajusteEntrada.IdAjuste,
+					Mensaje = "Cambio de artículo procesado correctamente. Los ajustes se sincronizarán con el ERP."
+				});
+			}
+			catch (Exception ex)
+			{
+				await transaction.RollbackAsync();
+				_logger.LogError(ex, "Error al cambiar artículo: CodigoOrigen={CodigoOrigen}", dto.CodigoArticuloOrigen);
+				return StatusCode(500, "Error interno al procesar el cambio de artículo");
+			}
+		}
+
+		/// <summary>
+		/// Notifica cuando se crea un nuevo inventario
+		/// </summary>
+		private async Task NotificarInventarioCreadoAsync(InventarioCabecera inventario, List<string> codigosAlmacen, int lineasGeneradas, CrearInventarioDto? dto = null)
+		{
+			try
+			{
+				_logger.LogInformation("Iniciando notificación de inventario creado {InventarioId}, UsuarioCreacionId: {UsuarioCreacionId}", 
+					inventario.IdInventario, inventario.UsuarioCreacionId);
+
+				using var scope = _serviceProvider.CreateScope();
+				var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+
+				// Obtener nombre del creador
+				var nombreCreador = await ObtenerNombreUsuarioAsync(inventario.UsuarioCreacionId);
+				_logger.LogDebug("Nombre del creador obtenido: {NombreCreador}", nombreCreador);
+
+				// Construir mensaje
+				var almacenesTexto = string.Join(", ", codigosAlmacen);
+				var tipoInventario = inventario.TipoInventario ?? "TOTAL";
+				
+				// Construir descripción detallada del tipo de inventario
+				var descripcionTipo = tipoInventario;
+				if (dto != null)
+				{
+					var detallesTipo = new List<string>();
+					
+					// Verificar si es inventario de artículos específicos
+					if (dto.CodigosArticuloFiltro != null && dto.CodigosArticuloFiltro.Any())
+					{
+						detallesTipo.Add($"Artículos específicos ({dto.CodigosArticuloFiltro.Count})");
+					}
+					// Verificar si es inventario por rango de artículos
+					else if (!string.IsNullOrEmpty(dto.ArticuloDesde) && !string.IsNullOrEmpty(dto.ArticuloHasta))
+					{
+						detallesTipo.Add($"Rango de artículos: {dto.ArticuloDesde} - {dto.ArticuloHasta}");
+					}
+					else if (!string.IsNullOrEmpty(dto.ArticuloDesde))
+					{
+						detallesTipo.Add($"Desde artículo: {dto.ArticuloDesde}");
+					}
+					
+					// Verificar si es inventario de ubicaciones específicas
+					if (!string.IsNullOrEmpty(inventario.RangoUbicaciones))
+					{
+						detallesTipo.Add("Ubicaciones específicas");
+					}
+					
+					// Si hay detalles, agregarlos a la descripción
+					if (detallesTipo.Any())
+					{
+						descripcionTipo = $"{tipoInventario} ({string.Join(", ", detallesTipo)})";
+					}
+				}
+				
+				var mensaje = $"Se ha creado un nuevo inventario: \"{inventario.CodigoInventario}\"\n" +
+					$"Creado por: {nombreCreador}\n" +
+					$"Almacén(es): {almacenesTexto}\n" +
+					$"Tipo: {descripcionTipo}\n" +
+					$"Líneas generadas: {lineasGeneradas}";
+
+				// Verificar rol del creador
+				var creador = await _context.Usuarios
+					.Where(u => u.IdUsuario == inventario.UsuarioCreacionId)
+					.Select(u => new { u.IdRol })
+					.FirstOrDefaultAsync();
+
+				_logger.LogDebug("Rol del creador: {IdRol}", creador?.IdRol ?? -1);
+
+				// 1. Notificar al creador (siempre)
+				_logger.LogDebug("Notificando al creador {UsuarioId}", inventario.UsuarioCreacionId);
+				await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+					inventario.UsuarioCreacionId,
+					"INVENTARIO_CREACION",
+					"Nuevo Inventario Creado",
+					mensaje,
+					inventario.IdInventario,
+					null,
+					inventario.Estado,
+					"info");
+
+				// 2. Notificar a supervisores con acceso a los almacenes del inventario
+				var supervisoresIds = await ObtenerSupervisoresConAccesoAlmacenesAsync(
+					codigosAlmacen,
+					inventario.CodigoEmpresa,
+					creador?.IdRol == 2 ? inventario.UsuarioCreacionId : null);
+
+				_logger.LogDebug("Supervisores con acceso encontrados: {Count}", supervisoresIds.Count);
+
+				if (supervisoresIds.Any())
+				{
+					foreach (var supervisorId in supervisoresIds)
+					{
+						_logger.LogDebug("Notificando al supervisor {SupervisorId}", supervisorId);
+						await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+							supervisorId,
+							"INVENTARIO_CREACION",
+							"Nuevo Inventario Creado",
+							mensaje,
+							inventario.IdInventario,
+							null,
+							inventario.Estado,
+							"info");
+					}
+				}
+
+				// 3. Notificar a todos los administradores (IdRol == 3)
+				var administradoresIds = await _context.Usuarios
+					.Where(u => u.IdRol == 3)
+					.Select(u => u.IdUsuario)
+					.ToListAsync();
+
+				_logger.LogDebug("Administradores encontrados: {Count}", administradoresIds.Count);
+
+				// Excluir al creador si es admin
+				if (creador?.IdRol == 3)
+				{
+					administradoresIds = administradoresIds.Where(id => id != inventario.UsuarioCreacionId).ToList();
+					_logger.LogDebug("Administradores después de excluir creador: {Count}", administradoresIds.Count);
+				}
+
+				if (administradoresIds.Any())
+				{
+					foreach (var adminId in administradoresIds)
+					{
+						_logger.LogDebug("Notificando al administrador {AdminId}", adminId);
+						await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+							adminId,
+							"INVENTARIO_CREACION",
+							"Nuevo Inventario Creado",
+							mensaje,
+							inventario.IdInventario,
+							null,
+							inventario.Estado,
+							"info");
+					}
+				}
+
+				_logger.LogInformation("Notificación de inventario creado enviada para inventario {InventarioId}", inventario.IdInventario);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error al enviar notificación de inventario creado {InventarioId}", inventario.IdInventario);
+				// No fallar la operación si falla la notificación
+			}
+		}
+
+		/// <summary>
+		/// Notifica cuando se cierra un inventario
+		/// </summary>
+		private async Task NotificarInventarioCerradoAsync(InventarioCabecera inventario, int ajustesGenerados)
+		{
+			try
+			{
+				using var scope = _serviceProvider.CreateScope();
+				var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+
+				// Obtener nombre del creador/usuario que cerró
+				var nombreCreador = await ObtenerNombreUsuarioAsync(inventario.UsuarioCreacionId);
+
+				// Construir mensaje
+				var mensaje = $"El inventario \"{inventario.CodigoInventario}\" ha sido cerrado\n" +
+					$"Cerrado por: {nombreCreador}\n" +
+					$"Ajustes generados: {ajustesGenerados}";
+
+				// Verificar rol del creador
+				var creador = await _context.Usuarios
+					.Where(u => u.IdUsuario == inventario.UsuarioCreacionId)
+					.Select(u => new { u.IdRol })
+					.FirstOrDefaultAsync();
+
+				// 1. Notificar al creador (siempre, pero solo si es supervisor o se quiere notificar siempre)
+				// Notificamos siempre al creador
+				await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+					inventario.UsuarioCreacionId,
+					"INVENTARIO_CIERRE",
+					"Inventario Cerrado",
+					mensaje,
+					inventario.IdInventario,
+					"ABIERTO",
+					inventario.Estado,
+					"success");
+
+				// 2. Notificar a todos los administradores (IdRol == 3)
+				var administradoresIds = await _context.Usuarios
+					.Where(u => u.IdRol == 3)
+					.Select(u => u.IdUsuario)
+					.ToListAsync();
+
+				// Excluir al creador si es admin (para evitar duplicados)
+				if (creador?.IdRol == 3)
+				{
+					administradoresIds = administradoresIds.Where(id => id != inventario.UsuarioCreacionId).ToList();
+				}
+
+				if (administradoresIds.Any())
+				{
+					foreach (var adminId in administradoresIds)
+					{
+						await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+							adminId,
+							"INVENTARIO_CIERRE",
+							"Inventario Cerrado",
+							mensaje,
+							inventario.IdInventario,
+							"ABIERTO",
+							inventario.Estado,
+							"success");
+					}
+				}
+
+				_logger.LogInformation("Notificación de inventario cerrado enviada para inventario {InventarioId}", inventario.IdInventario);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error al enviar notificación de inventario cerrado {InventarioId}", inventario.IdInventario);
+				// No fallar la operación si falla la notificación
+			}
+		}
+
+		/// <summary>
+		/// Obtiene el nombre de un usuario desde la vista vUsuariosConNombre
+		/// </summary>
+		private async Task<string> ObtenerNombreUsuarioAsync(int usuarioId)
+		{
+			try
+			{
+				var usuario = await _context.vUsuariosConNombre
+					.Where(u => u.UsuarioId == usuarioId)
+					.Select(u => u.NombreOperario)
+					.FirstOrDefaultAsync();
+
+				return usuario ?? usuarioId.ToString();
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "Error al obtener nombre del usuario {UsuarioId}, usando código", usuarioId);
+				return usuarioId.ToString();
+			}
+		}
+
+		/// <summary>
+		/// Obtiene los IDs de supervisores con acceso a los almacenes especificados
+		/// </summary>
+		private async Task<List<int>> ObtenerSupervisoresConAccesoAlmacenesAsync(List<string> codigosAlmacen, int codigoEmpresa, int? usuarioExcluir = null)
+		{
+			if (codigosAlmacen == null || !codigosAlmacen.Any())
+				return new List<int>();
+
+			try
+			{
+				// Obtener IDs de operarios con acceso a los almacenes desde OperariosAlmacenes
+				// Iterar sobre cada almacén para evitar problemas con Contains en SageDbContext
+				var operariosConAcceso = new List<int>();
+				foreach (var codigoAlmacen in codigosAlmacen.Distinct())
+				{
+					var operarios = await _sageDbContext.OperariosAlmacenes
+						.Where(oa => oa.CodigoAlmacen == codigoAlmacen && oa.CodigoEmpresa == codigoEmpresa)
+						.Select(oa => oa.Operario)
+						.Distinct()
+						.ToListAsync();
+					
+					operariosConAcceso.AddRange(operarios);
+				}
+
+				// Eliminar duplicados
+				operariosConAcceso = operariosConAcceso.Distinct().ToList();
+
+				if (!operariosConAcceso.Any())
+					return new List<int>();
+
+				// Filtrar solo supervisores (IdRol = 2)
+				var query = _context.Usuarios
+					.Where(u => u.IdRol == 2 && operariosConAcceso.Contains(u.IdUsuario));
+
+				// Excluir usuario si se especifica
+				if (usuarioExcluir.HasValue)
+				{
+					query = query.Where(u => u.IdUsuario != usuarioExcluir.Value);
+				}
+
+				var supervisoresIds = await query
+					.Select(u => u.IdUsuario)
+					.ToListAsync();
+
+				return supervisoresIds;
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "Error al obtener supervisores con acceso a almacenes {Almacenes}", string.Join(", ", codigosAlmacen));
+				return new List<int>();
+			}
+		}
+	}
 } 

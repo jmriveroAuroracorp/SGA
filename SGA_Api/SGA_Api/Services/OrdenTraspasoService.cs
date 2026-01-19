@@ -9,10 +9,14 @@ namespace SGA_Api.Services
     public class OrdenTraspasoService : IOrdenTraspasoService
     {
         private readonly AuroraSgaDbContext _context;
+        private readonly INotificacionesOrdenTraspasoService _notificacionesOrdenTraspaso;
 
-        public OrdenTraspasoService(AuroraSgaDbContext context)
+        public OrdenTraspasoService(
+            AuroraSgaDbContext context,
+            INotificacionesOrdenTraspasoService notificacionesOrdenTraspaso)
         {
             _context = context;
+            _notificacionesOrdenTraspaso = notificacionesOrdenTraspaso;
         }
 
         public async Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesTraspasoAsync(short? codigoEmpresa = null, string? estado = null)
@@ -99,6 +103,22 @@ namespace SGA_Api.Services
                 await _context.SaveChangesAsync();
             }
 
+            // Notificar creación de orden
+            try
+            {
+                await _notificacionesOrdenTraspaso.NotificarOrdenCreadaAsync(
+                    orden.IdOrdenTraspaso,
+                    orden.UsuarioCreacion,
+                    orden.CodigoEmpresa,
+                    orden.CodigoOrden,
+                    orden.CodigoAlmacenDestino);
+            }
+            catch (Exception ex)
+            {
+                // Log pero no fallar la operación
+                // Las notificaciones no deben bloquear la creación de la orden
+            }
+
             return MapToDto(orden);
         }
 
@@ -154,24 +174,50 @@ namespace SGA_Api.Services
 
             await _context.SaveChangesAsync();
 
+            // Detectar si se asignó un operario y notificar
+            if (dto.IdOperarioAsignado > 0 && linea.IdOperarioAsignado == dto.IdOperarioAsignado)
+            {
+                try
+                {
+                    // Obtener orden para tener CodigoEmpresa
+                    var orden = await _context.OrdenTraspasoCabecera
+                        .FirstOrDefaultAsync(o => o.IdOrdenTraspaso == linea.IdOrdenTraspaso);
+                    
+                    if (orden != null)
+                    {
+                        await _notificacionesOrdenTraspaso.NotificarLineaAsignadaAsync(
+                            linea.IdLineaOrdenTraspaso,
+                            linea.IdOrdenTraspaso,
+                            dto.IdOperarioAsignado,
+                            linea.CodigoArticulo,
+                            linea.CodigoAlmacenOrigen,
+                            orden.CodigoEmpresa);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log pero no fallar la operación
+                }
+            }
+
             // Lógica para actualizar el estado de la orden si todas las líneas tienen operario o no
-            var orden = await _context.OrdenTraspasoCabecera
+            var ordenEstado = await _context.OrdenTraspasoCabecera
                 .Include(o => o.Lineas)
                 .FirstOrDefaultAsync(o => o.IdOrdenTraspaso == linea.IdOrdenTraspaso);
             
-            if (orden != null)
+            if (ordenEstado != null)
             {
-                var todasLasLineasTienenOperario = orden.Lineas.All(l => l.IdOperarioAsignado > 0 || l.Estado == "CANCELADA" || l.Estado == "COMPLETADA" || l.Estado == "SUBDIVIDIDO");
-                var algunaLineaSinOperario = orden.Lineas.Any(l => l.IdOperarioAsignado <= 0 && l.Estado != "CANCELADA" && l.Estado != "COMPLETADA" && l.Estado != "SUBDIVIDIDO");
+                var todasLasLineasTienenOperario = ordenEstado.Lineas.All(l => l.IdOperarioAsignado > 0 || l.Estado == "CANCELADA" || l.Estado == "COMPLETADA" || l.Estado == "SUBDIVIDIDO");
+                var algunaLineaSinOperario = ordenEstado.Lineas.Any(l => l.IdOperarioAsignado <= 0 && l.Estado != "CANCELADA" && l.Estado != "COMPLETADA" && l.Estado != "SUBDIVIDIDO");
 
-                if (todasLasLineasTienenOperario && orden.Estado == "SIN_ASIGNAR")
+                if (todasLasLineasTienenOperario && ordenEstado.Estado == "SIN_ASIGNAR")
                 {
-                    orden.Estado = "PENDIENTE";
+                    ordenEstado.Estado = "PENDIENTE";
                     await _context.SaveChangesAsync();
                 }
-                else if (algunaLineaSinOperario && orden.Estado == "PENDIENTE")
+                else if (algunaLineaSinOperario && ordenEstado.Estado == "PENDIENTE")
                 {
-                    orden.Estado = "SIN_ASIGNAR";
+                    ordenEstado.Estado = "SIN_ASIGNAR";
                     await _context.SaveChangesAsync();
                 }
             }
@@ -242,6 +288,21 @@ namespace SGA_Api.Services
             orden.FechaFinalizacion = DateTime.Now;
 
             await _context.SaveChangesAsync();
+
+            // Notificar finalización de orden
+            try
+            {
+                await _notificacionesOrdenTraspaso.NotificarOrdenCompletadaAsync(
+                    id,
+                    orden.UsuarioCreacion,
+                    orden.CodigoEmpresa,
+                    orden.CodigoOrden);
+            }
+            catch (Exception ex)
+            {
+                // Log pero no fallar la operación
+            }
+
             return true;
         }
 

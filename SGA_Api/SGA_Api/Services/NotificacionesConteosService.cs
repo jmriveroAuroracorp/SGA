@@ -23,15 +23,18 @@ namespace SGA_Api.Services
     {
         private readonly INotificacionesUnificadasService _notificacionesUnificadas;
         private readonly AuroraSgaDbContext _context;
+        private readonly SageDbContext _sageContext;
         private readonly ILogger<NotificacionesConteosService> _logger;
 
         public NotificacionesConteosService(
             INotificacionesUnificadasService notificacionesUnificadas,
             AuroraSgaDbContext context,
+            SageDbContext sageContext,
             ILogger<NotificacionesConteosService> logger)
         {
             _notificacionesUnificadas = notificacionesUnificadas;
             _context = context;
+            _sageContext = sageContext;
             _logger = logger;
         }
 
@@ -156,16 +159,176 @@ namespace SGA_Api.Services
             };
             mensaje += $"\nPrioridad: {nivelPrioridad} ({prioridad}/5)";
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "OPERARIO", "SUPERVISOR", "ADMIN" },
-                    "ORDEN_CREADA",
-                    "Nueva Orden de Conteo",
-                    mensaje,
-                    ordenId,
-                    null,
-                    null,
-                    "info");
+                // 1. Notificar al operario asignado (si existe y NO es supervisor ni admin)
+                int? operarioAsignadoId = null;
+                if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
+                {
+                    operarioAsignadoId = operarioId;
+                    try
+                    {
+                        // Verificar el rol del operario asignado
+                        var operarioAsignado = await _context.Usuarios
+                            .Where(u => u.IdUsuario == operarioId)
+                            .Select(u => new { u.IdRol })
+                            .FirstOrDefaultAsync();
+
+                        if (operarioAsignado != null)
+                        {
+                            // Solo notificar como operario asignado si es operario puro (IdRol == 1)
+                            // Si es supervisor o admin, se le notificará más adelante con su rol correspondiente
+                            if (operarioAsignado.IdRol == 1)
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    operarioId,
+                                    "ORDEN_CREADA",
+                                    "Nueva Orden de Conteo",
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogInformation("Notificación enviada al operario asignado {OperarioId}", operarioId);
+                            }
+                            else
+                            {
+                                _logger.LogDebug("Operario asignado {OperarioId} es {Rol}, se notificará con su rol correspondiente", 
+                                    operarioId, operarioAsignado.IdRol == 2 ? "supervisor" : "administrador");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar al operario asignado {OperarioId}", operarioId);
+                    }
+                }
+
+                // 2. Notificar a supervisores que tengan permiso para el almacén
+                if (!string.IsNullOrEmpty(codigoAlmacen))
+                {
+                    try
+                    {
+                        // Primero obtener el CodigoEmpresa de la orden
+                        var orden = await _context.OrdenesConteo
+                            .Where(o => o.GuidID == ordenId)
+                            .Select(o => new { o.CodigoEmpresa })
+                            .FirstOrDefaultAsync();
+
+                        if (orden != null)
+                        {
+                            // Obtener IDs de operarios con acceso al almacén desde OperariosAlmacenes
+                            // Filtrar por CodigoEmpresa Y CodigoAlmacen
+                            var operariosConAcceso = await _sageContext.OperariosAlmacenes
+                                .Where(oa => oa.CodigoAlmacen == codigoAlmacen && 
+                                             oa.CodigoEmpresa == orden.CodigoEmpresa)
+                                .Select(oa => oa.Operario)
+                                .Distinct()
+                                .ToListAsync();
+
+                            if (operariosConAcceso.Any())
+                            {
+                                // Filtrar solo supervisores (IdRol = 2) y excluir al operario asignado si existe
+                                var supervisoresIds = await _context.Usuarios
+                                    .Where(u => u.IdRol == 2 && 
+                                                operariosConAcceso.Contains(u.IdUsuario) &&
+                                                (operarioAsignadoId == null || u.IdUsuario != operarioAsignadoId))
+                                    .Select(u => u.IdUsuario)
+                                    .ToListAsync();
+
+                                if (supervisoresIds.Any())
+                                {
+                                    _logger.LogInformation("Notificando a {Cantidad} supervisores con acceso al almacén {Almacen} de empresa {Empresa}", 
+                                        supervisoresIds.Count, codigoAlmacen, orden.CodigoEmpresa);
+
+                                    // Notificar a cada supervisor
+                                    foreach (var supervisorId in supervisoresIds)
+                                    {
+                                        try
+                                        {
+                                            await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                                supervisorId,
+                                                "ORDEN_CREADA",
+                                                "Nueva Orden de Conteo",
+                                                mensaje,
+                                                ordenId,
+                                                null,
+                                                null,
+                                                "info");
+                                            
+                                            _logger.LogDebug("Notificación enviada a supervisor {SupervisorId} para orden {OrdenId}", supervisorId, ordenId);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para orden {OrdenId}", supervisorId, ordenId);
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    _logger.LogDebug("No se encontraron supervisores con acceso al almacén {Almacen} de empresa {Empresa}", codigoAlmacen, orden.CodigoEmpresa);
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogDebug("No se encontraron operarios con acceso al almacén {Almacen} de empresa {Empresa}", codigoAlmacen, orden.CodigoEmpresa);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("No se encontró la orden {OrdenId} para obtener CodigoEmpresa", ordenId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al buscar supervisores para almacén {Almacen}", codigoAlmacen);
+                    }
+                }
+
+                // 3. Notificar a todos los administradores (IdRol = 3)
+                try
+                {
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3)
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    _logger.LogInformation("Encontrados {Cantidad} administradores en la base de datos", administradoresIds.Count);
+
+                    if (administradoresIds.Any())
+                    {
+                        _logger.LogInformation("Notificando a {Cantidad} administradores", administradoresIds.Count);
+
+                        foreach (var adminId in administradoresIds)
+                        {
+                            try
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    adminId,
+                                    "ORDEN_CREADA",
+                                    "Nueva Orden de Conteo",
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogDebug("Notificación enviada a administrador {AdminId} para orden {OrdenId}", adminId, ordenId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al notificar administrador {AdminId} para orden {OrdenId}", adminId, ordenId);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No se encontraron administradores (IdRol = 3) en la base de datos");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al buscar administradores para orden {OrdenId}", ordenId);
+                }
 
                 _logger.LogInformation("Notificación de orden creada enviada para orden {OrdenId}", ordenId);
             }
@@ -178,28 +341,170 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se asigna un operario a una orden de conteo
         /// </summary>
-        public async Task NotificarOperarioAsignadoAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null)
+        public async Task NotificarOperarioAsignadoAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null, string? codigoAlmacen = null)
         {
             try
             {
+                // Obtener nombres reales de usuarios
+                var nombresUsuarios = await ObtenerNombresUsuariosAsync("", supervisorCodigo, codigoOperario);
+                
                 var titulo = "Operario Asignado";
-                var mensaje = $"El operario {codigoOperario} ha sido asignado a una orden de conteo";
+                var mensaje = $"El operario {nombresUsuarios.Operario} ha sido asignado a una orden de conteo";
                 
                 if (!string.IsNullOrEmpty(supervisorCodigo))
                 {
-                    mensaje += $"\nSupervisor responsable: {supervisorCodigo}";
+                    mensaje += $"\nSupervisor responsable: {nombresUsuarios.Supervisor}";
                 }
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "SUPERVISOR", "ADMIN" },
-                    "OPERARIO_ASIGNADO",
-                    titulo,
-                    mensaje,
-                    ordenId,
-                    null,
-                    null,
-                    "info");
+                // 1. Notificar al operario asignado (si existe y NO es supervisor ni admin)
+                int? operarioAsignadoId = null;
+                if (!string.IsNullOrEmpty(codigoOperario) && int.TryParse(codigoOperario, out int operarioId))
+                {
+                    operarioAsignadoId = operarioId;
+                    try
+                    {
+                        // Verificar el rol del operario asignado
+                        var operarioAsignado = await _context.Usuarios
+                            .Where(u => u.IdUsuario == operarioId)
+                            .Select(u => new { u.IdRol })
+                            .FirstOrDefaultAsync();
+
+                        if (operarioAsignado != null)
+                        {
+                            // Solo notificar como operario asignado si es operario puro (IdRol == 1)
+                            // Si es supervisor o admin, se le notificará más adelante con su rol correspondiente
+                            if (operarioAsignado.IdRol == 1)
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    operarioId,
+                                    "OPERARIO_ASIGNADO",
+                                    titulo,
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogInformation("Notificación enviada al operario asignado {OperarioId}", operarioId);
+                            }
+                            else
+                            {
+                                _logger.LogDebug("Operario asignado {OperarioId} es {Rol}, se notificará con su rol correspondiente", 
+                                    operarioId, operarioAsignado.IdRol == 2 ? "supervisor" : "administrador");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar al operario asignado {OperarioId}", operarioId);
+                    }
+                }
+
+                // 2. Notificar a supervisores que tengan permiso para el almacén
+                if (!string.IsNullOrEmpty(codigoAlmacen))
+                {
+                    try
+                    {
+                        // Obtener IDs de operarios con acceso al almacén desde OperariosAlmacenes
+                        var operariosConAcceso = await _sageContext.OperariosAlmacenes
+                            .Where(oa => oa.CodigoAlmacen == codigoAlmacen)
+                            .Select(oa => oa.Operario)
+                            .Distinct()
+                            .ToListAsync();
+
+                        if (operariosConAcceso.Any())
+                        {
+                            // Filtrar solo supervisores (IdRol = 2) y excluir al operario asignado si existe
+                            var supervisoresIds = await _context.Usuarios
+                                .Where(u => u.IdRol == 2 && 
+                                            operariosConAcceso.Contains(u.IdUsuario) &&
+                                            (operarioAsignadoId == null || u.IdUsuario != operarioAsignadoId))
+                                .Select(u => u.IdUsuario)
+                                .ToListAsync();
+
+                            if (supervisoresIds.Any())
+                            {
+                                _logger.LogInformation("Notificando a {Cantidad} supervisores con acceso al almacén {Almacen} sobre operario asignado", 
+                                    supervisoresIds.Count, codigoAlmacen);
+
+                                // Notificar a cada supervisor
+                                foreach (var supervisorId in supervisoresIds)
+                                {
+                                    try
+                                    {
+                                        await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                            supervisorId,
+                                            "OPERARIO_ASIGNADO",
+                                            titulo,
+                                            mensaje,
+                                            ordenId,
+                                            null,
+                                            null,
+                                            "info");
+                                        
+                                        _logger.LogDebug("Notificación enviada a supervisor {SupervisorId} para orden {OrdenId}", supervisorId, ordenId);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para orden {OrdenId}", supervisorId, ordenId);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogDebug("No se encontraron supervisores con acceso al almacén {Almacen} para operario asignado", codigoAlmacen);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogDebug("No se encontraron operarios con acceso al almacén {Almacen} para operario asignado", codigoAlmacen);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al buscar supervisores para almacén {Almacen} en operario asignado", codigoAlmacen);
+                    }
+                }
+
+                // 3. Notificar a todos los administradores (IdRol = 3), excluyendo al operario asignado si existe
+                try
+                {
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3 && (operarioAsignadoId == null || u.IdUsuario != operarioAsignadoId))
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    if (administradoresIds.Any())
+                    {
+                        _logger.LogInformation("Notificando a {Cantidad} administradores sobre operario asignado", administradoresIds.Count);
+
+                        foreach (var adminId in administradoresIds)
+                        {
+                            try
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    adminId,
+                                    "OPERARIO_ASIGNADO",
+                                    titulo,
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogDebug("Notificación enviada a administrador {AdminId} para orden {OrdenId}", adminId, ordenId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al notificar administrador {AdminId} para orden {OrdenId}", adminId, ordenId);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al buscar administradores para orden {OrdenId}", ordenId);
+                }
 
                 _logger.LogInformation("Notificación de operario asignado enviada para orden {OrdenId}", ordenId);
             }
@@ -212,28 +517,150 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se inicia una orden de conteo
         /// </summary>
-        public async Task NotificarOrdenIniciadaAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null)
+        public async Task NotificarOrdenIniciadaAsync(Guid ordenId, string codigoOperario, string? supervisorCodigo = null, string? codigoAlmacen = null)
         {
             try
             {
+                // Obtener nombres reales de usuarios
+                var nombresUsuarios = await ObtenerNombresUsuariosAsync("", supervisorCodigo, codigoOperario);
+                
                 var titulo = "Conteo Iniciado";
-                var mensaje = $"El operario {codigoOperario} ha comenzado a realizar el conteo";
+                var mensaje = $"El operario {nombresUsuarios.Operario} ha comenzado a realizar el conteo";
                 
                 if (!string.IsNullOrEmpty(supervisorCodigo))
                 {
-                    mensaje += $"\nSupervisor responsable: {supervisorCodigo}";
+                    mensaje += $"\nSupervisor responsable: {nombresUsuarios.Supervisor}";
                 }
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "SUPERVISOR", "ADMIN" },
-                    "ORDEN_INICIADA",
-                    titulo,
-                    mensaje,
-                    ordenId,
-                    null,
-                    null,
-                    "info");
+                // 1. Notificar a supervisores que tengan permiso para el almacén
+                if (!string.IsNullOrEmpty(codigoAlmacen))
+                {
+                    try
+                    {
+                        // Obtener IDs de operarios con acceso al almacén desde OperariosAlmacenes
+                        var operariosConAcceso = await _sageContext.OperariosAlmacenes
+                            .Where(oa => oa.CodigoAlmacen == codigoAlmacen)
+                            .Select(oa => oa.Operario)
+                            .Distinct()
+                            .ToListAsync();
+
+                        if (operariosConAcceso.Any())
+                        {
+                            // Filtrar solo supervisores (IdRol = 2)
+                            var supervisoresIds = await _context.Usuarios
+                                .Where(u => u.IdRol == 2 && operariosConAcceso.Contains(u.IdUsuario))
+                                .Select(u => u.IdUsuario)
+                                .ToListAsync();
+
+                            if (supervisoresIds.Any())
+                            {
+                                _logger.LogInformation("Notificando a {Cantidad} supervisores con acceso al almacén {Almacen} sobre orden iniciada", 
+                                    supervisoresIds.Count, codigoAlmacen);
+
+                                // Notificar a cada supervisor
+                                foreach (var supervisorId in supervisoresIds)
+                                {
+                                    try
+                                    {
+                                        await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                            supervisorId,
+                                            "ORDEN_INICIADA",
+                                            titulo,
+                                            mensaje,
+                                            ordenId,
+                                            null,
+                                            null,
+                                            "info");
+                                        
+                                        _logger.LogDebug("Notificación enviada a supervisor {SupervisorId} para orden iniciada {OrdenId}", supervisorId, ordenId);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para orden iniciada {OrdenId}", supervisorId, ordenId);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogDebug("No se encontraron supervisores con acceso al almacén {Almacen} para orden iniciada", codigoAlmacen);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogDebug("No se encontraron operarios con acceso al almacén {Almacen} para orden iniciada", codigoAlmacen);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al buscar supervisores para almacén {Almacen} en orden iniciada", codigoAlmacen);
+                    }
+                }
+
+                // 2. Notificar a todos los administradores (IdRol = 3), excluyendo a los que ya son supervisores
+                try
+                {
+                    // Primero obtener los supervisores que se notificaron para excluirlos de admins
+                    var supervisoresNotificados = new List<int>();
+                    if (!string.IsNullOrEmpty(codigoAlmacen))
+                    {
+                        try
+                        {
+                            var operariosConAcceso = await _sageContext.OperariosAlmacenes
+                                .Where(oa => oa.CodigoAlmacen == codigoAlmacen)
+                                .Select(oa => oa.Operario)
+                                .Distinct()
+                                .ToListAsync();
+
+                            if (operariosConAcceso.Any())
+                            {
+                                supervisoresNotificados = await _context.Usuarios
+                                    .Where(u => u.IdRol == 2 && operariosConAcceso.Contains(u.IdUsuario))
+                                    .Select(u => u.IdUsuario)
+                                    .ToListAsync();
+                            }
+                        }
+                        catch
+                        {
+                            // Si hay error obteniendo supervisores, continuar sin excluirlos
+                        }
+                    }
+
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3 && !supervisoresNotificados.Contains(u.IdUsuario))
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    if (administradoresIds.Any())
+                    {
+                        _logger.LogInformation("Notificando a {Cantidad} administradores sobre orden iniciada", administradoresIds.Count);
+
+                        foreach (var adminId in administradoresIds)
+                        {
+                            try
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    adminId,
+                                    "ORDEN_INICIADA",
+                                    titulo,
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogDebug("Notificación enviada a administrador {AdminId} para orden iniciada {OrdenId}", adminId, ordenId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al notificar administrador {AdminId} para orden iniciada {OrdenId}", adminId, ordenId);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al buscar administradores para orden iniciada {OrdenId}", ordenId);
+                }
 
                 _logger.LogInformation("Notificación de orden iniciada enviada para orden {OrdenId}", ordenId);
             }
@@ -280,33 +707,96 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se cierra una orden de conteo
         /// </summary>
-        public async Task NotificarOrdenCerradaAsync(Guid ordenId, string? supervisorCodigo = null, int? totalResultados = null)
+        public async Task NotificarOrdenCerradaAsync(Guid ordenId, string? creadoPorCodigo = null, int? totalResultados = null)
         {
             try
             {
+                // Obtener la orden para obtener el título (más amigable que el GUID)
+                var orden = await _context.OrdenesConteo
+                    .Where(o => o.GuidID == ordenId)
+                    .Select(o => new { o.Titulo })
+                    .FirstOrDefaultAsync();
+
                 var titulo = "Conteo Cerrado";
-                var mensaje = $"Orden de conteo {ordenId} ha sido cerrada";
+                var mensaje = $"La orden de conteo \"{orden?.Titulo ?? "N/A"}\" ha sido cerrada";
                 
                 if (totalResultados.HasValue)
                 {
                     mensaje += $" con {totalResultados} resultados generados";
                 }
-                
-                if (!string.IsNullOrEmpty(supervisorCodigo))
+
+                // 1. Notificar al supervisor que creó la orden (si es supervisor)
+                int? creadorIdExcluido = null;
+                if (!string.IsNullOrEmpty(creadoPorCodigo) && int.TryParse(creadoPorCodigo, out int creadorId))
                 {
-                    mensaje += $" - Supervisor: {supervisorCodigo}";
+                    creadorIdExcluido = creadorId;
+                    try
+                    {
+                        // Verificar si el creador es supervisor (IdRol = 2)
+                        var creadorEsSupervisor = await _context.Usuarios
+                            .Where(u => u.IdUsuario == creadorId && u.IdRol == 2)
+                            .AnyAsync();
+
+                        if (creadorEsSupervisor)
+                        {
+                            await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                creadorId,
+                                "ORDEN_CERRADA",
+                                titulo,
+                                mensaje,
+                                ordenId,
+                                null,
+                                null,
+                                "info");
+                            
+                            _logger.LogInformation("Notificación enviada al supervisor creador {CreadorId} para orden cerrada", creadorId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar al supervisor creador {CreadorId} para orden cerrada", creadorId);
+                    }
                 }
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "SUPERVISOR", "ADMIN" },
-                    "ORDEN_CERRADA",
-                    titulo,
-                    mensaje,
-                    ordenId,
-                    null,
-                    null,
-                    "info");
+                // 2. Notificar a todos los administradores (IdRol = 3), excluyendo al supervisor creador si existe
+                try
+                {
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3 && (creadorIdExcluido == null || u.IdUsuario != creadorIdExcluido))
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    if (administradoresIds.Any())
+                    {
+                        _logger.LogInformation("Notificando a {Cantidad} administradores sobre orden cerrada", administradoresIds.Count);
+
+                        foreach (var adminId in administradoresIds)
+                        {
+                            try
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    adminId,
+                                    "ORDEN_CERRADA",
+                                    titulo,
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogDebug("Notificación enviada a administrador {AdminId} para orden cerrada {OrdenId}", adminId, ordenId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al notificar administrador {AdminId} para orden cerrada {OrdenId}", adminId, ordenId);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al buscar administradores para orden cerrada {OrdenId}", ordenId);
+                }
 
                 _logger.LogInformation("Notificación de orden cerrada enviada para orden {OrdenId}", ordenId);
             }
@@ -319,28 +809,88 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se crea una nueva lectura de conteo
         /// </summary>
-        public async Task NotificarLecturaCreadaAsync(Guid ordenId, string codigoOperario, string codigoArticulo, decimal cantidad, string? supervisorCodigo = null)
+        public async Task NotificarLecturaCreadaAsync(Guid ordenId, string codigoOperario, string codigoArticulo, decimal cantidad, string? creadoPorCodigo = null)
         {
             try
             {
-                var titulo = "Nueva Lectura de Conteo";
-                var mensaje = $"Operario {codigoOperario} registró {cantidad} unidades del artículo {codigoArticulo}";
+                // Obtener nombres reales de usuarios
+                var nombresUsuarios = await ObtenerNombresUsuariosAsync("", null, codigoOperario);
                 
-                if (!string.IsNullOrEmpty(supervisorCodigo))
+                var titulo = "Nueva Lectura de Conteo";
+                var mensaje = $"Operario {nombresUsuarios.Operario} registró {cantidad} unidades del artículo {codigoArticulo}";
+
+                // 1. Notificar al supervisor que creó la orden (si es supervisor)
+                int? creadorIdExcluido = null;
+                if (!string.IsNullOrEmpty(creadoPorCodigo) && int.TryParse(creadoPorCodigo, out int creadorId))
                 {
-                    mensaje += $" - Supervisor: {supervisorCodigo}";
+                    creadorIdExcluido = creadorId;
+                    try
+                    {
+                        // Verificar si el creador es supervisor (IdRol = 2)
+                        var creadorEsSupervisor = await _context.Usuarios
+                            .Where(u => u.IdUsuario == creadorId && u.IdRol == 2)
+                            .AnyAsync();
+
+                        if (creadorEsSupervisor)
+                        {
+                            await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                creadorId,
+                                "LECTURA_CREADA",
+                                titulo,
+                                mensaje,
+                                ordenId,
+                                null,
+                                null,
+                                "info");
+                            
+                            _logger.LogInformation("Notificación enviada al supervisor creador {CreadorId} para lectura creada", creadorId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar al supervisor creador {CreadorId} para lectura creada", creadorId);
+                    }
                 }
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "SUPERVISOR", "ADMIN" },
-                    "LECTURA_CREADA",
-                    titulo,
-                    mensaje,
-                    ordenId,
-                    null,
-                    null,
-                    "info");
+                // 2. Notificar a todos los administradores (IdRol = 3), excluyendo al supervisor creador si existe
+                try
+                {
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3 && (creadorIdExcluido == null || u.IdUsuario != creadorIdExcluido))
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    if (administradoresIds.Any())
+                    {
+                        _logger.LogInformation("Notificando a {Cantidad} administradores sobre lectura creada", administradoresIds.Count);
+
+                        foreach (var adminId in administradoresIds)
+                        {
+                            try
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    adminId,
+                                    "LECTURA_CREADA",
+                                    titulo,
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "info");
+                                
+                                _logger.LogDebug("Notificación enviada a administrador {AdminId} para lectura creada {OrdenId}", adminId, ordenId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al notificar administrador {AdminId} para lectura creada {OrdenId}", adminId, ordenId);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al buscar administradores para lectura creada {OrdenId}", ordenId);
+                }
 
                 _logger.LogInformation("Notificación de lectura creada enviada para orden {OrdenId}", ordenId);
             }
@@ -353,28 +903,160 @@ namespace SGA_Api.Services
         /// <summary>
         /// Notifica cuando se reasigna una línea de conteo
         /// </summary>
-        public async Task NotificarLineaReasignadaAsync(Guid ordenId, string codigoArticulo, string nuevoOperario, string? supervisorCodigo = null)
+        public async Task NotificarLineaReasignadaAsync(Guid ordenId, string codigoArticulo, string nuevoOperario, string? supervisorCodigo = null, string? codigoAlmacen = null)
         {
             try
             {
+                // Obtener nombres reales de usuarios
+                var nombresUsuarios = await ObtenerNombresUsuariosAsync("", supervisorCodigo, nuevoOperario);
+                
+                // Obtener información de la orden (almacén y empresa)
+                var orden = await _context.OrdenesConteo
+                    .Where(o => o.GuidID == ordenId)
+                    .Select(o => new { o.CodigoAlmacen, o.CodigoEmpresa, o.CodigoArticulo })
+                    .FirstOrDefaultAsync();
+                
+                // Usar codigoArticulo del parámetro o de la orden si está disponible
+                var articuloFinal = codigoArticulo != "N/A" ? codigoArticulo : (orden?.CodigoArticulo ?? "Artículo desconocido");
+                var almacenFinal = codigoAlmacen ?? orden?.CodigoAlmacen;
+                
                 var titulo = "Línea de Conteo Reasignada";
-                var mensaje = $"Línea del artículo {codigoArticulo} reasignada al operario {nuevoOperario}";
+                var mensaje = $"Línea del artículo {articuloFinal} reasignada al operario {nombresUsuarios.Operario}";
                 
                 if (!string.IsNullOrEmpty(supervisorCodigo))
                 {
-                    mensaje += $" - Supervisor: {supervisorCodigo}";
+                    mensaje += $"\nSupervisor responsable: {nombresUsuarios.Supervisor}";
                 }
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "SUPERVISOR", "ADMIN" },
-                    "LINEA_REASIGNADA",
-                    titulo,
-                    mensaje,
-                    ordenId,
-                    null,
-                    null,
-                    "warning");
+                // 1. Notificar al nuevo operario asignado (si no es supervisor ni admin)
+                int? operarioAsignadoId = null;
+                if (!string.IsNullOrEmpty(nuevoOperario) && int.TryParse(nuevoOperario, out int operarioId))
+                {
+                    operarioAsignadoId = operarioId;
+                    try
+                    {
+                        var operarioAsignado = await _context.Usuarios
+                            .Where(u => u.IdUsuario == operarioId)
+                            .Select(u => new { u.IdRol })
+                            .FirstOrDefaultAsync();
+
+                        if (operarioAsignado != null && operarioAsignado.IdRol == 1)
+                        {
+                            await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                operarioId,
+                                "LINEA_REASIGNADA",
+                                titulo,
+                                mensaje,
+                                ordenId,
+                                null,
+                                null,
+                                "warning");
+                            
+                            _logger.LogInformation("Notificación enviada al operario asignado {OperarioId} para línea reasignada", operarioId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar al operario asignado {OperarioId}", operarioId);
+                    }
+                }
+
+                // 2. Notificar a supervisores con acceso al almacén
+                if (!string.IsNullOrEmpty(almacenFinal) && orden != null)
+                {
+                    try
+                    {
+                        // Obtener IDs de operarios con acceso al almacén desde OperariosAlmacenes
+                        var operariosConAcceso = await _sageContext.OperariosAlmacenes
+                            .Where(oa => oa.CodigoAlmacen == almacenFinal && 
+                                        oa.CodigoEmpresa == orden.CodigoEmpresa)
+                            .Select(oa => oa.Operario)
+                            .Distinct()
+                            .ToListAsync();
+
+                        if (operariosConAcceso.Any())
+                        {
+                            // Filtrar solo supervisores (IdRol = 2) y excluir al operario asignado si existe
+                            var supervisoresIds = await _context.Usuarios
+                                .Where(u => u.IdRol == 2 && 
+                                           operariosConAcceso.Contains(u.IdUsuario) &&
+                                           (operarioAsignadoId == null || u.IdUsuario != operarioAsignadoId))
+                                .Select(u => u.IdUsuario)
+                                .ToListAsync();
+
+                            if (supervisoresIds.Any())
+                            {
+                                _logger.LogInformation("Notificando a {Cantidad} supervisores con acceso al almacén {Almacen} para línea reasignada {OrdenId}", 
+                                    supervisoresIds.Count, almacenFinal, ordenId);
+
+                                foreach (var supervisorId in supervisoresIds)
+                                {
+                                    try
+                                    {
+                                        await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                            supervisorId,
+                                            "LINEA_REASIGNADA",
+                                            titulo,
+                                            mensaje,
+                                            ordenId,
+                                            null,
+                                            null,
+                                            "warning");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para línea reasignada {OrdenId}", 
+                                            supervisorId, ordenId);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar supervisores para línea reasignada {OrdenId}", ordenId);
+                    }
+                }
+
+                // 3. Notificar a todos los administradores (IdRol == 3)
+                try
+                {
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3 && (operarioAsignadoId == null || u.IdUsuario != operarioAsignadoId))
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    if (administradoresIds.Any())
+                    {
+                        _logger.LogInformation("Notificando a {Cantidad} administradores para línea reasignada {OrdenId}", 
+                            administradoresIds.Count, ordenId);
+
+                        foreach (var adminId in administradoresIds)
+                        {
+                            try
+                            {
+                                await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                    adminId,
+                                    "LINEA_REASIGNADA",
+                                    titulo,
+                                    mensaje,
+                                    ordenId,
+                                    null,
+                                    null,
+                                    "warning");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al notificar administrador {AdminId} para línea reasignada {OrdenId}", 
+                                    adminId, ordenId);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al notificar administradores para línea reasignada {OrdenId}", ordenId);
+                }
 
                 _logger.LogInformation("Notificación de línea reasignada enviada para orden {OrdenId}", ordenId);
             }
@@ -493,24 +1175,138 @@ namespace SGA_Api.Services
         {
             try
             {
+                // Obtener nombres reales de usuarios
+                var nombresUsuarios = await ObtenerNombresUsuariosAsync("", supervisorCodigo, operarioCodigo);
+                
+                // Obtener información del resultado y orden (almacén y empresa)
+                var resultado = await _context.ResultadosConteo
+                    .Where(r => r.GuidID == resultadoGuid)
+                    .Select(r => new { r.CodigoAlmacen, r.OrdenGuid })
+                    .FirstOrDefaultAsync();
+                
+                string? codigoAlmacen = null;
+                int? codigoEmpresa = null;
+                
+                if (resultado != null)
+                {
+                    codigoAlmacen = resultado.CodigoAlmacen;
+                    
+                    // Obtener empresa de la orden
+                    var orden = await _context.OrdenesConteo
+                        .Where(o => o.GuidID == resultado.OrdenGuid)
+                        .Select(o => new { o.CodigoEmpresa })
+                        .FirstOrDefaultAsync();
+                    
+                    if (orden != null)
+                    {
+                        codigoEmpresa = orden.CodigoEmpresa;
+                    }
+                }
+
                 var titulo = "Conteo Enviado a Supervisión";
-                var mensaje = $"Conteo del artículo {codigoArticulo} (Cantidad: {cantidad}) enviado a supervisión por {operarioCodigo}";
+                var mensaje = $"Conteo del artículo {codigoArticulo} (Cantidad: {cantidad}) enviado a supervisión por {nombresUsuarios.Operario}";
                 
                 if (!string.IsNullOrEmpty(supervisorCodigo))
                 {
-                    mensaje += $" - Supervisor: {supervisorCodigo}";
+                    mensaje += $"\nSupervisor responsable: {nombresUsuarios.Supervisor}";
                 }
 
-                // Crear y enviar notificación unificada (BD + SignalR)
-                await _notificacionesUnificadas.CrearYEnviarNotificacionRolesAsync(
-                    new[] { "SUPERVISOR", "ADMIN" },
-                    "CONTEO_SUPERVISION",
-                    titulo,
-                    mensaje,
-                    resultadoGuid,
-                    null,
-                    null,
-                    "warning");
+                // 1. Notificar al operario (si no es supervisor ni admin)
+                int? operarioId = null;
+                if (!string.IsNullOrEmpty(operarioCodigo) && int.TryParse(operarioCodigo, out int opId))
+                {
+                    operarioId = opId;
+                    var operario = await _context.Usuarios
+                        .Where(u => u.IdUsuario == opId)
+                        .Select(u => new { u.IdRol })
+                        .FirstOrDefaultAsync();
+
+                    if (operario != null && operario.IdRol == 1)
+                    {
+                        await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                            opId,
+                            "CONTEO_SUPERVISION",
+                            titulo,
+                            mensaje,
+                            resultadoGuid,
+                            null,
+                            null,
+                            "warning");
+                    }
+                }
+
+                // 2. Notificar a supervisores con acceso al almacén
+                if (!string.IsNullOrEmpty(codigoAlmacen) && codigoEmpresa.HasValue)
+                {
+                    try
+                    {
+                        var operariosConAcceso = await _sageContext.OperariosAlmacenes
+                            .Where(oa => oa.CodigoAlmacen == codigoAlmacen && 
+                                        oa.CodigoEmpresa == codigoEmpresa.Value)
+                            .Select(oa => oa.Operario)
+                            .Distinct()
+                            .ToListAsync();
+
+                        if (operariosConAcceso.Any())
+                        {
+                            var supervisoresIds = await _context.Usuarios
+                                .Where(u => u.IdRol == 2 && 
+                                           operariosConAcceso.Contains(u.IdUsuario) &&
+                                           (operarioId == null || u.IdUsuario != operarioId))
+                                .Select(u => u.IdUsuario)
+                                .ToListAsync();
+
+                            if (supervisoresIds.Any())
+                            {
+                                foreach (var supervisorId in supervisoresIds)
+                                {
+                                    await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                        supervisorId,
+                                        "CONTEO_SUPERVISION",
+                                        titulo,
+                                        mensaje,
+                                        resultadoGuid,
+                                        null,
+                                        null,
+                                        "warning");
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al notificar supervisores para conteo en supervisión {ResultadoGuid}", resultadoGuid);
+                    }
+                }
+
+                // 3. Notificar a todos los administradores
+                try
+                {
+                    var administradoresIds = await _context.Usuarios
+                        .Where(u => u.IdRol == 3 && (operarioId == null || u.IdUsuario != operarioId))
+                        .Select(u => u.IdUsuario)
+                        .ToListAsync();
+
+                    if (administradoresIds.Any())
+                    {
+                        foreach (var adminId in administradoresIds)
+                        {
+                            await _notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+                                adminId,
+                                "CONTEO_SUPERVISION",
+                                titulo,
+                                mensaje,
+                                resultadoGuid,
+                                null,
+                                null,
+                                "warning");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al notificar administradores para conteo en supervisión {ResultadoGuid}", resultadoGuid);
+                }
 
                 _logger.LogInformation("Notificación de conteo en supervisión enviada para resultado {ResultadoGuid}", resultadoGuid);
             }
@@ -527,9 +1323,9 @@ namespace SGA_Api.Services
         {
             return idRol switch
             {
-                10 => "OPERARIO",
-                20 => "SUPERVISOR",
-                30 => "ADMIN",
+                1 => "OPERARIO",
+                2 => "SUPERVISOR",
+                3 => "ADMIN",
                 _ => "OPERARIO"
             };
         }

@@ -19,6 +19,9 @@
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
             <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}" />
             <helpers:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility"/>
+            <helpers:IsTraspasoDtoToVisibilityConverter x:Key="IsTraspasoDtoToVisibility"/>
+            <helpers:IsAjusteDtoToVisibilityConverter x:Key="IsAjusteDtoToVisibility"/>
+            <helpers:AjustePropertyConverter x:Key="AjustePropertyConverter"/>
             
             <!-- Color claro basado en BrushPrincipal para pestañas no seleccionadas -->
             <SolidColorBrush x:Key="BrushPrincipalClaro" Color="#0067C3" Opacity="0.15"/>
@@ -29,6 +32,236 @@
             <converters:EstadoToColorConverter x:Key="EstadoToColorConverter"/>
             <converters:EstadoToTextConverter x:Key="EstadoToTextConverter"/>
             <converters:EstadoMovimientoToTextConverter x:Key="EstadoMovimientoToTextConverter"/>
+            
+            <!-- Converters para ajustes -->
+            <converters:OrigenToColorConverter x:Key="OrigenToColorConverter"/>
+            <helpers:AjusteFinalColorConverter x:Key="AjusteFinalColorConverter"/>
+            <helpers:AjusteFinalTextConverter x:Key="AjusteFinalTextConverter"/>
+            
+            <!-- Converter para obtener nombre de empresa desde código -->
+            <helpers:CodigoEmpresaToNombreConverter x:Key="CodigoEmpresaToNombreConverter"/>
+            
+            <!-- Converter para obtener logo de empresa desde código -->
+            <helpers:CodigoToLogoConverter x:Key="CodigoToLogoConverter"/>
+            
+            <!-- DataTemplate para AjusteDto -->
+            <DataTemplate DataType="{x:Type models:AjusteDto}" x:Key="AjusteDtoTemplate">
+                <Border Background="White"
+                        CornerRadius="6" 
+                        Padding="12" 
+                        BorderThickness="1" 
+                        BorderBrush="{StaticResource BrushIntermedio}"
+                        Cursor="Hand">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.1"/>
+                    </Border.Effect>
+                    
+                    <!-- Grid con fondo semitransparente del logo -->
+                    <Grid>
+                        <!-- Icono de empresa como fondo semitransparente -->
+                        <Image HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Source="{Binding CodigoEmpresa, Converter={StaticResource CodigoToLogoConverter}}" 
+                               Width="120" 
+                               Height="120" 
+                               Stretch="Uniform"
+                               Opacity="0.15"
+                               Visibility="{Binding Data.VerTodasLasEmpresas, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVis}}"/>
+                        
+                        <!-- Contenido del card -->
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/> <!-- Badge de origen -->
+                                <RowDefinition Height="Auto"/> <!-- Primera fila: Información principal -->
+                                <RowDefinition Height="Auto"/> <!-- Segunda fila: Información secundaria -->
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Badge de origen (a la derecha) -->
+                            <Border Grid.Row="0" 
+                                    HorizontalAlignment="Right"
+                                    Background="{Binding Origen, Converter={StaticResource OrigenToColorConverter}}"
+                                    CornerRadius="10" 
+                                    Padding="6,2,6,2"
+                                    Margin="0,0,0,8">
+                                <TextBlock Text="{Binding OrigenTexto}" 
+                                           FontSize="10" 
+                                           FontWeight="Bold" 
+                                           Foreground="White"/>
+                            </Border>
+                            
+                            <!-- Primera fila: Fecha, Artículo, Descripción, Lote, Caducidad, Estado, Diferencia -->
+                            <Grid Grid.Row="1" Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="120"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Fecha -->
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="FECHA" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding Fecha, StringFormat=dd/MM/yyyy HH:mm}" 
+                                           FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Artículo -->
+                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="ARTÍCULO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding CodigoArticulo}" FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Descripción -->
+                            <StackPanel Grid.Column="2" Margin="6,0,0,0">
+                                <TextBlock Text="DESCRIPCIÓN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding DescripcionArticulo}" FontSize="12" 
+                                           Foreground="Black" TextWrapping="Wrap" 
+                                           FontWeight="Medium" MaxHeight="36" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            
+                            <!-- Lote -->
+                            <StackPanel Grid.Column="3" Margin="6,0,0,0">
+                                <TextBlock Text="LOTE" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding Partida}" FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+
+                            <!-- Caducidad -->
+                            <StackPanel Grid.Column="4" Margin="6,0,0,0">
+                                <TextBlock Text="CADUCIDAD" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding FechaCaducidad, StringFormat='{}{0:dd/MM/yyyy}'}" 
+                                           FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Estado -->
+                            <StackPanel Grid.Column="5" Margin="6,0,0,0">
+                                <TextBlock Text="ESTADO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <Border CornerRadius="6" Padding="6,3" HorizontalAlignment="Center" 
+                                        Background="{Binding Estado, Converter={StaticResource EstadoToColorConverter}}">
+                                    <TextBlock FontSize="9" FontWeight="Bold" 
+                                               HorizontalAlignment="Center" Foreground="White"
+                                               Text="{Binding Estado, Converter={StaticResource EstadoToTextConverter}}"/>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Diferencia -->
+                            <StackPanel Grid.Column="6" Margin="6,0,0,0">
+                                <TextBlock Text="DIFERENCIA" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <TextBlock FontSize="13" 
+                                           FontWeight="Bold" 
+                                           HorizontalAlignment="Center"
+                                           Foreground="{Binding Diferencia, Converter={StaticResource AjusteFinalColorConverter}}"
+                                           Text="{Binding Diferencia, Converter={StaticResource AjusteFinalTextConverter}}"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                        <!-- Segunda fila: Almacén, Ubicación, Palet, Usuario, Origen -->
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                        
+                            <!-- Almacén -->
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="ALMACÉN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding CodigoAlmacen}" FontSize="12" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Ubicación -->
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                <TextBlock Text="UBICACIÓN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding CodigoUbicacion}" FontSize="12" 
+                                           FontWeight="Bold" Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                            
+                            <!-- Palet -->
+                            <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                <TextBlock Text="PALET" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3" HorizontalAlignment="Center"/>
+                                <TextBlock FontSize="11" FontWeight="Bold" 
+                                           HorizontalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Sin paletizar"/>
+                                            <Setter Property="Foreground" Value="#6C757D"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CodigoPalet}" Value="{x:Null}">
+                                                    <Setter Property="Text" Value="Sin paletizar"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding CodigoPalet}" Value="">
+                                                    <Setter Property="Text" Value="Sin paletizar"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                    <TextBlock.Text>
+                                        <Binding Path="CodigoPalet" TargetNullValue="Sin paletizar"/>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                            
+                            <!-- Usuario -->
+                            <StackPanel Grid.Column="3" Margin="0,0,8,0">
+                                <TextBlock Text="USUARIO" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock Text="{Binding UsuarioNombre}" FontSize="11" 
+                                           Foreground="Black" FontWeight="Medium" 
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <!-- Origen (Inventario/Conteo) -->
+                            <StackPanel Grid.Column="4" Margin="0,0,0,0">
+                                <TextBlock Text="ORIGEN" FontSize="11" FontWeight="Bold" 
+                                           Foreground="Gray" Margin="0,0,0,3"/>
+                                <TextBlock FontSize="11" Foreground="Black" FontWeight="Medium" 
+                                           TextWrapping="Wrap" Margin="0,0,0,2">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="{}{0} {1}">
+                                            <Binding Path="OrigenTexto"/>
+                                            <Binding Path="CodigoConteo" TargetNullValue=""/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock Text="{Binding CodigoInventario}" FontSize="10" 
+                                           Foreground="#6C757D" 
+                                           Margin="0,0,0,0"
+                                           Visibility="{Binding EsDeInventario, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock FontSize="10" 
+                                           Foreground="#6C757D" 
+                                           Margin="0,2,0,0"
+                                           Visibility="{Binding EsDeConteo, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="Creado por: {0}">
+                                            <Binding Path="CreadorConteoDisplay"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </DataTemplate>
             
             <!-- DataTemplate para TraspasoDto (SGA Actual) - CON BADGE -->
             <DataTemplate DataType="{x:Type models:TraspasoDto}" x:Key="TraspasoDtoTemplate">
@@ -42,26 +275,39 @@
                         <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.1"/>
                     </Border.Effect>
                     
+                    <!-- Grid con fondo semitransparente del logo -->
                     <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/> <!-- Badge -->
-                            <RowDefinition Height="Auto"/> <!-- Primera fila: Información principal -->
-                            <RowDefinition Height="Auto"/> <!-- Segunda fila: Información secundaria -->
-                        </Grid.RowDefinitions>
+                        <!-- Icono de empresa como fondo semitransparente -->
+                        <Image HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Source="{Binding CodigoEmpresa, Converter={StaticResource CodigoToLogoConverter}}" 
+                               Width="120" 
+                               Height="120" 
+                               Stretch="Uniform"
+                               Opacity="0.15"
+                               Visibility="{Binding Data.VerTodasLasEmpresas, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVis}}"/>
                         
-                        <!-- Badge de fuente (solo visible en pestaña combinada) -->
-                        <Border Grid.Row="0" 
-                                HorizontalAlignment="Right" 
-                                Background="#3498DB" 
-                                CornerRadius="10" 
-                                Padding="6,2,6,2" 
-                                Margin="0,0,0,6"
-                                Visibility="{Binding Fuente, Converter={StaticResource StringToVisibilityConverter}}">
-                            <TextBlock Text="Aurora SGA" 
-                                       FontSize="10" 
-                                       FontWeight="Bold" 
-                                       Foreground="White"/>
-                        </Border>
+                        <!-- Contenido del card -->
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/> <!-- Badge -->
+                                <RowDefinition Height="Auto"/> <!-- Primera fila: Información principal -->
+                                <RowDefinition Height="Auto"/> <!-- Segunda fila: Información secundaria -->
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Badge de fuente (solo visible en pestaña combinada, a la derecha) -->
+                            <Border Grid.Row="0" 
+                                    HorizontalAlignment="Right"
+                                    Background="#3498DB" 
+                                    CornerRadius="10" 
+                                    Padding="6,2,6,2"
+                                    Margin="0,0,0,6"
+                                    Visibility="{Binding Fuente, Converter={StaticResource StringToVisibilityConverter}}">
+                                <TextBlock Text="Traspaso" 
+                                           FontSize="10" 
+                                           FontWeight="Bold" 
+                                           Foreground="White"/>
+                            </Border>
                         
                         <!-- Primera fila: Fecha, Artículo, Descripción, Tipo, Estado, Cantidad -->
                         <Grid Grid.Row="1" Margin="0,0,0,6">
@@ -131,7 +377,7 @@
                                     </TextBlock.Text>
                                 </TextBlock>
                             </StackPanel>
-
+                            
                             <!-- Tipo de Traspaso -->
                             <StackPanel Grid.Column="5" Margin="6,0,0,0">
                                 <TextBlock Text="TIPO" FontSize="11" FontWeight="Bold" 
@@ -264,6 +510,7 @@
                                     </TextBlock.Text>
                                 </TextBlock>
                             </StackPanel>
+                        </Grid>
                         </Grid>
                     </Grid>
                 </Border>
@@ -433,15 +680,15 @@
             <!-- Converter para mostrar/ocultar badge según si Fuente está definida -->
             <Helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             
-            <!-- Template Selector para la pestaña combinada -->
-            <Helpers:TraspasoCombinadoTemplateSelector x:Key="TraspasoCombinadoTemplateSelector">
-                <Helpers:TraspasoCombinadoTemplateSelector.TraspasoDtoTemplate>
+            <!-- Template Selector para la pestaña combinada (Traspasos + Ajustes) -->
+            <Helpers:TraspasoYAjusteTemplateSelector x:Key="TraspasoYAjusteTemplateSelector">
+                <Helpers:TraspasoYAjusteTemplateSelector.TraspasoDtoTemplate>
                     <StaticResource ResourceKey="TraspasoDtoTemplate"/>
-                </Helpers:TraspasoCombinadoTemplateSelector.TraspasoDtoTemplate>
-                <Helpers:TraspasoCombinadoTemplateSelector.TraspasoStorageControlDtoTemplate>
-                    <StaticResource ResourceKey="TraspasoStorageControlDtoTemplate"/>
-                </Helpers:TraspasoCombinadoTemplateSelector.TraspasoStorageControlDtoTemplate>
-            </Helpers:TraspasoCombinadoTemplateSelector>
+                </Helpers:TraspasoYAjusteTemplateSelector.TraspasoDtoTemplate>
+                <Helpers:TraspasoYAjusteTemplateSelector.AjusteDtoTemplate>
+                    <StaticResource ResourceKey="AjusteDtoTemplate"/>
+                </Helpers:TraspasoYAjusteTemplateSelector.AjusteDtoTemplate>
+            </Helpers:TraspasoYAjusteTemplateSelector>
         </ResourceDictionary>
     </Page.Resources>
 
@@ -454,7 +701,7 @@
         <!-- BOTONES DE PESTAÑAS -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
             <Button Content="📋 Aurora SGA"
-                    Command="{Binding CambiarASgaActualCommand}"
+                    Command="{Binding CambiarAAuroraSgaCommand}"
                     Width="200"
                     Height="28"
                     Margin="0,0,5,0">
@@ -464,7 +711,7 @@
                         <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                         <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding MostrandoSgaActual}" Value="True">
+                            <DataTrigger Binding="{Binding MostrandoAuroraSga}" Value="True">
                                 <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
@@ -477,8 +724,7 @@
             <Button Content="📦 SAGE"
                     Command="{Binding CambiarAStorageControlCommand}"
                     Width="220"
-                    Height="28"
-                    Margin="0,0,5,0">
+                    Height="28">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
                         <Setter Property="Background" Value="{StaticResource BrushPrincipalClaro}"/>
@@ -494,225 +740,7 @@
                     </Style>
                 </Button.Style>
             </Button>
-            
-            <Button Content="🔀 Combinado"
-                    Command="{Binding CambiarACombinadoCommand}"
-                    Width="180"
-                    Height="28">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
-                        <Setter Property="Background" Value="{StaticResource BrushPrincipalClaro}"/>
-                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
-                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding MostrandoCombinado}" Value="True">
-                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
         </StackPanel>
-
-        <!-- CONTENIDO DE TRASPASOS SGA ACTUAL -->
-        <Border Grid.Row="1" 
-                Background="White" 
-                BorderBrush="#E1E5E9" 
-                BorderThickness="1" 
-                CornerRadius="8"
-                Visibility="{Binding MostrandoSgaActual, Converter={StaticResource BoolToVisibilityConverter}}">
-            <Grid Margin="10">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/> <!-- Botones de acción -->
-                    <RowDefinition Height="Auto"/> <!-- Indicador de filtros activos -->
-                    <RowDefinition Height="Auto"/> <!-- Indicador de carga -->
-                    <RowDefinition Height="*"/> <!-- Lista de traspasos -->
-                </Grid.RowDefinitions>
-
-                <!-- Botones de acción -->
-                <Grid Grid.Row="0" Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Indicador de filtros activos -->
-                    <Border Grid.Column="0" 
-                            Background="#E8F4FD" 
-                            BorderBrush="#3498DB" 
-                            BorderThickness="1" 
-                            CornerRadius="5" 
-                            Padding="10,6"
-                            VerticalAlignment="Center"
-                            HorizontalAlignment="Left">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🔍 Filtros activos: " 
-                                       FontWeight="SemiBold" 
-                                       FontSize="11"
-                                       Foreground="#2980B9"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding ResumenFiltrosActivos}" 
-                                       FontSize="11"
-                                       Foreground="#34495E"
-                                       VerticalAlignment="Center"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Botones de acción -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="🔍 Filtros" 
-                                Command="{Binding AbrirFiltrosCommand}"
-                                Style="{StaticResource EstiloBotonPrincipal}" 
-                                Width="120" Height="36" Margin="0,0,8,0"/>
-                        <Button Content="🔄 Recargar" 
-                                Command="{Binding AplicarFiltrosCommand}"
-                                Style="{StaticResource EstiloBotonPrincipal}" 
-                                Width="120" Height="36" Margin="0,0,8,0"/>
-                        <Button Content="🧹 Limpiar" 
-                                Command="{Binding LimpiarFiltrosCommand}"
-                                Style="{StaticResource EstiloBotonSecundario}" 
-                                Width="100" Height="36"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- Indicador de carga -->
-                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                    <TextBlock Text="Cargando..." 
-                               Foreground="{StaticResource BrushPrincipal}" 
-                               FontWeight="Bold" 
-                               Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                </StackPanel>
-
-                <!-- Historial de traspasos con formato de cards -->
-                <GroupBox Header="Historial de Traspasos" Grid.Row="3" Margin="0,0,0,16">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Contador de resultados -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,20,10">
-                    <TextBlock Text="{Binding Traspasos.Count, StringFormat='{}{0} traspasos encontrados'}" 
-                               Foreground="{StaticResource BrushPrincipal}" 
-                               FontWeight="Bold" 
-                               FontSize="12"/>
-                </StackPanel>
-                
-                <!-- Lista de traspasos - OPTIMIZADO con ListBox virtualizado -->
-                <ListBox Grid.Row="1" 
-                         ItemsSource="{Binding Traspasos}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         Margin="15,0,15,15"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Focusable="False">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListBoxItem">
-                                        <ContentPresenter />
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Setter Property="Margin" Value="0,0,0,8"/>
-                            <Setter Property="Padding" Value="0"/>
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="IsSelected" Value="False"/>
-                            <Setter Property="ContextMenu">
-                                <Setter.Value>
-                                    <ContextMenu Style="{StaticResource EstiloContextMenu}">
-                                        <MenuItem Header="Copiar código artículo"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarCodigoCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding CodigoArticulo, TargetNullValue=''}" />
-                                        <MenuItem Header="Copiar descripción"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarDescripcionCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding DescripcionArticulo, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar lote"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarLoteCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding Partida, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar fecha caducidad"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarFechaCaducidadCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding FechaCaducidad}"/>
-                                        <Separator/>
-                                        <MenuItem Header="Copiar almacén origen"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarAlmacenOrigenCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding AlmacenOrigen, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar ubicación origen"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarUbicacionOrigenCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding UbicacionOrigen, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar almacén destino"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarAlmacenDestinoCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding AlmacenDestino, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar ubicación destino"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarUbicacionDestinoCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding UbicacionDestino, TargetNullValue=''}"/>
-                                        <Separator/>
-                                        <MenuItem Header="Copiar código palet"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarCodigoPaletCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding CodigoPalet, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar cantidad"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarCantidadCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding Cantidad}"/>
-                                        <MenuItem Header="Copiar usuario"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarUsuarioCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding UsuarioInicioNombre, TargetNullValue=''}"/>
-                                        <Separator/>
-                                        <MenuItem Header="Copiar tipo traspaso"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarTipoTraspasoCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding TipoTraspaso, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar estado"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarEstadoCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding CodigoEstado, TargetNullValue=''}"/>
-                                        <MenuItem Header="Copiar fecha"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarFechaCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding FechaInicio}"/>
-                                        <Separator/>
-                                        <MenuItem Header="Copiar comentarios"
-                                                  Style="{StaticResource EstiloMenuItem}"
-                                                  Command="{Binding Data.CopiarComentariosCommand, Source={StaticResource VmProxy}}"
-                                                  CommandParameter="{Binding Comentarios, TargetNullValue=''}"/>
-                                    </ContextMenu>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                </Trigger>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                    <ListBox.ItemTemplate>
-                        <StaticResource ResourceKey="TraspasoDtoTemplate"/>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-                </Grid>
-            </GroupBox>
-        </Grid>
-        </Border>
 
         <!-- CONTENIDO DE TRASPASOS STORAGECONTROL -->
         <Border Grid.Row="1" 
@@ -802,7 +830,8 @@
                         </StackPanel>
                         
                         <!-- Lista de traspasos StorageControl -->
-                        <ListBox Grid.Row="1" 
+                        <ListBox x:Name="ListBoxTraspasosStorageControl"
+                                 Grid.Row="1" 
                                  ItemsSource="{Binding TraspasosStorageControl}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -900,19 +929,19 @@
             </Grid>
         </Border>
         
-        <!-- CONTENIDO DE TRASPASOS COMBINADOS -->
+        <!-- CONTENIDO DE AURORA SGA -->
         <Border Grid.Row="1" 
                 Background="White" 
                 BorderBrush="#E1E5E9" 
                 BorderThickness="1" 
                 CornerRadius="8"
-                Visibility="{Binding MostrandoCombinado, Converter={StaticResource BoolToVisibilityConverter}}">
+                Visibility="{Binding MostrandoAuroraSga, Converter={StaticResource BoolToVisibilityConverter}}">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Botones de acción -->
                     <RowDefinition Height="Auto"/> <!-- Indicador de filtros activos -->
                     <RowDefinition Height="Auto"/> <!-- Indicador de carga -->
-                    <RowDefinition Height="*"/> <!-- Lista de traspasos -->
+                    <RowDefinition Height="*"/> <!-- Lista de traspasos y ajustes -->
                 </Grid.RowDefinitions>
 
                 <!-- Botones de acción -->
@@ -971,8 +1000,8 @@
                                Visibility="{Binding EstaCargando, Converter={StaticResource BoolToVisibilityConverter}}"/>
                 </StackPanel>
 
-                <!-- Historial de traspasos combinados -->
-                <GroupBox Header="Historial de Traspasos Combinados" Grid.Row="3" Margin="0,0,0,16">
+                <!-- Historial de traspasos y ajustes combinados -->
+                <GroupBox Header="Historial de Aurora SGA" Grid.Row="3" Margin="0,0,0,16">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -981,15 +1010,16 @@
                         
                         <!-- Contador de resultados -->
                         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,20,10">
-                            <TextBlock Text="{Binding TraspasosCombinados.Count, StringFormat='{}{0} traspasos encontrados'}" 
+                            <TextBlock Text="{Binding TraspasosYAjustes.Count, StringFormat='{}{0} registros encontrados'}" 
                                        Foreground="{StaticResource BrushPrincipal}" 
                                        FontWeight="Bold" 
                                        FontSize="12"/>
                         </StackPanel>
                         
-                        <!-- Lista de traspasos combinados -->
-                        <ListBox Grid.Row="1" 
-                                 ItemsSource="{Binding TraspasosCombinados}"
+                        <!-- Lista de traspasos y ajustes combinados -->
+                        <ListBox x:Name="ListBoxTraspasosYAjustes"
+                                 Grid.Row="1" 
+                                 ItemsSource="{Binding TraspasosYAjustes}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  Margin="15,0,15,15"
@@ -1062,51 +1092,63 @@
                                                 </MenuItem>
                                                 <Separator/>
                                                 <MenuItem Header="Copiar almacén origen"
-                                                          Style="{StaticResource EstiloMenuItem}">
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsTraspasoDtoToVisibility}}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarAlmacenOrigenCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <PriorityBinding>
-                                                            <Binding Path="AlmacenOrigen" TargetNullValue=""/>
-                                                            <Binding Path="AlmacenOrigen" TargetNullValue=""/>
-                                                        </PriorityBinding>
+                                                        <Binding Path="AlmacenOrigen" TargetNullValue=""/>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar ubicación origen"
-                                                          Style="{StaticResource EstiloMenuItem}">
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsTraspasoDtoToVisibility}}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarUbicacionOrigenCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <PriorityBinding>
-                                                            <Binding Path="UbicacionOrigen" TargetNullValue=""/>
-                                                            <Binding Path="UbicacionOrigen" TargetNullValue=""/>
-                                                        </PriorityBinding>
+                                                        <Binding Path="UbicacionOrigen" TargetNullValue=""/>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar almacén destino"
-                                                          Style="{StaticResource EstiloMenuItem}">
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsTraspasoDtoToVisibility}}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarAlmacenDestinoCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <PriorityBinding>
-                                                            <Binding Path="AlmacenDestino" TargetNullValue=""/>
-                                                            <Binding Path="AlmacenDestino" TargetNullValue=""/>
-                                                        </PriorityBinding>
+                                                        <Binding Path="AlmacenDestino" TargetNullValue=""/>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar ubicación destino"
-                                                          Style="{StaticResource EstiloMenuItem}">
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsTraspasoDtoToVisibility}}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarUbicacionDestinoCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <PriorityBinding>
-                                                            <Binding Path="UbicacionDestino" TargetNullValue=""/>
-                                                            <Binding Path="UbicacionDestino" TargetNullValue=""/>
-                                                        </PriorityBinding>
+                                                        <Binding Path="UbicacionDestino" TargetNullValue=""/>
+                                                    </MenuItem.CommandParameter>
+                                                </MenuItem>
+                                                <MenuItem Header="Copiar almacén"
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsAjusteDtoToVisibility}}">
+                                                    <MenuItem.Command>
+                                                        <Binding Path="Data.CopiarAlmacenCommand" Source="{StaticResource VmProxy}"/>
+                                                    </MenuItem.Command>
+                                                    <MenuItem.CommandParameter>
+                                                        <Binding Converter="{StaticResource AjustePropertyConverter}" ConverterParameter="CodigoAlmacen"/>
+                                                    </MenuItem.CommandParameter>
+                                                </MenuItem>
+                                                <MenuItem Header="Copiar ubicación"
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsAjusteDtoToVisibility}}">
+                                                    <MenuItem.Command>
+                                                        <Binding Path="Data.CopiarUbicacionCommand" Source="{StaticResource VmProxy}"/>
+                                                    </MenuItem.Command>
+                                                    <MenuItem.CommandParameter>
+                                                        <Binding Converter="{StaticResource AjustePropertyConverter}" ConverterParameter="CodigoUbicacion"/>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <Separator/>
@@ -1123,31 +1165,41 @@
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar cantidad"
-                                                          Style="{StaticResource EstiloMenuItem}">
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsTraspasoDtoToVisibility}}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarCantidadCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <PriorityBinding>
-                                                            <Binding Path="Cantidad"/>
-                                                            <Binding Path="Cantidad"/>
-                                                        </PriorityBinding>
+                                                        <Binding Path="Cantidad"/>
+                                                    </MenuItem.CommandParameter>
+                                                </MenuItem>
+                                                <MenuItem Header="Copiar diferencia"
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsAjusteDtoToVisibility}}">
+                                                    <MenuItem.Command>
+                                                        <Binding Path="Data.CopiarDiferenciaCommand" Source="{StaticResource VmProxy}"/>
+                                                    </MenuItem.Command>
+                                                    <MenuItem.CommandParameter>
+                                                        <Binding Converter="{StaticResource AjustePropertyConverter}" ConverterParameter="Diferencia"/>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar usuario"
-                                                          Style="{StaticResource EstiloMenuItem}"
-                                                          Visibility="{Binding UsuarioInicioNombre, Converter={StaticResource NullOrEmptyToVisibility}}">
+                                                          Style="{StaticResource EstiloMenuItem}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarUsuarioCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <Binding Path="UsuarioInicioNombre" TargetNullValue=""/>
+                                                        <PriorityBinding>
+                                                            <Binding Path="UsuarioInicioNombre" TargetNullValue=""/>
+                                                            <Binding Path="UsuarioNombre" TargetNullValue=""/>
+                                                        </PriorityBinding>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <Separator/>
                                                 <MenuItem Header="Copiar tipo traspaso"
                                                           Style="{StaticResource EstiloMenuItem}"
-                                                          Visibility="{Binding TipoTraspaso, Converter={StaticResource NullOrEmptyToVisibility}}">
+                                                          Visibility="{Binding ., Converter={StaticResource IsTraspasoDtoToVisibility}}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarTipoTraspasoCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
@@ -1156,13 +1208,15 @@
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar estado"
-                                                          Style="{StaticResource EstiloMenuItem}"
-                                                          Visibility="{Binding CodigoEstado, Converter={StaticResource NullOrEmptyToVisibility}}">
+                                                          Style="{StaticResource EstiloMenuItem}">
                                                     <MenuItem.Command>
                                                         <Binding Path="Data.CopiarEstadoCommand" Source="{StaticResource VmProxy}"/>
                                                     </MenuItem.Command>
                                                     <MenuItem.CommandParameter>
-                                                        <Binding Path="CodigoEstado" TargetNullValue=""/>
+                                                        <PriorityBinding>
+                                                            <Binding Path="CodigoEstado" TargetNullValue=""/>
+                                                            <Binding Path="Estado" TargetNullValue=""/>
+                                                        </PriorityBinding>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <MenuItem Header="Copiar fecha"
@@ -1173,9 +1227,18 @@
                                                     <MenuItem.CommandParameter>
                                                         <PriorityBinding>
                                                             <Binding Path="FechaInicio"/>
-                                                            <Binding Path="FechaRegistro"/>
                                                             <Binding Path="Fecha"/>
                                                         </PriorityBinding>
+                                                    </MenuItem.CommandParameter>
+                                                </MenuItem>
+                                                <MenuItem Header="Copiar código inventario"
+                                                          Style="{StaticResource EstiloMenuItem}"
+                                                          Visibility="{Binding ., Converter={StaticResource IsAjusteDtoToVisibility}}">
+                                                    <MenuItem.Command>
+                                                        <Binding Path="Data.CopiarCodigoInventarioCommand" Source="{StaticResource VmProxy}"/>
+                                                    </MenuItem.Command>
+                                                    <MenuItem.CommandParameter>
+                                                        <Binding Converter="{StaticResource AjustePropertyConverter}" ConverterParameter="CodigoInventario"/>
                                                     </MenuItem.CommandParameter>
                                                 </MenuItem>
                                                 <Separator/>
@@ -1205,7 +1268,7 @@
                                 </Style>
                             </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplateSelector>
-                                <StaticResource ResourceKey="TraspasoCombinadoTemplateSelector"/>
+                                <StaticResource ResourceKey="TraspasoYAjusteTemplateSelector"/>
                             </ListBox.ItemTemplateSelector>
                         </ListBox>
                     </Grid>

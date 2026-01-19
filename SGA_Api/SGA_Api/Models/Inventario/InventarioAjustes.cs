@@ -35,6 +35,8 @@ namespace SGA_Api.Models.Inventario
 
         public Guid? IdConteo { get; set; }
 
+        public Guid? IdCambioArticulo { get; set; }
+
         [Required]
         public short CodigoEmpresa { get; set; }
 
@@ -69,8 +71,10 @@ namespace SGA_Api.Models.Inventario
         // Campo de control para evitar notificar el mismo error múltiples veces
         public bool ErrorNotificado { get; set; } = false;
 
-        // Navigation property
+        // Navigation properties
         [ForeignKey("IdInventario")]
-        public virtual InventarioCabecera Inventario { get; set; } = null!;
+        public virtual InventarioCabecera? Inventario { get; set; }
+
+        public virtual CambioArticulo? CambioArticulo { get; set; }
     }
 } 

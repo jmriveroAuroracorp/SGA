@@ -1,0 +1,285 @@
+<Page x:Class="SGA_Desktop.Views.CambiarArticuloView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:vm="clr-namespace:SGA_Desktop.ViewModels"
+      xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+      mc:Ignorable="d"
+      Background="{StaticResource BrushFondo}">
+
+    <Page.DataContext>
+        <vm:CambiarArticuloViewModel />
+    </Page.DataContext>
+
+    <Page.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <helpers:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+    </Page.Resources>
+
+    <Grid Margin="30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="15"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Tipo de Cambio -->
+        <GroupBox Grid.Row="0" 
+                  Grid.ColumnSpan="3"
+                  Header="Tipo de Cambio" 
+                  Margin="0,0,0,15">
+            <StackPanel Orientation="Horizontal" Margin="15,10">
+                <RadioButton Content="Cambio de Código de Artículo" 
+                             IsChecked="{Binding EsCambioCodigo}"
+                             FontWeight="Bold"
+                             Margin="0,0,30,0"
+                             GroupName="TipoCambio"/>
+                <RadioButton Content="Ampliación" 
+                             IsChecked="{Binding EsCambioFecha}"
+                             FontWeight="Bold"
+                             GroupName="TipoCambio"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Artículo Origen -->
+        <GroupBox Grid.Row="1" 
+                  Grid.Column="0"
+                  Header="Artículo Origen" 
+                  Margin="0,0,0,15">
+                <Grid Margin="15,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Código Artículo Origen -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="Código Artículo *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding CodigoArticuloOrigen, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,5,0"
+                                     Padding="5"/>
+                            <Button Grid.Column="1"
+                                    Content="🔍 Buscar"
+                                    Command="{Binding BuscarArticuloOrigenCommand}"
+                                    IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                    Style="{StaticResource EstiloBotonSecundario}"
+                                    Width="100"
+                                    Height="28"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Descripción Artículo Origen -->
+                    <StackPanel Grid.Row="1" Margin="0,0,0,10">
+                        <TextBlock Text="Descripción" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding DescripcionArticuloOrigen, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 Background="LightGray"
+                                 Padding="5"/>
+                    </StackPanel>
+
+                    <!-- Almacén -->
+                    <StackPanel Grid.Row="2" Margin="0,0,0,10">
+                        <TextBlock Text="Almacén *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ComboBox ItemsSource="{Binding Almacenes}"
+                                  SelectedItem="{Binding AlmacenSeleccionado}"
+                                  DisplayMemberPath="DescripcionCombo"
+                                  SelectedValuePath="CodigoAlmacen"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  Padding="5"/>
+                    </StackPanel>
+
+                    <!-- Ubicación -->
+                    <StackPanel Grid.Row="3" Margin="0,0,0,10">
+                        <TextBlock Text="Ubicación *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ComboBox ItemsSource="{Binding Ubicaciones}"
+                                  SelectedItem="{Binding UbicacionSeleccionada}"
+                                  DisplayMemberPath="UbicacionMostrada"
+                                  IsEditable="False"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  Padding="5"/>
+                    </StackPanel>
+
+                    <!-- Partida -->
+                    <StackPanel Grid.Row="4" Margin="0,0,0,10">
+                        <TextBlock Text="Partida" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ComboBox ItemsSource="{Binding PartidasDisponibles}"
+                                  SelectedItem="{Binding PartidaSeleccionada}"
+                                  SelectedValuePath="Partida"
+                                  DisplayMemberPath="Partida"
+                                  IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  Padding="5"/>
+                    </StackPanel>
+
+                    <!-- Fecha Caducidad Origen -->
+                    <StackPanel Grid.Row="5" Margin="0,0,0,10">
+                        <TextBlock Text="Fecha Caducidad" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <ComboBox ItemsSource="{Binding FechasDisponibles}"
+                                  SelectedItem="{Binding FechaCaducidadOrigen}"
+                                  IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  Padding="5">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <Binding StringFormat="{}{0:dd/MM/yyyy}"/>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Cantidad y Stock Disponible -->
+                    <StackPanel Grid.Row="6" Margin="0,0,0,10">
+                        <TextBlock Text="Cantidad *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding Cantidad, UpdateSourceTrigger=LostFocus}"
+                                     Padding="5"
+                                     Margin="0,0,10,0"/>
+                            <StackPanel Grid.Column="1" Orientation="Vertical">
+                                <TextBlock Text="Stock Disponible:" FontSize="10" Foreground="Gray"/>
+                                <TextBlock Text="{Binding StockDisponible, StringFormat=N2}" 
+                                           FontWeight="Bold" 
+                                           FontSize="12"
+                                           Foreground="{StaticResource BrushPrincipal}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Mensaje Estado -->
+                    <TextBlock Grid.Row="7"
+                               Text="{Binding MensajeEstado}"
+                               Foreground="{StaticResource BrushPrincipal}"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding MensajeEstado, Converter={StaticResource StringToVisibilityConverter}}"/>
+                </Grid>
+        </GroupBox>
+
+        <!-- Artículo Destino -->
+        <GroupBox Grid.Row="1" 
+                  Grid.Column="2"
+                  Header="Artículo Destino" 
+                  Margin="0,0,0,15">
+                <Grid Margin="15,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Cambio de Código -->
+                    <StackPanel Grid.Row="0" 
+                                Margin="0,0,0,10"
+                                Visibility="{Binding EsCambioCodigo, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Código Artículo Destino *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding CodigoArticuloDestino, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,5,0"
+                                     Padding="5"/>
+                            <Button Grid.Column="1"
+                                    Content="🔍 Buscar"
+                                    Command="{Binding BuscarArticuloDestinoCommand}"
+                                    IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                    Style="{StaticResource EstiloBotonSecundario}"
+                                    Width="100"
+                                    Height="28"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" 
+                                Margin="0,0,0,10"
+                                Visibility="{Binding EsCambioCodigo, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Descripción Artículo Destino" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding DescripcionArticuloDestino, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 Background="LightGray"
+                                 Padding="5"/>
+                    </StackPanel>
+
+                    <!-- Ampliación -->
+                    <StackPanel Grid.Row="2" 
+                                Visibility="{Binding EsCambioFecha, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Nueva Fecha de Caducidad *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <DatePicker SelectedDate="{Binding FechaCaducidadDestino}"
+                                     IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                     Padding="5"
+                                     Margin="0,0,0,10"/>
+                        
+                        <TextBlock Text="Nueva Partida (Lote) *" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <TextBlock Text="(El lote original se mantiene intacto, solo puede agregar texto al inicio o al final)" 
+                                   FontSize="10" 
+                                   Foreground="Gray" 
+                                   Margin="0,0,0,3"
+                                   FontStyle="Italic"
+                                   TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding PartidaDestino, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                                 Padding="5"/>
+                    </StackPanel>
+                </Grid>
+        </GroupBox>
+
+        <!-- Botones -->
+        <Grid Grid.Row="2" 
+              Grid.ColumnSpan="3"
+              Margin="0,15,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Mensaje de carga -->
+                <TextBlock Grid.Column="0"
+                           Text="{Binding MensajeEstado}"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource BrushPrincipal}"
+                           Visibility="{Binding IsCargando, Converter={StaticResource BoolToVis}}"/>
+
+                <!-- Botón Guardar -->
+                <Button Grid.Column="1"
+                        Content="💾 Guardar Cambio"
+                        Command="{Binding GuardarCommand}"
+                        IsEnabled="{Binding IsCargando, Converter={StaticResource InverseBooleanConverter}}"
+                        Style="{StaticResource EstiloBotonPrincipal}"
+                        Width="180"
+                        Height="40"
+                        FontSize="14"
+                        FontWeight="Bold"
+                        Margin="0,0,10,0"/>
+        </Grid>
+    </Grid>
+</Page>
+

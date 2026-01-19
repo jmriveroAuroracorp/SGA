@@ -77,6 +77,12 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("creadorConteoNombre")]
         public string? CreadorConteoNombre { get; set; }
 
+        [JsonPropertyName("idCambioArticulo")]
+        public Guid? IdCambioArticulo { get; set; }
+
+        [JsonPropertyName("tipoCambioArticulo")]
+        public string? TipoCambioArticulo { get; set; } // "CAMBIO_CODIGO" o "AMPLIACION"
+
         [JsonPropertyName("origen")]
         public string Origen { get; set; } = "";
 
@@ -92,11 +98,13 @@ namespace SGA_Desktop.Models
         {
             "INVENTARIO" => "Inventario",
             "CONTEO" => "Conteo",
+            "CAMBIO_ARTICULO" => "Cambio de Artículo",
             _ => ""
         };
 
         public bool EsDeInventario => Origen == "INVENTARIO";
         public bool EsDeConteo => Origen == "CONTEO";
+        public bool EsDeCambioArticulo => Origen == "CAMBIO_ARTICULO";
 
         // Propiedad calculada para mostrar el creador del conteo
         public string CreadorConteoDisplay

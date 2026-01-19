@@ -260,7 +260,7 @@ namespace SGA_Api.Services
                         await ProcesarAjustesInventarioPorPaletAsync(dbContext, logger);
 
                         // 1.2. DETECCIÓN DE ERRORES EN AJUSTES DE INVENTARIO
-                        await DetectarYNotificarErroresInventariosAsync(dbContext, notificacionesUnificadas, logger);
+                        await DetectarYNotificarErroresInventariosAsync(dbContext, sageDbContext, notificacionesUnificadas, logger);
 
 						// 2. CONSOLIDACI�N DE PALETS - Solo para traspasos que afectan palets
 						// Obtener todos los paletId con l�neas temporales
@@ -1561,7 +1561,7 @@ namespace SGA_Api.Services
 
 							if (almacenesTraspaso.Any())
 							{
-								// Buscar supervisores (IdRol = 20) que tengan acceso a los almacenes del traspaso
+								// Buscar supervisores (IdRol = 2) que tengan acceso a los almacenes del traspaso
 								// Primero obtener IDs de operarios con acceso a los almacenes desde Sage
 								var operariosConAcceso = await sageDbContext.OperariosAlmacenes
 									.Where(oa => almacenesTraspaso.Contains(oa.CodigoAlmacen ?? ""))
@@ -1571,9 +1571,12 @@ namespace SGA_Api.Services
 
 								if (operariosConAcceso.Any())
 								{
-									// Luego buscar usuarios que sean supervisores (IdRol = 20) y tengan acceso
+									// Luego buscar usuarios que sean supervisores (IdRol = 2) y tengan acceso
+									// Excluir al usuario que inició el traspaso si es supervisor (para evitar duplicados)
 									var supervisoresIds = await dbContext.Usuarios
-										.Where(u => u.IdRol == 20 && operariosConAcceso.Contains(u.IdUsuario))
+										.Where(u => u.IdRol == 2 && 
+													operariosConAcceso.Contains(u.IdUsuario) &&
+													u.IdUsuario != usuarioId)
 										.Select(u => u.IdUsuario)
 										.ToListAsync();
 
@@ -1618,11 +1621,11 @@ namespace SGA_Api.Services
 								}
 							}
 
-							// Notificar a TODOS los ADMIN (sin filtro de almacén)
+							// Notificar a TODOS los ADMIN (sin filtro de almacén), excluyendo al usuario que inició el traspaso si es admin
 							try
 							{
 								var adminIds = await dbContext.Usuarios
-									.Where(u => u.IdRol == 30)
+									.Where(u => u.IdRol == 3 && u.IdUsuario != usuarioId)
 									.Select(u => u.IdUsuario)
 									.ToListAsync();
 
@@ -2111,7 +2114,8 @@ namespace SGA_Api.Services
 	/// Detecta ajustes de inventario con ERROR_ERP y notifica al usuario que creó el inventario
 	/// </summary>
 	private async Task DetectarYNotificarErroresInventariosAsync(
-		AuroraSgaDbContext dbContext, 
+		AuroraSgaDbContext dbContext,
+		SageDbContext sageDbContext,
 		INotificacionesUnificadasService notificacionesUnificadas, 
 		ILogger<TraspasoFinalizacionBackgroundService> logger)
 	{
@@ -2158,8 +2162,20 @@ namespace SGA_Api.Services
 					// Obtener información del inventario
 					var inventario = await dbContext.InventarioCabecera
 						.Where(i => i.IdInventario == inventarioId)
-						.Select(i => new { i.UsuarioCreacionId, i.CodigoInventario, i.CodigoAlmacen })
+						.Select(i => new { i.UsuarioCreacionId, i.CodigoInventario, i.CodigoAlmacen, i.CodigoEmpresa })
 						.FirstOrDefaultAsync();
+					
+					// Obtener todos los almacenes del inventario (puede ser multialmacén)
+					var almacenesInventario = await dbContext.InventarioAlmacenes
+						.Where(ia => ia.IdInventario == inventarioId)
+						.Select(ia => ia.CodigoAlmacen)
+						.ToListAsync();
+					
+					// Si no hay almacenes en InventarioAlmacenes, usar el de la cabecera
+					if (!almacenesInventario.Any() && !string.IsNullOrEmpty(inventario?.CodigoAlmacen))
+					{
+						almacenesInventario.Add(inventario.CodigoAlmacen);
+					}
 
 					if (inventario == null || inventario.UsuarioCreacionId <= 0)
 					{
@@ -2201,7 +2217,8 @@ namespace SGA_Api.Services
 					logger.LogInformation("📤 Intentando crear notificación para inventario {InventarioId}, usuario {UsuarioId}, mensaje length: {Length}",
 						inventarioId, inventario.UsuarioCreacionId, mensajeCompleto.Length);
 
-					// PASO 1: Guardar notificación en base de datos para persistencia (igual que traspasos)
+					// PASO 1: Notificar al creador (siempre)
+					var notificacionCreador = false;
 					try
 					{
 						var notificacion = await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
@@ -2214,12 +2231,128 @@ namespace SGA_Api.Services
 							"ERROR_ERP",
 							"error");
 
-						// SOLO marcar como notificados si la notificación se guardó correctamente en BD
 						if (notificacion != null)
 						{
-							logger.LogInformation("✅ Notificación creada correctamente: {IdNotificacion} para inventario {InventarioId}",
-								notificacion.IdNotificacion, inventarioId);
+							notificacionCreador = true;
+							logger.LogInformation("✅ Notificación creada para el creador del inventario {InventarioId}", inventarioId);
+						}
+					}
+					catch (Exception ex)
+					{
+						logger.LogError(ex, "Error al notificar al creador del inventario {InventarioId}", inventarioId);
+					}
 
+					// PASO 2: Notificar a supervisores con acceso a los almacenes del inventario
+					if (almacenesInventario.Any())
+					{
+						try
+						{
+							// Obtener IDs de operarios con acceso a los almacenes desde OperariosAlmacenes
+							var operariosConAcceso = new List<int>();
+							foreach (var codigoAlmacen in almacenesInventario.Distinct())
+							{
+								var operarios = await sageDbContext.OperariosAlmacenes
+									.Where(oa => oa.CodigoAlmacen == codigoAlmacen && 
+											     oa.CodigoEmpresa == inventario.CodigoEmpresa)
+									.Select(oa => oa.Operario)
+									.Distinct()
+									.ToListAsync();
+								
+								operariosConAcceso.AddRange(operarios);
+							}
+
+							operariosConAcceso = operariosConAcceso.Distinct().ToList();
+
+							if (operariosConAcceso.Any())
+							{
+								// Filtrar solo supervisores (IdRol = 2) y excluir al creador directamente en la consulta
+								var supervisoresIds = await dbContext.Usuarios
+									.Where(u => u.IdRol == 2 && 
+											   operariosConAcceso.Contains(u.IdUsuario) &&
+											   u.IdUsuario != inventario.UsuarioCreacionId)
+									.Select(u => u.IdUsuario)
+									.ToListAsync();
+
+								if (supervisoresIds.Any())
+								{
+									logger.LogInformation("Notificando a {Cantidad} supervisores con acceso a almacenes del inventario {InventarioId}", 
+										supervisoresIds.Count, inventarioId);
+
+									foreach (var supervisorId in supervisoresIds)
+									{
+										try
+										{
+											await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+												supervisorId,
+												"INVENTARIO",
+												"Error en Inventario",
+												mensajeCompleto,
+												inventarioId,
+												null,
+												"ERROR_ERP",
+												"error");
+										}
+										catch (Exception ex)
+										{
+											logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para inventario {InventarioId}", 
+												supervisorId, inventarioId);
+										}
+									}
+								}
+							}
+						}
+						catch (Exception ex)
+						{
+							logger.LogError(ex, "Error al notificar supervisores para inventario {InventarioId}", inventarioId);
+						}
+					}
+
+					// PASO 3: Notificar a todos los administradores (IdRol == 3)
+					try
+					{
+						// Excluir al creador directamente en la consulta (igual que en traspasos ERROR_ERP)
+						var administradoresIds = await dbContext.Usuarios
+							.Where(u => u.IdRol == 3 && u.IdUsuario != inventario.UsuarioCreacionId)
+							.Select(u => u.IdUsuario)
+							.ToListAsync();
+
+						if (administradoresIds.Any())
+						{
+							logger.LogInformation("Notificando a {Cantidad} administradores sobre error en inventario {InventarioId}", 
+								administradoresIds.Count, inventarioId);
+
+							foreach (var adminId in administradoresIds)
+							{
+								try
+								{
+									await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+										adminId,
+										"INVENTARIO",
+										"Error en Inventario",
+										mensajeCompleto,
+										inventarioId,
+										null,
+										"ERROR_ERP",
+										"error");
+								}
+								catch (Exception ex)
+								{
+									logger.LogError(ex, "Error al notificar administrador {AdminId} para inventario {InventarioId}", 
+										adminId, inventarioId);
+								}
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						logger.LogError(ex, "Error al notificar administradores para inventario {InventarioId}", inventarioId);
+					}
+
+					// SOLO marcar como notificados si la notificación al creador se guardó correctamente en BD
+					if (notificacionCreador)
+					{
+						try
+						{
 							// Ahora sí, marcar como notificados usando SQL directo para evitar problemas de tracking/concurrencia
 							var ajusteIds = ajustesError.Select(a => a.IdAjuste).ToList();
 							var idsString = string.Join(",", ajusteIds.Select(id => $"'{id}'"));
@@ -2229,19 +2362,17 @@ namespace SGA_Api.Services
 							logger.LogInformation("✅ Marcados {Cantidad} ajustes como notificados para inventario {InventarioId}", 
 								filasActualizadas, inventarioId);
 
-							logger.LogInformation("✅ Notificación de error enviada para inventario {InventarioId} al usuario {UsuarioId}",
-								inventarioId, inventario.UsuarioCreacionId);
+							logger.LogInformation("✅ Notificación de error enviada para inventario {InventarioId}",
+								inventarioId);
 						}
-						else
+						catch (Exception ex)
 						{
-							logger.LogWarning("⚠️ Notificación de inventario {InventarioId} retornó NULL - NO se guardó en BD, NO se marca como notificado. Se reintentará en el siguiente ciclo.", inventarioId);
+							logger.LogError(ex, "Error al marcar ajustes como notificados para inventario {InventarioId}", inventarioId);
 						}
 					}
-					catch (Exception ex)
+					else
 					{
-						logger.LogError(ex, "❌ EXCEPCIÓN al crear y enviar notificación unificada para inventario {InventarioId}: {MensajeError}", 
-							inventarioId, ex.Message);
-						// NO marcar como notificado si falla, para que se reintente
+						logger.LogWarning("⚠️ Notificación de inventario {InventarioId} al creador retornó NULL - NO se guardó en BD, NO se marca como notificado. Se reintentará en el siguiente ciclo.", inventarioId);
 					}
 				}
 				catch (Exception ex)

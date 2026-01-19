@@ -1550,6 +1550,216 @@ namespace SGA_Api.Services
                 throw;
             }
         }
+
+        public async Task<List<RendimientoArticuloDto>> ObtenerRendimientoArticulosAsync(FiltroRendimientosDto filtros)
+        {
+            try
+            {
+                _logger.LogInformation("Calculando rendimiento de artículos con filtros: {Filtros}", 
+                    System.Text.Json.JsonSerializer.Serialize(filtros));
+
+                // Consultar traspasos completados
+                var traspasosQuery = _context.Traspasos.AsQueryable();
+                
+                if (filtros.FechaDesde.HasValue)
+                {
+                    var fechaDesdeInicio = filtros.FechaDesde.Value.Date;
+                    traspasosQuery = traspasosQuery.Where(t => t.FechaInicio >= fechaDesdeInicio);
+                }
+                if (filtros.FechaHasta.HasValue)
+                {
+                    var fechaHastaFin = filtros.FechaHasta.Value.Date.AddDays(1).AddTicks(-1);
+                    traspasosQuery = traspasosQuery.Where(t => t.FechaInicio <= fechaHastaFin);
+                }
+                if (filtros.CodigoEmpresa.HasValue)
+                    traspasosQuery = traspasosQuery.Where(t => t.CodigoEmpresa == filtros.CodigoEmpresa.Value);
+                if (!string.IsNullOrEmpty(filtros.CodigoAlmacen))
+                {
+                    traspasosQuery = traspasosQuery.Where(t => 
+                        t.AlmacenOrigen == filtros.CodigoAlmacen || 
+                        t.AlmacenDestino == filtros.CodigoAlmacen);
+                }
+
+                var traspasosCompletados = await traspasosQuery
+                    .Where(t => t.FechaFinalizacion.HasValue && 
+                               !string.IsNullOrEmpty(t.CodigoArticulo) &&
+                               t.Cantidad.HasValue)
+                    .Select(t => new
+                    {
+                        t.CodigoArticulo,
+                        t.Cantidad,
+                        t.FechaInicio,
+                        FechaFinalizacion = t.FechaFinalizacion!.Value,
+                        t.AlmacenOrigen,
+                        t.AlmacenDestino,
+                        t.UbicacionOrigen,
+                        t.UbicacionDestino,
+                        t.UsuarioInicioId,
+                        t.UsuarioFinalizacionId
+                    })
+                    .ToListAsync();
+
+                if (!traspasosCompletados.Any())
+                {
+                    return new List<RendimientoArticuloDto>();
+                }
+
+                // Obtener códigos de artículo únicos para buscar CodigoFamilia
+                var codigosArticulos = traspasosCompletados
+                    .Select(t => t.CodigoArticulo!)
+                    .Distinct()
+                    .ToList();
+
+                // Obtener CodigoFamilia de los artículos desde Sage
+                var familiasArticulos = new Dictionary<string, string>();
+                if (codigosArticulos.Any() && filtros.CodigoEmpresa.HasValue)
+                {
+                    try
+                    {
+                        // Crear HashSet para búsqueda eficiente O(1)
+                        var codigosArticulosSet = codigosArticulos.ToHashSet();
+                        
+                        // Cargar todos los artículos de la empresa y filtrar en memoria para evitar Contains/OPENJSON
+                        var articulosEmpresa = await _sageContext.Articulos
+                            .Where(a => a.CodigoEmpresa == filtros.CodigoEmpresa.Value)
+                            .Select(a => new { a.CodigoArticulo, a.CodigoFamilia })
+                            .ToListAsync();
+                        
+                        // Filtrar en memoria usando HashSet (muy rápido)
+                        foreach (var art in articulosEmpresa)
+                        {
+                            if (codigosArticulosSet.Contains(art.CodigoArticulo))
+                            {
+                                familiasArticulos[art.CodigoArticulo] = art.CodigoFamilia ?? "SIN_FAMILIA";
+                            }
+                        }
+                        
+                        // Para artículos que no se encontraron en Sage, asignar SIN_FAMILIA
+                        foreach (var codigo in codigosArticulos)
+                        {
+                            if (!familiasArticulos.ContainsKey(codigo))
+                            {
+                                familiasArticulos[codigo] = "SIN_FAMILIA";
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudieron obtener códigos de familia desde Sage");
+                        // Asignar SIN_FAMILIA a todos los artículos si falla la consulta
+                        foreach (var codigo in codigosArticulos)
+                        {
+                            if (!familiasArticulos.ContainsKey(codigo))
+                            {
+                                familiasArticulos[codigo] = "SIN_FAMILIA";
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Si no hay empresa, asignar SIN_FAMILIA a todos
+                    foreach (var codigo in codigosArticulos)
+                    {
+                        familiasArticulos[codigo] = "SIN_FAMILIA";
+                    }
+                }
+
+                // Calcular total de traspasos para porcentajes
+                var totalTraspasos = traspasosCompletados.Count;
+
+                // Agrupar por CodigoFamilia
+                var rendimientos = traspasosCompletados
+                    .GroupBy(t => familiasArticulos.ContainsKey(t.CodigoArticulo!) 
+                        ? familiasArticulos[t.CodigoArticulo!] 
+                        : "SIN_FAMILIA")
+                    .Select(g =>
+                    {
+                        var codigoFamilia = g.Key;
+                        var traspasosGrupo = g.ToList();
+                        var unidadesTotales = traspasosGrupo.Sum(t => t.Cantidad!.Value);
+                        var cantidadTraspasos = traspasosGrupo.Count;
+                        var promedioUnidades = cantidadTraspasos > 0 ? unidadesTotales / cantidadTraspasos : 0;
+                        
+                        // Contar artículos únicos de esta familia
+                        var articulosUnicos = traspasosGrupo
+                            .Select(t => t.CodigoArticulo!)
+                            .Distinct()
+                            .Count();
+
+                        // Calcular tiempos
+                        var tiemposValidos = traspasosGrupo
+                            .Where(t => t.FechaFinalizacion > t.FechaInicio)
+                            .Select(t => (t.FechaFinalizacion - t.FechaInicio).TotalMinutes)
+                            .Where(t => t >= 0.01)
+                            .ToList();
+
+                        var tiempoPromedio = tiemposValidos.Any() ? (double?)tiemposValidos.Average() : null;
+                        var tiempoTotal = tiemposValidos.Sum();
+                        var eficiencia = tiempoPromedio.HasValue && tiempoPromedio.Value > 0 
+                            ? (double)((double)unidadesTotales / tiempoPromedio.Value) 
+                            : (double?)null;
+
+                        // Calcular distribución
+                        var almacenes = new HashSet<string>();
+                        var ubicaciones = new HashSet<string>();
+                        var operarios = new HashSet<int>();
+
+                        foreach (var t in traspasosGrupo)
+                        {
+                            if (!string.IsNullOrEmpty(t.AlmacenOrigen))
+                                almacenes.Add(t.AlmacenOrigen);
+                            if (!string.IsNullOrEmpty(t.AlmacenDestino))
+                                almacenes.Add(t.AlmacenDestino);
+                            if (!string.IsNullOrEmpty(t.UbicacionOrigen))
+                                ubicaciones.Add(t.UbicacionOrigen);
+                            if (!string.IsNullOrEmpty(t.UbicacionDestino))
+                                ubicaciones.Add(t.UbicacionDestino);
+                            operarios.Add(t.UsuarioInicioId);
+                            if (t.UsuarioFinalizacionId.HasValue)
+                                operarios.Add(t.UsuarioFinalizacionId.Value);
+                        }
+
+                        return new RendimientoArticuloDto
+                        {
+                            CodigoFamilia = codigoFamilia,
+                            CantidadArticulosUnicos = articulosUnicos,
+                            CantidadTraspasos = cantidadTraspasos,
+                            UnidadesTotalesMovidas = unidadesTotales,
+                            PromedioUnidadesPorTraspaso = promedioUnidades,
+                            TiempoPromedioMinutos = tiempoPromedio,
+                            TiempoTotalMinutos = tiempoTotal,
+                            EficienciaUnidadesPorMinuto = eficiencia,
+                            AlmacenesUnicos = almacenes.Count,
+                            UbicacionesUnicas = ubicaciones.Count,
+                            OperariosUnicos = operarios.Count,
+                            PorcentajeDelTotalTraspasos = totalTraspasos > 0 
+                                ? (double)(cantidadTraspasos / (double)totalTraspasos * 100) 
+                                : 0
+                        };
+                    })
+                    .OrderByDescending(r => r.CantidadTraspasos)
+                    .ToList();
+
+                // Asignar posiciones y recalcular porcentajes
+                var totalTraspasosReal = traspasosCompletados.Count;
+                var rendimientosList = rendimientos.ToList();
+                for (int i = 0; i < rendimientosList.Count; i++)
+                {
+                    rendimientosList[i].Posicion = i + 1;
+                    rendimientosList[i].PorcentajeDelTotalTraspasos = totalTraspasosReal > 0
+                        ? (double)(rendimientosList[i].CantidadTraspasos / (double)totalTraspasosReal * 100)
+                        : 0;
+                }
+
+                return rendimientosList;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calculando rendimiento de artículos");
+                throw;
+            }
+        }
     }
 }
 

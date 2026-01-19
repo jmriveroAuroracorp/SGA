@@ -59,10 +59,29 @@ namespace SGA_Desktop.ViewModels
         private DateTime? fechaPlan;
 
         [ObservableProperty]
+        private DateTime? fechaProximaRenovacion;
+
+        [ObservableProperty]
+        private int? frecuenciaDias;
+
+        [ObservableProperty]
         private string comentario = string.Empty;
+        
+        // Propiedad calculada para saber si es un conteo periódico
+        public bool EsPeriodico { get; private set; } = false;
+        
+        // Propiedad para saber si es un conteo periódico activo (solo se pueden editar campos limitados)
+        public bool EsPeriodicoActivo { get; private set; } = false;
+        
+        // Propiedades calculadas para habilitar/deshabilitar campos
+        public bool CamposEditables => !EsPeriodicoActivo; // Título, prioridad, almacén, etc.
+        public bool CamposPeriodicosEditables => true; // Operario, comentario, fecha renovación siempre editables
+        
+        // Fecha mínima para la próxima renovación (mañana)
+        public DateTime FechaMinimaRenovacion => DateTime.Now.Date.AddDays(1);
         #endregion
 
-        #region Propiedades de filtros de ubicación
+        #region Propiedades de filtros de ubicaci?n
         [ObservableProperty]
         private object? pasillo;
 
@@ -95,7 +114,7 @@ namespace SGA_Desktop.ViewModels
         public bool MostrarFiltrosSecuenciales => !UsarUbicacionDirecta;
         #endregion
 
-        #region Propiedades de filtros de artículo
+        #region Propiedades de filtros de art?culo
         [ObservableProperty]
         private string codigoArticulo = string.Empty;
 
@@ -122,7 +141,7 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private bool puedeActualizarOrden = false;
 
-        // Referencia al diálogo para cerrarlo
+        // Referencia al di?logo para cerrarlo
         public Window? DialogResult { get; set; }
         #endregion
 
@@ -211,46 +230,6 @@ namespace SGA_Desktop.ViewModels
                 IsCargando = true;
                 MensajeEstado = "Actualizando orden...";
 
-                var dto = new CrearOrdenConteoDto
-                {
-                    CodigoEmpresa = SessionManager.EmpresaSeleccionada ?? 1,
-                    Titulo = Titulo.Trim(),
-                    Visibilidad = VisibilidadSeleccionada?.Valor ?? "VISIBLE",
-                    Estado = "ASIGNADO",
-                    ModoGeneracion = "AUTOMATICO",
-                    Alcance = EsConteoUbicacion ? "ALMACEN" : "ARTICULO",
-                    FiltrosJson = GenerarFiltrosJson(),
-                    FechaPlan = FechaPlan,
-                    CreadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString() ?? "ADMIN",
-                    Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
-                    CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
-                    CodigoAlmacen = EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null,
-                    Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim()
-                };
-
-                // Debug: Log del DTO que se está enviando
-                Debug.WriteLine($"DTO para actualizar orden:");
-                Debug.WriteLine($"  - CodigoEmpresa: {dto.CodigoEmpresa}");
-                Debug.WriteLine($"  - Titulo: {dto.Titulo}");
-                Debug.WriteLine($"  - Visibilidad: {dto.Visibilidad}");
-                Debug.WriteLine($"  - Estado: {dto.Estado}");
-                Debug.WriteLine($"  - ModoGeneracion: {dto.ModoGeneracion}");
-                Debug.WriteLine($"  - Alcance: {dto.Alcance}");
-                Debug.WriteLine($"  - FiltrosJson: {dto.FiltrosJson}");
-                Debug.WriteLine($"  - FechaPlan: {dto.FechaPlan}");
-                Debug.WriteLine($"  - CreadoPorCodigo: {dto.CreadoPorCodigo}");
-                Debug.WriteLine($"  - Prioridad: {dto.Prioridad}");
-                Debug.WriteLine($"  - CodigoOperario: {dto.CodigoOperario}");
-                Debug.WriteLine($"  - CodigoAlmacen: {dto.CodigoAlmacen}");
-                Debug.WriteLine($"  - Comentario: {dto.Comentario}");
-                Debug.WriteLine($"  - CodigoArticulo: {dto.CodigoArticulo}");
-
-                // Si el alcance es ARTICULO, agregar el código del artículo
-                if (!EsConteoUbicacion && !string.IsNullOrWhiteSpace(CodigoArticulo))
-                {
-                    dto.CodigoArticulo = CodigoArticulo.Trim();
-                }
-
                 // SEGUNDO CHECK: Verificar que la orden aún se puede editar antes de actualizar
                 var ordenActual = await _conteosService.ObtenerOrdenAsync(_ordenGuid);
                 if (ordenActual == null)
@@ -274,19 +253,120 @@ namespace SGA_Desktop.ViewModels
                     editWindow?.Close();
                     return;
                 }
+                
+                // Validar fecha de próxima renovación si es periódico
+                if (EsPeriodico && !FechaProximaRenovacion.HasValue)
+                {
+                    var errorDialog = new WarningDialog(
+                        "Fecha requerida",
+                        "Debe especificar una fecha de próxima renovación para activar el conteo periódico.");
+                    errorDialog.ShowDialog();
+                    return;
+                }
+                
+                var fechaMinima = DateTime.Now.Date.AddDays(1); // Mañana como mínimo
+                if (EsPeriodico && FechaProximaRenovacion.HasValue && FechaProximaRenovacion.Value.Date < fechaMinima)
+                {
+                    var errorDialog = new WarningDialog(
+                        "Fecha inválida",
+                        "La fecha de próxima renovación debe ser del día siguiente en adelante. No se puede seleccionar hoy ni fechas pasadas.");
+                    errorDialog.ShowDialog();
+                    return;
+                }
+
+                CrearOrdenConteoDto dto;
+                
+                // Si es un conteo periódico activo, solo actualizar campos permitidos
+                if (EsPeriodicoActivo)
+                {
+                    // Solo actualizar: Operario, Comentario, FechaProximaRenovacion, FrecuenciaDias, Prioridad
+                    // Usar valores actuales de la orden para el resto
+                    dto = new CrearOrdenConteoDto
+                    {
+                        CodigoEmpresa = ordenActual.CodigoEmpresa,
+                        Titulo = ordenActual.Titulo, // Mantener original
+                        Visibilidad = ordenActual.Visibilidad, // Mantener original
+                        Estado = ordenActual.Estado, // Mantener original
+                        ModoGeneracion = ordenActual.ModoGeneracion, // Mantener original
+                        Alcance = ordenActual.Alcance, // Mantener original
+                        FiltrosJson = ordenActual.FiltrosJson, // Mantener original
+                        FechaPlan = ordenActual.FechaPlan, // Mantener original
+                        CreadoPorCodigo = ordenActual.CreadoPorCodigo, // Mantener original
+                        Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? ordenActual.Prioridad), // EDITABLE
+                        CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(), // EDITABLE
+                        CodigoAlmacen = ordenActual.CodigoAlmacen, // Mantener original
+                        Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim(), // EDITABLE
+                        EsPeriodico = true,
+                        FechaProximaRenovacion = FechaProximaRenovacion, // EDITABLE
+                        FrecuenciaDias = FrecuenciaDias // EDITABLE
+                    };
+                    
+                    // Mantener artículo si existe
+                    if (!string.IsNullOrEmpty(ordenActual.CodigoArticulo))
+                    {
+                        dto.CodigoArticulo = ordenActual.CodigoArticulo;
+                    }
+                    
+                    Debug.WriteLine($"Actualizando conteo periódico ACTIVO - Solo campos permitidos:");
+                    Debug.WriteLine($"  - Prioridad: {dto.Prioridad}");
+                    Debug.WriteLine($"  - CodigoOperario: {dto.CodigoOperario}");
+                    Debug.WriteLine($"  - Comentario: {dto.Comentario}");
+                    Debug.WriteLine($"  - FechaProximaRenovacion: {dto.FechaProximaRenovacion}");
+                    Debug.WriteLine($"  - FrecuenciaDias: {dto.FrecuenciaDias}");
+                }
+                else
+                {
+                    // Edición normal: todos los campos son editables
+                    dto = new CrearOrdenConteoDto
+                    {
+                        CodigoEmpresa = SessionManager.EmpresaSeleccionada ?? 1,
+                        Titulo = Titulo.Trim(),
+                        Visibilidad = VisibilidadSeleccionada?.Valor ?? "VISIBLE",
+                        Estado = "ASIGNADO",
+                        ModoGeneracion = "AUTOMATICO",
+                        Alcance = EsConteoUbicacion ? "ALMACEN" : "ARTICULO",
+                        FiltrosJson = GenerarFiltrosJson(),
+                        FechaPlan = FechaPlan,
+                        CreadoPorCodigo = SessionManager.UsuarioActual?.operario.ToString() ?? "ADMIN",
+                        Prioridad = (byte)(PrioridadSeleccionada?.Valor ?? 3),
+                        CodigoOperario = OperarioSeleccionado?.Operario == 0 ? null : OperarioSeleccionado?.Operario.ToString(),
+                        CodigoAlmacen = EsConteoUbicacion ? AlmacenSeleccionado?.CodigoAlmacen : null,
+                        Comentario = string.IsNullOrWhiteSpace(Comentario) ? null : Comentario.Trim(),
+                        EsPeriodico = EsPeriodico,
+                        FechaProximaRenovacion = EsPeriodico ? FechaProximaRenovacion : null,
+                        FrecuenciaDias = EsPeriodico ? FrecuenciaDias : null
+                    };
+
+                    // Si el alcance es ARTICULO, agregar el código del artículo
+                    if (!EsConteoUbicacion && !string.IsNullOrWhiteSpace(CodigoArticulo))
+                    {
+                        dto.CodigoArticulo = CodigoArticulo.Trim();
+                    }
+                    
+                    Debug.WriteLine($"Actualizando orden normal - Todos los campos:");
+                    Debug.WriteLine($"  - Titulo: {dto.Titulo}");
+                    Debug.WriteLine($"  - Prioridad: {dto.Prioridad}");
+                    Debug.WriteLine($"  - CodigoOperario: {dto.CodigoOperario}");
+                    Debug.WriteLine($"  - Comentario: {dto.Comentario}");
+                    Debug.WriteLine($"  - FechaProximaRenovacion: {dto.FechaProximaRenovacion}");
+                }
 
                 // Actualizar la orden
                 var ordenActualizada = await _conteosService.ActualizarOrdenAsync(_ordenGuid, dto);
 
-                // Mostrar mensaje de éxito
+                // Mostrar mensaje de ?xito
                 var successDialog = new WarningDialog(
                     "Orden Actualizada", 
                     $"La orden '{ordenActualizada.Titulo}' ha sido actualizada exitosamente.");
                 successDialog.ShowDialog();
 
-                // Cerrar el diálogo - buscar la ventana padre y cerrarla
+                // Cerrar el diálogo con resultado true - buscar la ventana padre y cerrarla
                 var window = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.DataContext == this);
-                window?.Close();
+                if (window != null)
+                {
+                    window.DialogResult = true;
+                    window.Close();
+                }
             }
             catch (Exception ex)
             {
@@ -312,7 +392,7 @@ namespace SGA_Desktop.ViewModels
         }
         #endregion
 
-        #region Métodos de inicialización
+        #region M?todos de inicializaci?n
         private void InicializarPrioridades()
         {
             PrioridadesDisponibles.Clear();
@@ -363,7 +443,7 @@ namespace SGA_Desktop.ViewModels
                 var centro = SessionManager.UsuarioActual?.codigoCentro ?? "0";
                 var desdeLogin = SessionManager.UsuarioActual?.codigosAlmacen ?? new List<string>();
 
-                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin);
+                var resultado = await _stockService.ObtenerAlmacenesAutorizadosAsync(empresa, centro, desdeLogin, SessionManager.Operario);
 
                 AlmacenesDisponibles.Clear();
 
@@ -401,14 +481,14 @@ namespace SGA_Desktop.ViewModels
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error cargando operarios: {ex.Message}");
-                // En caso de error, dejar la lista vacía
+                // En caso de error, dejar la lista vac?a
                 OperariosDisponibles.Clear();
                 OperariosView?.Refresh();
             }
         }
         #endregion
 
-        #region Métodos públicos para cargar datos de la orden
+        #region M?todos p?blicos para cargar datos de la orden
         public async Task CargarOrdenAsync(Guid ordenGuid)
         {
             try
@@ -428,8 +508,43 @@ namespace SGA_Desktop.ViewModels
                 // Cargar datos básicos
                 Titulo = orden.Titulo ?? string.Empty;
                 EsConteoUbicacion = orden.Alcance != "ARTICULO";
-                FechaPlan = orden.FechaPlan;
                 Comentario = orden.Comentario ?? string.Empty;
+                
+                // Detectar si es periódico y si está activo
+                EsPeriodico = orden.EsPeriodico;
+                EsPeriodicoActivo = orden.EsPeriodico && orden.Activo;
+                
+                // Para conteos periódicos activos, mostrar la fecha de hoy
+                // (se renuevan automáticamente según FechaProximaRenovacion, pero es útil mostrar fecha actual)
+                // Para otros casos, cargar la fecha planificada normalmente
+                if (EsPeriodicoActivo)
+                {
+                    FechaPlan = DateTime.Now.Date; // Mostrar fecha de hoy para conteos periódicos activos
+                }
+                else
+                {
+                    FechaPlan = orden.FechaPlan;
+                }
+                
+                OnPropertyChanged(nameof(EsPeriodico));
+                OnPropertyChanged(nameof(EsPeriodicoActivo));
+                OnPropertyChanged(nameof(CamposEditables));
+                OnPropertyChanged(nameof(CamposPeriodicosEditables));
+                
+                // Cargar fecha de próxima renovación
+                if (orden.EsPeriodico && orden.Activo)
+                {
+                    // Si está activo, cargar la fecha actual o usar la fecha original si existe
+                    FechaProximaRenovacion = orden.FechaProximaRenovacion;
+                }
+                else if (orden.EsPeriodico && !orden.Activo)
+                {
+                    // Si está desactivado, usar el día actual como valor por defecto
+                    FechaProximaRenovacion = DateTime.Now.Date;
+                }
+                
+                // Cargar frecuencia de días
+                FrecuenciaDias = orden.FrecuenciaDias;
 
                 // Cargar prioridad
                 PrioridadSeleccionada = PrioridadesDisponibles.FirstOrDefault(p => p.Valor == orden.Prioridad);
@@ -441,34 +556,34 @@ namespace SGA_Desktop.ViewModels
                 await CargarAlmacenesAsync();
                 await CargarOperariosAsync();
 
-                // AHORA SÍ cargar almacén (después de que se hayan cargado los almacenes)
+                // AHORA S? cargar almac?n (despu?s de que se hayan cargado los almacenes)
                 if (!string.IsNullOrEmpty(orden.CodigoAlmacen))
                 {
-                    Debug.WriteLine($"Buscando almacén con código: '{orden.CodigoAlmacen}'");
+                    Debug.WriteLine($"Buscando almac?n con c?digo: '{orden.CodigoAlmacen}'");
                     Debug.WriteLine($"Almacenes disponibles: {AlmacenesDisponibles.Count}");
                     foreach (var almacen in AlmacenesDisponibles)
                     {
                         Debug.WriteLine($"  - {almacen.CodigoAlmacen}: {almacen.NombreAlmacen}");
                     }
                     
-                    // Intentar diferentes formas de comparación
+                    // Intentar diferentes formas de comparaci?n
                     AlmacenSeleccionado = AlmacenesDisponibles.FirstOrDefault(a => 
                         a.CodigoAlmacen == orden.CodigoAlmacen ||
                         a.CodigoAlmacen == orden.CodigoAlmacen?.Trim());
-                    Debug.WriteLine($"Almacén seleccionado: {(AlmacenSeleccionado != null ? $"{AlmacenSeleccionado.CodigoAlmacen} - {AlmacenSeleccionado.NombreAlmacen}" : "NO ENCONTRADO")}");
+                    Debug.WriteLine($"Almac?n seleccionado: {(AlmacenSeleccionado != null ? $"{AlmacenSeleccionado.CodigoAlmacen} - {AlmacenSeleccionado.NombreAlmacen}" : "NO ENCONTRADO")}");
                 }
 
-                // AHORA SÍ cargar operario (después de que se hayan cargado los operarios)
+                // AHORA S? cargar operario (despu?s de que se hayan cargado los operarios)
                 if (!string.IsNullOrEmpty(orden.CodigoOperario))
                 {
-                    Debug.WriteLine($"Buscando operario con código: '{orden.CodigoOperario}'");
+                    Debug.WriteLine($"Buscando operario con c?digo: '{orden.CodigoOperario}'");
                     Debug.WriteLine($"Operarios disponibles: {OperariosDisponibles.Count}");
                     foreach (var operario in OperariosDisponibles)
                     {
                         Debug.WriteLine($"  - {operario.Operario}: {operario.NombreOperario}");
                     }
                     
-                    // Intentar diferentes formas de comparación
+                    // Intentar diferentes formas de comparaci?n
                     OperarioSeleccionado = OperariosDisponibles.FirstOrDefault(o => 
                         o.Operario.ToString() == orden.CodigoOperario ||
                         o.Operario.ToString() == orden.CodigoOperario?.Trim() ||
@@ -479,32 +594,32 @@ namespace SGA_Desktop.ViewModels
                 // Cargar filtros
                 await CargarFiltrosDeOrdenAsync(orden);
 
-                // Cargar rangos si es conteo por ubicación
+                // Cargar rangos si es conteo por ubicaci?n
                 if (EsConteoUbicacion && AlmacenSeleccionado != null)
                 {
                     await CargarRangosDisponiblesAsync();
                     await CargarUbicacionesDisponiblesAsync();
                 }
 
-                // Cargar artículo si es conteo por artículo
+                // Cargar art?culo si es conteo por art?culo
                 if (!EsConteoUbicacion && !string.IsNullOrEmpty(orden.CodigoArticulo))
                 {
                     CodigoArticulo = orden.CodigoArticulo;
                     await BuscarArticuloAsync(orden.CodigoArticulo);
                     
-                    // Asegurar que se seleccione el artículo correcto si hay múltiples resultados
+                    // Asegurar que se seleccione el art?culo correcto si hay m?ltiples resultados
                     if (ArticulosEncontrados.Count > 1)
                     {
                         ArticuloSeleccionado = ArticulosEncontrados.FirstOrDefault(a => 
                             a.CodigoArticulo == orden.CodigoArticulo) ?? ArticulosEncontrados.First();
                     }
-                    // Si no se encontró pero hay código, crear el DTO manualmente
+                    // Si no se encontr? pero hay c?digo, crear el DTO manualmente
                     else if (ArticulosEncontrados.Count == 0 && !string.IsNullOrEmpty(orden.CodigoArticulo))
                     {
                         ArticuloSeleccionado = new ArticuloResumenDto
                         {
                             CodigoArticulo = orden.CodigoArticulo,
-                            DescripcionArticulo = orden.DescripcionArticulo ?? "Artículo sin stock virtual registrado"
+                            DescripcionArticulo = orden.DescripcionArticulo ?? "Art?culo sin stock virtual registrado"
                         };
                         CodigoArticulo = orden.CodigoArticulo;
                     }
@@ -532,7 +647,7 @@ namespace SGA_Desktop.ViewModels
                 var filtros = JsonSerializer.Deserialize<Dictionary<string, object>>(orden.FiltrosJson);
                 if (filtros == null) return;
 
-                // Cargar filtros de ubicación
+                // Cargar filtros de ubicaci?n
                 if (filtros.ContainsKey("ubicacion"))
                 {
                     var ubicacion = filtros["ubicacion"]?.ToString();
@@ -567,7 +682,7 @@ namespace SGA_Desktop.ViewModels
                     }
                 }
 
-                // Actualizar el estado de habilitación después de cargar los filtros
+                // Actualizar el estado de habilitaci?n despu?s de cargar los filtros
                 ActualizarEstadoFiltros();
             }
             catch (Exception ex)
@@ -577,7 +692,7 @@ namespace SGA_Desktop.ViewModels
         }
         #endregion
 
-        #region Métodos de carga de rangos y ubicaciones
+        #region M?todos de carga de rangos y ubicaciones
         private async Task CargarRangosDisponiblesAsync()
         {
             try
@@ -595,9 +710,9 @@ namespace SGA_Desktop.ViewModels
                 AlturasDisponibles.Clear();
                 PosicionesDisponibles.Clear();
 
-                // Agregar opción "Todos" al principio de cada lista
+                // Agregar opci?n "Todos" al principio de cada lista
                 PasillosDisponibles.Add(new OpcionTodos { Texto = "Todos los pasillos" });
-                EstanteriasDisponibles.Add(new OpcionTodos { Texto = "Todas las estanterías" });
+                EstanteriasDisponibles.Add(new OpcionTodos { Texto = "Todas las estanter?as" });
                 AlturasDisponibles.Add(new OpcionTodos { Texto = "Todas las alturas" });
                 PosicionesDisponibles.Add(new OpcionTodos { Texto = "Todas las posiciones" });
 
@@ -613,12 +728,12 @@ namespace SGA_Desktop.ViewModels
                 foreach (var posicion in rangos.Posiciones ?? new List<int>())
                     PosicionesDisponibles.Add(posicion);
 
-                // Actualizar el estado de habilitación después de cargar los rangos
+                // Actualizar el estado de habilitaci?n despu?s de cargar los rangos
                 ActualizarEstadoFiltros();
 
                 // NO establecer valores por defecto - los filtros son opcionales
                 // El usuario puede seleccionar solo los filtros que necesite
-                // Si no selecciona nada, se hace conteo de todo el almacén
+                // Si no selecciona nada, se hace conteo de todo el almac?n
             }
             catch (Exception ex)
             {
@@ -639,10 +754,10 @@ namespace SGA_Desktop.ViewModels
 
                 UbicacionesDisponibles.Clear();
 
-                // Agregar opción "SIN UBICAR" al principio
+                // Agregar opci?n "SIN UBICAR" al principio
                 UbicacionesDisponibles.Add("SIN UBICAR");
 
-                // Agregar todas las ubicaciones ordenadas (filtrar vacías)
+                // Agregar todas las ubicaciones ordenadas (filtrar vac?as)
                 foreach (var ubicacion in ubicaciones
                     .Where(u => !string.IsNullOrWhiteSpace(u.Ubicacion))
                     .OrderBy(u => u.Ubicacion))
@@ -660,7 +775,7 @@ namespace SGA_Desktop.ViewModels
         }
         #endregion
 
-        #region Métodos de búsqueda de artículos
+        #region M?todos de b?squeda de art?culos
         private async Task BuscarArticuloAsync(string codigoArticulo)
         {
             try
@@ -679,12 +794,12 @@ namespace SGA_Desktop.ViewModels
                     ArticulosEncontrados.Add(articulo);
                 }
 
-                // Si hay exactamente un resultado, seleccionarlo automáticamente
+                // Si hay exactamente un resultado, seleccionarlo autom?ticamente
                 if (ArticulosEncontrados.Count == 1)
                 {
                     ArticuloSeleccionado = ArticulosEncontrados.First();
                     CodigoArticulo = ArticuloSeleccionado.CodigoArticulo;
-                    ArticuloTieneStockVirtual = true; // Tiene stock porque se encontró en la búsqueda
+                    ArticuloTieneStockVirtual = true; // Tiene stock porque se encontr? en la b?squeda
                 }
                 else if (ArticulosEncontrados.Count > 0)
                 {
@@ -692,13 +807,13 @@ namespace SGA_Desktop.ViewModels
                 }
                 else
                 {
-                    // Si no se encontraron resultados pero se proporcionó un código, permitir crear sin stock virtual
+                    // Si no se encontraron resultados pero se proporcion? un c?digo, permitir crear sin stock virtual
                     if (!string.IsNullOrWhiteSpace(codigoArticulo))
                     {
                         ArticuloSeleccionado = new ArticuloResumenDto
                         {
                             CodigoArticulo = codigoArticulo,
-                            DescripcionArticulo = "Artículo sin stock virtual registrado"
+                            DescripcionArticulo = "Art?culo sin stock virtual registrado"
                         };
                         CodigoArticulo = codigoArticulo;
                         ArticuloTieneStockVirtual = false; // NO tiene stock virtual
@@ -707,12 +822,12 @@ namespace SGA_Desktop.ViewModels
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error buscando artículo: {ex.Message}");
+                Debug.WriteLine($"Error buscando art?culo: {ex.Message}");
             }
         }
         #endregion
 
-        #region Métodos de validación
+        #region M?todos de validaci?n
         private void ActualizarEstadoValidacion()
         {
             bool esValido = !string.IsNullOrWhiteSpace(Titulo) &&
@@ -732,12 +847,12 @@ namespace SGA_Desktop.ViewModels
         }
         #endregion
 
-        #region Generación de filtros JSON
+        #region Generaci?n de filtros JSON
         private string GenerarFiltrosJson()
         {
             var filtros = new Dictionary<string, object>();
 
-            // Solo agregar almacén si es conteo por ubicación
+            // Solo agregar almac?n si es conteo por ubicaci?n
             if (EsConteoUbicacion && AlmacenSeleccionado != null)
             {
                 filtros["almacen"] = AlmacenSeleccionado.CodigoAlmacen;
@@ -745,24 +860,24 @@ namespace SGA_Desktop.ViewModels
 
             if (EsConteoUbicacion)
             {
-                // FLUJO 1: Conteo por ubicación
+                // FLUJO 1: Conteo por ubicaci?n
                 if (UsarUbicacionDirecta)
                 {
                     if (UbicacionDirecta == "SIN UBICAR")
                     {
-                        // Para "SIN UBICAR", enviar ubicación vacía explícitamente
+                        // Para "SIN UBICAR", enviar ubicaci?n vac?a expl?citamente
                         filtros["ubicacion"] = "";
                     }
                     else if (!string.IsNullOrWhiteSpace(UbicacionDirecta))
                     {
-                        // Modo ubicación directa: usar solo la ubicación específica
+                        // Modo ubicaci?n directa: usar solo la ubicaci?n espec?fica
                         filtros["ubicacion"] = UbicacionDirecta.Trim();
                     }
                 }
                 else
                 {
-                    // Filtros por componentes de ubicación (opcionales)
-                    // Si no se especifica nada, se hace conteo de todo el almacén
+                    // Filtros por componentes de ubicaci?n (opcionales)
+                    // Si no se especifica nada, se hace conteo de todo el almac?n
                     if (Pasillo is int pasilloValor)
                         filtros["pasillo"] = pasilloValor.ToString();
                     if (Estanteria is int estanteriaValor)
@@ -775,7 +890,7 @@ namespace SGA_Desktop.ViewModels
             }
             else
             {
-                // FLUJO 2: Conteo por artículo
+                // FLUJO 2: Conteo por art?culo
                 if (!string.IsNullOrWhiteSpace(CodigoArticulo))
                     filtros["articulo"] = CodigoArticulo.Trim();
             }
@@ -793,18 +908,18 @@ namespace SGA_Desktop.ViewModels
             try
             {
                 IsCargando = true;
-                MensajeEstado = "Buscando artículo...";
+                MensajeEstado = "Buscando art?culo...";
 
                 await BuscarArticuloAsync(ArticuloBuscado);
                 ActualizarEstadoValidacion();
 
                 MensajeEstado = ArticulosEncontrados.Count > 0 
-                    ? $"Encontrados {ArticulosEncontrados.Count} artículos" 
-                    : "No se encontraron artículos";
+                    ? $"Encontrados {ArticulosEncontrados.Count} art?culos" 
+                    : "No se encontraron art?culos";
             }
             catch (Exception ex)
             {
-                MensajeEstado = $"Error al buscar artículo: {ex.Message}";
+                MensajeEstado = $"Error al buscar art?culo: {ex.Message}";
             }
             finally
             {
@@ -836,7 +951,7 @@ namespace SGA_Desktop.ViewModels
             ActualizarEstadoValidacion();
             if (value != null && EsConteoUbicacion)
             {
-                // Limpiar filtros cuando cambia el almacén
+                // Limpiar filtros cuando cambia el almac?n
                 Pasillo = null;
                 Estanteria = null;
                 Altura = null;
@@ -855,25 +970,25 @@ namespace SGA_Desktop.ViewModels
             // Limpiar filtros cuando cambia el tipo de conteo
             if (value)
             {
-                // Cambió a conteo por ubicación, limpiar campos de artículo
+                // Cambi? a conteo por ubicaci?n, limpiar campos de art?culo
                 CodigoArticulo = string.Empty;
                 ArticuloBuscado = string.Empty;
                 ArticulosEncontrados.Clear();
                 ArticuloSeleccionado = null;
-                // Restablecer estado de habilitación
+                // Restablecer estado de habilitaci?n
                 EstanteriaHabilitada = true;
                 AlturaHabilitada = true;
                 PosicionHabilitada = true;
             }
             else
             {
-                // Cambió a conteo por artículo, limpiar campos de ubicación
+                // Cambi? a conteo por art?culo, limpiar campos de ubicaci?n
                 Pasillo = null;
                 Estanteria = null;
                 Altura = null;
                 Posicion = null;
                 UbicacionDirecta = "SIN UBICAR";
-                // Restablecer estado de habilitación
+                // Restablecer estado de habilitaci?n
                 EstanteriaHabilitada = true;
                 AlturaHabilitada = true;
                 PosicionHabilitada = true;
@@ -888,8 +1003,8 @@ namespace SGA_Desktop.ViewModels
             {
                 CodigoArticulo = value.CodigoArticulo;
                 // Si se selecciona de la lista de encontrados, tiene stock virtual
-                // Si la descripción indica que no tiene stock, mantenerlo en false
-                if (value.DescripcionArticulo != "Artículo sin stock virtual registrado")
+                // Si la descripci?n indica que no tiene stock, mantenerlo en false
+                if (value.DescripcionArticulo != "Art?culo sin stock virtual registrado")
                 {
                     ArticuloTieneStockVirtual = true;
                 }
@@ -913,7 +1028,7 @@ namespace SGA_Desktop.ViewModels
         {
             if (value)
             {
-                // Si se activa ubicación directa, limpiar filtros secuenciales
+                // Si se activa ubicaci?n directa, limpiar filtros secuenciales
                 Pasillo = null;
                 Estanteria = null;
                 Altura = null;
@@ -921,9 +1036,9 @@ namespace SGA_Desktop.ViewModels
             }
             else
             {
-                // Si se desactiva ubicación directa, establecer "SIN UBICAR" por defecto
+                // Si se desactiva ubicaci?n directa, establecer "SIN UBICAR" por defecto
                 UbicacionDirecta = "SIN UBICAR";
-                // Restablecer estado de habilitación
+                // Restablecer estado de habilitaci?n
                 EstanteriaHabilitada = true;
                 AlturaHabilitada = true;
                 PosicionHabilitada = true;
@@ -935,7 +1050,7 @@ namespace SGA_Desktop.ViewModels
 
         partial void OnPasilloChanged(object? value)
         {
-            // Si se selecciona "Todos los pasillos", bloquear y limpiar los filtros más específicos
+            // Si se selecciona "Todos los pasillos", bloquear y limpiar los filtros m?s espec?ficos
             if (value is OpcionTodos)
             {
                 EstanteriaHabilitada = false;
@@ -947,16 +1062,16 @@ namespace SGA_Desktop.ViewModels
             }
             else
             {
-                // Si se selecciona un pasillo específico, habilitar estantería
+                // Si se selecciona un pasillo espec?fico, habilitar estanter?a
                 EstanteriaHabilitada = true;
-                // Re-evaluar el estado de altura y posición basado en estantería
+                // Re-evaluar el estado de altura y posici?n basado en estanter?a
                 ActualizarEstadoFiltros();
             }
         }
 
         partial void OnEstanteriaChanged(object? value)
         {
-            // Si se selecciona "Todas las estanterías", bloquear y limpiar los filtros más específicos
+            // Si se selecciona "Todas las estanter?as", bloquear y limpiar los filtros m?s espec?ficos
             if (value is OpcionTodos)
             {
                 AlturaHabilitada = false;
@@ -966,16 +1081,16 @@ namespace SGA_Desktop.ViewModels
             }
             else
             {
-                // Si se selecciona una estantería específica, habilitar altura
+                // Si se selecciona una estanter?a espec?fica, habilitar altura
                 AlturaHabilitada = true;
-                // Re-evaluar el estado de posición basado en altura
+                // Re-evaluar el estado de posici?n basado en altura
                 ActualizarEstadoFiltros();
             }
         }
 
         partial void OnAlturaChanged(object? value)
         {
-            // Si se selecciona "Todas las alturas", bloquear y limpiar el filtro más específico
+            // Si se selecciona "Todas las alturas", bloquear y limpiar el filtro m?s espec?fico
             if (value is OpcionTodos)
             {
                 PosicionHabilitada = false;
@@ -983,14 +1098,14 @@ namespace SGA_Desktop.ViewModels
             }
             else
             {
-                // Si se selecciona una altura específica, habilitar posición
+                // Si se selecciona una altura espec?fica, habilitar posici?n
                 PosicionHabilitada = true;
             }
         }
 
         private void ActualizarEstadoFiltros()
         {
-            // Re-evaluar el estado de altura basado en estantería
+            // Re-evaluar el estado de altura basado en estanter?a
             if (Estanteria is OpcionTodos)
             {
                 AlturaHabilitada = false;
@@ -999,7 +1114,7 @@ namespace SGA_Desktop.ViewModels
             else if (Estanteria != null)
             {
                 AlturaHabilitada = true;
-                // Re-evaluar posición basado en altura
+                // Re-evaluar posici?n basado en altura
                 if (Altura is OpcionTodos)
                 {
                     PosicionHabilitada = false;
@@ -1012,7 +1127,7 @@ namespace SGA_Desktop.ViewModels
         }
         #endregion
 
-        #region Métodos de filtrado de operarios
+        #region M?todos de filtrado de operarios
         partial void OnFiltroOperariosChanged(string value)
         {
             OperariosView?.Refresh(); // Actualiza el filtrado al teclear
@@ -1023,7 +1138,7 @@ namespace SGA_Desktop.ViewModels
             if (string.IsNullOrWhiteSpace(FiltroOperarios)) return true;
             if (obj is not OperariosAccesoDto operario) return false;
 
-            // Búsqueda acento-insensible, sin mayúsc/minúsc, en cualquier parte del texto
+            // B?squeda acento-insensible, sin may?sc/min?sc, en cualquier parte del texto
             var compare = CultureInfo.CurrentCulture.CompareInfo;
             var options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
 
