@@ -413,6 +413,28 @@ namespace SGA_Api.Controllers.Stock
 				var totalPaletizado = stockPaletizado.Select(p => (decimal)p.CantidadEnPalet).Sum();
 				var stockSuelto = (decimal)item.Disponible - totalPaletizado;
 
+				// 🔷 NUEVO: Verificar bloqueo de calidad específico para esta ubicación
+				var queryBloqueo = _auroraSgaContext.BloqueosCalidad
+					.Where(b => b.CodigoEmpresa == codigoEmpresa &&
+							   b.CodigoArticulo == item.CodigoArticulo &&
+							   b.LotePartida == item.Partida &&
+							   b.CodigoAlmacen == item.CodigoAlmacen &&
+							   b.Bloqueado == true);
+
+				// Filtrar por ubicación específica
+				if (!string.IsNullOrWhiteSpace(item.Ubicacion))
+				{
+					queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == item.Ubicacion);
+				}
+				else
+				{
+					queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+				}
+
+				var bloqueoEspecifico = await queryBloqueo
+					.OrderByDescending(b => b.FechaBloqueo)
+					.FirstOrDefaultAsync();
+
 				// 🔷 NUEVO: Obtener fecha del último traspaso para stock suelto
 				DateTime? fechaUltimoTraspasoSuelto = null;
 				if (stockSuelto > 0)
@@ -453,7 +475,12 @@ namespace SGA_Api.Controllers.Stock
 						CodigoPalet = (string?)null,
 						EstadoPalet = (string?)null,
 						// 🔷 NUEVO: Fecha del último traspaso
-						FechaUltimoTraspaso = fechaUltimoTraspasoSuelto
+						FechaUltimoTraspaso = fechaUltimoTraspasoSuelto,
+						// 🔷 NUEVO: Información de bloqueo por calidad
+						IsBloqueadoCalidad = bloqueoEspecifico != null,
+						MotivoBloqueoCalidad = bloqueoEspecifico?.ComentarioBloqueo,
+						FechaBloqueoCalidad = bloqueoEspecifico?.FechaBloqueo,
+						TipoBloqueoCalidad = bloqueoEspecifico?.TipoBloqueo ?? "TOTAL"
 					});
 				}
 
@@ -490,7 +517,12 @@ namespace SGA_Api.Controllers.Stock
 						CodigoPalet = palet.CodigoPalet,
 						EstadoPalet = palet.EstadoPalet,
 						// 🔷 NUEVO: Fecha del último traspaso
-						FechaUltimoTraspaso = fechaUltimoTraspasoPalet
+						FechaUltimoTraspaso = fechaUltimoTraspasoPalet,
+						// 🔷 NUEVO: Información de bloqueo por calidad
+						IsBloqueadoCalidad = bloqueoEspecifico != null,
+						MotivoBloqueoCalidad = bloqueoEspecifico?.ComentarioBloqueo,
+						FechaBloqueoCalidad = bloqueoEspecifico?.FechaBloqueo,
+						TipoBloqueoCalidad = bloqueoEspecifico?.TipoBloqueo ?? "TOTAL"
 					});
 				}
 			}

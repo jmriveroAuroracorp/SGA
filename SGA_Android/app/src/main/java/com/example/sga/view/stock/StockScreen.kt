@@ -100,6 +100,37 @@ fun StockCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
+                    // 🔷 NUEVO: Badge de bloqueo de calidad
+                    if (stock.isBloqueadoCalidad) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFF6B6B)
+                            ),
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                Text(
+                                    text = "🔒",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "BLOQUEADO CALIDAD - ${stock.tipoBloqueoCalidad}",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    
                     Text(
                         text  = "📦 ${stock.codigoArticulo} — ${stock.descripcionArticulo}",
                         style = MaterialTheme.typography.titleMedium
@@ -109,6 +140,16 @@ fun StockCard(
                     Text("📍 Ubicación: ${stock.ubicacion}")
                     Text("📋 Partida: ${stock.partida}")
                     Text("🗓 Caducidad: $fechaCorta")
+                    
+                    // 🔷 NUEVO: Mostrar motivo de bloqueo si existe
+                    if (stock.isBloqueadoCalidad && !stock.motivoBloqueoCalidad.isNullOrBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "⚠️ Motivo: ${stock.motivoBloqueoCalidad}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
 
                 // Iconos de impresión si el usuario tiene permiso 11

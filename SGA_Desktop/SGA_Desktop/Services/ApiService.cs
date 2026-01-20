@@ -11,8 +11,8 @@ public class ApiService
 	protected readonly HttpClient _httpClient;
 
 	// URL base del servidor (sin /api/) para otros servicios como SignalR
-	//public static string ServerBaseUrl => "http://10.0.0.175:5234";
-	public static string ServerBaseUrl => "http://localhost:5234";
+	public static string ServerBaseUrl => "http://10.0.0.175:5234";
+	//public static string ServerBaseUrl => "http://localhost:5234";
 
 	public ApiService()
 	{

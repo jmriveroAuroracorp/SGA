@@ -16,5 +16,10 @@ data class Stock(
     val paletId: String?,
     val codigoPalet: String?,
     val estadoPalet: String?,
-    val ordenTrabajoId: String?
+    val ordenTrabajoId: String?,
+    // 🔷 NUEVO: Campos de bloqueo de calidad
+    val isBloqueadoCalidad: Boolean = false,
+    val motivoBloqueoCalidad: String? = null,
+    val fechaBloqueoCalidad: String? = null,
+    val tipoBloqueoCalidad: String = "TOTAL"
 )

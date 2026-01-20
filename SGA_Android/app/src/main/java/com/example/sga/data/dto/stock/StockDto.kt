@@ -16,5 +16,11 @@ data class StockDto(
     val paletId: String?,
     val codigoPalet: String?,
     val estadoPalet: String?,
-    val ordenTrabajoId: String?
+    val ordenTrabajoId: String?,
+    // 🔷 NUEVO: Campos de bloqueo de calidad
+    // Gson hace matching automático case-insensitive entre PascalCase (API) y camelCase (Kotlin)
+    val isBloqueadoCalidad: Boolean? = false,
+    val motivoBloqueoCalidad: String? = null,
+    val fechaBloqueoCalidad: String? = null,
+    val tipoBloqueoCalidad: String? = "TOTAL"
 )

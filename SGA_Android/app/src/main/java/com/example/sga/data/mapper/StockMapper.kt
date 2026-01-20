@@ -21,7 +21,12 @@ object StockMapper {
             paletId = dto.paletId,
             codigoPalet = dto.codigoPalet,
             estadoPalet = dto.estadoPalet,
-            ordenTrabajoId = dto.ordenTrabajoId
+            ordenTrabajoId = dto.ordenTrabajoId,
+            // 🔷 NUEVO: Campos de bloqueo de calidad
+            isBloqueadoCalidad = dto.isBloqueadoCalidad ?: false,
+            motivoBloqueoCalidad = dto.motivoBloqueoCalidad,
+            fechaBloqueoCalidad = dto.fechaBloqueoCalidad,
+            tipoBloqueoCalidad = dto.tipoBloqueoCalidad ?: "TOTAL"
         )
     }
 }

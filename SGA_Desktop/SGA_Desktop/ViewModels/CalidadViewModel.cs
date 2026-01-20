@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SGA_Desktop.Helpers;
 using SGA_Desktop.Models.Calidad;
+using SGA_Desktop.Models;
 using SGA_Desktop.Services;
 using System.Collections.ObjectModel;
 using System.Windows;
@@ -11,10 +12,12 @@ namespace SGA_Desktop.ViewModels
     public partial class CalidadViewModel : ObservableObject
     {
         private readonly CalidadService calidadService;
+        private readonly StockService stockService;
 
         public CalidadViewModel()
         {
             this.calidadService = new CalidadService();
+            this.stockService = new StockService();
 
             // Inicializar propiedades
             CodigoEmpresa = SessionManager.EmpresaSeleccionada ?? 0;
@@ -71,27 +74,23 @@ namespace SGA_Desktop.ViewModels
                 EstaCargando = true;
                 MensajeEstado = "Buscando stock...";
 
-                var filtros = new BuscarStockCalidadDto
-                {
-                    CodigoEmpresa = CodigoEmpresa,
-                    CodigoArticulo = CodigoArticulo,
-                    Partida = LotePartida
-                };
-
-                var resultado = await calidadService.BuscarStockAsync(filtros);
+                // Usar StockService en lugar de CalidadService
+                var stockData = await stockService.ObtenerPorArticuloAsync(
+                    CodigoEmpresa,
+                    CodigoArticulo,
+                    partida: LotePartida
+                );
 
                 StockDisponible.Clear();
-                foreach (var item in resultado)
+                foreach (var item in stockData)
                 {
-                    // 🔷 SIMPLIFICADO: El servicio ya devuelve EstaBloqueado correctamente por ubicación
-                    // Solo establecemos el Estado para la vista basándonos en EstaBloqueado
-                    item.Estado = item.EstaBloqueado ? "Bloqueado" : "Disponible";
-                    
-                    StockDisponible.Add(item);
+                    // Mapear StockDto a StockCalidadDto
+                    var stockCalidad = MapearAStockCalidadDto(item);
+                    StockDisponible.Add(stockCalidad);
                 }
 
-                MensajeEstado = $"Encontrados {resultado.Count} registros de stock";
-                System.Diagnostics.Debug.WriteLine($"Búsqueda de stock completada. Resultados: {resultado.Count}");
+                MensajeEstado = $"Encontrados {stockData.Count} registros de stock";
+                System.Diagnostics.Debug.WriteLine($"Búsqueda de stock completada. Resultados: {stockData.Count}");
             }
             catch (Exception ex)
             {
@@ -463,6 +462,32 @@ namespace SGA_Desktop.ViewModels
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Mapea StockDto (del StockController) a StockCalidadDto (para la vista)
+        /// </summary>
+        private StockCalidadDto MapearAStockCalidadDto(Models.StockDto stockDto)
+        {
+            return new StockCalidadDto
+            {
+                CodigoArticulo = stockDto.CodigoArticulo,
+                DescripcionArticulo = stockDto.DescripcionArticulo ?? string.Empty,
+                CodigoAlmacen = stockDto.CodigoAlmacen,
+                Almacen = stockDto.Almacen,
+                Ubicacion = stockDto.Ubicacion ?? "Sin ubicación específica",
+                LotePartida = stockDto.Partida,
+                FechaCaducidad = stockDto.FechaCaducidad,
+                CantidadDisponible = stockDto.UnidadSaldo,
+                EstaBloqueado = stockDto.IsBloqueadoCalidad,
+                ComentarioBloqueo = stockDto.MotivoBloqueoCalidad,
+                FechaBloqueo = stockDto.FechaBloqueoCalidad,
+                UsuarioBloqueo = null, // No disponible en StockDto
+                Estado = stockDto.IsBloqueadoCalidad ? "Bloqueado" : "Disponible",
+                PaletId = null, // Se puede obtener de Palets si es necesario
+                CodigoPalet = stockDto.CodigoPalet,
+                EstadoPalet = stockDto.EstadoPalet
+            };
         }
 
         [RelayCommand]

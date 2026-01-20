@@ -26,6 +26,7 @@ namespace SGA_Api.Models.Palet
 		public Guid? TraspasoId { get; set; }
 		public Guid? ConteoId { get; set; }
 		public Guid? InventarioId { get; set; }
+		public Guid? CambioArticuloId { get; set; }
 		public bool EsHeredada { get; set; } = false;
 
 		//navegacion

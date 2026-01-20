@@ -21,22 +21,6 @@ namespace SGA_Api.Services
         Task<bool> VerificarAccesoEmpresaAsync(int usuarioId, short codigoEmpresa);
 
         /// <summary>
-        /// Busca stock por artículo y lote con filtros obligatorios
-        /// </summary>
-        /// <param name="codigoEmpresa">Código de empresa (obligatorio)</param>
-        /// <param name="codigoArticulo">Código de artículo (obligatorio)</param>
-        /// <param name="partida">Lote/partida (obligatorio)</param>
-        /// <param name="codigoAlmacen">Código de almacén (opcional)</param>
-        /// <param name="codigoUbicacion">Código de ubicación (opcional)</param>
-        /// <returns>Lista de stock encontrado</returns>
-        Task<List<StockCalidadDto>> BuscarStockPorArticuloYLoteAsync(
-            short codigoEmpresa, 
-            string codigoArticulo, 
-            string partida, 
-            string? codigoAlmacen = null, 
-            string? codigoUbicacion = null);
-
-        /// <summary>
         /// Bloquea stock específico
         /// </summary>
         /// <param name="dto">Datos del bloqueo</param>

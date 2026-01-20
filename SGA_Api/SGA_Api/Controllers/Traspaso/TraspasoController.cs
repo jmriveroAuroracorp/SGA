@@ -1072,6 +1072,50 @@ public class TraspasosController : ControllerBase
 				}
 			}
 
+			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD TOTAL: Validar siempre antes de crear traspaso
+			// Si hay bloqueo TOTAL, no permitir crear el traspaso en estado PENDIENTE (PDA)
+			if (!string.IsNullOrWhiteSpace(dto.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.Partida) && !string.IsNullOrWhiteSpace(dto.AlmacenOrigen))
+			{
+				var ubicacionOrigenNormalizada = string.IsNullOrWhiteSpace(dto.UbicacionOrigen) ? "" : dto.UbicacionOrigen.Trim();
+				
+				// Buscar bloqueo en el origen
+				var queryBloqueo = _context.BloqueosCalidad
+					.Where(b => b.CodigoEmpresa == dto.CodigoEmpresa && 
+							   b.CodigoArticulo == dto.CodigoArticulo && 
+							   b.LotePartida == dto.Partida &&
+							   b.CodigoAlmacen == dto.AlmacenOrigen &&
+							   b.Bloqueado);
+
+				// Filtrar por ubicación origen específica
+				if (!string.IsNullOrWhiteSpace(ubicacionOrigenNormalizada))
+				{
+					queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == ubicacionOrigenNormalizada);
+				}
+				else
+				{
+					queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+				}
+
+				var bloqueo = await queryBloqueo
+					.OrderByDescending(b => b.FechaBloqueo)
+					.FirstOrDefaultAsync();
+
+				if (bloqueo != null)
+				{
+					var tipoBloqueo = bloqueo.TipoBloqueo?.ToUpper() ?? "TOTAL";
+					
+					// Si es bloqueo TOTAL, bloquear siempre (incluso si Finalizar = false)
+					if (tipoBloqueo == "TOTAL")
+					{
+						_logger.LogWarning("🚫 BLOQUEO TOTAL - No se puede crear traspaso en estado PENDIENTE. Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}",
+							dto.CodigoArticulo, dto.Partida, dto.AlmacenOrigen, ubicacionOrigenNormalizada);
+						return BadRequest($"No se puede crear el traspaso. El artículo {dto.CodigoArticulo} (partida {dto.Partida}) está bloqueado por calidad TOTAL en la ubicación origen {dto.AlmacenOrigen}-{ubicacionOrigenNormalizada}. Debe desbloquearse antes de poder crear el traspaso.");
+					}
+					// Si es SOLO_PULMON y Finalizar = false, permitir crear (se validará al finalizar)
+					// Si es SOLO_PULMON y Finalizar = true, validar como antes (líneas siguientes)
+				}
+			}
+
 			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Si se finaliza inmediatamente, validar antes de crear
 			if (dto.Finalizar ?? true)
 			{
@@ -1491,37 +1535,30 @@ public class TraspasosController : ControllerBase
 		var ubiKey = ubiDestino.ToUpper();
 
 		// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Verificar si el artículo está bloqueado y el destino es PULMÓN
-		// IMPORTANTE: Validar siempre que haya código de artículo y ubicación destino (requerido para finalizar)
+		// 🔷 CORREGIDO: Validar también cuando la ubicación destino está vacía (ahora el servicio puede manejarlo)
 		if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
 		{
-			if (string.IsNullOrWhiteSpace(ubiDestino))
+			var ubicacionDestinoDisplay = string.IsNullOrWhiteSpace(ubiDestino) ? "(sin ubicación)" : ubiDestino;
+			_logger.LogWarning("🔍 Validando bloqueo de calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+				traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", traspaso.AlmacenOrigen ?? "(null)", traspaso.UbicacionOrigen ?? "(null)", almDestino, ubicacionDestinoDisplay, traspaso.CodigoEmpresa);
+
+			var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+				traspaso.CodigoArticulo,
+				almDestino,
+				ubiDestino, // Puede ser cadena vacía, el servicio lo maneja correctamente
+				traspaso.CodigoEmpresa,
+				traspaso.Partida,
+				traspaso.AlmacenOrigen,
+				traspaso.UbicacionOrigen);
+
+			_logger.LogWarning("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
+				resultadoValidacion.EsValido, resultadoValidacion.MotivoBloqueo ?? "(sin motivo)");
+
+			if (!resultadoValidacion.EsValido)
 			{
-				_logger.LogWarning("⚠️ FinalizarTraspasoArticulo: Ubicación destino vacía para artículo {CodigoArticulo}. No se puede validar bloqueo de calidad.", 
-					traspaso.CodigoArticulo);
-			}
-			else
-			{
-				_logger.LogWarning("🔍 Validando bloqueo de calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
-					traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", traspaso.AlmacenOrigen ?? "(null)", traspaso.UbicacionOrigen ?? "(null)", almDestino, ubiDestino, traspaso.CodigoEmpresa);
-
-				var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
-					traspaso.CodigoArticulo,
-					almDestino,
-					ubiDestino,
-					traspaso.CodigoEmpresa,
-					traspaso.Partida,
-					traspaso.AlmacenOrigen,
-					traspaso.UbicacionOrigen);
-
-				_logger.LogWarning("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
-					resultadoValidacion.EsValido, resultadoValidacion.MotivoBloqueo ?? "(sin motivo)");
-
-				if (!resultadoValidacion.EsValido)
-				{
-					_logger.LogWarning("🚫 Traspaso bloqueado por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
-						traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", almDestino, ubiDestino, resultadoValidacion.MotivoBloqueo);
-					return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede realizar el traspaso debido a un bloqueo de calidad.");
-				}
+				_logger.LogWarning("🚫 Traspaso bloqueado por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+					traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", almDestino, ubicacionDestinoDisplay, resultadoValidacion.MotivoBloqueo);
+				return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede realizar el traspaso debido a un bloqueo de calidad.");
 			}
 		}
 		else
@@ -1986,32 +2023,83 @@ public class TraspasosController : ControllerBase
 			if (lineas.Count == 0)
 				return BadRequest("No hay líneas definitivas para este palet. No se puede mover.");
 
-			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Validar cada línea del palet antes de crear traspasos
-			var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
 			var almacenOrigen = ultimoTraspaso.AlmacenDestino ?? "";
 			var ubicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "";
 
+			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD TOTAL: Validar siempre antes de crear traspasos
+			// Si hay bloqueo TOTAL, no permitir crear el traspaso en estado PENDIENTE (PDA)
 			foreach (var linea in lineas)
 			{
-				if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+				if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(linea.Lote) && !string.IsNullOrWhiteSpace(almacenOrigen))
 				{
-					_logger.LogInformation("🔍 Validando bloqueo de calidad en MoverPalet - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
-						linea.CodigoArticulo, linea.Lote ?? "(sin partida)", almacenOrigen, ubicacionOrigen, dto.AlmacenDestino, ubicacionDestino, dto.CodigoEmpresa);
+					var ubicacionOrigenNormalizada = string.IsNullOrWhiteSpace(ubicacionOrigen) ? "" : ubicacionOrigen.Trim();
+					
+					// Buscar bloqueo TOTAL en el origen
+					var queryBloqueo = _context.BloqueosCalidad
+						.Where(b => b.CodigoEmpresa == dto.CodigoEmpresa && 
+								   b.CodigoArticulo == linea.CodigoArticulo && 
+								   b.LotePartida == linea.Lote &&
+								   b.CodigoAlmacen == almacenOrigen &&
+								   b.Bloqueado);
 
-					var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
-						linea.CodigoArticulo,
-						dto.AlmacenDestino,
-						ubicacionDestino,
-						dto.CodigoEmpresa,
-						linea.Lote,
-						almacenOrigen,
-						ubicacionOrigen);
-
-					if (!resultadoValidacion.EsValido)
+					// Filtrar por ubicación origen específica
+					if (!string.IsNullOrWhiteSpace(ubicacionOrigenNormalizada))
 					{
-						_logger.LogWarning("🚫 Traspaso de palet bloqueado por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
-							linea.CodigoArticulo, linea.Lote ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.MotivoBloqueo);
-						return BadRequest($"No se puede mover el palet. {resultadoValidacion.MotivoBloqueo}");
+						queryBloqueo = queryBloqueo.Where(b => b.Ubicacion == ubicacionOrigenNormalizada);
+					}
+					else
+					{
+						queryBloqueo = queryBloqueo.Where(b => string.IsNullOrEmpty(b.Ubicacion));
+					}
+
+					var bloqueo = await queryBloqueo
+						.OrderByDescending(b => b.FechaBloqueo)
+						.FirstOrDefaultAsync();
+
+					if (bloqueo != null)
+					{
+						var tipoBloqueo = bloqueo.TipoBloqueo?.ToUpper() ?? "TOTAL";
+						
+						// Si es bloqueo TOTAL, bloquear siempre (incluso si esFinalizado = false)
+						if (tipoBloqueo == "TOTAL")
+						{
+							_logger.LogWarning("🚫 BLOQUEO TOTAL - No se puede crear traspaso de palet en estado PENDIENTE. Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}",
+								linea.CodigoArticulo, linea.Lote, almacenOrigen, ubicacionOrigenNormalizada);
+							return BadRequest($"No se puede crear el traspaso del palet. El artículo {linea.CodigoArticulo} (partida {linea.Lote}) está bloqueado por calidad TOTAL en la ubicación origen {almacenOrigen}-{ubicacionOrigenNormalizada}. Debe desbloquearse antes de poder crear el traspaso.");
+						}
+						// Si es SOLO_PULMON y esFinalizado = false, permitir crear (se validará al finalizar)
+						// Si es SOLO_PULMON y esFinalizado = true, validar como antes (líneas siguientes)
+					}
+				}
+			}
+
+			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Validar cada línea del palet antes de crear traspasos (si se finaliza inmediatamente)
+			if (esFinalizado && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
+			{
+				var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+
+				foreach (var linea in lineas)
+				{
+					if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo))
+					{
+						_logger.LogInformation("🔍 Validando bloqueo de calidad en MoverPalet - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+							linea.CodigoArticulo, linea.Lote ?? "(sin partida)", almacenOrigen, ubicacionOrigen, dto.AlmacenDestino, ubicacionDestino, dto.CodigoEmpresa);
+
+						var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+							linea.CodigoArticulo,
+							dto.AlmacenDestino,
+							ubicacionDestino,
+							dto.CodigoEmpresa,
+							linea.Lote,
+							almacenOrigen,
+							ubicacionOrigen);
+
+						if (!resultadoValidacion.EsValido)
+						{
+							_logger.LogWarning("🚫 Traspaso de palet bloqueado por calidad - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+								linea.CodigoArticulo, linea.Lote ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.MotivoBloqueo);
+							return BadRequest($"No se puede mover el palet. {resultadoValidacion.MotivoBloqueo}");
+						}
 					}
 				}
 			}

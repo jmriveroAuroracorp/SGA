@@ -7,6 +7,7 @@ using SGA_Api.Models.Palet;
 using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.UsuarioConf;
 using SGA_Api.Models.Registro;
+using SGA_Api.Services;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -25,19 +26,22 @@ public class PaletController : ControllerBase
 	private readonly StorageControlDbContext _storageContext;
 	private readonly ILogger<PaletController> _logger;
 	private readonly IServiceProvider _serviceProvider;
+	private readonly IValidacionTraspasoService _validacionService;
 
 	public PaletController(
 		AuroraSgaDbContext auroraSgaContext,
 		SageDbContext sageContext,
 		StorageControlDbContext storageContext,
 		ILogger<PaletController> logger,
-		IServiceProvider serviceProvider)
+		IServiceProvider serviceProvider,
+		IValidacionTraspasoService validacionService)
 	{
 		_auroraSgaContext = auroraSgaContext;
 		_sageContext = sageContext;
 		_storageContext = storageContext;
 		_logger = logger;
 		_serviceProvider = serviceProvider;
+		_validacionService = validacionService;
 	}
 
 	#region GET: Catálogo de tipos
@@ -2029,6 +2033,79 @@ public class PaletController : ControllerBase
 
 		if (traspaso.CodigoEstado != "PENDIENTE")
 			return BadRequest("Solo se pueden completar traspasos en estado PENDIENTE.");
+
+		// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Validar antes de completar el traspaso
+		var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+		var ubicacionDestinoDisplay = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "(sin ubicación)" : dto.UbicacionDestino.Trim();
+		
+		// 🔷 CORREGIDO: Si es traspaso de tipo PALET, validar TODOS los artículos del palet
+		if (string.Equals(traspaso.TipoTraspaso, "PALET", StringComparison.OrdinalIgnoreCase) && traspaso.PaletId != Guid.Empty)
+		{
+			// Obtener todas las líneas del palet
+			var lineasPalet = await _auroraSgaContext.PaletLineas
+				.Where(l => l.PaletId == traspaso.PaletId)
+				.ToListAsync();
+
+			if (lineasPalet.Any())
+			{
+				var almacenOrigen = traspaso.AlmacenOrigen ?? "";
+				var ubicacionOrigen = traspaso.UbicacionOrigen ?? "";
+
+				// Validar cada línea del palet
+				foreach (var linea in lineasPalet)
+				{
+					if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.CodigoAlmacenDestino))
+					{
+						_logger.LogInformation("🔍 Validando bloqueo de calidad en CompletarTraspaso (PALET) - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+							linea.CodigoArticulo, linea.Lote ?? "(sin partida)", almacenOrigen, ubicacionOrigen, dto.CodigoAlmacenDestino, ubicacionDestinoDisplay, traspaso.CodigoEmpresa);
+
+						var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+							linea.CodigoArticulo,
+							dto.CodigoAlmacenDestino,
+							ubicacionDestino, // Puede ser cadena vacía, el servicio lo maneja correctamente
+							traspaso.CodigoEmpresa,
+							linea.Lote,
+							almacenOrigen,
+							ubicacionOrigen);
+
+						_logger.LogInformation("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
+							resultadoValidacion.EsValido, resultadoValidacion.MotivoBloqueo ?? "(sin motivo)");
+
+						if (!resultadoValidacion.EsValido)
+						{
+							_logger.LogWarning("🚫 Traspaso de palet bloqueado por calidad en CompletarTraspaso - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+								linea.CodigoArticulo, linea.Lote ?? "(sin partida)", dto.CodigoAlmacenDestino, ubicacionDestinoDisplay, resultadoValidacion.MotivoBloqueo);
+							return BadRequest($"No se puede completar el traspaso del palet. {resultadoValidacion.MotivoBloqueo}");
+						}
+					}
+				}
+			}
+		}
+		else if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.CodigoAlmacenDestino))
+		{
+			// Validación para traspasos de artículo individual (no palet)
+			_logger.LogInformation("🔍 Validando bloqueo de calidad en CompletarTraspaso - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
+				traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", traspaso.AlmacenOrigen ?? "(null)", traspaso.UbicacionOrigen ?? "(null)", dto.CodigoAlmacenDestino, ubicacionDestinoDisplay, traspaso.CodigoEmpresa);
+
+			var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+				traspaso.CodigoArticulo,
+				dto.CodigoAlmacenDestino,
+				ubicacionDestino, // Puede ser cadena vacía, el servicio lo maneja correctamente
+				traspaso.CodigoEmpresa,
+				traspaso.Partida,
+				traspaso.AlmacenOrigen,
+				traspaso.UbicacionOrigen);
+
+			_logger.LogInformation("🔍 Resultado validación - EsValido: {EsValido}, Motivo: {MotivoBloqueo}",
+				resultadoValidacion.EsValido, resultadoValidacion.MotivoBloqueo ?? "(sin motivo)");
+
+			if (!resultadoValidacion.EsValido)
+			{
+				_logger.LogWarning("🚫 Traspaso bloqueado por calidad en CompletarTraspaso - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+					traspaso.CodigoArticulo, traspaso.Partida ?? "(sin partida)", dto.CodigoAlmacenDestino, ubicacionDestinoDisplay, resultadoValidacion.MotivoBloqueo);
+				return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede completar el traspaso debido a un bloqueo de calidad.");
+			}
+		}
 
 		// Actualiza los datos de destino y finalización
 		traspaso.AlmacenDestino = dto.CodigoAlmacenDestino;

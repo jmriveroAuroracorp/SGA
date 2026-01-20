@@ -4099,6 +4099,98 @@ namespace SGA_Api.Controllers.Inventario
 				_context.InventarioAjustes.Add(ajusteSalida);
 				_context.InventarioAjustes.Add(ajusteEntrada);
 
+				// Crear TempPaletLineas si hay palet (igual que en inventarios/conteos)
+				if (dto.PaletId.HasValue)
+				{
+					// Obtener descripción del artículo origen desde Sage
+					string? descripcionArticuloOrigen = null;
+					try
+					{
+						descripcionArticuloOrigen = await _sageDbContext.Articulos
+							.Where(a => a.CodigoEmpresa == dto.CodigoEmpresa && 
+									   a.CodigoArticulo == dto.CodigoArticuloOrigen)
+							.Select(a => a.DescripcionArticulo)
+							.FirstOrDefaultAsync();
+					}
+					catch
+					{
+						_logger.LogWarning("No se pudo obtener descripción del artículo origen {CodigoArticulo} para TempPaletLinea", dto.CodigoArticuloOrigen);
+					}
+
+					// Obtener descripción del artículo destino (si es cambio de código)
+					string? descripcionArticuloDestino = null;
+					if (cambioCodigo && !string.IsNullOrWhiteSpace(dto.CodigoArticuloDestino))
+					{
+						try
+						{
+							descripcionArticuloDestino = await _sageDbContext.Articulos
+								.Where(a => a.CodigoEmpresa == dto.CodigoEmpresa && 
+										   a.CodigoArticulo == dto.CodigoArticuloDestino)
+								.Select(a => a.DescripcionArticulo)
+								.FirstOrDefaultAsync();
+						}
+						catch
+						{
+							_logger.LogWarning("No se pudo obtener descripción del artículo destino {CodigoArticulo} para TempPaletLinea", dto.CodigoArticuloDestino);
+						}
+					}
+
+					// TempPaletLinea para ajuste de salida (negativo)
+					var tempPaletLineaSalida = new TempPaletLinea
+					{
+						Id = Guid.NewGuid(),
+						PaletId = dto.PaletId.Value,
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoArticulo = dto.CodigoArticuloOrigen,
+						DescripcionArticulo = descripcionArticuloOrigen,
+						Cantidad = -dto.Cantidad, // Negativo = salida
+						UnidadMedida = "UN",
+						Lote = dto.Partida,
+						FechaCaducidad = fechaCaducidadOrigen,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Ubicacion = dto.Ubicacion ?? string.Empty,
+						UsuarioId = dto.UsuarioId,
+						FechaAgregado = DateTime.Now,
+						Observaciones = $"Cambio de artículo - {cambioArticulo.TipoCambio}",
+						TraspasoId = null,
+						ConteoId = null,
+						InventarioId = null,
+						CambioArticuloId = cambioArticulo.IdCambioArticulo,
+						Procesada = false,
+						EsHeredada = false
+					};
+					_context.TempPaletLineas.Add(tempPaletLineaSalida);
+
+					// TempPaletLinea para ajuste de entrada (positivo)
+					var tempPaletLineaEntrada = new TempPaletLinea
+					{
+						Id = Guid.NewGuid(),
+						PaletId = dto.PaletId.Value,
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
+						DescripcionArticulo = cambioCodigo ? descripcionArticuloDestino : descripcionArticuloOrigen,
+						Cantidad = dto.Cantidad, // Positivo = entrada
+						UnidadMedida = "UN",
+						Lote = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : dto.Partida,
+						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Ubicacion = dto.Ubicacion ?? string.Empty,
+						UsuarioId = dto.UsuarioId,
+						FechaAgregado = DateTime.Now,
+						Observaciones = $"Cambio de artículo - {cambioArticulo.TipoCambio}",
+						TraspasoId = null,
+						ConteoId = null,
+						InventarioId = null,
+						CambioArticuloId = cambioArticulo.IdCambioArticulo,
+						Procesada = false,
+						EsHeredada = false
+					};
+					_context.TempPaletLineas.Add(tempPaletLineaEntrada);
+
+					_logger.LogInformation("✅ Creadas TempPaletLineas para cambio de artículo: PaletId={PaletId}, CambioArticuloId={CambioArticuloId}, Salida={Salida}, Entrada={Entrada}", 
+						dto.PaletId, cambioArticulo.IdCambioArticulo, -dto.Cantidad, dto.Cantidad);
+				}
+
 				await _context.SaveChangesAsync();
 				await transaction.CommitAsync();
 
@@ -4275,75 +4367,118 @@ namespace SGA_Api.Controllers.Inventario
 		/// <summary>
 		/// Notifica cuando se cierra un inventario
 		/// </summary>
-		private async Task NotificarInventarioCerradoAsync(InventarioCabecera inventario, int ajustesGenerados)
+	private async Task NotificarInventarioCerradoAsync(InventarioCabecera inventario, int ajustesGenerados)
+	{
+		try
 		{
-			try
+			_logger.LogInformation("Iniciando notificación de inventario cerrado {InventarioId}, UsuarioCreacionId: {UsuarioCreacionId}", 
+				inventario.IdInventario, inventario.UsuarioCreacionId);
+
+			using var scope = _serviceProvider.CreateScope();
+			var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+
+			// Obtener nombre del creador/usuario que cerró
+			var nombreCreador = await ObtenerNombreUsuarioAsync(inventario.UsuarioCreacionId);
+			_logger.LogDebug("Nombre del creador obtenido: {NombreCreador}", nombreCreador);
+
+			// Construir mensaje
+			var mensaje = $"El inventario \"{inventario.CodigoInventario}\" ha sido cerrado\n" +
+				$"Cerrado por: {nombreCreador}\n" +
+				$"Ajustes generados: {ajustesGenerados}";
+
+			// Verificar rol del creador
+			var creador = await _context.Usuarios
+				.Where(u => u.IdUsuario == inventario.UsuarioCreacionId)
+				.Select(u => new { u.IdRol })
+				.FirstOrDefaultAsync();
+
+			_logger.LogDebug("Rol del creador: {IdRol}", creador?.IdRol ?? -1);
+
+			// 1. Notificar al creador (siempre)
+			_logger.LogDebug("Notificando al creador {UsuarioId}", inventario.UsuarioCreacionId);
+			await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+				inventario.UsuarioCreacionId,
+				"INVENTARIO_CIERRE",
+				"Inventario Cerrado",
+				mensaje,
+				inventario.IdInventario,
+				"ABIERTO",
+				inventario.Estado,
+				"success");
+
+			// 2. Obtener almacenes del inventario
+			var codigosAlmacen = await _context.InventarioAlmacenes
+				.Where(ia => ia.IdInventario == inventario.IdInventario)
+				.Select(ia => ia.CodigoAlmacen)
+				.ToListAsync();
+
+			_logger.LogDebug("Almacenes del inventario: {Almacenes}", string.Join(", ", codigosAlmacen));
+
+			// 3. Notificar a supervisores con acceso a los almacenes del inventario
+			var supervisoresIds = await ObtenerSupervisoresConAccesoAlmacenesAsync(
+				codigosAlmacen,
+				inventario.CodigoEmpresa,
+				creador?.IdRol == 2 ? inventario.UsuarioCreacionId : null);
+
+			_logger.LogDebug("Supervisores con acceso encontrados: {Count}", supervisoresIds.Count);
+
+			if (supervisoresIds.Any())
 			{
-				using var scope = _serviceProvider.CreateScope();
-				var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
-
-				// Obtener nombre del creador/usuario que cerró
-				var nombreCreador = await ObtenerNombreUsuarioAsync(inventario.UsuarioCreacionId);
-
-				// Construir mensaje
-				var mensaje = $"El inventario \"{inventario.CodigoInventario}\" ha sido cerrado\n" +
-					$"Cerrado por: {nombreCreador}\n" +
-					$"Ajustes generados: {ajustesGenerados}";
-
-				// Verificar rol del creador
-				var creador = await _context.Usuarios
-					.Where(u => u.IdUsuario == inventario.UsuarioCreacionId)
-					.Select(u => new { u.IdRol })
-					.FirstOrDefaultAsync();
-
-				// 1. Notificar al creador (siempre, pero solo si es supervisor o se quiere notificar siempre)
-				// Notificamos siempre al creador
-				await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
-					inventario.UsuarioCreacionId,
-					"INVENTARIO_CIERRE",
-					"Inventario Cerrado",
-					mensaje,
-					inventario.IdInventario,
-					"ABIERTO",
-					inventario.Estado,
-					"success");
-
-				// 2. Notificar a todos los administradores (IdRol == 3)
-				var administradoresIds = await _context.Usuarios
-					.Where(u => u.IdRol == 3)
-					.Select(u => u.IdUsuario)
-					.ToListAsync();
-
-				// Excluir al creador si es admin (para evitar duplicados)
-				if (creador?.IdRol == 3)
+				foreach (var supervisorId in supervisoresIds)
 				{
-					administradoresIds = administradoresIds.Where(id => id != inventario.UsuarioCreacionId).ToList();
+					_logger.LogDebug("Notificando al supervisor {SupervisorId}", supervisorId);
+					await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+						supervisorId,
+						"INVENTARIO_CIERRE",
+						"Inventario Cerrado",
+						mensaje,
+						inventario.IdInventario,
+						"ABIERTO",
+						inventario.Estado,
+						"success");
 				}
-
-				if (administradoresIds.Any())
-				{
-					foreach (var adminId in administradoresIds)
-					{
-						await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
-							adminId,
-							"INVENTARIO_CIERRE",
-							"Inventario Cerrado",
-							mensaje,
-							inventario.IdInventario,
-							"ABIERTO",
-							inventario.Estado,
-							"success");
-					}
-				}
-
-				_logger.LogInformation("Notificación de inventario cerrado enviada para inventario {InventarioId}", inventario.IdInventario);
 			}
-			catch (Exception ex)
+
+			// 4. Notificar a todos los administradores (IdRol == 3)
+			var administradoresIds = await _context.Usuarios
+				.Where(u => u.IdRol == 3)
+				.Select(u => u.IdUsuario)
+				.ToListAsync();
+
+			_logger.LogDebug("Administradores encontrados: {Count}", administradoresIds.Count);
+
+			// Excluir al creador si es admin
+			if (creador?.IdRol == 3)
 			{
-				_logger.LogError(ex, "Error al enviar notificación de inventario cerrado {InventarioId}", inventario.IdInventario);
-				// No fallar la operación si falla la notificación
+				administradoresIds = administradoresIds.Where(id => id != inventario.UsuarioCreacionId).ToList();
+				_logger.LogDebug("Administradores después de excluir creador: {Count}", administradoresIds.Count);
 			}
+
+			if (administradoresIds.Any())
+			{
+				foreach (var adminId in administradoresIds)
+				{
+					_logger.LogDebug("Notificando al administrador {AdminId}", adminId);
+					await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+						adminId,
+						"INVENTARIO_CIERRE",
+						"Inventario Cerrado",
+						mensaje,
+						inventario.IdInventario,
+						"ABIERTO",
+						inventario.Estado,
+						"success");
+				}
+			}
+
+			_logger.LogInformation("Notificación de inventario cerrado enviada para inventario {InventarioId}", inventario.IdInventario);
 		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error al notificar cierre de inventario {InventarioId}", inventario.IdInventario);
+			// No lanzamos la excepción para no interrumpir el flujo principal
+		}
+	}
 
 		/// <summary>
 		/// Obtiene el nombre de un usuario desde la vista vUsuariosConNombre

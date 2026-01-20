@@ -17,37 +17,6 @@ namespace SGA_Desktop.Services
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionManager.Token);
         }
 
-        public async Task<List<StockCalidadDto>> BuscarStockAsync(BuscarStockCalidadDto filtros)
-        {
-            try
-            {
-                ActualizarToken();
-                
-                var queryParams = new List<string>();
-                queryParams.Add($"codigoEmpresa={filtros.CodigoEmpresa}");
-                queryParams.Add($"codigoArticulo={Uri.EscapeDataString(filtros.CodigoArticulo)}");
-                queryParams.Add($"partida={Uri.EscapeDataString(filtros.Partida)}");
-
-                var url = $"Calidad/buscar-stock?{string.Join("&", queryParams)}";
-                System.Diagnostics.Debug.WriteLine($"🔍 URL completa: {_httpClient.BaseAddress}{url}");
-                System.Diagnostics.Debug.WriteLine($"🔍 Token: {SessionManager.Token?.Substring(0, Math.Min(10, SessionManager.Token.Length))}...");
-                
-                var json = await GetStringAsync(url);
-                System.Diagnostics.Debug.WriteLine($"🔍 Respuesta: {json?.Substring(0, Math.Min(200, json.Length))}...");
-                var resultado = JsonSerializer.Deserialize<List<StockCalidadDto>>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                return resultado ?? new List<StockCalidadDto>();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error al buscar stock: {ex.Message}");
-                throw;
-            }
-        }
-
         public async Task<object> BloquearStockAsync(BloquearStockDto dto)
         {
             try

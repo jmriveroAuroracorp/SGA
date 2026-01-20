@@ -193,6 +193,53 @@ namespace SGA_Api.Services
                             logger.LogWarning("⚠️ Ajuste {AjusteId} no tiene IdInventario, no se pueden marcar TempPaletLineas como procesadas", aj.IdAjuste);
                         }
 
+                        // 🔷 NUEVO: Marcar TempPaletLineas de cambio de artículo como procesadas cuando el ajuste se completa
+                        // Si el ajuste tiene IdCambioArticulo, buscar y marcar las TempPaletLineas correspondientes
+                        if (aj.IdCambioArticulo.HasValue && aj.IdCambioArticulo.Value != Guid.Empty)
+                        {
+                            logger.LogInformation("🔍 Buscando TempPaletLineas de cambio de artículo: PaletId={PaletId}, CambioArticuloId={CambioArticuloId}, Articulo={Articulo}", 
+                                paletId, aj.IdCambioArticulo.Value, art);
+                            
+                            // Normalizar código de artículo para comparación (trim y mayúsculas)
+                            var artNormalizado = (art ?? "").Trim().ToUpper();
+                            
+                            var tempLineasCambio = await dbContext.TempPaletLineas
+                                .Where(tpl => tpl.PaletId == paletId && 
+                                             tpl.CambioArticuloId == aj.IdCambioArticulo.Value && 
+                                             (tpl.CodigoArticulo ?? "").Trim().ToUpper() == artNormalizado &&
+                                             tpl.Procesada == false)
+                                .ToListAsync();
+
+                            logger.LogInformation("🔍 Encontradas {Cantidad} TempPaletLineas de cambio de artículo pendientes", tempLineasCambio.Count);
+
+                            if (!tempLineasCambio.Any())
+                            {
+                                // 🔷 FALLBACK: Intentar buscar sin filtrar por artículo (por si hay discrepancias)
+                                var tempLineasCambioFallback = await dbContext.TempPaletLineas
+                                    .Where(tpl => tpl.PaletId == paletId && 
+                                                 tpl.CambioArticuloId == aj.IdCambioArticulo.Value && 
+                                                 tpl.Procesada == false)
+                                    .ToListAsync();
+                                
+                                if (tempLineasCambioFallback.Any())
+                                {
+                                    logger.LogWarning("⚠️ Encontradas {Cantidad} TempPaletLineas de cambio de artículo sin filtrar por artículo. Artículos: {Articulos}", 
+                                        tempLineasCambioFallback.Count, 
+                                        string.Join(", ", tempLineasCambioFallback.Select(t => t.CodigoArticulo).Distinct()));
+                                    
+                                    tempLineasCambio = tempLineasCambioFallback;
+                                }
+                            }
+
+                            foreach (var tempLinea in tempLineasCambio)
+                            {
+                                tempLinea.Procesada = true;
+                                dbContext.TempPaletLineas.Update(tempLinea);
+                                logger.LogInformation("✅ TempPaletLinea {TempId} marcada como procesada tras completar ajuste de cambio de artículo {CambioArticuloId}", 
+                                    tempLinea.Id, aj.IdCambioArticulo);
+                            }
+                        }
+
                         // Marcar como procesado
                         aj.ProcesadoPalet = true;
                         dbContext.InventarioAjustes.Update(aj);
@@ -1538,108 +1585,61 @@ namespace SGA_Api.Services
 					logger.LogError(ex, "Error al crear y enviar notificación unificada para traspaso {TraspasoId}", traspasoId);
 				}
 
-				// PASO 2: Si es ERROR_ERP, notificar también a supervisores con acceso al almacén
-				if (estadoActual == "ERROR_ERP")
+			// PASO 2: Si es ERROR_ERP, notificar también a supervisores con acceso al almacén
+			if (estadoActual == "ERROR_ERP")
+			{
+				var almacenesTraspaso = new List<string>();
+				
+				try
 				{
-					try
+					// Obtener el traspaso completo para tener AlmacenOrigen y AlmacenDestino
+					var traspasoCompleto = await dbContext.Traspasos
+						.Where(t => t.Id == traspasoId)
+						.Select(t => new { t.AlmacenOrigen, t.AlmacenDestino })
+						.FirstOrDefaultAsync();
+
+					if (traspasoCompleto != null && (!string.IsNullOrEmpty(traspasoCompleto.AlmacenOrigen) || !string.IsNullOrEmpty(traspasoCompleto.AlmacenDestino)))
 					{
-						// Obtener el traspaso completo para tener AlmacenOrigen y AlmacenDestino
-						var traspasoCompleto = await dbContext.Traspasos
-							.Where(t => t.Id == traspasoId)
-							.Select(t => new { t.AlmacenOrigen, t.AlmacenDestino })
-							.FirstOrDefaultAsync();
+						// Recopilar almacenes únicos del traspaso
+						if (!string.IsNullOrEmpty(traspasoCompleto.AlmacenOrigen))
+							almacenesTraspaso.Add(traspasoCompleto.AlmacenOrigen.Trim());
+						if (!string.IsNullOrEmpty(traspasoCompleto.AlmacenDestino) && 
+							traspasoCompleto.AlmacenDestino.Trim() != traspasoCompleto.AlmacenOrigen?.Trim())
+							almacenesTraspaso.Add(traspasoCompleto.AlmacenDestino.Trim());
 
-						if (traspasoCompleto != null && (!string.IsNullOrEmpty(traspasoCompleto.AlmacenOrigen) || !string.IsNullOrEmpty(traspasoCompleto.AlmacenDestino)))
+						if (almacenesTraspaso.Any())
 						{
-							// Recopilar almacenes únicos del traspaso
-							var almacenesTraspaso = new List<string>();
-							if (!string.IsNullOrEmpty(traspasoCompleto.AlmacenOrigen))
-								almacenesTraspaso.Add(traspasoCompleto.AlmacenOrigen.Trim());
-							if (!string.IsNullOrEmpty(traspasoCompleto.AlmacenDestino) && 
-								traspasoCompleto.AlmacenDestino.Trim() != traspasoCompleto.AlmacenOrigen?.Trim())
-								almacenesTraspaso.Add(traspasoCompleto.AlmacenDestino.Trim());
+							// Buscar supervisores (IdRol = 2) que tengan acceso a los almacenes del traspaso
+							// Primero obtener IDs de operarios con acceso a los almacenes desde Sage
+							var operariosConAcceso = await sageDbContext.OperariosAlmacenes
+								.Where(oa => almacenesTraspaso.Contains(oa.CodigoAlmacen ?? ""))
+								.Select(oa => oa.Operario)
+								.Distinct()
+								.ToListAsync();
 
-							if (almacenesTraspaso.Any())
+							if (operariosConAcceso.Any())
 							{
-								// Buscar supervisores (IdRol = 2) que tengan acceso a los almacenes del traspaso
-								// Primero obtener IDs de operarios con acceso a los almacenes desde Sage
-								var operariosConAcceso = await sageDbContext.OperariosAlmacenes
-									.Where(oa => almacenesTraspaso.Contains(oa.CodigoAlmacen ?? ""))
-									.Select(oa => oa.Operario)
-									.Distinct()
-									.ToListAsync();
-
-								if (operariosConAcceso.Any())
-								{
-									// Luego buscar usuarios que sean supervisores (IdRol = 2) y tengan acceso
-									// Excluir al usuario que inició el traspaso si es supervisor (para evitar duplicados)
-									var supervisoresIds = await dbContext.Usuarios
-										.Where(u => u.IdRol == 2 && 
-													operariosConAcceso.Contains(u.IdUsuario) &&
-													u.IdUsuario != usuarioId)
-										.Select(u => u.IdUsuario)
-										.ToListAsync();
-
-									if (supervisoresIds.Any())
-									{
-										logger.LogInformation("Notificando a {Cantidad} supervisores con acceso a almacenes {Almacenes} del traspaso {TraspasoId}",
-											supervisoresIds.Count, string.Join(", ", almacenesTraspaso), traspasoId);
-
-										// Notificar a cada supervisor
-										foreach (var supervisorId in supervisoresIds)
-										{
-											try
-											{
-												await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
-													supervisorId,
-													"TRASPASO",
-													$"Error en Traspaso - {string.Join(", ", almacenesTraspaso)}",
-													$"Supervisión requerida: {mensajeCompleto}",
-													traspasoId,
-													estadoAnterior,
-													estadoActual,
-													"error");
-
-												logger.LogInformation("Notificación enviada a supervisor {SupervisorId} para traspaso {TraspasoId}", supervisorId, traspasoId);
-											}
-											catch (Exception ex)
-											{
-												logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para traspaso {TraspasoId}", supervisorId, traspasoId);
-											}
-										}
-									}
-									else
-									{
-										logger.LogDebug("No se encontraron supervisores con acceso a almacenes {Almacenes} para traspaso {TraspasoId}",
-											string.Join(", ", almacenesTraspaso), traspasoId);
-									}
-								}
-								else
-								{
-									logger.LogDebug("No se encontraron operarios con acceso a almacenes {Almacenes} para traspaso {TraspasoId}",
-										string.Join(", ", almacenesTraspaso), traspasoId);
-								}
-							}
-
-							// Notificar a TODOS los ADMIN (sin filtro de almacén), excluyendo al usuario que inició el traspaso si es admin
-							try
-							{
-								var adminIds = await dbContext.Usuarios
-									.Where(u => u.IdRol == 3 && u.IdUsuario != usuarioId)
+								// Luego buscar usuarios que sean supervisores (IdRol = 2) y tengan acceso
+								// Excluir al usuario que inició el traspaso si es supervisor (para evitar duplicados)
+								var supervisoresIds = await dbContext.Usuarios
+									.Where(u => u.IdRol == 2 && 
+												operariosConAcceso.Contains(u.IdUsuario) &&
+												u.IdUsuario != usuarioId)
 									.Select(u => u.IdUsuario)
 									.ToListAsync();
 
-								if (adminIds.Any())
+								if (supervisoresIds.Any())
 								{
-									logger.LogInformation("Notificando a {Cantidad} administradores para traspaso {TraspasoId}",
-										adminIds.Count, traspasoId);
+									logger.LogInformation("Notificando a {Cantidad} supervisores con acceso a almacenes {Almacenes} del traspaso {TraspasoId}",
+										supervisoresIds.Count, string.Join(", ", almacenesTraspaso), traspasoId);
 
-									foreach (var adminId in adminIds)
+									// Notificar a cada supervisor
+									foreach (var supervisorId in supervisoresIds)
 									{
 										try
 										{
 											await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
-												adminId,
+												supervisorId,
 												"TRASPASO",
 												$"Error en Traspaso - {string.Join(", ", almacenesTraspaso)}",
 												$"Supervisión requerida: {mensajeCompleto}",
@@ -1648,28 +1648,81 @@ namespace SGA_Api.Services
 												estadoActual,
 												"error");
 
-											logger.LogInformation("Notificación enviada a administrador {AdminId} para traspaso {TraspasoId}", adminId, traspasoId);
+											logger.LogInformation("Notificación enviada a supervisor {SupervisorId} para traspaso {TraspasoId}", supervisorId, traspasoId);
 										}
 										catch (Exception ex)
 										{
-											logger.LogError(ex, "Error al notificar administrador {AdminId} para traspaso {TraspasoId}", adminId, traspasoId);
+											logger.LogError(ex, "Error al notificar supervisor {SupervisorId} para traspaso {TraspasoId}", supervisorId, traspasoId);
 										}
 									}
 								}
+								else
+								{
+									logger.LogDebug("No se encontraron supervisores con acceso a almacenes {Almacenes} para traspaso {TraspasoId}",
+										string.Join(", ", almacenesTraspaso), traspasoId);
+								}
 							}
-							catch (Exception ex)
+							else
 							{
-								logger.LogError(ex, "Error al notificar administradores para traspaso {TraspasoId}", traspasoId);
-								// No fallar si falla la notificación a administradores
+								logger.LogDebug("No se encontraron operarios con acceso a almacenes {Almacenes} para traspaso {TraspasoId}",
+									string.Join(", ", almacenesTraspaso), traspasoId);
 							}
 						}
 					}
-					catch (Exception ex)
+				}
+				catch (Exception ex)
+				{
+					logger.LogError(ex, "Error al notificar supervisores para traspaso {TraspasoId}", traspasoId);
+					// No fallar la notificación principal si falla la de supervisores
+				}
+
+				// Notificar a TODOS los ADMIN (sin filtro de almacén), excluyendo al usuario que inició el traspaso si es admin
+				// Este bloque se ejecuta siempre cuando es ERROR_ERP, independientemente de si hay almacenes o no
+				try
+				{
+					var adminIds = await dbContext.Usuarios
+						.Where(u => u.IdRol == 3 && u.IdUsuario != usuarioId)
+						.Select(u => u.IdUsuario)
+						.ToListAsync();
+
+					if (adminIds.Any())
 					{
-						logger.LogError(ex, "Error al notificar supervisores para traspaso {TraspasoId}", traspasoId);
-						// No fallar la notificación principal si falla la de supervisores
+						logger.LogInformation("Notificando a {Cantidad} administradores para traspaso {TraspasoId}",
+							adminIds.Count, traspasoId);
+
+						var tituloAdmin = almacenesTraspaso.Any() 
+							? $"Error en Traspaso - {string.Join(", ", almacenesTraspaso)}"
+							: "Error en Traspaso";
+
+						foreach (var adminId in adminIds)
+						{
+							try
+							{
+								await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+									adminId,
+									"TRASPASO",
+									tituloAdmin,
+									$"Supervisión requerida: {mensajeCompleto}",
+									traspasoId,
+									estadoAnterior,
+									estadoActual,
+									"error");
+
+								logger.LogInformation("Notificación enviada a administrador {AdminId} para traspaso {TraspasoId}", adminId, traspasoId);
+							}
+							catch (Exception ex)
+							{
+								logger.LogError(ex, "Error al notificar administrador {AdminId} para traspaso {TraspasoId}", adminId, traspasoId);
+							}
+						}
 					}
 				}
+				catch (Exception ex)
+				{
+					logger.LogError(ex, "Error al notificar administradores para traspaso {TraspasoId}", traspasoId);
+					// No fallar si falla la notificación a administradores
+				}
+			}
 
 				// PASO 3: Agregar a cola de notificaciones Teams si es ERROR_ERP
 				if (estadoActual == "ERROR_ERP")

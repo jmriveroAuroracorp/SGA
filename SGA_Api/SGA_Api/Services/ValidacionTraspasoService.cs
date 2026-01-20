@@ -99,7 +99,25 @@ namespace SGA_Api.Services
                 // 🔷 NUEVO: Verificar tipo de bloqueo
                 if (tipoBloqueo == "TOTAL")
                 {
-                    // Bloqueo total: No se puede traspasar a ninguna ubicación
+                    // 🔷 CORREGIDO: Permitir traspaso si el destino es igual al origen (mismo almacén y ubicación)
+                    // Normalizar ubicaciones para comparación
+                    var almacenOrigenNormalizado = almacenOrigen?.Trim() ?? "";
+                    var almacenDestinoNormalizado = almacenDestino?.Trim() ?? "";
+                    var ubicacionOrigenNormalizada = string.IsNullOrWhiteSpace(ubicacionOrigen) ? "" : ubicacionOrigen.Trim();
+                    var ubicacionDestinoNormalizada = string.IsNullOrWhiteSpace(ubicacionDestino) ? "" : ubicacionDestino.Trim();
+                    
+                    // Verificar si origen y destino son iguales
+                    var esMismoAlmacen = string.Equals(almacenOrigenNormalizado, almacenDestinoNormalizado, StringComparison.OrdinalIgnoreCase);
+                    var esMismaUbicacion = string.Equals(ubicacionOrigenNormalizada, ubicacionDestinoNormalizada, StringComparison.OrdinalIgnoreCase);
+                    
+                    if (esMismoAlmacen && esMismaUbicacion)
+                    {
+                        // Destino igual al origen: permitir traspaso (no hay movimiento real)
+                        _logger.LogInformation($"✅ BLOQUEO TOTAL - Artículo {codigoArticulo} (partida {partida}) bloqueado pero destino es igual al origen ({almacenDestinoNormalizado}-{ubicacionDestinoNormalizada}). Se permite el traspaso.");
+                        return ValidacionTraspasoResult.Valido();
+                    }
+                    
+                    // Bloqueo total: No se puede traspasar a ninguna otra ubicación
                     _logger.LogWarning($"🚫 BLOQUEO TOTAL ACTIVADO - Artículo {codigoArticulo} (partida {partida}) bloqueado por calidad en {bloqueo.CodigoAlmacen}-{bloqueo.Ubicacion ?? "(sin ubicación)"}. No se puede traspasar a ninguna ubicación.");
                     return ValidacionTraspasoResult.Bloqueado(
                         $"No se puede traspasar el artículo {codigoArticulo} (partida {partida}). El artículo está bloqueado por calidad en la ubicación origen {bloqueo.CodigoAlmacen}-{bloqueo.Ubicacion ?? "(sin ubicación)"}. Debe desbloquearse antes de poder traspasarlo.");
@@ -108,9 +126,17 @@ namespace SGA_Api.Services
                 // Si es "SOLO_PULMON", verificar si el destino es PULMÓN
                 if (tipoBloqueo == "SOLO_PULMON")
                 {
+                    // 🔷 CORREGIDO: Manejar ubicaciones vacías correctamente (NULL o cadena vacía)
+                    var ubicacionDestinoParaConsulta = string.IsNullOrWhiteSpace(ubicacionDestino) ? null : ubicacionDestino;
+                    var ubicacionDestinoDisplay = string.IsNullOrWhiteSpace(ubicacionDestino) ? "(sin ubicación)" : ubicacionDestino;
+                    
                     // 🔷 OPTIMIZADO: Una sola consulta con JOIN para mejor rendimiento
+                    // Manejar tanto NULL como cadena vacía en la base de datos
                     var tipoUbicacion = await _auroraSgaContext.Ubicaciones_Configuracion
-                        .Where(u => u.Ubicacion == ubicacionDestino && u.CodigoAlmacen == almacenDestino)
+                        .Where(u => u.CodigoAlmacen == almacenDestino &&
+                                   (ubicacionDestinoParaConsulta == null 
+                                    ? (u.Ubicacion == null || u.Ubicacion == "")
+                                    : u.Ubicacion == ubicacionDestinoParaConsulta))
                         .Join(_auroraSgaContext.TipoUbicaciones,
                             u => u.TipoUbicacionId,
                             t => t.TipoUbicacionId,
@@ -119,17 +145,17 @@ namespace SGA_Api.Services
 
                     if (string.IsNullOrEmpty(tipoUbicacion))
                     {
-                        _logger.LogWarning($"⚠️ Ubicación no encontrada en configuración: {almacenDestino}-{ubicacionDestino}. Se permite el traspaso (no se puede validar tipo).");
+                        _logger.LogWarning($"⚠️ Ubicación no encontrada en configuración: {almacenDestino}-{ubicacionDestinoDisplay}. Se permite el traspaso (no se puede validar tipo).");
                         return ValidacionTraspasoResult.Valido(); // Permitir si no se encuentra la ubicación
                     }
 
-                    _logger.LogInformation($"📍 Ubicación {almacenDestino}-{ubicacionDestino} -> Tipo: {tipoUbicacion}");
+                    _logger.LogInformation($"📍 Ubicación {almacenDestino}-{ubicacionDestinoDisplay} -> Tipo: {tipoUbicacion}");
 
                     var esPulmon = tipoUbicacion?.ToUpper() == "PULMON";
                     
                     if (esPulmon)
                     {
-                        _logger.LogWarning($"🚫 BLOQUEO A PULMÓN ACTIVADO - Artículo {codigoArticulo} (partida {partida}) bloqueado por calidad intentando moverse a PULMÓN {almacenDestino}-{ubicacionDestino}");
+                        _logger.LogWarning($"🚫 BLOQUEO A PULMÓN ACTIVADO - Artículo {codigoArticulo} (partida {partida}) bloqueado por calidad intentando moverse a PULMÓN {almacenDestino}-{ubicacionDestinoDisplay}");
                         return ValidacionTraspasoResult.Bloqueado(
                             $"No se puede traspasar el artículo {codigoArticulo} (partida {partida}) a ubicación PULMÓN. El artículo está bloqueado por calidad.");
                     }
