@@ -41,5 +41,8 @@ namespace SGA_Api.Models.Conteos
         // Navigation properties
         public ICollection<LecturaConteo> Lecturas { get; set; } = new List<LecturaConteo>();
         public ICollection<ResultadoConteo> Resultados { get; set; } = new List<ResultadoConteo>();
+
+        // Propiedad para órdenes de traspaso
+        public Guid? IdOrdenTraspaso { get; set; }
     }
 } 
