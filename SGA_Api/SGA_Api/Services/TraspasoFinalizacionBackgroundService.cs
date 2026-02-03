@@ -29,13 +29,15 @@ namespace SGA_Api.Services
         /// Procesa InventarioAjustes asociados a un Palet (PaletId no nulo) cuando el ajuste está COMPLETADO por el integrador ERP.
         /// Aplica el delta en PaletLineas y registra LogPalet. Evita crear "suelto" cuando el ajuste era de palet.
         /// </summary>
-        private async Task ProcesarAjustesInventarioPorPaletAsync(AuroraSgaDbContext dbContext, ILogger<TraspasoFinalizacionBackgroundService> logger)
+        private async Task ProcesarAjustesInventarioPorPaletAsync(AuroraSgaDbContext dbContext, SageDbContext sageDbContext, ILogger<TraspasoFinalizacionBackgroundService> logger)
         {
             try
             {
                 var ajustes = await dbContext.InventarioAjustes
                     .Where(a => a.PaletId != null && a.Estado == "COMPLETADO" && a.ProcesadoPalet == false)
                     .OrderBy(a => a.Fecha)
+                    .ThenByDescending(a => a.Diferencia) // Procesar positivos antes que negativos para cambios de artículo
+                    .ThenBy(a => a.IdCambioArticulo.HasValue ? 0 : 1) // Agrupar cambios de artículo juntos
                     .Take(200)
                     .ToListAsync();
 
@@ -76,13 +78,65 @@ namespace SGA_Api.Services
                             }
                             else
                             {
+                                // Obtener descripción desde TempPaletLineas (igual que inventarios y conteos)
+                                string? descripcionArticulo = null;
+                                
+                                if (aj.IdInventario.HasValue && aj.IdInventario.Value != Guid.Empty)
+                                {
+                                    var tempLinea = await dbContext.TempPaletLineas
+                                        .Where(tpl => tpl.PaletId == paletId && 
+                                                     tpl.InventarioId == aj.IdInventario.Value &&
+                                                     (tpl.CodigoArticulo ?? "").Trim().ToUpper() == (art ?? "").Trim().ToUpper())
+                                        .FirstOrDefaultAsync();
+                                    
+                                    if (tempLinea != null && !string.IsNullOrWhiteSpace(tempLinea.DescripcionArticulo))
+                                    {
+                                        descripcionArticulo = tempLinea.DescripcionArticulo.Trim();
+                                    }
+                                }
+                                else if (aj.IdConteo.HasValue && aj.IdConteo.Value != Guid.Empty)
+                                {
+                                    var tempLinea = await dbContext.TempPaletLineas
+                                        .Where(tpl => tpl.PaletId == paletId && 
+                                                     tpl.ConteoId == aj.IdConteo.Value &&
+                                                     (tpl.CodigoArticulo ?? "").Trim().ToUpper() == (art ?? "").Trim().ToUpper())
+                                        .FirstOrDefaultAsync();
+                                    
+                                    if (tempLinea != null && !string.IsNullOrWhiteSpace(tempLinea.DescripcionArticulo))
+                                    {
+                                        descripcionArticulo = tempLinea.DescripcionArticulo.Trim();
+                                    }
+                                }
+                                else if (aj.IdCambioArticulo.HasValue && aj.IdCambioArticulo.Value != Guid.Empty)
+                                {
+                                    // Para cambio de artículo, buscar la TempPaletLinea que coincida con el signo del ajuste
+                                    var tempLinea = await dbContext.TempPaletLineas
+                                        .Where(tpl => tpl.PaletId == paletId && 
+                                                     tpl.CambioArticuloId == aj.IdCambioArticulo.Value &&
+                                                     (tpl.CodigoArticulo ?? "").Trim().ToUpper() == (art ?? "").Trim().ToUpper() &&
+                                                     ((aj.Diferencia > 0 && tpl.Cantidad > 0) || (aj.Diferencia < 0 && tpl.Cantidad < 0)))
+                                        .FirstOrDefaultAsync();
+                                    
+                                    if (tempLinea != null && !string.IsNullOrWhiteSpace(tempLinea.DescripcionArticulo))
+                                    {
+                                        descripcionArticulo = tempLinea.DescripcionArticulo.Trim();
+                                    }
+                                }
+                                
+                                // Si no se encontró en TempPaletLineas, intentar desde Sage u otras fuentes
+                                if (string.IsNullOrWhiteSpace(descripcionArticulo))
+                                {
+                                    descripcionArticulo = await ObtenerDescripcionArticuloAsync(
+                                        dbContext, sageDbContext, paletId, art, aj.CodigoEmpresa, logger);
+                                }
+                                
                                 dbContext.PaletLineas.Add(new PaletLinea
                                 {
                                     Id = Guid.NewGuid(),
                                     PaletId = paletId,
                                     CodigoEmpresa = aj.CodigoEmpresa,
                                     CodigoArticulo = art,
-                                    DescripcionArticulo = null,
+                                    DescripcionArticulo = descripcionArticulo,
                                     Cantidad = delta,
                                     UnidadMedida = null,
                                     Lote = lote,
@@ -197,37 +251,74 @@ namespace SGA_Api.Services
                         // Si el ajuste tiene IdCambioArticulo, buscar y marcar las TempPaletLineas correspondientes
                         if (aj.IdCambioArticulo.HasValue && aj.IdCambioArticulo.Value != Guid.Empty)
                         {
-                            logger.LogInformation("🔍 Buscando TempPaletLineas de cambio de artículo: PaletId={PaletId}, CambioArticuloId={CambioArticuloId}, Articulo={Articulo}", 
-                                paletId, aj.IdCambioArticulo.Value, art);
+                            logger.LogInformation("🔍 Buscando TempPaletLineas de cambio de artículo: PaletId={PaletId}, CambioArticuloId={CambioArticuloId}, Articulo={Articulo}, Diferencia={Diferencia}", 
+                                paletId, aj.IdCambioArticulo.Value, art, aj.Diferencia);
                             
                             // Normalizar código de artículo para comparación (trim y mayúsculas)
                             var artNormalizado = (art ?? "").Trim().ToUpper();
                             
+                            // Buscar TempPaletLineas que coincidan con el CambioArticuloId y el código de artículo
+                            // También filtrar por el signo de la cantidad (positivo para entrada, negativo para salida)
                             var tempLineasCambio = await dbContext.TempPaletLineas
                                 .Where(tpl => tpl.PaletId == paletId && 
                                              tpl.CambioArticuloId == aj.IdCambioArticulo.Value && 
                                              (tpl.CodigoArticulo ?? "").Trim().ToUpper() == artNormalizado &&
+                                             // Filtrar por signo: si el ajuste es positivo, buscar TempPaletLinea positiva; si es negativo, buscar negativa
+                                             ((aj.Diferencia > 0 && tpl.Cantidad > 0) || (aj.Diferencia < 0 && tpl.Cantidad < 0)) &&
                                              tpl.Procesada == false)
                                 .ToListAsync();
 
-                            logger.LogInformation("🔍 Encontradas {Cantidad} TempPaletLineas de cambio de artículo pendientes", tempLineasCambio.Count);
+                            logger.LogInformation("🔍 Encontradas {Cantidad} TempPaletLineas de cambio de artículo pendientes (filtradas por artículo y signo)", tempLineasCambio.Count);
 
                             if (!tempLineasCambio.Any())
                             {
-                                // 🔷 FALLBACK: Intentar buscar sin filtrar por artículo (por si hay discrepancias)
+                                // 🔷 FALLBACK 1: Intentar buscar sin filtrar por signo (por si hay discrepancias)
                                 var tempLineasCambioFallback = await dbContext.TempPaletLineas
                                     .Where(tpl => tpl.PaletId == paletId && 
                                                  tpl.CambioArticuloId == aj.IdCambioArticulo.Value && 
+                                                 (tpl.CodigoArticulo ?? "").Trim().ToUpper() == artNormalizado &&
                                                  tpl.Procesada == false)
                                     .ToListAsync();
                                 
                                 if (tempLineasCambioFallback.Any())
                                 {
-                                    logger.LogWarning("⚠️ Encontradas {Cantidad} TempPaletLineas de cambio de artículo sin filtrar por artículo. Artículos: {Articulos}", 
+                                    logger.LogWarning("⚠️ Encontradas {Cantidad} TempPaletLineas de cambio de artículo sin filtrar por signo. Artículos: {Articulos}, Cantidades: {Cantidades}", 
                                         tempLineasCambioFallback.Count, 
-                                        string.Join(", ", tempLineasCambioFallback.Select(t => t.CodigoArticulo).Distinct()));
+                                        string.Join(", ", tempLineasCambioFallback.Select(t => t.CodigoArticulo).Distinct()),
+                                        string.Join(", ", tempLineasCambioFallback.Select(t => t.Cantidad.ToString("F6"))));
                                     
                                     tempLineasCambio = tempLineasCambioFallback;
+                                }
+                                else
+                                {
+                                    // 🔷 FALLBACK 2: Intentar buscar sin filtrar por artículo ni signo (último recurso)
+                                    var tempLineasCambioFallback2 = await dbContext.TempPaletLineas
+                                        .Where(tpl => tpl.PaletId == paletId && 
+                                                     tpl.CambioArticuloId == aj.IdCambioArticulo.Value && 
+                                                     tpl.Procesada == false)
+                                        .ToListAsync();
+                                    
+                                    if (tempLineasCambioFallback2.Any())
+                                    {
+                                        logger.LogWarning("⚠️ Encontradas {Cantidad} TempPaletLineas de cambio de artículo sin filtrar por artículo ni signo. Artículos: {Articulos}, Cantidades: {Cantidades}", 
+                                            tempLineasCambioFallback2.Count, 
+                                            string.Join(", ", tempLineasCambioFallback2.Select(t => t.CodigoArticulo).Distinct()),
+                                            string.Join(", ", tempLineasCambioFallback2.Select(t => t.Cantidad.ToString("F6"))));
+                                        
+                                        // Si hay múltiples, intentar encontrar la que coincida mejor con el ajuste
+                                        // Priorizar: mismo código de artículo > mismo signo
+                                        var mejorCoincidencia = tempLineasCambioFallback2
+                                            .OrderByDescending(t => (t.CodigoArticulo ?? "").Trim().ToUpper() == artNormalizado ? 1 : 0)
+                                            .ThenByDescending(t => ((aj.Diferencia > 0 && t.Cantidad > 0) || (aj.Diferencia < 0 && t.Cantidad < 0)) ? 1 : 0)
+                                            .FirstOrDefault();
+                                        
+                                        if (mejorCoincidencia != null)
+                                        {
+                                            tempLineasCambio = new List<TempPaletLinea> { mejorCoincidencia };
+                                            logger.LogInformation("✅ Seleccionada mejor coincidencia: TempId={TempId}, Articulo={Articulo}, Cantidad={Cantidad}", 
+                                                mejorCoincidencia.Id, mejorCoincidencia.CodigoArticulo, mejorCoincidencia.Cantidad);
+                                        }
+                                    }
                                 }
                             }
 
@@ -235,8 +326,8 @@ namespace SGA_Api.Services
                             {
                                 tempLinea.Procesada = true;
                                 dbContext.TempPaletLineas.Update(tempLinea);
-                                logger.LogInformation("✅ TempPaletLinea {TempId} marcada como procesada tras completar ajuste de cambio de artículo {CambioArticuloId}", 
-                                    tempLinea.Id, aj.IdCambioArticulo);
+                                logger.LogInformation("✅ TempPaletLinea {TempId} marcada como procesada tras completar ajuste de cambio de artículo {CambioArticuloId}. Articulo={Articulo}, Cantidad={Cantidad}", 
+                                    tempLinea.Id, aj.IdCambioArticulo, tempLinea.CodigoArticulo, tempLinea.Cantidad);
                             }
                         }
 
@@ -304,7 +395,7 @@ namespace SGA_Api.Services
 						await DetectarYNotificarCambiosEstadoAsync(dbContext, sageDbContext, notificacionesUnificadas, logger);
 
                         // 1.1. PROCESAR AJUSTES DE INVENTARIO POR PALET (COMPLETADO)
-                        await ProcesarAjustesInventarioPorPaletAsync(dbContext, logger);
+                        await ProcesarAjustesInventarioPorPaletAsync(dbContext, sageDbContext, logger);
 
                         // 1.2. DETECCIÓN DE ERRORES EN AJUSTES DE INVENTARIO
                         await DetectarYNotificarErroresInventariosAsync(dbContext, sageDbContext, notificacionesUnificadas, logger);
@@ -429,7 +520,7 @@ namespace SGA_Api.Services
 
 					foreach (var temp in tempsPendientes)
 					{
-						// 🔷 PROTECCIÓN: Las líneas de conteo e inventario NO se consolidan aquí
+						// 🔷 PROTECCIÓN: Las líneas de conteo, inventario y cambio de artículo NO se consolidan aquí
 						// Solo se procesan cuando el InventarioAjustes asociado está COMPLETADO
 						// y se aplican a través de ProcesarAjustesInventarioPorPaletAsync
 						if (temp.ConteoId != null && temp.ConteoId != Guid.Empty)
@@ -441,6 +532,12 @@ namespace SGA_Api.Services
 						if (temp.InventarioId != null && temp.InventarioId != Guid.Empty)
 						{
 							// Línea de inventario - no procesar aquí, esperar a que el ajuste esté COMPLETADO
+							continue;
+						}
+						
+						if (temp.CambioArticuloId != null && temp.CambioArticuloId != Guid.Empty)
+						{
+							// Línea de cambio de artículo - no procesar aquí, esperar a que el ajuste esté COMPLETADO
 							continue;
 						}
 

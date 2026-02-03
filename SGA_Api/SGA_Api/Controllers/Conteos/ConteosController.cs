@@ -604,16 +604,19 @@ namespace SGA_Api.Controllers
         [HttpGet("palets-disponibles")]
         public async Task<IActionResult> ObtenerPaletsDisponibles(
             [FromQuery] string codigoAlmacen,
-            [FromQuery] string ubicacion,
             [FromQuery] string codigoArticulo,
+            [FromQuery] string? ubicacion = null,
             [FromQuery] string? lote = null,
             [FromQuery] DateTime? fechaCaducidad = null)
         {
             try
             {
+                // Normalizar ubicación: null o string vacío se trata como string.Empty para "SIN UBICAR"
+                var ubicacionNormalizada = string.IsNullOrEmpty(ubicacion) ? string.Empty : ubicacion;
+                
                 var palets = await _conteosService.ObtenerPaletsDisponiblesAsync(
                     codigoAlmacen, 
-                    ubicacion, 
+                    ubicacionNormalizada, 
                     codigoArticulo, 
                     lote, 
                     fechaCaducidad);
@@ -823,6 +826,44 @@ namespace SGA_Api.Controllers
                 {
                     Title = "Error interno del servidor",
                     Detail = "Ocurrió un error al desactivar la periodicidad",
+                    Status = 500
+                });
+            }
+        }
+
+        /// <summary>
+        /// Renovar manualmente un conteo periódico (relanzar ahora)
+        /// </summary>
+        /// <param name="guid">Guid de la orden periódica</param>
+        /// <returns>Nueva orden creada por la renovación</returns>
+        [HttpPost("ordenes/{guid:guid}/renovar")]
+        [ProducesResponseType(typeof(OrdenDto), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 404)]
+        public async Task<IActionResult> RenovarConteoPeriodico(Guid guid)
+        {
+            try
+            {
+                var nuevaOrden = await _conteosService.RenovarConteoPeriodicoAsync(guid);
+                return Ok(nuevaOrden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Error de validación al renovar conteo periódico {Guid}", guid);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Error de validación",
+                    Detail = ex.Message,
+                    Status = 400
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al renovar conteo periódico {Guid}", guid);
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al renovar el conteo periódico",
                     Status = 500
                 });
             }

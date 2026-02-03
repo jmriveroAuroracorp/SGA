@@ -52,6 +52,8 @@ namespace SGA_Desktop.Models
                 EstadoAnterior = apiDto.EstadoAnterior,
                 EstadoActual = apiDto.EstadoActual,
                 TipoTraspaso = apiDto.TipoNotificacion == "TRASPASO" ? "ARTICULO" : null, // Asumimos artículo por defecto
+                TipoNotificacion = apiDto.TipoNotificacion,
+                ProcesoId = apiDto.ProcesoId,
                 // Los datos adicionales se pueden extraer del objeto DatosAdicionales si es necesario
             };
         }
@@ -74,6 +76,8 @@ namespace SGA_Desktop.Models
                 EstadoAnterior = null, // No disponible en el resumen
                 EstadoActual = resumenDto.EstadoActual,
                 TipoTraspaso = resumenDto.TipoNotificacion == "TRASPASO" ? "TRASPASO" : null,
+                TipoNotificacion = resumenDto.TipoNotificacion,
+                ProcesoId = resumenDto.ProcesoId,
             };
         }
 

@@ -830,7 +830,7 @@ namespace SGA_Api.Controllers.Inventario
                             grupo.CodigoArticulo, grupo.Partida, grupo.CodigoAlmacen);
                     }
                     
-                    await Task.Delay(30000); // Delay real de 30 segundos
+                    await Task.Delay(15000); // Delay real de 15 segundos
                     
                     // Ahora crear los negativos con conflicto (arreglan positivos del inventario)
                     foreach (var ajuste in ajustesNegativosConConflicto)
@@ -4052,52 +4052,116 @@ namespace SGA_Api.Controllers.Inventario
 
 				_context.CambioArticulo.Add(cambioArticulo);
 
-				// Crear ajuste negativo (salida) del artículo origen
-				var ajusteSalida = new InventarioAjustes
-				{
-					IdAjuste = Guid.NewGuid(),
-					IdInventario = null, // Ajuste sin inventario asociado
-					CodigoArticulo = dto.CodigoArticuloOrigen,
-					CodigoUbicacion = dto.Ubicacion ?? string.Empty,
-					Diferencia = -dto.Cantidad, // Negativo = salida
-					UsuarioId = dto.UsuarioId,
-					Fecha = DateTime.Now,
-					IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
-					IdCambioArticulo = cambioArticulo.IdCambioArticulo,
-					CodigoEmpresa = dto.CodigoEmpresa,
-					CodigoAlmacen = dto.CodigoAlmacen,
-					Estado = "PENDIENTE_ERP",
-					FechaCaducidad = fechaCaducidadOrigen,
-					Partida = dto.Partida,
-					PaletId = dto.PaletId,
-					CodigoPalet = codigoPalet,
-					ProcesadoPalet = false
-				};
+				InventarioAjustes ajusteEntrada;
+				InventarioAjustes ajusteSalida;
 
-				// Crear ajuste positivo (entrada) del artículo destino
-				var ajusteEntrada = new InventarioAjustes
+				// Si hay palet, crear primero la entrada (positivo) y luego la salida (negativo) con delay
+				// Esto asegura que el palet no quede vacío durante el procesamiento
+				if (dto.PaletId.HasValue)
 				{
-					IdAjuste = Guid.NewGuid(),
-					IdInventario = null, // Ajuste sin inventario asociado
-					CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
-					CodigoUbicacion = dto.Ubicacion ?? string.Empty,
-					Diferencia = dto.Cantidad, // Positivo = entrada
-					UsuarioId = dto.UsuarioId,
-					Fecha = DateTime.Now,
-					IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
-					IdCambioArticulo = cambioArticulo.IdCambioArticulo,
-					CodigoEmpresa = dto.CodigoEmpresa,
-					CodigoAlmacen = dto.CodigoAlmacen,
-					Estado = "PENDIENTE_ERP",
-					FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
-					Partida = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : dto.Partida,
-					PaletId = dto.PaletId,
-					CodigoPalet = codigoPalet,
-					ProcesadoPalet = false
-				};
+					// PRIMERO: Crear ajuste positivo (entrada) del artículo destino
+					ajusteEntrada = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
+						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						Diferencia = dto.Cantidad, // Positivo = entrada
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now,
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+						Partida = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : dto.Partida,
+						PaletId = dto.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
 
-				_context.InventarioAjustes.Add(ajusteSalida);
-				_context.InventarioAjustes.Add(ajusteEntrada);
+					_context.InventarioAjustes.Add(ajusteEntrada);
+					await _context.SaveChangesAsync(); // Guardar entrada primero
+
+					_logger.LogInformation("⏳ Cambio de artículo con palet: Ajuste de entrada creado. Esperando 15 segundos antes de crear ajuste de salida.");
+
+					// Delay para asegurar que el ajuste de entrada se procese antes que el de salida
+					await Task.Delay(15000); // Delay real de 15 segundos
+
+					// SEGUNDO: Crear ajuste negativo (salida) del artículo origen
+					ajusteSalida = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = dto.CodigoArticuloOrigen,
+						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						Diferencia = -dto.Cantidad, // Negativo = salida
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now, // Fecha posterior por el delay
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = fechaCaducidadOrigen,
+						Partida = dto.Partida,
+						PaletId = dto.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					_context.InventarioAjustes.Add(ajusteSalida);
+					_logger.LogInformation("✅ Ajuste de salida creado después del delay para cambio de artículo con palet.");
+				}
+				else
+				{
+					// Si NO hay palet, crear ambos ajustes normalmente (sin delay)
+					ajusteSalida = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = dto.CodigoArticuloOrigen,
+						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						Diferencia = -dto.Cantidad, // Negativo = salida
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now,
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = fechaCaducidadOrigen,
+						Partida = dto.Partida,
+						PaletId = dto.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					ajusteEntrada = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
+						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						Diferencia = dto.Cantidad, // Positivo = entrada
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now,
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambioArticulo.IdCambioArticulo,
+						CodigoEmpresa = dto.CodigoEmpresa,
+						CodigoAlmacen = dto.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+						Partida = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : dto.Partida,
+						PaletId = dto.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					_context.InventarioAjustes.Add(ajusteSalida);
+					_context.InventarioAjustes.Add(ajusteEntrada);
+				}
 
 				// Crear TempPaletLineas si hay palet (igual que en inventarios/conteos)
 				if (dto.PaletId.HasValue)

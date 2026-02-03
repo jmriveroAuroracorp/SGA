@@ -76,5 +76,46 @@ namespace SGA_Desktop.Services
                 throw;
             }
         }
+
+        public async Task<EstadisticasCalidadDto> ObtenerEstadisticasAsync(short codigoEmpresa)
+        {
+            try
+            {
+                ActualizarToken();
+                var url = $"Calidad/estadisticas?codigoEmpresa={codigoEmpresa}";
+                System.Diagnostics.Debug.WriteLine($"[CalidadService] Llamando a: {url}");
+                
+                var json = await GetStringAsync(url);
+                if (json != null && json.Length > 0)
+                {
+                    var preview = json.Length > 200 ? json.Substring(0, 200) : json;
+                    System.Diagnostics.Debug.WriteLine($"[CalidadService] Respuesta recibida: {preview}...");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[CalidadService] Respuesta recibida: (vacía o null)");
+                }
+                
+                var resultado = JsonSerializer.Deserialize<EstadisticasCalidadDto>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (resultado == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[CalidadService] WARNING: resultado es null, retornando DTO vacío");
+                    return new EstadisticasCalidadDto();
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[CalidadService] Estadísticas deserializadas - Bloqueados: {resultado.TotalBloqueados}");
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalidadService] Error al obtener estadísticas: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[CalidadService] StackTrace: {ex.StackTrace}");
+                throw;
+            }
+        }
     }
 }

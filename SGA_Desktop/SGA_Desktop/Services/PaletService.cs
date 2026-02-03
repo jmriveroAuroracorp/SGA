@@ -287,16 +287,18 @@ namespace SGA_Desktop.Services
 
 		//	return resp.IsSuccessStatusCode;
 		//}
-		public async Task<bool> CerrarPaletAsync(
-			Guid paletId,
-			int usuarioId,
-			string codigoAlmacen,             // origen (de las líneas)
-			string codigoAlmacenDestino,
-			string ubicacionDestino,
-			string? comentario = null, // Nuevo parámetro opcional
-			decimal? altura = null,
-			decimal? peso = null
-		)
+	public async Task<(bool exito, string? mensaje)> CerrarPaletAsync(
+		Guid paletId,
+		int usuarioId,
+		string codigoAlmacen,             // origen (de las líneas)
+		string codigoAlmacenDestino,
+		string ubicacionDestino,
+		string? comentario = null, // Nuevo parámetro opcional
+		decimal? altura = null,
+		decimal? peso = null
+	)
+	{
+		try
 		{
 			var dto = new
 			{
@@ -316,26 +318,55 @@ namespace SGA_Desktop.Services
 			var resp = await _httpClient.PostAsJsonAsync(
 				$"palet/{paletId}/cerrar", dto);
 
-			var content = await resp.Content.ReadAsStringAsync();
-
-			if (!resp.IsSuccessStatusCode)
+			if (resp.IsSuccessStatusCode)
 			{
-				MessageBox.Show($"Error al cerrar palet: {resp.StatusCode}");
-				MessageBox.Show($"Respuesta: {content}");
+				return (true, null);
 			}
 
-			return resp.IsSuccessStatusCode;
+			// Leer el mensaje de error que envía el servidor (incluye los valores de SAGE y StorageControl)
+			var mensaje = await resp.Content.ReadAsStringAsync();
+			if (string.IsNullOrWhiteSpace(mensaje))
+			{
+				mensaje = $"Error al cerrar palet: {resp.StatusCode}";
+			}
+
+			return (false, mensaje);
 		}
+		catch (Exception ex)
+		{
+			return (false, $"Error al cerrar el palet: {ex.Message}");
+		}
+	}
 
 
 
 
 
-		public async Task<bool> ReabrirPaletAsync(Guid paletId, int usuarioId)
+	public async Task<(bool success, string? errorMessage)> ReabrirPaletAsync(Guid paletId, int usuarioId)
+	{
+		try
 		{
 			var resp = await _httpClient.PostAsync($"palet/{paletId}/reabrir?usuarioId={usuarioId}", null);
-			return resp.IsSuccessStatusCode;
+			
+			if (resp.IsSuccessStatusCode)
+			{
+				return (true, null);
+			}
+
+			// Leer el mensaje de error que envía el servidor
+			var mensaje = await resp.Content.ReadAsStringAsync();
+			if (string.IsNullOrWhiteSpace(mensaje))
+			{
+				mensaje = $"Error al reabrir palet: {resp.StatusCode}";
+			}
+
+			return (false, mensaje);
 		}
+		catch (Exception ex)
+		{
+			return (false, $"Error al reabrir el palet: {ex.Message}");
+		}
+	}
 
 		public async Task<PaletDto?> ObtenerPaletPorIdAsync(Guid id)
 		{

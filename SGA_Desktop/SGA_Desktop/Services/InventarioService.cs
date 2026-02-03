@@ -139,6 +139,29 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
+        /// Obtiene un inventario por su ID
+        /// </summary>
+        public async Task<InventarioCabeceraDto?> ObtenerInventarioPorIdAsync(Guid idInventario)
+        {
+            try
+            {
+                var filtro = new FiltroInventarioDto
+                {
+                    CodigoEmpresa = SessionManager.EmpresaSeleccionada!.Value,
+                    FechaDesde = DateTime.Today.AddDays(-365), // Último año
+                    FechaHasta = DateTime.Today.AddDays(1)
+                };
+                
+                var inventarios = await ObtenerInventariosAsync(filtro);
+                return inventarios.FirstOrDefault(i => i.IdInventario == idInventario);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Crea un nuevo registro de inventario
         /// </summary>
         public async Task<CrearInventarioResponseDto?> CrearInventarioAsync(CrearInventarioDto inventario)

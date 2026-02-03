@@ -126,7 +126,7 @@
 
                     <!-- Filtro por nombre -->
                     <TextBlock Grid.Row="0" Grid.Column="0"
-                               Text="Filtrar por nombre:"
+                               Text="Filtrar por nombre o código:"
                                VerticalAlignment="Center"
                                Margin="0,0,10,0"
                                Foreground="White"/>

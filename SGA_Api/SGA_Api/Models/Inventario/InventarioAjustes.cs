@@ -35,6 +35,8 @@ namespace SGA_Api.Models.Inventario
 
         public Guid? IdConteo { get; set; }
 
+        public Guid? IdOrden { get; set; }  
+       
         public Guid? IdCambioArticulo { get; set; }
 
         [Required]

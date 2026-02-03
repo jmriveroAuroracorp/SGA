@@ -117,6 +117,10 @@ namespace SGA_Desktop.ViewModels
         [ObservableProperty]
         private AlmacenDto? almacenSeleccionado;
 
+        // Propiedades para modo multialmacén (solo en modo artículo)
+        [ObservableProperty]
+        private bool modoMultialmacen = false;
+
         [ObservableProperty]
         private OperariosAccesoDto? operarioSeleccionado;
 
@@ -283,6 +287,27 @@ namespace SGA_Desktop.ViewModels
         public bool MostrarListaArticulos => ArticulosSeleccionados != null && ArticulosSeleccionados.Any();
         public bool MostrarInfoArticulo => ArticuloSeleccionado != null;
         public bool MostrarAdvertenciaSinStock => MostrarInfoArticulo && !ArticuloTieneStockVirtual;
+
+        // Propiedades computadas para modo multialmacén
+        public List<AlmacenDto> AlmacenesSeleccionados => 
+            AlmacenesDisponibles.Where(a => a.IsSelected && a.CodigoAlmacen != "TODOS").ToList();
+
+        public string DescripcionAlmacenesSeleccionados
+        {
+            get
+            {
+                var seleccionados = AlmacenesSeleccionados;
+                if (!seleccionados.Any())
+                    return "Ningún almacén seleccionado";
+                    
+                if (seleccionados.Count == 1)
+                    return seleccionados.First().DescripcionCombo;
+                    
+                return seleccionados.Count <= 3 
+                    ? string.Join(", ", seleccionados.Select(a => a.CodigoAlmacen))
+                    : $"{string.Join(", ", seleccionados.Take(2).Select(a => a.CodigoAlmacen))} y {seleccionados.Count - 2} más";
+            }
+        }
         #endregion
 
         #region Commands
@@ -308,6 +333,19 @@ namespace SGA_Desktop.ViewModels
                     var warningDialog = new WarningDialog("Error de validación", "Selecciona un almacén específico antes de crear la orden.");
                     warningDialog.ShowDialog();
                     return;
+                }
+
+                // Validar modo multialmacén
+                if (ModoMultialmacen && !EsConteoUbicacion)
+                {
+                    if (!AlmacenesSeleccionados.Any())
+                    {
+                        var warningDialog = new WarningDialog(
+                            "Error de validación", 
+                            "En modo multialmacén, debe seleccionar al menos un almacén.");
+                        warningDialog.ShowDialog();
+                        return;
+                    }
                 }
 
                 // Validar periodicidad
@@ -386,6 +424,12 @@ namespace SGA_Desktop.ViewModels
                     EsPeriodico = EsPeriodico,
                     FrecuenciaDias = EsPeriodico ? FrecuenciaDias : null
                 };
+
+                // Agregar lista de almacenes si está en modo multialmacén
+                if (ModoMultialmacen && !EsConteoUbicacion && AlmacenesSeleccionados.Any())
+                {
+                    dto.CodigosAlmacen = AlmacenesSeleccionados.Select(a => a.CodigoAlmacen).ToList();
+                }
 
 
                 // Si el alcance es ARTICULO, agregar el código del artículo
@@ -710,6 +754,26 @@ namespace SGA_Desktop.ViewModels
             ArticulosSeleccionados.Remove(articulo);
             OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
         }
+
+        [RelayCommand]
+        private void MarcarTodosAlmacenes()
+        {
+            if (!ModoMultialmacen) return;
+
+            var todosMarcados = AlmacenesDisponibles
+                .Where(a => a.CodigoAlmacen != "TODOS")
+                .All(a => a.IsSelected);
+
+            foreach (var almacen in AlmacenesDisponibles)
+            {
+                if (almacen.CodigoAlmacen != "TODOS")
+                {
+                    almacen.IsSelected = !todosMarcados;
+                }
+            }
+
+            OnPropertyChanged(nameof(DescripcionAlmacenesSeleccionados));
+        }
         #endregion
 
         #region Private Methods
@@ -749,7 +813,10 @@ namespace SGA_Desktop.ViewModels
 
                 // Agregar el resto de almacenes
                 foreach (var a in resultado)
+                {
+                    a.IsSelected = false; // Inicializar selección múltiple
                     AlmacenesDisponibles.Add(a);
+                }
 
                 // Refrescar la vista filtrada
                 AlmacenesView?.Refresh();
@@ -931,11 +998,27 @@ namespace SGA_Desktop.ViewModels
             {
                 var filtros = new Dictionary<string, object>();
 
-                // Incluir el almacén solo si se ha seleccionado y no es "TODOS"
-                // En conteos por ubicación es obligatorio, en conteos por artículo es opcional
-                if (AlmacenSeleccionado != null && AlmacenSeleccionado.CodigoAlmacen != "TODOS")
+                // Manejar almacenes según el modo
+                if (ModoMultialmacen && !EsConteoUbicacion)
                 {
-                    filtros["almacen"] = AlmacenSeleccionado.CodigoAlmacen;
+                    // Modo multialmacén: incluir array de almacenes
+                    var almacenesSeleccionados = AlmacenesSeleccionados
+                        .Where(a => a.CodigoAlmacen != "TODOS")
+                        .Select(a => a.CodigoAlmacen)
+                        .ToList();
+                    
+                    if (almacenesSeleccionados.Any())
+                    {
+                        filtros["almacenes"] = almacenesSeleccionados;
+                    }
+                }
+                else
+                {
+                    // Modo único: incluir almacén individual (compatibilidad)
+                    if (AlmacenSeleccionado != null && AlmacenSeleccionado.CodigoAlmacen != "TODOS")
+                    {
+                        filtros["almacen"] = AlmacenSeleccionado.CodigoAlmacen;
+                    }
                 }
 
                 if (EsConteoUbicacion)
@@ -1175,6 +1258,48 @@ namespace SGA_Desktop.ViewModels
             OnPropertyChanged(nameof(MostrarAdvertenciaSinStock));
         }
 
+        partial void OnModoMultialmacenChanged(bool oldValue, bool newValue)
+        {
+            if (newValue)
+            {
+                // Activar modo multialmacén: Deseleccionar el almacén único
+                if (AlmacenSeleccionado != null)
+                {
+                    AlmacenSeleccionado.IsSelected = false;
+                    AlmacenSeleccionado = null;
+                }
+                
+                // Permitir selección múltiple - limpiar selecciones previas
+                foreach (var almacen in AlmacenesDisponibles)
+                {
+                    if (almacen.CodigoAlmacen != "TODOS")
+                    {
+                        almacen.IsSelected = false;
+                    }
+                }
+            }
+            else
+            {
+                // Volver a modo único: Deseleccionar todos
+                foreach (var almacen in AlmacenesDisponibles)
+                {
+                    almacen.IsSelected = false;
+                }
+                
+                // Seleccionar "TODOS" por defecto en modo artículo
+                if (!EsConteoUbicacion)
+                {
+                    var opcionTodos = AlmacenesDisponibles.FirstOrDefault(a => a.CodigoAlmacen == "TODOS");
+                    if (opcionTodos != null)
+                    {
+                        AlmacenSeleccionado = opcionTodos;
+                    }
+                }
+            }
+            
+            OnPropertyChanged(nameof(DescripcionAlmacenesSeleccionados));
+        }
+
         partial void OnArticulosSeleccionadosChanged(ObservableCollection<ArticuloResumenDto> value)
         {
             OnPropertyChanged(nameof(DescripcionArticulosSeleccionados));
@@ -1350,10 +1475,13 @@ namespace SGA_Desktop.ViewModels
         {
             if (obj is not AlmacenDto almacen) return false;
             
-            // En modo conteo por ubicación, excluir "TODOS"
-            if (EsConteoUbicacion && almacen.CodigoAlmacen == "TODOS")
+            // Excluir "TODOS" en modo conteo por ubicación o en modo multialmacén
+            if (almacen.CodigoAlmacen == "TODOS")
             {
-                return false;
+                if (EsConteoUbicacion || ModoMultialmacen)
+                {
+                    return false;
+                }
             }
             
             return true;

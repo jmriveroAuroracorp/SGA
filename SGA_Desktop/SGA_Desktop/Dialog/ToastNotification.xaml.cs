@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -58,6 +59,10 @@ namespace SGA_Desktop.Dialog
         public ToastNotification(NotificacionDto notificacion)
         {
             InitializeComponent();
+            
+            // Configurar ventana para no interferir con desplegables
+            this.Focusable = false;
+            this.IsHitTestVisible = true; // Permitir clics en los botones
             
             // Configurar contenido
             TitleText.Text = notificacion.Titulo;
@@ -172,13 +177,17 @@ namespace SGA_Desktop.Dialog
             CerrarConAnimacion();
         }
 
-        private void CloseButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void CloseButton_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            e.Handled = true; // Evitar que se propague el click al Border
+            e.Handled = true; // Evitar que se propague el click al Border y cierre desplegables
         }
 
-        private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void Border_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // Solo procesar si no se hizo clic en el botón de cerrar
+            if (e.OriginalSource is Button closeBtn && closeBtn.Name == "CloseButton")
+                return;
+                
             // Abrir la ventana de notificaciones
             try
             {

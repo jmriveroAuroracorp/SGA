@@ -1216,6 +1216,15 @@
                                                             FontSize="11"
                                                             Margin="0,0,4,0"
                                                             Visibility="{Binding Activo, Converter={StaticResource BoolToVis}}"/>
+                                                    <Button Content="🚀 Relanzar ahora"
+                                                            Command="{Binding DataContext.RelanzarConteoPeriodicoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Style="{StaticResource EstiloBoton}"
+                                                            Width="120"
+                                                            Height="30"
+                                                            FontSize="11"
+                                                            Margin="0,0,4,0"
+                                                            Visibility="{Binding Activo, Converter={StaticResource BoolToVis}}"/>
                                                     <Button Content="📋 Historial"
                                                             Command="{Binding DataContext.VerRenovacionesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}"

@@ -155,4 +155,12 @@ public class StockDisponibleDto : INotifyPropertyChanged
     
     // 🔷 NUEVO: Fecha del último traspaso
     public DateTime? FechaUltimoTraspaso { get; set; }
+    
+    // 🔷 NUEVO: Alérgenos del artículo
+    public string? Alergenos { get; set; }
+    
+    // 🔷 NUEVO: Información de desincronización de stock (SAGE vs StorageControl)
+    public bool? TieneDesincronizacion { get; set; }
+    public decimal? StockSage { get; set; }
+    public decimal? StockStorageControl { get; set; }
 }

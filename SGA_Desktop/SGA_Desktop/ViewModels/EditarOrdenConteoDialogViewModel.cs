@@ -241,7 +241,10 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
-                if (ordenActual.Estado != "PLANIFICADO" && ordenActual.Estado != "ASIGNADO")
+                // Para conteos periódicos, permitir edición independientemente del estado
+                // porque los cambios solo afectan a la plantilla para futuras renovaciones
+                // Para conteos normales, solo permitir edición si está en PLANIFICADO o ASIGNADO
+                if (!EsPeriodico && ordenActual.Estado != "PLANIFICADO" && ordenActual.Estado != "ASIGNADO")
                 {
                     var errorDialog = new WarningDialog(
                         "No se puede actualizar", 
@@ -539,8 +542,9 @@ namespace SGA_Desktop.ViewModels
                 }
                 else if (orden.EsPeriodico && !orden.Activo)
                 {
-                    // Si está desactivado, usar el día actual como valor por defecto
-                    FechaProximaRenovacion = DateTime.Now.Date;
+                    // Si está desactivado, usar mañana como valor por defecto para cumplir con la validación
+                    // El usuario puede cambiarla si lo desea
+                    FechaProximaRenovacion = DateTime.Now.Date.AddDays(1);
                 }
                 
                 // Cargar frecuencia de días

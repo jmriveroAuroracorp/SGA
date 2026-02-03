@@ -225,33 +225,58 @@ namespace SGA_Desktop.Services
         {
             try
             {
-                _logger?.LogInformation("📨 Notificación recibida: {Notificacion}", notificacion);
-
+                System.Diagnostics.Debug.WriteLine($"📨 [SignalR] Notificación recibida (RAW): {notificacion?.ToString() ?? "null"}");
+                _logger?.LogInformation("📨 Notificación recibida (RAW): {Notificacion}", notificacion?.ToString() ?? "null");
+                
                 // Deserializar la notificación
-                var notificacionData = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(notificacion.ToString() ?? "");
+                var jsonString = notificacion?.ToString() ?? "";
+                System.Diagnostics.Debug.WriteLine($"📨 [SignalR] JSON recibido: {jsonString}");
+                _logger?.LogInformation("📨 JSON recibido: {Json}", jsonString);
+                
+                var notificacionData = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(jsonString);
+                
+                // Intentar acceder a las propiedades en diferentes formatos (PascalCase y camelCase)
+                string tipoNotificacion = notificacionData?.TipoNotificacion?.ToString() 
+                                    ?? notificacionData?.tipoNotificacion?.ToString() 
+                                    ?? "";
+                string titulo = notificacionData?.Titulo?.ToString() 
+                          ?? notificacionData?.titulo?.ToString() 
+                          ?? "";
+                string mensaje = notificacionData?.Mensaje?.ToString() 
+                           ?? notificacionData?.mensaje?.ToString() 
+                           ?? "";
+                string tipoPopup = notificacionData?.TipoPopup?.ToString() 
+                             ?? notificacionData?.tipoPopup?.ToString() 
+                             ?? "info";
+                
+                System.Diagnostics.Debug.WriteLine($"📋 [SignalR] Notificación parseada - Tipo: {tipoNotificacion}, Título: {titulo}, Mensaje: {mensaje}, TipoPopup: {tipoPopup}");
+                _logger?.LogInformation("📋 Notificación parseada - Tipo: {Tipo}, Título: {Titulo}, Mensaje: {Mensaje}, TipoPopup: {TipoPopup}", 
+                    tipoNotificacion, titulo, mensaje, tipoPopup);
                 
                 var args = new NotificacionUsuarioEventArgs
                 {
-                    TipoNotificacion = notificacionData?.tipoNotificacion?.ToString() ?? "",
-                    Titulo = notificacionData?.titulo?.ToString(),
-                    Mensaje = notificacionData?.mensaje?.ToString(),
-                    TipoPopup = notificacionData?.tipoPopup?.ToString(),
+                    TipoNotificacion = tipoNotificacion,
+                    Titulo = titulo,
+                    Mensaje = mensaje,
+                    TipoPopup = tipoPopup,
                     Timestamp = DateTime.UtcNow,
                     DatosCompletos = notificacion
                 };
 
-                _logger?.LogInformation("📋 Notificación procesada - Tipo: {Tipo}, Título: {Titulo}", 
-                    args.TipoNotificacion, args.Titulo);
-
                 // Invocar en el hilo de UI
                 Application.Current.Dispatcher.Invoke(() =>
                 {
+                    System.Diagnostics.Debug.WriteLine($"🔔 [SignalR] Disparando evento NotificacionRecibida");
+                    _logger?.LogInformation("🔔 Disparando evento NotificacionRecibida");
                     NotificacionRecibida?.Invoke(this, args);
                 });
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Error al procesar notificación recibida");
+                System.Diagnostics.Debug.WriteLine($"❌ [SignalR] Error al procesar notificación recibida: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ [SignalR] StackTrace: {ex.StackTrace}");
+                _logger?.LogError(ex, "❌ Error al procesar notificación recibida: {Error}", ex.Message);
+                _logger?.LogError(ex, "❌ StackTrace: {StackTrace}", ex.StackTrace);
                 ErrorConexion?.Invoke(this, ex);
             }
         }

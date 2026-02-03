@@ -82,6 +82,9 @@ namespace SGA_Api.Data
 		// Entidades de Calidad
 		public DbSet<BloqueoCalidad> BloqueosCalidad { get; set; }
 
+		// Entidades de Bloqueos de Sincronización de Stock
+		public DbSet<BloqueoSincronizacionStock> BloqueosSincronizacionStock { get; set; } = null!;
+
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -424,6 +427,7 @@ namespace SGA_Api.Data
                 ent.Property(i => i.UsuarioId).HasColumnName("UsuarioId");
                 ent.Property(i => i.Fecha).HasColumnName("Fecha").HasColumnType("DATETIME");
                 ent.Property(i => i.IdConteo).HasColumnName("IdConteo");
+                ent.Property(i => i.IdOrden).HasColumnName("IdOrden").IsRequired(false);
                 ent.Property(i => i.IdCambioArticulo).HasColumnName("IdCambioArticulo").IsRequired(false);
                 ent.Property(i => i.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
                 ent.Property(i => i.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10);
@@ -755,6 +759,29 @@ namespace SGA_Api.Data
 				// Índice en Estado para optimizar consultas de pendientes
 				entity.HasIndex(e => e.Estado)
 					.HasFilter("[Estado] = 'Pendiente'");
+			});
+
+			// Configuración de BloqueoSincronizacionStock
+			modelBuilder.Entity<BloqueoSincronizacionStock>(entity =>
+			{
+				entity.ToTable("BloqueosSincronizacionStock");
+				entity.HasKey(b => b.Id);
+				entity.Property(b => b.Id).ValueGeneratedOnAdd();
+				entity.Property(b => b.CodigoEmpresa).HasColumnName("CodigoEmpresa").HasColumnType("SMALLINT");
+				entity.Property(b => b.CodigoArticulo).HasColumnName("CodigoArticulo").HasMaxLength(50).IsRequired();
+				entity.Property(b => b.Partida).HasColumnName("Partida").HasMaxLength(50);
+				entity.Property(b => b.CodigoAlmacen).HasColumnName("CodigoAlmacen").HasMaxLength(10).IsRequired();
+				entity.Property(b => b.Ubicacion).HasColumnName("Ubicacion").HasMaxLength(50);
+				entity.Property(b => b.StockSage).HasColumnName("StockSage").HasColumnType("DECIMAL(18,6)");
+				entity.Property(b => b.StockStorageControl).HasColumnName("StockStorageControl").HasColumnType("DECIMAL(18,6)");
+				entity.Property(b => b.Diferencia).HasColumnName("Diferencia").HasColumnType("DECIMAL(18,6)");
+				entity.Property(b => b.FechaBloqueo).HasColumnName("FechaBloqueo").HasColumnType("DATETIME").HasDefaultValueSql("GETDATE()");
+				entity.Property(b => b.UsuarioId).HasColumnName("UsuarioId");
+				entity.Property(b => b.TipoOperacion).HasColumnName("TipoOperacion").HasMaxLength(100);
+				entity.Property(b => b.PaletId).HasColumnName("PaletId");
+				entity.Property(b => b.CodigoPalet).HasColumnName("CodigoPalet").HasMaxLength(50);
+				entity.Property(b => b.MensajeError).HasColumnName("MensajeError").HasMaxLength(500);
+				entity.Property(b => b.Notificado).HasColumnName("Notificado").HasDefaultValue(false);
 			});
 
         }

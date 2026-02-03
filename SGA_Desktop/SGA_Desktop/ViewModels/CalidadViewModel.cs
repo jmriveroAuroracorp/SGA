@@ -22,6 +22,7 @@ namespace SGA_Desktop.ViewModels
             // Inicializar propiedades
             CodigoEmpresa = SessionManager.EmpresaSeleccionada ?? 0;
             CargarBloqueos();
+            _ = CargarEstadisticasAsync();
         }
 
         #region Propiedades de Búsqueda
@@ -50,8 +51,14 @@ namespace SGA_Desktop.ViewModels
         #endregion
 
         #region Propiedades de Pestañas
-        [ObservableProperty] private bool mostrandoStock = true;
+        [ObservableProperty] private bool mostrandoStock = false;
         [ObservableProperty] private bool mostrandoBloqueos = false;
+        [ObservableProperty] private bool mostrandoResumen = true;
+        #endregion
+
+        #region Propiedades de Estadísticas
+        [ObservableProperty] private EstadisticasCalidadDto? estadisticas;
+        [ObservableProperty] private bool cargandoEstadisticas = false;
         #endregion
 
         #region Propiedades de Bloqueo/Desbloqueo
@@ -196,6 +203,7 @@ namespace SGA_Desktop.ViewModels
                 // Actualizar listas
                 await CargarBloqueosInterno(false);
                 await BuscarStock();
+                await CargarEstadisticasAsync();
 
                 MessageBox.Show(mensajeExito, "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
                 System.Diagnostics.Debug.WriteLine($"Stock bloqueado exitosamente para artículo {articuloBloqueado}, lote {loteBloqueado}");
@@ -310,6 +318,7 @@ namespace SGA_Desktop.ViewModels
 
                 // Actualizar listas
                 await CargarBloqueosInterno(false);
+                await CargarEstadisticasAsync();
 
                 MessageBox.Show(mensajeExito, "Éxito", MessageBoxButton.OK, MessageBoxImage.Information);
                 System.Diagnostics.Debug.WriteLine($"Stock desbloqueado exitosamente para bloqueo ID {bloqueoId}");
@@ -495,6 +504,7 @@ namespace SGA_Desktop.ViewModels
         {
             MostrandoStock = true;
             MostrandoBloqueos = false;
+            MostrandoResumen = false;
         }
 
         [RelayCommand]
@@ -502,6 +512,52 @@ namespace SGA_Desktop.ViewModels
         {
             MostrandoStock = false;
             MostrandoBloqueos = true;
+            MostrandoResumen = false;
+        }
+
+        [RelayCommand]
+        private async Task CambiarAResumen()
+        {
+            MostrandoStock = false;
+            MostrandoBloqueos = false;
+            MostrandoResumen = true;
+            await CargarEstadisticasAsync();
+        }
+
+        private async Task CargarEstadisticasAsync()
+        {
+            try
+            {
+                CargandoEstadisticas = true;
+                System.Diagnostics.Debug.WriteLine($"[CalidadViewModel] Cargando estadísticas para empresa {CodigoEmpresa}");
+                
+                if (CodigoEmpresa <= 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("[CalidadViewModel] ERROR: CodigoEmpresa no válido");
+                    Estadisticas = new EstadisticasCalidadDto();
+                    return;
+                }
+
+                Estadisticas = await calidadService.ObtenerEstadisticasAsync(CodigoEmpresa);
+                
+                System.Diagnostics.Debug.WriteLine($"[CalidadViewModel] Estadísticas cargadas - Bloqueados: {Estadisticas?.TotalBloqueados ?? 0}, Total: {Estadisticas?.BloqueosTotales ?? 0}");
+                System.Diagnostics.Debug.WriteLine($"[CalidadViewModel] Top Artículos: {Estadisticas?.TopArticulosBloqueados?.Count ?? 0}, Distribución: {Estadisticas?.DistribucionPorAlmacen?.Count ?? 0}, Recientes: {Estadisticas?.BloqueosRecientes?.Count ?? 0}");
+                
+                if (Estadisticas?.TopArticulosBloqueados != null && Estadisticas.TopArticulosBloqueados.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CalidadViewModel] Primer artículo bloqueado: {Estadisticas.TopArticulosBloqueados.First().CodigoArticulo}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[CalidadViewModel] Error al cargar estadísticas: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[CalidadViewModel] StackTrace: {ex.StackTrace}");
+                Estadisticas = new EstadisticasCalidadDto();
+            }
+            finally
+            {
+                CargandoEstadisticas = false;
+            }
         }
         #endregion
     }

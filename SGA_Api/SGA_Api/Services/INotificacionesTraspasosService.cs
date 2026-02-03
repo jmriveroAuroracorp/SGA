@@ -30,7 +30,10 @@ namespace SGA_Api.Services
         /// <param name="titulo">Título de la notificación</param>
         /// <param name="mensaje">Mensaje de la notificación</param>
         /// <param name="tipoNotificacion">Tipo de notificación (info, warning, error, success)</param>
-        Task NotificarPopupUsuarioAsync(int usuarioId, string titulo, string mensaje, string tipoNotificacion = "info");
+        /// <param name="tipoNotificacionReal">Tipo real de notificación (INVENTARIO_CIERRE, ORDEN_CERRADA, etc.)</param>
+        /// <param name="procesoId">ID del proceso relacionado (inventario, orden, etc.)</param>
+        /// <param name="codigoEmpresa">Código de la empresa</param>
+        Task NotificarPopupUsuarioAsync(int usuarioId, string titulo, string mensaje, string tipoNotificacion = "info", string? tipoNotificacionReal = null, Guid? procesoId = null, int? codigoEmpresa = null);
 
         /// <summary>
         /// Envía una notificación personalizada a un usuario específico

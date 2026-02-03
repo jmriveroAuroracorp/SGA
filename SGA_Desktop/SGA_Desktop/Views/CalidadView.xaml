@@ -3,10 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:SGA_Desktop.Views"
              xmlns:helpers="clr-namespace:SGA_Desktop.Helpers"
+             xmlns:converters="clr-namespace:SGA_Desktop.Converters"
              mc:Ignorable="d" 
-             d:DesignHeight="800" d:DesignWidth="1200"
              Background="{StaticResource BrushFondo}">
     
     <Page.Resources>
@@ -16,108 +15,62 @@
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <helpers:OperarioIdANombreConverter x:Key="OperarioIdANombreConverter"/>
+            <helpers:BindingProxy x:Key="VmProxy" Data="{Binding}"/>
+            <helpers:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+            <helpers:BoolToBorderBrushConverter x:Key="BoolToBorderBrushConverter"/>
+            <helpers:BoolToThicknessConverter x:Key="BoolToThicknessConverter"/>
+            <converters:StockSeleccionadoConverter x:Key="StockSeleccionadoConverter"/>
+            <converters:BloqueoSeleccionadoConverter x:Key="BloqueoSeleccionadoConverter"/>
         </ResourceDictionary>
     </Page.Resources>
     
     <Grid Margin="20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <!-- 0: Pestañas -->
+            <RowDefinition Height="Auto" />
+            <!-- 1: Filtros/Búsqueda -->
+            <RowDefinition Height="Auto" />
+            <!-- 2: Contenido principal -->
+            <RowDefinition Height="*" />
+            <!-- 3: Panel de acciones (Bloquear/Desbloquear) -->
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-
-        <!-- BARRA DE BÚSQUEDA (Solo visible en pestaña Stock) -->
-        <Border Grid.Row="0" 
-                Background="White"
-                Padding="20,15"
-                BorderBrush="{StaticResource BrushPrincipal}"
-                BorderThickness="2"
-                CornerRadius="8"
-                Margin="0,0,0,10"
-                Visibility="{Binding MostrandoStock, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Título de la sección -->
-                <TextBlock Grid.Row="0" 
-                           Text="📋 Criterios de Búsqueda"
-                           FontFamily="{StaticResource FuentePrincipal}"
-                           FontSize="16"
-                           FontWeight="Bold"
-                           Foreground="{StaticResource BrushPrincipal}"
-                           Margin="0,0,0,12"/>
-                
-                <!-- Campos de búsqueda -->
-                <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                
-                    <StackPanel Grid.Column="0" Margin="0,0,20,0">
-                    <TextBlock Text="Código de Artículo" 
-                               FontFamily="{StaticResource FuentePrincipal}"
-                                   FontSize="13"
-                               FontWeight="Bold"
-                                   Foreground="{StaticResource BrushPrincipal}"
-                                   Margin="0,0,0,8"/>
-                    <TextBox Text="{Binding CodigoArticulo}" 
-                                 Style="{StaticResource EstiloCajaTexto}"
-                                 Height="35"
-                                 KeyDown="TextBox_KeyDown"/>
-                </StackPanel>
-                
-                    <StackPanel Grid.Column="1" Margin="20,0">
-                    <TextBlock Text="Lote/Partida" 
-                               FontFamily="{StaticResource FuentePrincipal}"
-                                   FontSize="13"
-                               FontWeight="Bold"
-                                   Foreground="{StaticResource BrushPrincipal}"
-                                   Margin="0,0,0,8"/>
-                    <TextBox Text="{Binding LotePartida}" 
-                                 Style="{StaticResource EstiloCajaTexto}"
-                                 Height="35"
-                                 KeyDown="TextBox_KeyDown"/>
-                </StackPanel>
-                
-                    <StackPanel Grid.Column="2" Margin="25,0" VerticalAlignment="Bottom">
-                        <Button Content="🔍 Buscar Stock" 
-                            Command="{Binding BuscarStockCommand}"
-                            Style="{StaticResource EstiloBotonPrincipal}"
-                                Width="120"
-                                Height="40"
-                                Margin="0,0,0,8"/>
-                    <Button Content="🗑️ Limpiar" 
-                            Command="{Binding LimpiarBusquedaCommand}"
-                            Style="{StaticResource EstiloBotonSecundario}"
-                                Width="120"
-                                Height="35"/>
-                </StackPanel>
-                </Grid>
-            </Grid>
-        </Border>
-
-        <!-- BOTONES DE PESTAÑAS -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+        <!-- PESTAÑAS -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+            <Button Content="📊 Resumen"
+                    Command="{Binding CambiarAResumenCommand}"
+                    Width="160"
+                    Height="28"
+                    Margin="0,0,5,0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding MostrandoResumen}" Value="True">
+                                <Setter Property="Background" Value="#3498DB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
             <Button Content="📦 Stock Disponible"
                     Command="{Binding CambiarAStockCommand}"
                     Width="180"
-                    Height="35"
-                    Margin="0,0,8,0">
+                    Height="28"
+                    Margin="0,0,5,0">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
-                        <Setter Property="Background" Value="White"/>
-                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
-                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding MostrandoStock}" Value="True">
-                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="Background" Value="#3498DB"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </DataTrigger>
@@ -128,15 +81,15 @@
             <Button Content="🔒 Bloqueos"
                     Command="{Binding CambiarABloqueosCommand}"
                     Width="160"
-                    Height="35">
+                    Height="28">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource EstiloBoton}">
-                        <Setter Property="Background" Value="White"/>
-                        <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
-                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                        <Setter Property="Background" Value="#E8F4FD"/>
+                        <Setter Property="BorderBrush" Value="#3498DB"/>
+                        <Setter Property="Foreground" Value="#2980B9"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding MostrandoBloqueos}" Value="True">
-                                <Setter Property="Background" Value="{StaticResource BrushPrincipal}"/>
+                                <Setter Property="Background" Value="#3498DB"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </DataTrigger>
@@ -146,194 +99,376 @@
             </Button>
         </StackPanel>
 
-        <!-- CONTENIDO DE STOCK DISPONIBLE -->
-        <Grid Grid.Row="2"
+        <!-- FILTROS DE BÚSQUEDA (Solo Stock) -->
+        <Border Grid.Row="1" 
+                Background="White"
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                                        Margin="0,0,0,12"
+                Visibility="{Binding MostrandoStock, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid Margin="15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                            <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                    <TextBlock Text="Código de Artículo" 
+                               FontFamily="{StaticResource FuentePrincipal}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#7F8C8D"
+                                               Margin="0,0,0,6"/>
+                    <TextBox Text="{Binding CodigoArticulo}" 
+                                 Style="{StaticResource EstiloCajaTexto}"
+                             Height="32"
+                             Margin="0"
+                                 KeyDown="TextBox_KeyDown"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                    <TextBlock Text="Lote/Partida" 
+                               FontFamily="{StaticResource FuentePrincipal}"
+                                              FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#7F8C8D"
+                               Margin="0,0,0,6"/>
+                    <TextBox Text="{Binding LotePartida}" 
+                                 Style="{StaticResource EstiloCajaTexto}"
+                             Height="32"
+                             Margin="0"
+                                 KeyDown="TextBox_KeyDown"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
+                    <Button Content="🔍 Buscar" 
+                            Command="{Binding BuscarStockCommand}"
+                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="110"
+                            Height="32"
+                            FontSize="12"
+                                            FontWeight="Bold"
+                                Margin="0,0,0,8"/>
+                    <Button Content="🧹 Limpiar" 
+                            Command="{Binding LimpiarBusquedaCommand}"
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="110"
+                            Height="32"
+                                            FontSize="12"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- FILTROS DE BLOQUEOS -->
+        <Border Grid.Row="1" 
+                            Background="White"
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Margin="0,0,0,12"
+                Visibility="{Binding MostrandoBloqueos, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid Margin="15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                                    <TextBlock Text="Código de Artículo" 
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#7F8C8D"
+                               Margin="0,0,0,6"/>
+                                    <TextBox Text="{Binding FiltroCodigoArticulo, UpdateSourceTrigger=PropertyChanged}" 
+                                             Style="{StaticResource EstiloCajaTexto}"
+                             Height="32"
+                             Margin="0"
+                                             KeyDown="FiltroTextBox_KeyDown"/>
+        </StackPanel>
+
+                                <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                                    <TextBlock Text="Lote/Partida" 
+                                               FontFamily="{StaticResource FuentePrincipal}"
+                                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#7F8C8D"
+                               Margin="0,0,0,6"/>
+                                    <TextBox Text="{Binding FiltroLotePartida, UpdateSourceTrigger=PropertyChanged}" 
+                                             Style="{StaticResource EstiloCajaTexto}"
+                             Height="32"
+                             Margin="0"
+                                             KeyDown="FiltroTextBox_KeyDown"/>
+                                </StackPanel>
+
+                <StackPanel Grid.Column="2" Margin="0,0,10,0" VerticalAlignment="Bottom">
+                                    <CheckBox Content="Solo Bloqueados" 
+                                              IsChecked="{Binding MostrarSoloBloqueados}" 
+                                              FontFamily="{StaticResource FuentePrincipal}"
+                              FontWeight="SemiBold"
+                              FontSize="12"
+                              Foreground="#34495E"
+                              VerticalAlignment="Center"
+                              Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                    <Button Content="🔍 Filtrar" 
+                                            Command="{Binding FiltrarBloqueosCommand}" 
+                                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="100" 
+                            Height="32"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            Margin="0,0,8,0"/>
+                                    <Button Content="🔄 Actualizar" 
+                                            Command="{Binding CargarBloqueosCommand}" 
+                                            Style="{StaticResource EstiloBotonPrincipal}"
+                            Width="110" 
+                            Height="32"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            Margin="0,0,8,0"/>
+                    <Button Content="🧹 Limpiar" 
+                            Command="{Binding LimpiarFiltrosBloqueosCommand}" 
+                            Style="{StaticResource EstiloBotonSecundario}"
+                            Width="100" 
+                            Height="32"
+                            FontSize="12"/>
+                                </StackPanel>
+                        </Grid>
+                    </Border>
+
+        <!-- CONTENIDO PRINCIPAL: STOCK DISPONIBLE -->
+        <Border Grid.Row="2" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
               Visibility="{Binding MostrandoStock, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid Margin="10">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- ListView de Stock con Cards -->
-                    <ListView Grid.Row="0"
-                              ItemsSource="{Binding StockDisponible}"
-                              SelectedItem="{Binding StockSeleccionado}"
-                              SelectionMode="Single"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto"
-                              Background="Transparent">
-                        
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="Margin" Value="0,0,0,10"/>
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="Foreground" Value="Black"/>
-                            </Style>
-                        </ListView.ItemContainerStyle>
+                <!-- Estado de carga -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" 
+                            Visibility="{Binding EstaCargando, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ProgressBar Width="20" Height="20" 
+                                 IsIndeterminate="True" 
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding MensajeEstado}" 
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushSecundario}"
+                               FontStyle="Italic"/>
+                </StackPanel>
 
-                        <ListView.ItemTemplate>
+                <!-- Lista de cards de stock -->
+                <ScrollViewer Grid.Row="1" 
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding StockDisponible}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border CornerRadius="8"
-                                        BorderThickness="2"
-                                        BorderBrush="{StaticResource BrushPrincipal}"
-                                        Background="White"
-                                        Margin="0,0,0,12"
-                                        Effect="{x:Null}">
-                                    
+                                <Border Width="380" 
+                                        Height="Auto"
+                                        MinHeight="140"
+                                        Margin="6"
+                                        Padding="10"
+                                        CornerRadius="6"
+                                        BorderThickness="{Binding IsSelected, Converter={StaticResource BoolToThicknessConverter}}"
+                                        BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToBorderBrushConverter}}"
+                                        Background="{Binding IsSelected, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='#6fc4fa|White'}"
+                                        Cursor="Hand"
+                                        MouseLeftButtonDown="StockCard_MouseLeftButtonDown">
+                                    <Border.Tag>
+                                        <Binding/>
+                                    </Border.Tag>
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Background" Value="White"/>
-                                            <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                             <Style.Triggers>
-                                                <!-- Hover -->
-                                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
-                                                    <Setter Property="Background" Value="#F8FBFF"/>
-                                                    <Setter Property="BorderBrush" Value="{StaticResource BrushSecundario1}"/>
-                                                </DataTrigger>
-                                                <!-- Selección -->
-                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4FD"/>
-                                                    <Setter Property="BorderBrush" Value="{StaticResource BrushSecundario1}"/>
-                                                </DataTrigger>
+                                                <!-- Hover: se aplica primero -->
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#E6F0FA"/>
+                                                    <Setter Property="BorderBrush" Value="#3498DB"/>
+                                                </Trigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
 
-                                    <Grid Margin="15,15">
+                                        <!-- Header: Código y Estado -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,10">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- Información consolidada en una fila -->
-                                        <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <!-- Código del artículo -->
-                                            <Border Background="{StaticResource BrushPrincipal}" 
-                                                    CornerRadius="6" 
-                                                    Padding="12,8" 
-                                                    Margin="0,0,15,0">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="Artículo: " 
+                                                           FontWeight="SemiBold" 
+                                                           Foreground="#7F8C8D"
+                                                           FontSize="12"
+                                                           VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding CodigoArticulo}"
+                                                           FontFamily="Consolas"
                                                            FontWeight="Bold"
-                                                           FontSize="16"
-                                                           Foreground="White"/>
-                                            </Border>
+                                                           Foreground="#2C3E50"
+                                                               FontSize="13"
+                                                           VerticalAlignment="Center"/>
+                                                </StackPanel>
                                             
-                                            <!-- Descripción del artículo -->
-                                            <TextBlock Text="{Binding DescripcionArticulo}"
-                                                       FontSize="14"
+                                            <!-- Badge Estado -->
+                                            <Border Grid.Column="1" 
+                                                    CornerRadius="12" 
+                                                    Padding="8,4"
+                                                    VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#D1E7DD"/>
+                                                        <Setter Property="BorderBrush" Value="#198754"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
+                                            <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estado}" Value="Bloqueado">
+                                                                <Setter Property="Background" Value="#F8D7DA"/>
+                                                                <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                                <TextBlock Text="{Binding Estado}" 
+                                                               FontWeight="Bold" 
+                                                           FontSize="11"
+                                                           HorizontalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#198754"/>
+                                                                <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Estado}" Value="Bloqueado">
+                                                                    <Setter Property="Foreground" Value="#DC3545"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                            </Border>
+                                        </Grid>
+                                            
+                                        <!-- Contenido -->
+                                        <StackPanel Grid.Row="1">
+                                            <!-- Descripción -->
+                                            <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Descripción: " 
                                                        FontWeight="SemiBold"
-                                                       Foreground="{StaticResource BrushPrincipal}"
-                                                       VerticalAlignment="Center"
-                                                       MaxWidth="250"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       Margin="0,0,15,0"/>
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding DescripcionArticulo}" 
+                                                               FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
                                             
                                             <!-- Lote -->
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="5" 
-                                                    Padding="10,6" 
-                                                    Margin="0,0,15,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏷️" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding LotePartida}" 
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Lote: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding LotePartida}" 
+                                                           FontFamily="Consolas"
                                                                FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
+                                                           FontSize="12"
+                                                           Foreground="#2C3E50"/>
+                                            </Grid>
                                             
-                                            <!-- Almacén -->
-                                            <Border Background="#FFF4E6" 
-                                                    CornerRadius="5" 
-                                                    Padding="10,6" 
-                                                    Margin="0,0,15,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏢" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding Almacen}" 
+                                            <!-- Almacén y Ubicación -->
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Almacén: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Almacen}" 
                                                                FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            
-                                            <!-- Ubicación -->
-                                            <Border Background="#F0E6FF" 
-                                                    CornerRadius="5" 
-                                                    Padding="10,6" 
-                                                    Margin="0,0,15,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📍" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}">
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                                <TextBlock Grid.Column="2" Text="Ubicación: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock Grid.Column="3" 
+                                                           FontFamily="Consolas"
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#2C3E50">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="Text" Value="{Binding Ubicacion}"/>
+                                                            <Setter Property="Text" Value="{Binding Ubicacion}"/>
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Ubicacion}" Value="">
-                                                                        <Setter Property="Text" Value="Sin Ubicar"/>
+                                                                <DataTrigger Binding="{Binding Ubicacion}" Value="">
+                                                                    <Setter Property="Text" Value="Sin Ubicar"/>
+                                                                    <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                                                                    <Setter Property="FontStyle" Value="Italic"/>
+                                                                    <Setter Property="Foreground" Value="#7F8C8D"/>
                                                                     </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Ubicacion}" Value="{x:Null}">
-                                                                        <Setter Property="Text" Value="Sin Ubicar"/>
+                                                                <DataTrigger Binding="{Binding Ubicacion}" Value="{x:Null}">
+                                                                    <Setter Property="Text" Value="Sin Ubicar"/>
+                                                                    <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
+                                                                    <Setter Property="FontStyle" Value="Italic"/>
+                                                                    <Setter Property="Foreground" Value="#7F8C8D"/>
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </TextBlock.Style>
                                                     </TextBlock>
-                                                </StackPanel>
-                                            </Border>
+                                            </Grid>
                                             
-                                            <!-- Estado -->
-                                            <Border CornerRadius="5" 
-                                                    Padding="10,6"
-                                                    Margin="0,0,15,0">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="#FFE6E6"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="Disponible">
-                                                                <Setter Property="Background" Value="#E6F7E6"/>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Estado}" Value="Bloqueado">
-                                                                <Setter Property="Background" Value="#FFE6E6"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="⚡" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding Estado}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="13">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="#CC0000"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Estado}" Value="Disponible">
-                                                                        <Setter Property="Foreground" Value="#006600"/>
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Estado}" Value="Bloqueado">
-                                                                        <Setter Property="Foreground" Value="#CC0000"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </Border>
-                                            
-                                            <!-- 🔷 NUEVO: Información de palet si está paletizado -->
-                                            <Border CornerRadius="5" 
-                                                    Padding="10,6"
-                                                    Background="#E8F4FD"
+                                            <!-- Palet (si está paletizado) -->
+                                            <Grid Margin="0,0,0,4" 
                                                     Visibility="{Binding EstaPaletizado, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📦" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Palet: " 
+                                                       FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" 
+                                                           FontFamily="Consolas"
+                                                               FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#2C3E50">
                                                         <TextBlock.Text>
                                                             <MultiBinding StringFormat="{}{0} ({1})">
                                                                 <Binding Path="CodigoPalet"/>
@@ -341,602 +476,845 @@
                                                             </MultiBinding>
                                                         </TextBlock.Text>
                                                     </TextBlock>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
+                                    </Grid>
 
-                                        <!-- Cantidad destacada a la derecha -->
-                                        <Border Grid.Column="1"
-                                                Background="{StaticResource BrushSecundario1}"
-                                                CornerRadius="6"
-                                                Padding="12,8"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
-                                                MinWidth="100">
-                                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                                                <TextBlock Text="STOCK" 
+                                            <!-- Cantidad -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Stock: " 
+                                                           FontWeight="SemiBold" 
+                                              FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" 
+                                                           FontFamily="Consolas"
                                                            FontWeight="Bold" 
-                                                           Foreground="White" 
-                                                           FontSize="9"
-                                                           HorizontalAlignment="Center"
-                                                           Margin="0,0,0,3"/>
-                                                <TextBlock Text="{Binding CantidadDisponible, StringFormat='0.########'}"  
-                                                           FontWeight="Bold" 
-                                                           FontSize="18"
-                                                           Foreground="White"
-                                                           HorizontalAlignment="Center"/>
+                                                           FontSize="14"
+                                                           Foreground="{StaticResource BrushPrincipal}">
+                                                    <TextBlock.Text>
+                                                        <Binding Path="CantidadDisponible" StringFormat="0.########"/>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </Grid>
                                             </StackPanel>
-                                        </Border>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                </Grid>
+                                            </Border>
 
-                    <!-- Panel de Bloqueo -->
-                    <Border Grid.Row="1" 
+        <!-- CONTENIDO PRINCIPAL: RESUMEN/ESTADÍSTICAS -->
+        <Border Grid.Row="2" 
                             Background="White"
-                            Padding="15"
-                            Margin="0,10,0,0"
-                            BorderBrush="{StaticResource BrushPrincipal}"
-                            BorderThickness="2"
-                            CornerRadius="8">
-                        <Grid>
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Visibility="{Binding MostrandoResumen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid Margin="15">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Título de la sección -->
-                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                                <TextBlock Text="🔒" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="BLOQUEAR STOCK SELECCIONADO" 
-                                           FontFamily="{StaticResource FuentePrincipal}"
-                                           FontWeight="Bold"
-                                           FontSize="14"
-                                           Foreground="{StaticResource BrushPrincipal}"/>
-                            </StackPanel>
+                <!-- Estado de carga -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15" 
+                            Visibility="{Binding CargandoEstadisticas, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ProgressBar Width="20" Height="20" 
+                                 IsIndeterminate="True" 
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="Cargando estadísticas..." 
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushSecundario}"
+                               FontStyle="Italic"/>
+                </StackPanel>
 
-                            <!-- Contenido del panel -->
-                            <Grid Grid.Row="1">
-                            <Grid.ColumnDefinitions>
+                <!-- Cards de estadísticas -->
+                <ScrollViewer Grid.Row="1" 
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <!-- Cards resumen compactos (3 columnas) -->
+                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <!-- Card: Total Bloqueados -->
+                            <Border MinWidth="150"
+                                    MaxWidth="200"
+                                    Height="100"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="Total Bloqueados" 
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                               Margin="0,0,0,4"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Estadisticas.TotalBloqueados, FallbackValue=0}" 
+                                               FontSize="24"
+                                               FontWeight="Bold"
+                                               Foreground="#E74C3C"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card: Total Desbloqueados -->
+                            <Border MinWidth="150"
+                                    MaxWidth="200"
+                                    Height="100"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="Total Desbloqueados" 
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                               Margin="0,0,0,4"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Estadisticas.TotalDesbloqueados, FallbackValue=0}" 
+                                               FontSize="24"
+                                               FontWeight="Bold"
+                                               Foreground="#27AE60"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card: Bloqueos TOTAL -->
+                            <Border MinWidth="150"
+                                    MaxWidth="200"
+                                    Height="100"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="Bloqueos TOTAL" 
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                               Margin="0,0,0,4"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Estadisticas.BloqueosTotales, FallbackValue=0}" 
+                                               FontSize="24"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card: Bloqueos SOLO_PULMON -->
+                            <Border MinWidth="150"
+                                    MaxWidth="200"
+                                    Height="100"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="SOLO_PULMON" 
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                               Margin="0,0,0,4"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Estadisticas.BloqueosSoloPulmon, FallbackValue=0}" 
+                                               FontSize="24"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushSecundario1}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card: Bloqueos Globales -->
+                            <Border MinWidth="150"
+                                    MaxWidth="200"
+                                    Height="100"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="Bloqueos Globales" 
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                               Margin="0,0,0,4"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Estadisticas.BloqueosGlobales, FallbackValue=0}" 
+                                               FontSize="24"
+                                               FontWeight="Bold"
+                                               Foreground="#F39C12"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Card: Bloqueos Individuales -->
+                            <Border MinWidth="150"
+                                    MaxWidth="200"
+                                    Height="100"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="Bloqueos Individuales" 
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                               Margin="0,0,0,4"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Estadisticas.BloqueosIndividuales, FallbackValue=0}" 
+                                               FontSize="24"
+                                               FontWeight="Bold"
+                                               Foreground="#16A085"/>
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+
+                        <!-- Nuevas secciones: 3 columnas -->
+                        <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" Margin="0,0,15,0">
-                                    <TextBlock Text="Motivo del Bloqueo" 
-                                           FontFamily="{StaticResource FuentePrincipal}"
-                                           FontWeight="Bold"
-                                               FontSize="13"
+                            <!-- Columna 1: Top Artículos Bloqueados -->
+                            <Border Grid.Column="0" 
+                                    Margin="4,0,4,0"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="🔝 Top Artículos Bloqueados" 
+                                               FontSize="14"
+                                               FontWeight="Bold"
                                                Foreground="{StaticResource BrushPrincipal}"
-                                               Margin="0,0,0,6"/>
-                                <TextBox Text="{Binding ComentarioBloqueo}" 
-                                             Height="50" 
-                                         TextWrapping="Wrap" 
-                                         AcceptsReturn="True"
-                                             Style="{StaticResource EstiloCajaTexto}"
-                                             FontSize="13"
-                                             Padding="10"
-                                             KeyDown="ComentarioTextBox_KeyDown"/>
-                                    <TextBlock Text="💡 Especifica el motivo del bloqueo para control de calidad"
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="10"
-                                               FontStyle="Italic"
-                                               Foreground="#666"
-                                               Margin="0,3,0,8"/>
-                                    
-                                    <!-- 🔷 NUEVO: Selector de tipo de bloqueo -->
-                                    <TextBlock Text="Tipo de Bloqueo" 
-                                           FontFamily="{StaticResource FuentePrincipal}"
-                                           FontWeight="Bold"
-                                               FontSize="13"
-                                               Foreground="{StaticResource BrushPrincipal}"
-                                               Margin="0,0,0,6"/>
-                                <ComboBox SelectedValue="{Binding TipoBloqueo}"
-                                          SelectedValuePath="Tag"
-                                          Style="{StaticResource EstiloComboBox}"
-                                          Height="35"
-                                          FontSize="13">
-                                    <ComboBoxItem Content="🔒 Bloqueo Total (No permite traspasos a ninguna ubicación)" 
-                                                  Tag="TOTAL"/>
-                                    <ComboBoxItem Content="🚫 Solo Bloqueo a PULMÓN (Permite traspasos a otras ubicaciones)" 
-                                                  Tag="SOLO_PULMON"/>
-                                </ComboBox>
-                                    <TextBlock Text="💡 Bloqueo Total: impide todos los traspasos. Solo PULMÓN: solo impide traspasos a ubicaciones PULMÓN"
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="10"
-                                               FontStyle="Italic"
-                                               Foreground="#666"
-                                               Margin="0,3,0,10"/>
-                                    
-                                    <!-- 🔷 NUEVO: Opción de bloqueo global -->
-                                    <CheckBox Content="🌐 Bloquear en TODAS las ubicaciones (Bloqueo Global)"
-                                              IsChecked="{Binding EsBloqueoGlobal}"
-                                              FontFamily="{StaticResource FuentePrincipal}"
-                                              FontSize="12"
-                                              FontWeight="Bold"
-                                              Foreground="{StaticResource BrushPrincipal}"
-                                              Margin="0,5,0,0"/>
-                                    <TextBlock Text="💡 Si está marcado, se bloqueará el artículo y lote en todas las ubicaciones donde exista stock"
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="10"
-                                               FontStyle="Italic"
-                                               Foreground="#666"
-                                               Margin="20,3,0,0"
-                                               TextWrapping="Wrap"/>
-                            </StackPanel>
+                                               Margin="0,0,0,10"/>
+                                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                                        <Grid>
+                                            <ItemsControl ItemsSource="{Binding Estadisticas.TopArticulosBloqueados}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,6" 
+                                                                Padding="8"
+                                                                Background="#F8F9FA"
+                                                                CornerRadius="4">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0" 
+                                                                           Text="{Binding Posicion}" 
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{StaticResource BrushGrisOscuro}"
+                                                                           Margin="0,0,8,0"
+                                                                           VerticalAlignment="Center"/>
+                                                                <StackPanel Grid.Column="1">
+                                                                    <TextBlock Text="{Binding CodigoArticulo}" 
+                                                                               FontWeight="SemiBold"
+                                                                               FontSize="12"
+                                                                               FontFamily="Consolas"/>
+                                                                    <TextBlock Text="{Binding DescripcionArticulo}" 
+                                                                               FontSize="10"
+                                                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                </StackPanel>
+                                                                <TextBlock Grid.Column="2" 
+                                                                           Text="{Binding CantidadBloqueos}" 
+                                                                           FontWeight="Bold"
+                                                                           Foreground="#E74C3C"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="No hay artículos bloqueados" 
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource BrushGrisOscuro}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estadisticas.TopArticulosBloqueados.Count}" Value="0">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
-                                    <Button Content="🔒 BLOQUEAR" 
-                                        Command="{Binding BloquearStockCommand}" 
-                                        Style="{StaticResource EstiloBotonPrincipal}"
-                                            Width="120" 
-                                            Height="35" 
-                                            FontSize="13"
-                                            FontWeight="Bold"
-                                            Margin="0,0,0,8"/>
-                                <Button Content="🗑️ Limpiar" 
-                                        Command="{Binding LimpiarComentariosCommand}" 
-                                        Style="{StaticResource EstiloBotonSecundario}"
-                                            Width="120" 
-                                            Height="35"
-                                            FontSize="12"/>
-                            </StackPanel>
+                            <!-- Columna 2: Distribución por Almacén -->
+                            <Border Grid.Column="1" 
+                                    Margin="4,0,4,0"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="🏢 Distribución por Almacén" 
+                                               FontSize="14"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,10"/>
+                                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                                        <Grid>
+                                            <ItemsControl ItemsSource="{Binding Estadisticas.DistribucionPorAlmacen}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,6" 
+                                                                Padding="8"
+                                                                Background="#F8F9FA"
+                                                                CornerRadius="4">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0" 
+                                                                           Text="{Binding Posicion}" 
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{StaticResource BrushGrisOscuro}"
+                                                                           Margin="0,0,8,0"
+                                                                           VerticalAlignment="Center"/>
+                                                                <StackPanel Grid.Column="1">
+                                                                    <TextBlock Text="{Binding CodigoAlmacen}" 
+                                                                               FontWeight="SemiBold"
+                                                                               FontSize="12"/>
+                                                                    <TextBlock Text="{Binding NombreAlmacen}" 
+                                                                               FontSize="10"
+                                                                               Foreground="{StaticResource BrushGrisOscuro}"
+                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                </StackPanel>
+                                                                <TextBlock Grid.Column="2" 
+                                                                           Text="{Binding CantidadBloqueos}" 
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{StaticResource BrushPrincipal}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="No hay distribución por almacén" 
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource BrushGrisOscuro}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estadisticas.DistribucionPorAlmacen.Count}" Value="0">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Columna 3: Bloqueos Recientes -->
+                            <Border Grid.Column="2" 
+                                    Margin="4,0,4,0"
+                                    Style="{StaticResource EstiloTarjeta}">
+                                <StackPanel>
+                                    <TextBlock Text="🕒 Bloqueos Recientes" 
+                                               FontSize="14"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource BrushPrincipal}"
+                                               Margin="0,0,0,10"/>
+                                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                                        <Grid>
+                                            <ItemsControl ItemsSource="{Binding Estadisticas.BloqueosRecientes}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,6" 
+                                                                Padding="8"
+                                                                Background="#F8F9FA"
+                                                                CornerRadius="4">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding CodigoArticulo}" 
+                                                                           FontWeight="SemiBold"
+                                                                           FontSize="11"
+                                                                           FontFamily="Consolas"/>
+                                                                <TextBlock Text="{Binding DescripcionArticulo}" 
+                                                                           FontSize="9"
+                                                                           Foreground="{StaticResource BrushGrisOscuro}"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Margin="0,2,0,2"/>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock FontSize="9" Foreground="{StaticResource BrushGrisOscuro}">
+                                                                        <Run Text="{Binding CodigoAlmacen}"/>
+                                                                        <Run Text=" - "/>
+                                                                        <Run Text="{Binding Ubicacion, TargetNullValue='Sin ubicación'}"/>
+                                                                        <Run Text=" | "/>
+                                                                        <Run Text="{Binding TipoBloqueo}"/>
+                                                                    </TextBlock>
+                                                                    <TextBlock FontSize="9" Foreground="#E74C3C" FontWeight="Bold" 
+                                                                               Visibility="{Binding EsGlobal, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                                        <Run Text=" | GLOBAL"/>
+                                                                    </TextBlock>
+                                                                </StackPanel>
+                                                                <TextBlock Text="{Binding ComentarioBloqueo}" 
+                                                                           FontSize="9"
+                                                                           Foreground="{StaticResource BrushGrisOscuro}"
+                                                                           TextWrapping="Wrap"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           MaxHeight="30"
+                                                                           Margin="0,2,0,0"/>
+                                                                <TextBlock FontSize="8" Foreground="{StaticResource BrushGrisOscuro}" Margin="0,2,0,0">
+                                                                    <Run Text="{Binding UsuarioBloqueo}"/>
+                                                                    <Run Text=" - "/>
+                                                                    <Run Text="{Binding FechaBloqueo, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="No hay bloqueos recientes" 
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource BrushGrisOscuro}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Estadisticas.BloqueosRecientes.Count}" Value="0">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
                             </Grid>
+                    </StackPanel>
+                </ScrollViewer>
                         </Grid>
                     </Border>
-                </Grid>
-        </Grid>
 
-        <!-- CONTENIDO DE BLOQUEOS -->
-        <Grid Grid.Row="2"
+        <!-- CONTENIDO PRINCIPAL: BLOQUEOS -->
+        <Border Grid.Row="2" 
+                Background="White" 
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
               Visibility="{Binding MostrandoBloqueos, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid Margin="10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Filtros de Bloqueos -->
-                    <Border Grid.Row="0" 
-                            Background="White"
-                            Padding="20,15"
-                            Margin="0,0,0,10"
-                            BorderBrush="{StaticResource BrushPrincipal}"
-                            BorderThickness="2"
-                            CornerRadius="8">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <!-- Título -->
-                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
-                                <TextBlock Text="📋" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="Filtros de Bloqueos" 
-                                           FontFamily="{StaticResource FuentePrincipal}"
-                                           FontSize="16"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource BrushPrincipal}"/>
+                <!-- Estado de carga -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10" 
+                            Visibility="{Binding EstaCargando, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ProgressBar Width="20" Height="20" 
+                                 IsIndeterminate="True" 
+                                 Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding MensajeEstado}" 
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource BrushSecundario}"
+                               FontStyle="Italic"/>
                             </StackPanel>
 
-                            <!-- Contenido de filtros -->
-                            <Grid Grid.Row="1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Código de Artículo -->
-                                <StackPanel Grid.Column="0" Margin="0,0,15,0">
-                                    <TextBlock Text="Código de Artículo" 
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="12"
-                                               Foreground="{StaticResource BrushGrisOscuro}"
-                                               Margin="0,0,0,5"/>
-                                    <TextBox Text="{Binding FiltroCodigoArticulo, UpdateSourceTrigger=PropertyChanged}" 
-                                             Style="{StaticResource EstiloCajaTexto}"
-                                             Height="35"
-                                             KeyDown="FiltroTextBox_KeyDown"/>
-                                </StackPanel>
-
-                                <!-- Lote/Partida -->
-                                <StackPanel Grid.Column="1" Margin="0,0,15,0">
-                                    <TextBlock Text="Lote/Partida" 
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="12"
-                                               Foreground="{StaticResource BrushGrisOscuro}"
-                                               Margin="0,0,0,5"/>
-                                    <TextBox Text="{Binding FiltroLotePartida, UpdateSourceTrigger=PropertyChanged}" 
-                                             Style="{StaticResource EstiloCajaTexto}"
-                                             Height="35"
-                                             KeyDown="FiltroTextBox_KeyDown"/>
-                                </StackPanel>
-
-                                <!-- Checkbox Solo Bloqueados -->
-                                <StackPanel Grid.Column="2" Margin="0,20,15,0" VerticalAlignment="Center">
-                                    <CheckBox Content="Solo Bloqueados" 
-                                              IsChecked="{Binding MostrarSoloBloqueados}" 
-                                              FontFamily="{StaticResource FuentePrincipal}"
-                                              FontWeight="Bold"
-                                              Foreground="{StaticResource BrushPrincipal}"/>
-                                </StackPanel>
-
-                                <!-- Botones -->
-                                <StackPanel Grid.Column="3" VerticalAlignment="Bottom" Margin="0,0,10,0">
-                                    <Button Content="🔍 Filtrar" 
-                                            Command="{Binding FiltrarBloqueosCommand}" 
-                                            Style="{StaticResource EstiloBotonPrincipal}"
-                                            Width="120" 
-                                            Height="35"
-                                            Margin="0,0,0,8"/>
-                                    <Button Content="🗑️ Limpiar" 
-                                            Command="{Binding LimpiarFiltrosBloqueosCommand}" 
-                                            Style="{StaticResource EstiloBotonSecundario}"
-                                            Width="120" 
-                                            Height="35"/>
-                                </StackPanel>
-
-                                <!-- Botón Actualizar -->
-                                <StackPanel Grid.Column="4" VerticalAlignment="Bottom">
-                                    <Button Content="🔄 Actualizar" 
-                                            Command="{Binding CargarBloqueosCommand}" 
-                                            Style="{StaticResource EstiloBotonPrincipal}"
-                                            Width="120" 
-                                            Height="35"/>
-                                </StackPanel>
-                            </Grid>
-                        </Grid>
-                    </Border>
-
-                    <!-- ListView de Bloqueos con Cards -->
-                    <ListView Grid.Row="1"
-                              ItemsSource="{Binding BloqueosFiltrados}"
-                              SelectedItem="{Binding BloqueoSeleccionado}"
-                              SelectionMode="Single"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto"
-                              Background="Transparent">
-                        
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="FontFamily" Value="{StaticResource FuentePrincipal}"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="Margin" Value="0,0,0,10"/>
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="Foreground" Value="Black"/>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-
-                        <ListView.ItemTemplate>
+                <!-- Lista de cards de bloqueos -->
+                <ScrollViewer Grid.Row="1" 
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding BloqueosFiltrados}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border CornerRadius="8"
-                                        BorderThickness="2"
-                                        BorderBrush="{StaticResource BrushPrincipal}"
-                                        Background="White"
-                                        Margin="0,0,0,12">
-                                    
+                                <Border Width="380" 
+                                        Height="Auto"
+                                        MinHeight="140"
+                                        Margin="6"
+                                        Padding="10"
+                                        CornerRadius="6"
+                                        BorderThickness="{Binding IsSelected, Converter={StaticResource BoolToThicknessConverter}}"
+                                        BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToBorderBrushConverter}}"
+                                        Background="{Binding IsSelected, Converter={StaticResource BoolToBrushConverter}, ConverterParameter='#6fc4fa|White'}"
+                                        Cursor="Hand"
+                                        MouseLeftButtonDown="BloqueoCard_MouseLeftButtonDown">
+                                    <Border.Tag>
+                                        <Binding/>
+                                    </Border.Tag>
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Background" Value="White"/>
-                                            <Setter Property="BorderBrush" Value="{StaticResource BrushPrincipal}"/>
                                             <Style.Triggers>
-                                                <!-- Hover -->
-                                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
-                                                    <Setter Property="Background" Value="#F8FBFF"/>
-                                                    <Setter Property="BorderBrush" Value="{StaticResource BrushSecundario1}"/>
-                                                </DataTrigger>
-                                                <!-- Selección -->
-                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4FD"/>
-                                                    <Setter Property="BorderBrush" Value="{StaticResource BrushSecundario1}"/>
-                                                </DataTrigger>
+                                                <!-- Hover: se aplica primero -->
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#E6F0FA"/>
+                                                    <Setter Property="BorderBrush" Value="#3498DB"/>
+                                                </Trigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
 
-                                    <Grid Margin="15,15">
+                                        <!-- Header: Código y Estado -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,6">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- Información consolidada en una fila -->
-                                        <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <!-- Código del artículo -->
-                                            <Border Background="{StaticResource BrushPrincipal}" 
-                                                    CornerRadius="6" 
-                                                    Padding="12,8" 
-                                                    Margin="0,0,15,0">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="Artículo: " 
+                                                           FontWeight="SemiBold" 
+                                                           Foreground="#7F8C8D"
+                                                           FontSize="12"
+                                                           VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding CodigoArticulo}"
+                                                           FontFamily="Consolas"
                                                            FontWeight="Bold"
-                                                           FontSize="16"
-                                                           Foreground="White"/>
-                                            </Border>
-                                            
-                                            <!-- Descripción del artículo -->
-                                            <TextBlock Text="{Binding DescripcionArticulo}"
-                                                       FontSize="14"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{StaticResource BrushPrincipal}"
-                                                       VerticalAlignment="Center"
-                                                       MaxWidth="200"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       Margin="0,0,15,0"/>
-                                            
-                                            <!-- Lote -->
-                                            <Border Background="#E8F4FD" 
-                                                    CornerRadius="5" 
-                                                    Padding="10,6" 
-                                                    Margin="0,0,15,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🏷️" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding LotePartida}" 
-                                                               FontWeight="Bold" 
+                                                           Foreground="#2C3E50"
                                                                FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
+                                                           VerticalAlignment="Center"/>
                                                 </StackPanel>
-                                            </Border>
                                             
-                                            <!-- Usuario que bloqueó -->
-                                            <Border Background="#F0F6FF" 
-                                                    CornerRadius="5" 
-                                                    Padding="10,6" 
-                                                    Margin="0,0,15,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="👤" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding UsuarioBloqueo, Converter={StaticResource OperarioIdANombreConverter}}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            
-                                            <!-- Fecha de bloqueo -->
-                                            <Border Background="#F0F6FF" 
-                                                    CornerRadius="5" 
-                                                    Padding="10,6"
-                                                    Margin="0,0,15,0">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🕐" FontSize="14" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding FechaBloqueo, StringFormat=dd/MM/yyyy HH:mm}" 
-                                                               FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}"/>
-                                                </StackPanel>
-                                            </Border>
-                                            
-                                            <!-- 🔷 NUEVO: Tipo de bloqueo -->
-                                            <Border CornerRadius="5" 
-                                                    Padding="10,6">
+                                            <!-- Badge Estado -->
+                                            <Border Grid.Column="1" 
+                                                    CornerRadius="12" 
+                                                    Padding="8,4"
+                                                    VerticalAlignment="Center">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="#FFE6E6"/>
+                                                        <Setter Property="Background" Value="#D1E7DD"/>
+                                                        <Setter Property="BorderBrush" Value="#28A745"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding TipoBloqueo}" Value="SOLO_PULMON">
-                                                                <Setter Property="Background" Value="#FFF4E6"/>
+                                                            <DataTrigger Binding="{Binding Bloqueado}" Value="True">
+                                                                <Setter Property="Background" Value="#F8D7DA"/>
+                                                                <Setter Property="BorderBrush" Value="#DC3545"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🔒" FontSize="14" Margin="0,0,6,0">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Text" Value="🔒"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding TipoBloqueo}" Value="SOLO_PULMON">
-                                                                        <Setter Property="Text" Value="🚫"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
                                                     <TextBlock FontWeight="Bold" 
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource BrushPrincipal}">
+                                                           FontSize="11"
+                                                           HorizontalAlignment="Center">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="Text" Value="TOTAL"/>
+                                                            <Setter Property="Text" Value="DESBLOQUEADO"/>
+                                                            <Setter Property="Foreground" Value="#28A745"/>
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding TipoBloqueo}" Value="SOLO_PULMON">
-                                                                        <Setter Property="Text" Value="SOLO PULMÓN"/>
+                                                                <DataTrigger Binding="{Binding Bloqueado}" Value="True">
+                                                                    <Setter Property="Text" Value="BLOQUEADO"/>
+                                                                    <Setter Property="Foreground" Value="#DC3545"/>
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </TextBlock.Style>
                                                     </TextBlock>
-                                                </StackPanel>
                                             </Border>
-                                        </StackPanel>
+                                        </Grid>
 
-                                        <!-- Estado destacado a la derecha -->
-                                        <Border Grid.Column="1"
-                                                CornerRadius="6"
-                                                Padding="10,6"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
-                                                MinWidth="80">
+                                        <!-- Contenido -->
+                                        <StackPanel Grid.Row="1">
+                                            <!-- Descripción -->
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Descripción: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding DescripcionArticulo}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+
+                                            <!-- Lote -->
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Lote: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding LotePartida}" 
+                                                           FontFamily="Consolas"
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#2C3E50"/>
+                                            </Grid>
+
+                                            <!-- Usuario y Fecha -->
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Usuario: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" 
+                                                           Text="{Binding UsuarioBloqueo, Converter={StaticResource OperarioIdANombreConverter}}" 
+                                                           FontWeight="Bold" 
+                                                           FontSize="12"
+                                                           Foreground="#34495E"/>
+                                                <TextBlock Grid.Column="2" Text="Fecha: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"
+                                                           Margin="10,0,0,0"/>
+                                                <TextBlock Grid.Column="3" 
+                                                           Text="{Binding FechaBloqueo, StringFormat=dd/MM/yyyy HH:mm}" 
+                                                           FontFamily="Consolas"
+                                                           FontWeight="Bold" 
+                                                           FontSize="11"
+                                                           Foreground="#7F8C8D"/>
+                                            </Grid>
+
+                                            <!-- Tipo de Bloqueo -->
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Tipo: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <Border CornerRadius="8" 
+                                                        Padding="6,3"
+                                                        VerticalAlignment="Center">
                                             <Border.Style>
                                                 <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#DC3545"/>
+                                                            <Setter Property="Background" Value="#FFF3CD"/>
+                                                            <Setter Property="BorderBrush" Value="#FFC107"/>
+                                                            <Setter Property="BorderThickness" Value="1"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Bloqueado}" Value="False">
-                                                            <Setter Property="Background" Value="#28A745"/>
+                                                                <DataTrigger Binding="{Binding TipoBloqueo}" Value="TOTAL">
+                                                                    <Setter Property="Background" Value="#F8D7DA"/>
+                                                                    <Setter Property="BorderBrush" Value="#DC3545"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
-                                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                                                <TextBlock Text="ESTADO" 
-                                                           FontWeight="Bold" 
-                                                           Foreground="White" 
-                                                           FontSize="9"
-                                                           HorizontalAlignment="Center"
-                                                           Margin="0,0,0,2"/>
                                                 <TextBlock FontWeight="Bold" 
-                                                           FontSize="14"
-                                                           Foreground="White"
+                                                               FontSize="11"
                                                            HorizontalAlignment="Center">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
-                                                            <Setter Property="Text" Value="BLOQUEADO"/>
+                                                                <Setter Property="Text" Value="SOLO PULMÓN"/>
+                                                                <Setter Property="Foreground" Value="#856404"/>
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Bloqueado}" Value="False">
-                                                                    <Setter Property="Text" Value="DESBLOQUEADO"/>
+                                                                    <DataTrigger Binding="{Binding TipoBloqueo}" Value="TOTAL">
+                                                                        <Setter Property="Text" Value="TOTAL"/>
+                                                                        <Setter Property="Foreground" Value="#721C24"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </TextBlock.Style>
                                                 </TextBlock>
-                                            </StackPanel>
                                         </Border>
+                                            </Grid>
+
+                                            <!-- Comentario -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Motivo: " 
+                                                           FontWeight="SemiBold" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"/>
+                                                <TextBlock Grid.Column="1" 
+                                                           Text="{Binding ComentarioBloqueo}" 
+                                                           FontSize="12"
+                                                           Foreground="#7F8C8D"
+                                                           TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Grid>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
 
-                    <!-- Panel de Desbloqueo -->
-                    <Border Grid.Row="2" 
+        <!-- PANEL DE BLOQUEO (Solo Stock) -->
+        <Border Grid.Row="3" 
                             Background="White"
-                            Padding="15"
-                            Margin="0,10,0,0"
-                            BorderBrush="{StaticResource BrushPrincipal}"
-                            BorderThickness="2"
-                            CornerRadius="8">
-                        <Grid>
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Margin="0,12,0,0"
+                Visibility="{Binding MostrandoStock, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid Margin="15">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Título de la sección -->
-                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                                <TextBlock Text="🔓" FontSize="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="DESBLOQUEAR STOCK SELECCIONADO" 
+                <TextBlock Grid.Row="0" 
+                           Text="🔒 Bloquear Stock Seleccionado" 
                                            FontFamily="{StaticResource FuentePrincipal}"
                                            FontWeight="Bold"
                                            FontSize="14"
-                                           Foreground="{StaticResource BrushPrincipal}"/>
-                            </StackPanel>
+                           Foreground="{StaticResource BrushPrincipal}"
+                           Margin="0,0,0,12"/>
 
-                            <!-- Contenido del panel -->
                             <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" Margin="0,0,15,0" VerticalAlignment="Top">
-                                    <TextBlock Text="Motivo del Desbloqueo" 
+                    <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                        <TextBlock Text="Motivo del Bloqueo" 
                                            FontFamily="{StaticResource FuentePrincipal}"
-                                           FontWeight="Bold"
-                                               FontSize="13"
-                                               Foreground="{StaticResource BrushPrincipal}"
+                                   FontWeight="SemiBold"
+                                   FontSize="12"
+                                   Foreground="#7F8C8D"
                                                Margin="0,0,0,6"/>
-                                <TextBox Text="{Binding ComentarioDesbloqueo}" 
+                        <TextBox Text="{Binding ComentarioBloqueo}" 
                                              Height="50" 
                                          TextWrapping="Wrap" 
                                          AcceptsReturn="True"
                                              Style="{StaticResource EstiloCajaTexto}"
-                                             FontSize="13"
-                                             Padding="10"
-                                             KeyDown="DesbloquearTextBox_KeyDown"/>
-                                    <TextBlock Text="💡 Explica por qué se libera este stock del control de calidad"
-                                               FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="10"
-                                               FontStyle="Italic"
-                                               Foreground="#666"
-                                               Margin="0,3,0,10"/>
-                                    
-                                    <!-- 🔷 NUEVO: Opción de desbloqueo global -->
-                                    <CheckBox Content="🌐 Desbloquear en TODAS las ubicaciones (Desbloqueo Global)"
-                                              IsChecked="{Binding EsDesbloqueoGlobal}"
+                                 FontSize="12"
+                                 Padding="8"
+                                 Margin="0,0,0,8"
+                                 KeyDown="ComentarioTextBox_KeyDown"/>
+                        
+                        <TextBlock Text="Tipo de Bloqueo" 
                                               FontFamily="{StaticResource FuentePrincipal}"
+                                   FontWeight="SemiBold"
                                               FontSize="12"
-                                              FontWeight="Bold"
-                                              Foreground="{StaticResource BrushPrincipal}"
-                                              Margin="0,10,0,5"/>
-                                    <TextBlock Text="💡 Si está marcado, se desbloqueará el artículo y lote en todas las ubicaciones donde esté bloqueado"
+                                   Foreground="#7F8C8D"
+                                   Margin="0,0,0,6"/>
+                        <ComboBox SelectedValue="{Binding TipoBloqueo}"
+                                  SelectedValuePath="Tag"
+                                  Style="{StaticResource EstiloComboBox}"
+                                  Height="32"
+                                  FontSize="12"
+                                  Margin="0,0,0,8">
+                            <ComboBoxItem Content="🔒 Bloqueo Total" Tag="TOTAL"/>
+                            <ComboBoxItem Content="🚫 Solo Bloqueo a PULMÓN" Tag="SOLO_PULMON"/>
+                        </ComboBox>
+                        
+                        <CheckBox Content="🌐 Bloquear en TODAS las ubicaciones (Bloqueo Global)"
+                                  IsChecked="{Binding EsBloqueoGlobal}"
                                                FontFamily="{StaticResource FuentePrincipal}"
-                                               FontSize="10"
-                                               FontStyle="Italic"
-                                               Foreground="#666"
-                                               Margin="20,0,0,0"
-                                               TextWrapping="Wrap"/>
+                                  FontSize="12"
+                                  FontWeight="SemiBold"
+                                  Foreground="#34495E"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
-                                    <Button Content="🔓 DESBLOQUEAR" 
-                                        Command="{Binding DesbloquearStockCommand}" 
+                        <Button Content="🔒 BLOQUEAR" 
+                                Command="{Binding BloquearStockCommand}" 
                                         Style="{StaticResource EstiloBotonPrincipal}"
                                             Width="120" 
-                                            Height="35" 
-                                            FontSize="13"
+                                Height="32" 
+                                FontSize="12"
+                                FontWeight="Bold"
                                             Margin="0,0,0,8"/>
-                                <Button Content="🗑️ Limpiar" 
+                        <Button Content="🧹 Limpiar" 
                                         Command="{Binding LimpiarComentariosCommand}" 
                                         Style="{StaticResource EstiloBotonSecundario}"
                                             Width="120" 
-                                            Height="35"
+                                Height="32"
                                             FontSize="12"/>
                             </StackPanel>
                             </Grid>
                         </Grid>
                     </Border>
-                </Grid>
-        </Grid>
 
-        <!-- BARRA DE ESTADO -->
+        <!-- PANEL DE DESBLOQUEO (Solo Bloqueos) -->
         <Border Grid.Row="3" 
-                Height="40"
                 Background="White"
-                BorderBrush="{StaticResource BrushPrincipal}"
-                BorderThickness="0,2,0,0"
-                CornerRadius="0,0,8,8">
-            <Grid>
+                BorderBrush="#E1E5E9" 
+                BorderThickness="1" 
+                CornerRadius="8"
+                Margin="0,12,0,0"
+                Visibility="{Binding MostrandoBloqueos, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid Margin="15">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" 
+                           Text="🔓 Desbloquear Stock Seleccionado" 
+                           FontFamily="{StaticResource FuentePrincipal}"
+                           FontWeight="Bold"
+                           FontSize="14"
+                           Foreground="{StaticResource BrushPrincipal}"
+                           Margin="0,0,0,12"/>
+
+                <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <StackPanel Grid.Column="0" 
-                            Orientation="Horizontal" 
-                            VerticalAlignment="Center" 
-                            Margin="15,0">
-                    <TextBlock Text="📊" FontSize="14" Margin="0,0,8,0"/>
-                <TextBlock Text="{Binding MensajeEstado}" 
+                    <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                        <TextBlock Text="Motivo del Desbloqueo" 
+                                   FontFamily="{StaticResource FuentePrincipal}"
+                                   FontWeight="SemiBold"
+                                   FontSize="12"
+                                   Foreground="#7F8C8D"
+                                   Margin="0,0,0,6"/>
+                        <TextBox Text="{Binding ComentarioDesbloqueo}" 
+                                 Height="50" 
+                                 TextWrapping="Wrap" 
+                                 AcceptsReturn="True"
+                                 Style="{StaticResource EstiloCajaTexto}"
+                                 FontSize="12"
+                                 Padding="8"
+                                 Margin="0,0,0,8"
+                                 KeyDown="DesbloquearTextBox_KeyDown"/>
+                        
+                        <CheckBox Content="🌐 Desbloquear en TODAS las ubicaciones (Desbloqueo Global)"
+                                  IsChecked="{Binding EsDesbloqueoGlobal}"
                            FontFamily="{StaticResource FuentePrincipal}"
                                FontSize="12"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource BrushPrincipal}"
-                               VerticalAlignment="Center"/>
+                                  Foreground="#34495E"/>
                 </StackPanel>
                 
-                <StackPanel Grid.Column="1" 
-                            Orientation="Horizontal" 
-                            VerticalAlignment="Center" 
-                            Margin="0,0,15,0">
-                    <ProgressBar Width="120" 
-                                 Height="20" 
-                            IsIndeterminate="{Binding EstaCargando}" 
-                                 Visibility="{Binding EstaCargando, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                 Background="#E0E0E0"
-                                 Foreground="{StaticResource BrushPrincipal}"
-                                 Margin="0,0,10,0"/>
-                    <TextBlock Text="🔄 Cargando..." 
-                               FontFamily="{StaticResource FuentePrincipal}"
-                               FontSize="11"
-                               Foreground="#666"
-                               VerticalAlignment="Center"
-                            Visibility="{Binding EstaCargando, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
+                        <Button Content="🔓 DESBLOQUEAR" 
+                                Command="{Binding DesbloquearStockCommand}" 
+                                Style="{StaticResource EstiloBotonPrincipal}"
+                                Width="130" 
+                                Height="32" 
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Margin="0,0,0,8"/>
+                        <Button Content="🧹 Limpiar" 
+                                Command="{Binding LimpiarComentariosCommand}" 
+                                Style="{StaticResource EstiloBotonSecundario}"
+                                Width="130" 
+                                Height="32"
+                                FontSize="12"/>
                 </StackPanel>
+                </Grid>
             </Grid>
         </Border>
     </Grid>

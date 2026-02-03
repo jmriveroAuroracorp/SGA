@@ -10,6 +10,8 @@
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         Topmost="True"
+        ShowActivated="False"
+        Focusable="False"
         MaxWidth="400"
         MinWidth="300">
     
@@ -41,7 +43,7 @@
             BorderThickness="2"
             Padding="16"
             SnapsToDevicePixels="True"
-            MouseLeftButtonDown="Border_MouseLeftButtonDown"
+            PreviewMouseDown="Border_PreviewMouseDown"
             Cursor="Hand">
             <Border.Effect>
                 <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3" Color="Black"/>
@@ -81,7 +83,7 @@
                            MaxHeight="200"/>
             </StackPanel>
             
-            <!-- Botón cerrar (más visible) -->
+            <!-- Botón cerrar -->
             <Button x:Name="CloseButton"
                     Grid.Column="2"
                     Content="✕"
@@ -93,13 +95,13 @@
                     FontSize="14"
                     FontWeight="Bold"
                     Padding="0"
-                    Margin="8,0,0,0"
+                    Margin="0,0,0,0"
                     VerticalAlignment="Top"
                     HorizontalAlignment="Right"
                     Cursor="Hand"
                     Click="CloseButton_Click"
                     ToolTip="Cerrar"
-                    MouseLeftButtonDown="CloseButton_MouseLeftButtonDown"/>
+                    PreviewMouseDown="CloseButton_PreviewMouseDown"/>
         </Grid>
     </Border>
 </Window>

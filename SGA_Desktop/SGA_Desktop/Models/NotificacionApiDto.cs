@@ -30,7 +30,7 @@ namespace SGA_Desktop.Models
         /// <summary>
         /// ID del proceso relacionado
         /// </summary>
-        [JsonPropertyName("procesold")]
+        [JsonPropertyName("procesoId")]
         public Guid? ProcesoId { get; set; }
 
         /// <summary>

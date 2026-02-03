@@ -854,6 +854,22 @@ namespace SGA_Api.Controllers.Stock
 
     var datos = await q.ToListAsync();
     
+    // 🔷 NUEVO: Validación batch de sincronización de stock
+    // Agrupar artículos únicos por (CodigoArticulo, Partida, CodigoAlmacen)
+    var articulosUnicos = datos
+        .GroupBy(d => new { d.CodigoArticulo, d.Partida, d.CodigoAlmacen })
+        .Select(g => (g.Key.CodigoArticulo, g.Key.Partida ?? "", g.Key.CodigoAlmacen))
+        .Distinct()
+        .ToList();
+
+    // Validar todos en batch (una sola llamada)
+    var validacionesSincronizacion = await ValidarSincronizacionStockBatchAsync(
+        codigoEmpresa,
+        articulosUnicos);
+    
+    // 🔷 NUEVO: Consultar alérgenos de cada artículo individualmente (con caché para evitar consultas duplicadas)
+    var alergenosCache = new Dictionary<string, string>();
+    
     // 🔷 ACTUALIZADO: Verificar bloqueos por ubicación específica para cada registro
     // 🔷 NUEVA LÓGICA: Crear opciones separadas para stock suelto y paletizado
     var resultado = new List<object>();
@@ -940,6 +956,25 @@ namespace SGA_Api.Controllers.Stock
             fechaUltimoTraspasoSuelto = ultimoTraspasoSuelto;
         }
 
+        // 🔷 NUEVO: Obtener alérgenos del artículo (con caché para evitar consultas duplicadas)
+        if (!alergenosCache.TryGetValue(item.CodigoArticulo, out var alergenos))
+        {
+            var articuloInfo = await _sageContext.VisArticulos
+                .AsNoTracking()
+                .Where(v => v.CodigoEmpresa == codigoEmpresa && v.CodigoArticulo == item.CodigoArticulo)
+                .Select(v => v.VNEWAlergenos)
+                .FirstOrDefaultAsync();
+            
+            alergenos = articuloInfo ?? string.Empty;
+            alergenosCache[item.CodigoArticulo] = alergenos;
+        }
+
+        // 🔷 NUEVO: Obtener validación de sincronización desde diccionario
+        var keySincronizacion = (item.CodigoArticulo, item.Partida ?? "", item.CodigoAlmacen);
+        var (tieneDesincronizacion, stockSage, stockStorageControl) = validacionesSincronizacion.GetValueOrDefault(
+            keySincronizacion, 
+            (false, 0m, 0m));
+
         // 🔷 Opción 1: Stock suelto (si hay)
         if (stockSuelto > 0)
         {
@@ -969,7 +1004,15 @@ namespace SGA_Api.Controllers.Stock
                 TipoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("tipoBloqueo")?.GetValue(bloqueoInfo)?.ToString() ?? "TOTAL", // 🔷 NUEVO
                 
                 // 🔷 NUEVO: Fecha del último traspaso
-                FechaUltimoTraspaso = fechaUltimoTraspasoSuelto
+                FechaUltimoTraspaso = fechaUltimoTraspasoSuelto,
+                
+                // 🔷 NUEVO: Alérgenos del artículo (consultado individualmente con caché)
+                Alergenos = alergenos,
+                
+                // 🔷 NUEVO: Información de desincronización de stock
+                TieneDesincronizacion = tieneDesincronizacion ? true : (bool?)null,
+                StockSage = tieneDesincronizacion ? stockSage : (decimal?)null,
+                StockStorageControl = tieneDesincronizacion ? stockStorageControl : (decimal?)null
             });
         }
 
@@ -1015,7 +1058,15 @@ namespace SGA_Api.Controllers.Stock
                 TipoBloqueoCalidad = bloqueoInfo?.GetType().GetProperty("tipoBloqueo")?.GetValue(bloqueoInfo)?.ToString() ?? "TOTAL", // 🔷 NUEVO
                 
                 // 🔷 NUEVO: Fecha del último traspaso
-                FechaUltimoTraspaso = fechaUltimoTraspasoPalet
+                FechaUltimoTraspaso = fechaUltimoTraspasoPalet,
+                
+                // 🔷 NUEVO: Alérgenos del artículo (consultado individualmente con caché)
+                Alergenos = alergenos,
+                
+                // 🔷 NUEVO: Información de desincronización de stock
+                TieneDesincronizacion = tieneDesincronizacion ? true : (bool?)null,
+                StockSage = tieneDesincronizacion ? stockSage : (decimal?)null,
+                StockStorageControl = tieneDesincronizacion ? stockStorageControl : (decimal?)null
             });
 			}
 		}
@@ -1296,6 +1347,132 @@ namespace SGA_Api.Controllers.Stock
 			}
 		}
 
+		/// <summary>
+		/// Clase auxiliar para mapear resultados de consultas SQL de stock
+		/// </summary>
+		private class StockBatchResult
+		{
+			public string CodigoArticulo { get; set; } = string.Empty;
+			public string Partida { get; set; } = string.Empty;
+			public string CodigoAlmacen { get; set; } = string.Empty;
+			public decimal Stock { get; set; }
+		}
+
+		/// <summary>
+		/// Valida sincronización de stock en batch para múltiples artículos (optimizado)
+		/// Retorna diccionario con (CodigoArticulo, Partida, CodigoAlmacen) -> (TieneDesincronizacion, StockSage, StockStorageControl)
+		/// </summary>
+		private async Task<Dictionary<(string CodigoArticulo, string Partida, string CodigoAlmacen), (bool TieneDesincronizacion, decimal StockSage, decimal StockStorageControl)>> 
+			ValidarSincronizacionStockBatchAsync(
+				short codigoEmpresa,
+				List<(string CodigoArticulo, string Partida, string CodigoAlmacen)> articulos)
+		{
+			var resultado = new Dictionary<(string, string, string), (bool, decimal, decimal)>();
+			
+			if (!articulos.Any())
+				return resultado;
+
+			try
+			{
+				// Obtener el ejercicio actual (una sola vez)
+				var ejercicio = await _sageContext.Periodos
+					.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+
+				if (ejercicio == 0)
+				{
+					_logger.LogWarning("No se encontró ejercicio válido para validación batch de sincronización");
+					// Retornar todos como null (no verificado)
+					foreach (var art in articulos)
+					{
+						resultado[(art.CodigoArticulo, art.Partida ?? "", art.CodigoAlmacen)] = (false, 0m, 0m);
+					}
+					return resultado;
+				}
+
+				// Construir listas de valores únicos para filtrar
+				var codigosArticulos = articulos.Select(a => a.CodigoArticulo).Distinct().ToList();
+				var partidas = articulos.Select(a => a.Partida ?? "").Distinct().ToList();
+				var codigosAlmacenes = articulos.Select(a => a.CodigoAlmacen).Distinct().ToList();
+
+				// UNA consulta batch a SAGE - filtrar por listas y luego filtrar en memoria por combinaciones exactas
+				var stocksSageRaw = await _sageContext.Database
+					.SqlQueryRaw<StockBatchResult>(
+						$@"SELECT CodigoArticulo, ISNULL(Partida, '') AS Partida, CodigoAlmacen, SUM(UnidadSaldo) AS Stock
+                           FROM AURORA.dbo.AcumuladoStock 
+                           WHERE Ejercicio = {ejercicio} 
+                             AND Periodo = 99 
+                             AND CodigoEmpresa = {codigoEmpresa}
+                             AND CodigoArticulo IN ({string.Join(", ", codigosArticulos.Select((a, i) => $"'{a.Replace("'", "''")}'"))})
+                             AND CodigoAlmacen IN ({string.Join(", ", codigosAlmacenes.Select((a, i) => $"'{a.Replace("'", "''")}'"))})
+                           GROUP BY CodigoArticulo, ISNULL(Partida, ''), CodigoAlmacen")
+					.ToListAsync();
+
+				// Filtrar en memoria por combinaciones exactas de (CodigoArticulo, Partida, CodigoAlmacen)
+				var combinacionesValidas = articulos.Select(a => (a.CodigoArticulo, a.Partida ?? "", a.CodigoAlmacen)).ToHashSet();
+				var stocksSage = stocksSageRaw
+					.Where(s => combinacionesValidas.Contains((s.CodigoArticulo, s.Partida ?? "", s.CodigoAlmacen)))
+					.ToList();
+
+				// UNA consulta batch a StorageControl - mismo enfoque
+				var stocksStorageRaw = await _storageContext.Database
+					.SqlQueryRaw<StockBatchResult>(
+						$@"SELECT CodigoArticulo, ISNULL(Partida, '') AS Partida, CodigoAlmacen, SUM(UnidadSaldo) AS Stock
+                           FROM StorageControl.dbo.AcumuladoStockUbicacion 
+                           WHERE Ejercicio = {ejercicio} 
+                             AND CodigoEmpresa = {codigoEmpresa}
+                             AND CodigoArticulo IN ({string.Join(", ", codigosArticulos.Select((a, i) => $"'{a.Replace("'", "''")}'"))})
+                             AND CodigoAlmacen IN ({string.Join(", ", codigosAlmacenes.Select((a, i) => $"'{a.Replace("'", "''")}'"))})
+                           GROUP BY CodigoArticulo, ISNULL(Partida, ''), CodigoAlmacen")
+					.ToListAsync();
+
+				// Filtrar en memoria por combinaciones exactas
+				var stocksStorage = stocksStorageRaw
+					.Where(s => combinacionesValidas.Contains((s.CodigoArticulo, s.Partida ?? "", s.CodigoAlmacen)))
+					.ToList();
+
+				// Crear diccionarios para lookup rápido
+				var dictSage = stocksSage.ToDictionary(
+					s => (s.CodigoArticulo, s.Partida ?? "", s.CodigoAlmacen), 
+					s => s.Stock);
+				var dictStorage = stocksStorage.ToDictionary(
+					s => (s.CodigoArticulo, s.Partida ?? "", s.CodigoAlmacen), 
+					s => s.Stock);
+
+				// Comparar y construir resultado
+				foreach (var art in articulos)
+				{
+					var key = (art.CodigoArticulo, art.Partida ?? "", art.CodigoAlmacen);
+					var stockSage = dictSage.GetValueOrDefault(key, 0m);
+					var stockStorage = dictStorage.GetValueOrDefault(key, 0m);
+					var tieneDesincronizacion = stockSage != stockStorage;
+					
+					if (tieneDesincronizacion)
+					{
+						_logger.LogWarning("⚠️ Desincronización detectada - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacén: {CodigoAlmacen}, SAGE: {StockSage:N6}, StorageControl: {StockStorage:N6}",
+							art.CodigoArticulo, art.Partida ?? "(sin partida)", art.CodigoAlmacen, stockSage, stockStorage);
+					}
+					
+					resultado[key] = (tieneDesincronizacion, stockSage, stockStorage);
+				}
+
+				_logger.LogInformation("Validación batch de sincronización completada - {Count} artículos validados", articulos.Count);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error al validar sincronización de stock en batch - {Count} artículos", articulos.Count);
+				// Si falla, retornar todos como no verificados (false)
+				foreach (var art in articulos)
+				{
+					resultado[(art.CodigoArticulo, art.Partida ?? "", art.CodigoAlmacen)] = (false, 0m, 0m);
+				}
+			}
+
+			return resultado;
+		}
+
 		// helper para proyectar
 		private async Task<List<StockUbicacionDto>> ProjectToDtoConBloqueosAsync(List<AcumuladoStockUbicacion> datos, short codigoEmpresa)
 		{
@@ -1315,6 +1492,9 @@ namespace SGA_Api.Controllers.Stock
 			var codigosArticulos = datos.Select(d => d.CodigoArticulo).Distinct().ToList();
 			var partidas = datos.Select(d => d.Partida).Distinct().ToList();
 			var ubicaciones = datos.Select(d => d.Ubicacion).Distinct().ToList();
+
+			// 🔷 NUEVO: Consultar alérgenos de cada artículo individualmente (con caché para evitar consultas duplicadas)
+			var alergenosCache = new Dictionary<string, string>();
 
 			var lineasPalets = _auroraSgaContext.PaletLineas
 				.Include(l => l.Palet)
@@ -1348,6 +1528,18 @@ namespace SGA_Api.Controllers.Stock
 					g => g.Sum(x => x.UnidadSaldo)
 				);
 
+			// 🔷 NUEVO: Validación batch de sincronización de stock
+			// Agrupar artículos únicos por (CodigoArticulo, Partida, CodigoAlmacen)
+			var articulosUnicos = datos
+				.GroupBy(d => new { d.CodigoArticulo, d.Partida, d.CodigoAlmacen })
+				.Select(g => (g.Key.CodigoArticulo, g.Key.Partida ?? "", g.Key.CodigoAlmacen))
+				.Distinct()
+				.ToList();
+
+			// Validar todos en batch (una sola llamada)
+			var validacionesSincronizacion = await ValidarSincronizacionStockBatchAsync(
+				codigoEmpresa,
+				articulosUnicos);
 
 			var resultado = new List<StockUbicacionDto>();
 			
@@ -1419,6 +1611,19 @@ namespace SGA_Api.Controllers.Stock
 					.OrderByDescending(b => b.FechaBloqueo)
 					.FirstOrDefaultAsync();
 
+				// 🔷 NUEVO: Obtener alérgenos del artículo (con caché para evitar consultas duplicadas)
+				if (!alergenosCache.TryGetValue(s.CodigoArticulo, out var alergenos))
+				{
+					var articuloInfo = await _sageContext.VisArticulos
+						.AsNoTracking()
+						.Where(v => v.CodigoEmpresa == empresa && v.CodigoArticulo == s.CodigoArticulo)
+						.Select(v => v.VNEWAlergenos)
+						.FirstOrDefaultAsync();
+					
+					alergenos = articuloInfo ?? string.Empty;
+					alergenosCache[s.CodigoArticulo] = alergenos;
+				}
+
 				// 🔷 CORREGIDO: Obtener fecha del último traspaso
 				// Si hay palets, usar TraspasoId de las líneas directamente
 				DateTime? fechaUltimoTraspaso = null;
@@ -1469,6 +1674,19 @@ namespace SGA_Api.Controllers.Stock
 					fechaUltimoTraspaso = ultimoTraspasoSuelto;
 				}
 
+				// 🔷 NUEVO: Obtener validación de sincronización desde diccionario ANTES de crear el DTO
+				var keySincronizacion = (s.CodigoArticulo, s.Partida ?? "", s.CodigoAlmacen);
+				var (tieneDesincronizacion, stockSage, stockStorageControl) = validacionesSincronizacion.GetValueOrDefault(
+					keySincronizacion, 
+					(false, 0m, 0m));
+				
+				// 🔷 DEBUG: Log si hay desincronización para este registro específico
+				if (tieneDesincronizacion)
+				{
+					_logger.LogInformation("🔍 Asignando desincronización a DTO - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacén: {CodigoAlmacen}, Ubicación: {Ubicacion}, SAGE: {StockSage:N6}, StorageControl: {StockStorageControl:N6}",
+						s.CodigoArticulo, s.Partida ?? "(sin partida)", s.CodigoAlmacen, s.Ubicacion ?? "(sin ubicación)", stockSage, stockStorageControl);
+				}
+
 				resultado.Add(new StockUbicacionDto
 				{
 					CodigoEmpresa = s.CodigoEmpresa.ToString(),
@@ -1497,7 +1715,15 @@ namespace SGA_Api.Controllers.Stock
 					TipoBloqueoCalidad = bloqueoEspecifico?.TipoBloqueo ?? "TOTAL", // 🔷 NUEVO
 					
 					// 🔷 NUEVO: Fecha del último traspaso
-					FechaUltimoTraspaso = fechaUltimoTraspaso
+					FechaUltimoTraspaso = fechaUltimoTraspaso,
+					
+					// 🔷 NUEVO: Alérgenos del artículo (consultado individualmente con caché)
+					Alergenos = alergenos,
+					
+					// 🔷 NUEVO: Información de desincronización de stock
+					TieneDesincronizacion = tieneDesincronizacion ? true : (bool?)null,
+					StockSage = tieneDesincronizacion ? stockSage : (decimal?)null,
+					StockStorageControl = tieneDesincronizacion ? stockStorageControl : (decimal?)null
 				});
 			}
 			

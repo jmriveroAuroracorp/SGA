@@ -9,8 +9,18 @@ namespace SGA_Desktop.Helpers
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
+            // Manejar bool normal
             if (value is bool b)
                 return b ? Visibility.Visible : Visibility.Collapsed;
+            
+            // Manejar bool? (nullable)
+            if (value is bool?)
+            {
+                var nullableBool = (bool?)value;
+                if (nullableBool.HasValue && nullableBool.Value)
+                    return Visibility.Visible;
+            }
+            
             return Visibility.Collapsed;
         }
 

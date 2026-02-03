@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SGA_Api.Data;
 using SGA_Api.Models.Notificaciones;
 using SGA_Api.Models.Traspasos;
+using System;
 using System.Text;
 using System.Data.Common;
 
@@ -14,6 +15,17 @@ namespace SGA_Api.Services
         Task<MrhTipoNotificacion?> ObtenerTipoNotificacionAsync(SageDbContext sageDbContext, int tipoNotificacion);
         string ConstruirMensajeTraspaso(Traspaso traspaso, string mensajeError);
         Task InsertarMrhNotificacionAsync(SageDbContext sageDbContext, Traspaso traspaso, MrhTipoNotificacion tipoNotificacion, string mensaje);
+        Task InsertarNotificacionBloqueoSincronizacionAsync(
+            SageDbContext sageDbContext,
+            short codigoEmpresa,
+            string codigoArticulo,
+            string? partida,
+            string almacenOrigen,
+            string? ubicacionOrigen,
+            decimal stockSage,
+            decimal stockStorageControl,
+            string tipoOperacion,
+            string? codigoPalet);
     }
 
     public class NotificacionesTeamsService : INotificacionesTeamsService
@@ -247,6 +259,131 @@ namespace SGA_Api.Services
                 _logger.LogError(ex, "Error al insertar notificación MRH para traspaso {TraspasoId}", traspaso.Id);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Inserta notificación de bloqueo de sincronización en MRH_Notificaciones para enviar a Teams
+        /// Usa las mismas reglas que los traspasos: 002 → Canela (95), 100 → Andalucía (94), 300 → Oceania (97), resto → General (96)
+        /// </summary>
+        public async Task InsertarNotificacionBloqueoSincronizacionAsync(
+            SageDbContext sageDbContext,
+            short codigoEmpresa,
+            string codigoArticulo,
+            string? partida,
+            string almacenOrigen,
+            string? ubicacionOrigen,
+            decimal stockSage,
+            decimal stockStorageControl,
+            string tipoOperacion,
+            string? codigoPalet)
+        {
+            try
+            {
+                // Usar las MISMAS reglas que para traspasos, pero con almacén ORIGEN
+                // 002 → Canela (95), 100 → Andalucía (94), 300 → Oceania (97), resto → General (96)
+                var tipoNotificacionId = await DeterminarTipoNotificacionAsync(sageDbContext, almacenOrigen);
+                
+                // Obtener datos del tipo de notificación (incluyendo CanalTeams)
+                var tipoNotificacion = await ObtenerTipoNotificacionAsync(sageDbContext, tipoNotificacionId);
+                
+                // Si no se encuentra, usar fallback tipo 96 (General)
+                if (tipoNotificacion == null && tipoNotificacionId != 96)
+                {
+                    _logger.LogWarning("No se encontró tipo de notificación {TipoNotificacionId}, intentando con fallback 96", tipoNotificacionId);
+                    tipoNotificacion = await ObtenerTipoNotificacionAsync(sageDbContext, 96);
+                    if (tipoNotificacion != null)
+                    {
+                        tipoNotificacionId = 96;
+                    }
+                }
+
+                if (tipoNotificacion == null)
+                {
+                    _logger.LogWarning("No se pudo obtener tipo de notificación para bloqueo de sincronización");
+                    return; // No lanzar excepción, solo loguear
+                }
+
+                // Construir mensaje HTML para Teams
+                var mensaje = ConstruirMensajeBloqueoSincronizacion(
+                    codigoArticulo, partida, almacenOrigen, ubicacionOrigen,
+                    stockSage, stockStorageControl, tipoOperacion, codigoPalet);
+
+                var asunto = $"Bloqueo de Sincronización de Stock - {codigoArticulo}";
+                if (!string.IsNullOrWhiteSpace(codigoPalet))
+                    asunto += $" - Palet: {codigoPalet}";
+
+                // Insertar en MRH_Notificaciones (igual que traspasos)
+                var sql = @"
+                    INSERT INTO MRH_Notificaciones 
+                    (CodigoEmpresa, MovPosicion, MRH_OrigenNotificacion, MRH_Interno, FechaRegistro, 
+                     EnviaEmail, Email, Asunto, Mensaje, CanalTeams)
+                    VALUES 
+                    (@codigoEmpresa, NEWID(), @origenNotificacion, @interno, @fechaRegistro,
+                     @enviaEmail, @email, @asunto, @mensaje, @canalTeams)";
+
+                var parametros = new[]
+                {
+                    new Microsoft.Data.SqlClient.SqlParameter("@codigoEmpresa", codigoEmpresa),
+                    new Microsoft.Data.SqlClient.SqlParameter("@origenNotificacion", "AURORA SGA - Bloqueo Sincronización"),
+                    new Microsoft.Data.SqlClient.SqlParameter("@interno", -1),
+                    new Microsoft.Data.SqlClient.SqlParameter("@fechaRegistro", DateTime.Now),
+                    new Microsoft.Data.SqlClient.SqlParameter("@enviaEmail", -1),
+                    new Microsoft.Data.SqlClient.SqlParameter("@email", tipoNotificacion.Email ?? "aurorabot@auroracorp.es"),
+                    new Microsoft.Data.SqlClient.SqlParameter("@asunto", asunto),
+                    new Microsoft.Data.SqlClient.SqlParameter("@mensaje", mensaje),
+                    new Microsoft.Data.SqlClient.SqlParameter("@canalTeams", tipoNotificacion.CanalTeams ?? (object)DBNull.Value)
+                };
+
+                await sageDbContext.Database.ExecuteSqlRawAsync(sql, parametros);
+                
+                _logger.LogInformation("Notificación Teams insertada para bloqueo de sincronización - Artículo: {CodigoArticulo}, Almacén: {AlmacenOrigen}, Tipo: {TipoNotificacion}",
+                    codigoArticulo, almacenOrigen, tipoNotificacionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al insertar notificación Teams para bloqueo de sincronización - Artículo: {CodigoArticulo}", codigoArticulo);
+                // No lanzar excepción para no interrumpir el flujo principal
+            }
+        }
+
+        /// <summary>
+        /// Construye el mensaje HTML para notificaciones de bloqueo de sincronización
+        /// </summary>
+        private string ConstruirMensajeBloqueoSincronizacion(
+            string codigoArticulo,
+            string? partida,
+            string almacenOrigen,
+            string? ubicacionOrigen,
+            decimal stockSage,
+            decimal stockStorageControl,
+            string tipoOperacion,
+            string? codigoPalet)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"<strong>⚠️ Bloqueo de Sincronización de Stock</strong><br><br>");
+            
+            sb.AppendLine($"<strong>Artículo:</strong> {codigoArticulo}<br>");
+            
+            if (!string.IsNullOrWhiteSpace(partida))
+                sb.AppendLine($"<strong>Partida:</strong> {partida}<br>");
+            
+            sb.AppendLine($"<strong>Almacén:</strong> {almacenOrigen}<br>");
+            
+            if (!string.IsNullOrWhiteSpace(ubicacionOrigen))
+                sb.AppendLine($"<strong>Ubicación:</strong> {ubicacionOrigen}<br>");
+            
+            sb.AppendLine($"<strong>Operación:</strong> {tipoOperacion}<br>");
+            
+            if (!string.IsNullOrWhiteSpace(codigoPalet))
+                sb.AppendLine($"<strong>Palet:</strong> {codigoPalet}<br>");
+            
+            sb.AppendLine($"<br><strong>Stock SAGE:</strong> {stockSage:N6}<br>");
+            sb.AppendLine($"<strong>Stock StorageControl:</strong> {stockStorageControl:N6}<br>");
+            sb.AppendLine($"<strong>Diferencia:</strong> {Math.Abs(stockSage - stockStorageControl):N6}<br>");
+            
+            sb.AppendLine($"<br><strong>⚠️ La operación ha sido bloqueada para evitar inconsistencias.</strong><br>");
+            
+            return sb.ToString();
         }
     }
 }

@@ -514,6 +514,31 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
+        /// Renovar manualmente un conteo periódico (relanzar ahora)
+        /// </summary>
+        public async Task<OrdenConteoDto> RenovarConteoPeriodicoAsync(Guid guid)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync($"conteos/ordenes/{guid}/renovar", null);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var orden = JsonConvert.DeserializeObject<OrdenConteoDto>(responseContent);
+                
+                return orden ?? throw new Exception("Error al deserializar la respuesta");
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al renovar conteo periódico: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Obtener códigos de operarios que han creado conteos
         /// </summary>
         public async Task<List<string>> ObtenerCreadoresConteosAsync()
@@ -585,6 +610,59 @@ namespace SGA_Desktop.Services
             catch (Exception ex)
             {
                 throw new Exception($"Error al obtener renovaciones: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Obtener palets disponibles en una ubicación con características específicas
+        /// </summary>
+        public async Task<List<PaletDisponibleInfo>> ObtenerPaletsDisponiblesAsync(
+            short codigoEmpresa,
+            string codigoAlmacen,
+            string ubicacion,
+            string codigoArticulo,
+            string? lote = null,
+            DateTime? fechaCaducidad = null)
+        {
+            try
+            {
+                var queryParams = new List<string>
+                {
+                    $"codigoAlmacen={Uri.EscapeDataString(codigoAlmacen)}",
+                    $"codigoArticulo={Uri.EscapeDataString(codigoArticulo)}"
+                };
+                
+                // Agregar ubicación
+                // NOTA: Cuando ubicacion es string.Empty (SIN UBICAR), no lo incluimos en la query
+                // El backend lo normalizará a string.Empty desde null
+                if (ubicacion != null && ubicacion != string.Empty)
+                {
+                    queryParams.Add($"ubicacion={Uri.EscapeDataString(ubicacion)}");
+                }
+                // Si es string.Empty, no agregarlo - el backend lo tratará como null y lo normalizará a string.Empty
+                
+                if (!string.IsNullOrWhiteSpace(lote))
+                    queryParams.Add($"lote={Uri.EscapeDataString(lote)}");
+                
+                if (fechaCaducidad.HasValue)
+                    queryParams.Add($"fechaCaducidad={fechaCaducidad.Value:yyyy-MM-dd}");
+                
+                var uri = $"conteos/palets-disponibles?{string.Join("&", queryParams)}";
+                var response = await _httpClient.GetAsync(uri);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var palets = JsonConvert.DeserializeObject<List<PaletDisponibleInfo>>(responseContent);
+                
+                return palets ?? new List<PaletDisponibleInfo>();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new Exception($"Error de comunicación con el servidor: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al obtener palets disponibles: {ex.Message}", ex);
             }
         }
     }

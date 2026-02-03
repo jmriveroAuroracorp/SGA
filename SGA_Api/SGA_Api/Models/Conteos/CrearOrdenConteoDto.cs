@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace SGA_Api.Models.Conteos
@@ -42,6 +43,9 @@ namespace SGA_Api.Models.Conteos
         
         [StringLength(10, ErrorMessage = "El código del almacén no puede exceder 10 caracteres")]
         public string? CodigoAlmacen { get; set; }
+        
+        // Lista de códigos de almacén para modo multialmacén
+        public List<string>? CodigosAlmacen { get; set; }
         
         [StringLength(30, ErrorMessage = "El código de ubicación no puede exceder 30 caracteres")]
         public string? CodigoUbicacion { get; set; }

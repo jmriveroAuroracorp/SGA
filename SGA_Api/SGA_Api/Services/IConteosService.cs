@@ -34,5 +34,6 @@ namespace SGA_Api.Services
         Task<IEnumerable<OrdenDto>> ObtenerRenovacionesAsync(Guid guid);
         Task<IEnumerable<string>> ObtenerCreadoresConteosAsync();
         Task<IEnumerable<string>> ObtenerCreadoresConteosPeriodicosAsync();
+        Task<OrdenDto> RenovarConteoPeriodicoAsync(Guid guid);
     }
 } 

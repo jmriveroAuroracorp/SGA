@@ -137,13 +137,75 @@
                                                Margin="5,0,0,0"
                                                Visibility="{Binding MostrarConteoArticulo, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
+                                
+                                <!-- CheckBox modo multialmacén (solo visible en modo artículo) -->
+                                <CheckBox Content="Conteo multialmacén" 
+                                          IsChecked="{Binding ModoMultialmacen}"
+                                          FontSize="12"
+                                          Foreground="Gray"
+                                          Margin="0,0,0,5"
+                                          Visibility="{Binding MostrarConteoArticulo, Converter={StaticResource BoolToVis}}"/>
+                                
+                                <!-- ComboBox modo único (cuando ModoMultialmacen = false) -->
                                 <ComboBox ItemsSource="{Binding AlmacenesView}"
                                           DisplayMemberPath="DescripcionCombo"
                                           SelectedItem="{Binding AlmacenSeleccionado}"
                                           Height="35"
                                           FontSize="14"
                                           Padding="8"
-                                          IsEditable="True"/>
+                                          IsEditable="True"
+                                          Visibility="{Binding ModoMultialmacen, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                
+                                <!-- Panel modo múltiple (cuando ModoMultialmacen = true) -->
+                                <Grid Visibility="{Binding ModoMultialmacen, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    
+                                    <!-- Resumen de selección -->
+                                    <TextBlock Grid.Row="0"
+                                               Text="{Binding DescripcionAlmacenesSeleccionados}"
+                                               FontSize="11"
+                                               Foreground="Gray"
+                                               Margin="0,0,0,8"
+                                               TextWrapping="Wrap"
+                                               FontWeight="SemiBold"/>
+                                    
+                                    <!-- Lista de almacenes con CheckBoxes -->
+                                    <ScrollViewer Grid.Row="1"
+                                                  VerticalScrollBarVisibility="Auto" 
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  MaxHeight="200">
+                                        <ItemsControl ItemsSource="{Binding AlmacenesView}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Content="{Binding DescripcionCombo}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              Margin="2,4"
+                                                              Padding="4,2"
+                                                              FontSize="13"
+                                                              Cursor="Hand">
+                                                        <CheckBox.Style>
+                                                            <Style TargetType="CheckBox">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Style.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Background" Value="#F0F0F0"/>
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsChecked" Value="True">
+                                                                        <Setter Property="FontWeight" Value="Bold"/>
+                                                                        <Setter Property="Foreground" Value="{StaticResource BrushPrincipal}"/>
+                                                                    </Trigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </CheckBox.Style>
+                                                    </CheckBox>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Grid>
                             </StackPanel>
 
                             <!-- Operario -->

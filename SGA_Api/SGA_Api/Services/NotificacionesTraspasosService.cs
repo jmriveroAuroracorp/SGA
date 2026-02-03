@@ -71,21 +71,36 @@ namespace SGA_Api.Services
         /// <summary>
         /// Envía una notificación popup a un usuario específico
         /// </summary>
-        public async Task NotificarPopupUsuarioAsync(int usuarioId, string titulo, string mensaje, string tipoNotificacion = "info")
+        public async Task NotificarPopupUsuarioAsync(int usuarioId, string titulo, string mensaje, string tipoNotificacion = "info", string? tipoNotificacionReal = null, Guid? procesoId = null, int? codigoEmpresa = null)
         {
-            _logger.LogDebug("Enviando notificación popup a usuario {UsuarioId}: {Titulo}", usuarioId, titulo);
+            _logger.LogInformation("🔔 [SignalR] Enviando notificación popup a usuario {UsuarioId}: {Titulo}", usuarioId, titulo);
             
             var notificacion = new
             {
-                TipoNotificacion = "Popup",
+                TipoNotificacion = tipoNotificacionReal ?? "Popup",
                 Titulo = titulo,
                 Mensaje = mensaje,
                 TipoPopup = tipoNotificacion,
+                ProcesoId = procesoId,
+                CodigoEmpresa = codigoEmpresa ?? 1,
                 Timestamp = DateTime.Now
             };
 
-            await _hubContext.Clients.Group($"Usuario_{usuarioId}")
-                .SendAsync("NotificacionUsuario", notificacion);
+            try
+            {
+                var grupo = $"Usuario_{usuarioId}";
+                _logger.LogInformation("🔔 [SignalR] Enviando a grupo: {Grupo}", grupo);
+                
+                await _hubContext.Clients.Group(grupo)
+                    .SendAsync("NotificacionUsuario", notificacion);
+                
+                _logger.LogInformation("✅ [SignalR] Notificación enviada exitosamente a grupo {Grupo}", grupo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ [SignalR] Error al enviar notificación a usuario {UsuarioId}", usuarioId);
+                throw;
+            }
         }
 
         /// <summary>

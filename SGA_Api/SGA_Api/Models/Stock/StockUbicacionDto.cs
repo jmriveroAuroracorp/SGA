@@ -46,6 +46,20 @@ namespace SGA_Api.Models.Stock
 		// 🔷 NUEVO: Fecha del último traspaso
 		[JsonPropertyName("fechaUltimoTraspaso")]
 		public DateTime? FechaUltimoTraspaso { get; set; }
+		
+		// 🔷 NUEVO: Alérgenos del artículo
+		[JsonPropertyName("alergenos")]
+		public string? Alergenos { get; set; }
+		
+		// 🔷 NUEVO: Información de desincronización de stock (SAGE vs StorageControl)
+		[JsonPropertyName("tieneDesincronizacion")]
+		public bool? TieneDesincronizacion { get; set; }
+		
+		[JsonPropertyName("stockSage")]
+		public decimal? StockSage { get; set; }
+		
+		[JsonPropertyName("stockStorageControl")]
+		public decimal? StockStorageControl { get; set; }
 	}
 
 }

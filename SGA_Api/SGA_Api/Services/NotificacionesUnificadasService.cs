@@ -72,13 +72,22 @@ namespace SGA_Api.Services
             try
             {
                 // PASO 2: Enviar por SignalR
-                await _notificacionesSignalRService.NotificarPopupUsuarioAsync(usuarioId, titulo, mensaje, tipoVisual);
+                _logger.LogInformation("🔔 [Unificadas] Intentando enviar notificación por SignalR a usuario {UsuarioId}: {Titulo}", usuarioId, titulo);
+                await _notificacionesSignalRService.NotificarPopupUsuarioAsync(
+                    usuarioId, 
+                    titulo, 
+                    mensaje, 
+                    tipoVisual,
+                    tipoNotificacion,  // Pasar el tipo real (INVENTARIO_CIERRE, etc.)
+                    procesoId,         // Pasar el procesoId
+                    notificacionBd?.CodigoEmpresa ?? 1);  // Pasar CodigoEmpresa
                 signalREnviado = true;
-                _logger.LogInformation("✅ Notificación enviada por SignalR a usuario {UsuarioId}: {Titulo}", usuarioId, titulo);
+                _logger.LogInformation("✅ [Unificadas] Notificación enviada por SignalR a usuario {UsuarioId}: {Titulo}", usuarioId, titulo);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error al enviar notificación por SignalR a usuario {UsuarioId}", usuarioId);
+                _logger.LogError(ex, "❌ [Unificadas] Error al enviar notificación por SignalR a usuario {UsuarioId}: {Error}", usuarioId, ex.Message);
+                _logger.LogError(ex, "❌ [Unificadas] StackTrace: {StackTrace}", ex.StackTrace);
                 // Si falla SignalR pero BD está guardada, la notificación sigue disponible
             }
 

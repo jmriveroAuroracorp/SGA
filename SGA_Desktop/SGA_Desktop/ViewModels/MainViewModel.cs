@@ -384,8 +384,20 @@ namespace SGA_Desktop.ViewModels
 				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
 						   ?? Application.Current.MainWindow;
 				if (owner != null && owner != modal)
+				{
 					modal.Owner = owner;
+					modal.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+				}
+				else
+				{
+					modal.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+				}
 				
+				// Asegurar que el modal sea visible antes de mostrarlo
+				modal.Visibility = Visibility.Visible;
+				modal.ShowActivated = true;
+				
+				System.Diagnostics.Debug.WriteLine($"🔔 Mostrando modal - Owner: {owner?.Title ?? "null"}");
 				modal.ShowDialog();
 				
 				System.Diagnostics.Debug.WriteLine("✅ Modal de notificaciones mostrado");
@@ -393,6 +405,7 @@ namespace SGA_Desktop.ViewModels
 			catch (Exception ex)
 			{
 				System.Diagnostics.Debug.WriteLine($"❌ Error al abrir notificaciones: {ex.Message}");
+				System.Diagnostics.Debug.WriteLine($"❌ StackTrace: {ex.StackTrace}");
 			}
 		}
 

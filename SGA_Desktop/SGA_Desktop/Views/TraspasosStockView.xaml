@@ -186,7 +186,6 @@
                                                                         <Border x:Name="CardBorder"
                                                                                 BorderBrush="{StaticResource BrushPrincipal}"
                                                                                 BorderThickness="2"
-                                                                                Background="White"
                                                                                 Margin="0,0,0,10">
                                                                             
                                                                             <Border.Style>
@@ -199,6 +198,28 @@
                                                                                             <Setter Property="BorderBrush" Value="#FF6B6B"/>
                                                                                             <Setter Property="BorderThickness" Value="4"/>
                                                                                         </DataTrigger>
+                                                                                        <!-- 🔷 NUEVO: Desincronización de stock -->
+                                                                                        <DataTrigger Binding="{Binding TieneDesincronizacion}" Value="True">
+                                                                                            <Setter Property="BorderBrush" Value="#FF9800"/>
+                                                                                            <Setter Property="BorderThickness" Value="3"/>
+                                                                                            <Setter Property="Background" Value="#FFE0E0"/>
+                                                                                        </DataTrigger>
+                                                                                        <!-- Hover - mantener fondo rojo si hay desincronización -->
+                                                                                        <MultiDataTrigger>
+                                                                                            <MultiDataTrigger.Conditions>
+                                                                                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True"/>
+                                                                                                <Condition Binding="{Binding TieneDesincronizacion}" Value="False"/>
+                                                                                            </MultiDataTrigger.Conditions>
+                                                                                            <Setter Property="Background" Value="#E6F0FA"/>
+                                                                                        </MultiDataTrigger>
+                                                                                        <!-- Hover con desincronización - fondo rojo más oscuro -->
+                                                                                        <MultiDataTrigger>
+                                                                                            <MultiDataTrigger.Conditions>
+                                                                                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True"/>
+                                                                                                <Condition Binding="{Binding TieneDesincronizacion}" Value="True"/>
+                                                                                            </MultiDataTrigger.Conditions>
+                                                                                            <Setter Property="Background" Value="#FFB3B3"/>
+                                                                                        </MultiDataTrigger>
                                                                                     </Style.Triggers>
                                                                                 </Style>
                                                                             </Border.Style>
@@ -242,6 +263,41 @@
                                                                                                 <Run Text=" "/>
                                                                                                 <Run Text="{Binding TipoBloqueoCalidad, Converter={StaticResource TipoBloqueoDisplayConverter}, Mode=OneWay}"/>
                                                                                             </TextBlock>
+                                                                                        </StackPanel>
+                                                                                    </Border>
+                                                                                    
+                                                                                    <!-- 🔷 NUEVO: Indicador de desincronización de stock -->
+                                                                                    <Border Background="#FF9800" 
+                                                                                            CornerRadius="3" 
+                                                                                            Padding="4,2" 
+                                                                                            Margin="0,0,8,0"
+                                                                                            Visibility="{Binding TieneDesincronizacion, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                                        <Border.ToolTip>
+                                                                                            <ToolTip>
+                                                                                                <StackPanel>
+                                                                                                    <TextBlock Text="⚠️ Stock desincronizado" FontWeight="Bold"/>
+                                                                                                    <TextBlock Text="El stock en SAGE no coincide con StorageControl"/>
+                                                                                                    <TextBlock Margin="0,4,0,0">
+                                                                                                        <Run Text="SAGE: " FontWeight="Bold"/>
+                                                                                                        <Run Text="{Binding StockSage, StringFormat='{}{0:N6}'}"/>
+                                                                                                    </TextBlock>
+                                                                                                    <TextBlock>
+                                                                                                        <Run Text="StorageControl: " FontWeight="Bold"/>
+                                                                                                        <Run Text="{Binding StockStorageControl, StringFormat='{}{0:N6}'}"/>
+                                                                                                    </TextBlock>
+                                                                                                    <TextBlock Text="⚠️ No se podrá realizar traspasos hasta resolver la desincronización" 
+                                                                                                               FontStyle="Italic" 
+                                                                                                               Foreground="#D32F2F" 
+                                                                                                               Margin="0,4,0,0"/>
+                                                                                                </StackPanel>
+                                                                                            </ToolTip>
+                                                                                        </Border.ToolTip>
+                                                                                        <StackPanel Orientation="Horizontal">
+                                                                                            <TextBlock Text="⚠️" FontSize="12" Margin="0,0,2,0"/>
+                                                                                            <TextBlock Text="DESINCRONIZADO" 
+                                                                                                       FontSize="10" 
+                                                                                                       FontWeight="Bold" 
+                                                                                                       Foreground="White"/>
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                     
@@ -337,9 +393,8 @@
                                                                             </Grid>
                                                                         </Border>
                                                                         <ControlTemplate.Triggers>
-                                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                                <Setter TargetName="CardBorder" Property="Background" Value="#E6F0FA"/>
-                                                                            </Trigger>
+                                                                            <!-- Hover: el fondo se maneja desde el Style del Border con MultiDataTriggers -->
+                                                                            <!-- No hacemos nada aquí para que el Style del Border tenga prioridad -->
                                                                             <Trigger Property="IsPressed" Value="True">
                                                                                 <Setter TargetName="CardBorder" Property="BorderBrush" Value="#031ca5"/>
                                                                             </Trigger>

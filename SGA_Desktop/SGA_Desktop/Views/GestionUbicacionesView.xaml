@@ -253,7 +253,9 @@
                                         </StackPanel>
                                         
                                                         <!-- Badges -->
-                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <!-- Badges horizontales: OBSOLETA y Activa -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                             <Border Background="#D32F2F"
                                                     BorderBrush="#B71C1C"
                                                                     BorderThickness="1"
@@ -286,6 +288,20 @@
                                                     </Style>
                                                 </Border.Style>
                                                                 <TextBlock Text="Activa" 
+                                                               FontSize="9"
+                                                               FontWeight="Bold"
+                                                               Foreground="White"/>
+                                                </Border>
+                                            </StackPanel>
+                                            
+                                            <!-- Badge de Tipología -->
+                                            <Border Background="#2196F3"
+                                                    BorderThickness="1"
+                                                    BorderBrush="#1976D2"
+                                                    CornerRadius="3"
+                                                    Padding="6,3"
+                                                    Visibility="{Binding TipoUbicacionDescripcion, Converter={StaticResource StringToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding TipoUbicacionDescripcion}" 
                                                            FontSize="9"
                                                            FontWeight="Bold"
                                                            Foreground="White"/>

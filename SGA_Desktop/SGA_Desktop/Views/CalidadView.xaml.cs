@@ -2,6 +2,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Data;
 using SGA_Desktop.ViewModels;
+using SGA_Desktop.Models.Calidad;
 
 namespace SGA_Desktop.Views
 {
@@ -94,6 +95,90 @@ namespace SGA_Desktop.Views
                 }
                 e.Handled = true; // Prevenir que se agregue nueva línea
             }
+        }
+
+        /// <summary>
+        /// Maneja el clic en una card de stock para seleccionarla
+        /// </summary>
+        private void StockCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                // Obtener el item del DataContext del Border (que viene del DataTemplate)
+                var stock = border.DataContext as StockCalidadDto;
+                if (stock != null)
+                {
+                    var viewModel = DataContext as CalidadViewModel;
+                    if (viewModel != null)
+                    {
+                        // Deseleccionar todos los items anteriores
+                        foreach (var item in viewModel.StockDisponible)
+                        {
+                            if (item.IsSelected)
+                            {
+                                item.IsSelected = false;
+                            }
+                        }
+                        
+                        // Seleccionar el item actual
+                        stock.IsSelected = true;
+                        
+                        // Establecer nueva selección en el ViewModel
+                        viewModel.StockSeleccionado = stock;
+                        
+                        // Forzar actualización del binding del Border
+                        var bindingExpression = BindingOperations.GetBindingExpression(border, Border.BackgroundProperty);
+                        bindingExpression?.UpdateTarget();
+                        
+                        // Forzar invalidación visual
+                        border.InvalidateVisual();
+                        border.UpdateLayout();
+                    }
+                }
+            }
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// Maneja el clic en una card de bloqueo para seleccionarla
+        /// </summary>
+        private void BloqueoCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                // Obtener el item del DataContext del Border (que viene del DataTemplate)
+                var bloqueo = border.DataContext as BloqueoCalidadDto;
+                if (bloqueo != null)
+                {
+                    var viewModel = DataContext as CalidadViewModel;
+                    if (viewModel != null)
+                    {
+                        // Deseleccionar todos los items anteriores
+                        foreach (var item in viewModel.BloqueosFiltrados)
+                        {
+                            if (item.IsSelected)
+                            {
+                                item.IsSelected = false;
+                            }
+                        }
+                        
+                        // Seleccionar el item actual
+                        bloqueo.IsSelected = true;
+                        
+                        // Establecer nueva selección en el ViewModel
+                        viewModel.BloqueoSeleccionado = bloqueo;
+                        
+                        // Forzar actualización del binding del Border
+                        var bindingExpression = BindingOperations.GetBindingExpression(border, Border.BackgroundProperty);
+                        bindingExpression?.UpdateTarget();
+                        
+                        // Forzar invalidación visual
+                        border.InvalidateVisual();
+                        border.UpdateLayout();
+                    }
+                }
+            }
+            e.Handled = true;
         }
     }
 }

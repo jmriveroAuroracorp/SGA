@@ -1,4 +1,5 @@
 using System;
+using SGA_Desktop.Helpers;
 
 namespace SGA_Desktop.Models
 {
@@ -20,6 +21,11 @@ namespace SGA_Desktop.Models
         public string? TipoTraspaso { get; set; } // "PALET", "ARTICULO"
         public string? EstadoAnterior { get; set; }
         public string? EstadoActual { get; set; }
+        
+        // Información del tipo de notificación y proceso relacionado
+        public string? TipoNotificacion { get; set; } // "INVENTARIO_CREACION", "INVENTARIO_CIERRE", "INVENTARIO", "TRASPASO", etc.
+        public Guid? ProcesoId { get; set; } // ID del inventario, traspaso, etc.
+        public int CodigoEmpresa { get; set; } = 1; // Código de la empresa, por defecto 1
         
         // Información adicional del traspaso
         public string? AlmacenOrigen { get; set; }
@@ -90,6 +96,19 @@ namespace SGA_Desktop.Models
         /// Indica si la notificación es de un traspaso
         /// </summary>
         public bool EsTraspaso => !string.IsNullOrEmpty(TipoTraspaso);
+
+        /// <summary>
+        /// Indica si la notificación es de un inventario cerrado
+        /// </summary>
+        public bool EsInventarioCerrado => 
+            TipoNotificacion == "INVENTARIO_CIERRE" && 
+            ProcesoId.HasValue && 
+            CodigoEmpresa == (SessionManager.EmpresaSeleccionada ?? 1); // Verificar que sea de la empresa actual
+
+        /// <summary>
+        /// Indica si la notificación es de una orden de conteo cerrada
+        /// </summary>
+        public bool EsOrdenConteoCerrada => TipoNotificacion == "ORDEN_CERRADA" && ProcesoId.HasValue;
 
         /// <summary>
         /// Obtiene la información de cantidad formateada

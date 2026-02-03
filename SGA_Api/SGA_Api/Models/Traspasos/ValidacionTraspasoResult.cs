@@ -10,17 +10,21 @@ namespace SGA_Api.Models.Traspasos
         public string CodigoArticulo { get; set; } = string.Empty;
         public string UbicacionDestino { get; set; } = string.Empty;
         
+        // 🔷 NUEVO: Tipo de bloqueo para distinguir entre calidad y alérgenos
+        public string TipoBloqueo { get; set; } = "CALIDAD"; // Por defecto "CALIDAD" para mantener compatibilidad
+        
         public static ValidacionTraspasoResult Valido()
         {
             return new ValidacionTraspasoResult { EsValido = true };
         }
         
-        public static ValidacionTraspasoResult Bloqueado(string motivo)
+        public static ValidacionTraspasoResult Bloqueado(string motivo, string tipoBloqueo = "CALIDAD")
         {
             return new ValidacionTraspasoResult 
             { 
                 EsValido = false, 
-                MotivoBloqueo = motivo 
+                MotivoBloqueo = motivo,
+                TipoBloqueo = tipoBloqueo
             };
         }
     }

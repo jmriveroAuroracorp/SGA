@@ -18,6 +18,7 @@ namespace SGA_Desktop.Converters
                 {
                     "INVENTARIO" => new SolidColorBrush(Color.FromRgb(255, 152, 0)),   // Naranja
                     "CONTEO" => new SolidColorBrush(Color.FromRgb(155, 89, 182)),        // Morado
+                    "CAMBIO_ARTICULO" => new SolidColorBrush(Color.FromRgb(0, 150, 136)), // Verde teal
                     "MANUAL" => new SolidColorBrush(Color.FromRgb(149, 165, 166)),       // Gris
                     _ => new SolidColorBrush(Color.FromRgb(149, 165, 166))
                 };

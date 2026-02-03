@@ -76,6 +76,11 @@ namespace SGA_Desktop.ViewModels
                 Notificaciones.Clear();
                 foreach (var n in notificaciones)
                 {
+                    // Debug: verificar si las notificaciones tienen los campos necesarios
+                    if (n.Titulo.Contains("Inventario Cerrado"))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"🔍 Notificación inventario cerrado - TipoNotificacion: {n.TipoNotificacion}, ProcesoId: {n.ProcesoId}, EsInventarioCerrado: {n.EsInventarioCerrado}");
+                    }
                     Notificaciones.Add(n);
                 }
                 
@@ -206,6 +211,82 @@ namespace SGA_Desktop.ViewModels
             }
         }
         
+        /// <summary>
+        /// Comando para ver el inventario desde una notificación
+        /// </summary>
+        [RelayCommand]
+        private async Task VerInventario(NotificacionDto notificacion)
+        {
+            if (!notificacion.EsInventarioCerrado || !notificacion.ProcesoId.HasValue)
+                return;
+                
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"👁️ Abriendo inventario {notificacion.ProcesoId.Value} desde notificación");
+                
+                var inventarioService = new InventarioService();
+                var inventario = await inventarioService.ObtenerInventarioPorIdAsync(notificacion.ProcesoId.Value);
+                
+                if (inventario != null)
+                {
+                    var dialog = new VerInventarioDialog(inventario);
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (owner != null && owner != dialog)
+                        dialog.Owner = owner;
+                    dialog.ShowDialog();
+                    
+                    System.Diagnostics.Debug.WriteLine("✅ Diálogo de inventario abierto");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("⚠️ No se encontró el inventario");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ Error al abrir inventario: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Comando para ver la orden de conteo desde una notificación
+        /// </summary>
+        [RelayCommand]
+        private async Task VerOrdenConteo(NotificacionDto notificacion)
+        {
+            if (!notificacion.EsOrdenConteoCerrada || !notificacion.ProcesoId.HasValue)
+                return;
+                
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"👁️ Abriendo orden de conteo {notificacion.ProcesoId.Value} desde notificación");
+                
+                var conteosService = new ConteosService();
+                var orden = await conteosService.ObtenerOrdenAsync(notificacion.ProcesoId.Value);
+                
+                if (orden != null)
+                {
+                    var dialog = new VerOrdenConteoDialog(orden);
+                    var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                             ?? Application.Current.MainWindow;
+                    if (owner != null && owner != dialog)
+                        dialog.Owner = owner;
+                    dialog.ShowDialog();
+                    
+                    System.Diagnostics.Debug.WriteLine("✅ Diálogo de orden de conteo abierto");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("⚠️ No se encontró la orden de conteo");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ Error al abrir orden de conteo: {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// Comando para cerrar el modal
         /// </summary>

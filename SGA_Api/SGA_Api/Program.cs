@@ -118,6 +118,7 @@ builder.Services.AddScoped<INotificacionesTeamsService, NotificacionesTeamsServi
 builder.Services.AddScoped<IRolesSgaService, RolesSgaService>();
 builder.Services.AddScoped<ICalidadService, CalidadService>();
 builder.Services.AddScoped<IValidacionTraspasoService, ValidacionTraspasoService>();
+builder.Services.AddScoped<IValidacionAlergenosPaletService, ValidacionAlergenosPaletService>();
 builder.Services.AddScoped<RendimientosService>(provider => 
     new RendimientosService(
         provider.GetRequiredService<AuroraSgaDbContext>(),

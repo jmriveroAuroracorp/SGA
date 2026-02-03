@@ -19,19 +19,22 @@ namespace SGA_Desktop.ViewModels
         private readonly InventarioService _inventarioService;
         private readonly StockService _stockService;
         private readonly PaletService _paletService;
+        private readonly ConteosService _conteosService;
         #endregion
 
         #region Constructor
-        public CambiarArticuloViewModel(InventarioService inventarioService, StockService stockService, PaletService paletService)
+        public CambiarArticuloViewModel(InventarioService inventarioService, StockService stockService, PaletService paletService, ConteosService conteosService)
         {
             _inventarioService = inventarioService;
             _stockService = stockService;
             _paletService = paletService;
+            _conteosService = conteosService;
 
             Almacenes = new ObservableCollection<AlmacenDto>();
             Ubicaciones = new ObservableCollection<UbicacionDto>();
             PartidasDisponibles = new ObservableCollection<LoteDto>();
             FechasDisponibles = new ObservableCollection<DateTime?>();
+            PaletsDisponibles = new ObservableCollection<PaletDisponibleInfo>();
 
             if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
             {
@@ -39,7 +42,7 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        public CambiarArticuloViewModel() : this(new InventarioService(), new StockService(), new PaletService()) { }
+        public CambiarArticuloViewModel() : this(new InventarioService(), new StockService(), new PaletService(), new ConteosService()) { }
         #endregion
 
         #region Observable Properties - Tipo de Cambio
@@ -100,6 +103,61 @@ namespace SGA_Desktop.ViewModels
 
         [ObservableProperty]
         private Guid? paletId;
+
+        [ObservableProperty]
+        private ObservableCollection<PaletDisponibleInfo> paletsDisponibles;
+
+        [ObservableProperty]
+        private PaletDisponibleInfo? paletSeleccionado;
+
+        private PaletDisponibleInfo? _paletDetectado;
+
+        public bool MostrarSelectorPalets => PaletsDisponibles.Count > 1 && !MostrarOpcionesPaletSuelto;
+
+        public bool MostrarInfoPalet => _paletDetectado != null && !MostrarOpcionesPaletSuelto;
+
+        public string InformacionPalet
+        {
+            get
+            {
+                if (_paletDetectado == null)
+                    return string.Empty;
+
+                return $"Código: {_paletDetectado.CodigoPalet} | Estado: {_paletDetectado.Estado} | Cantidad: {_paletDetectado.Cantidad:0.######}";
+            }
+        }
+
+        [ObservableProperty]
+        private bool mostrarOpcionesPaletSuelto = false;
+
+        [ObservableProperty]
+        private bool opcionPaletSeleccionada = false;
+
+        [ObservableProperty]
+        private bool opcionSueltoSeleccionada = false;
+
+        [ObservableProperty]
+        private decimal stockSuelto = 0;
+
+        public string MensajeOpcionesPaletSuelto
+        {
+            get
+            {
+                if (!MostrarOpcionesPaletSuelto) return string.Empty;
+                
+                var mensaje = "Hay material paletizado y suelto en esta ubicación. Elija dónde aplicar el cambio:";
+                if (PaletsDisponibles.Count > 1)
+                {
+                    mensaje += $"\n- {PaletsDisponibles.Count} palets disponibles";
+                }
+                else if (_paletDetectado != null)
+                {
+                    mensaje += $"\n- Palet: {_paletDetectado.CodigoPalet} ({_paletDetectado.Cantidad:0.######})";
+                }
+                mensaje += $"\n- Stock suelto: {StockSuelto:0.######}";
+                return mensaje;
+            }
+        }
         #endregion
 
         #region Observable Properties - Artículo Destino
@@ -231,6 +289,19 @@ namespace SGA_Desktop.ViewModels
             if (newValue != null)
             {
                 Ubicacion = newValue.Ubicacion;
+                // Limpiar palets y opciones al cambiar ubicación
+                PaletsDisponibles.Clear();
+                _paletDetectado = null;
+                PaletSeleccionado = null;
+                PaletId = null;
+                MostrarOpcionesPaletSuelto = false;
+                OpcionPaletSeleccionada = false;
+                OpcionSueltoSeleccionada = false;
+                StockSuelto = 0;
+                OnPropertyChanged(nameof(MostrarSelectorPalets));
+                OnPropertyChanged(nameof(MostrarInfoPalet));
+                OnPropertyChanged(nameof(InformacionPalet));
+
                 // Si ya hay artículo seleccionado, cargar lotes
                 if (!string.IsNullOrWhiteSpace(CodigoArticuloOrigen))
                 {
@@ -240,6 +311,12 @@ namespace SGA_Desktop.ViewModels
                 if (!string.IsNullOrWhiteSpace(CodigoArticuloOrigen))
                 {
                     _ = CargarStockDisponibleAsync();
+                }
+
+                // Detectar palets si ya hay todos los campos completos
+                if (!string.IsNullOrWhiteSpace(CodigoArticuloOrigen) && !string.IsNullOrWhiteSpace(Partida) && FechaCaducidadOrigen.HasValue)
+                {
+                    _ = DetectarPaletAsync();
                 }
             }
         }
@@ -275,21 +352,115 @@ namespace SGA_Desktop.ViewModels
                     if (fechas.Count == 1)
                     {
                         FechaCaducidadOrigen = fechas[0];
+                        // La detección se ejecutará automáticamente en OnFechaCaducidadOrigenChanged
                     }
                 }
 
                 // Actualizar stock disponible
                 _ = CargarStockDisponibleAsync();
+
+                // Detectar palets si ya hay fecha seleccionada (después de que se haya asignado)
+                // Esto se maneja en OnFechaCaducidadOrigenChanged, pero lo llamamos aquí también por si acaso
+                if (FechaCaducidadOrigen.HasValue && !string.IsNullOrWhiteSpace(CodigoArticuloOrigen) && Ubicacion != null)
+                {
+                    _ = DetectarPaletAsync();
+                }
             }
         }
 
         partial void OnFechaCaducidadOrigenChanged(DateTime? oldValue, DateTime? newValue)
         {
             // Actualizar stock disponible cuando cambia la fecha
-            if (!string.IsNullOrWhiteSpace(CodigoArticuloOrigen) && !string.IsNullOrWhiteSpace(Ubicacion))
+            if (!string.IsNullOrWhiteSpace(CodigoArticuloOrigen) && Ubicacion != null)
             {
                 _ = CargarStockDisponibleAsync();
             }
+
+            // Detectar palets cuando se selecciona fecha
+            // NOTA: Ubicacion puede ser string.Empty para "SIN UBICAR"
+            if (newValue.HasValue && !string.IsNullOrWhiteSpace(CodigoArticuloOrigen) && Ubicacion != null && !string.IsNullOrWhiteSpace(Partida))
+            {
+                _ = DetectarPaletAsync();
+            }
+            else
+            {
+                // Limpiar palets y opciones si no hay fecha
+                PaletsDisponibles.Clear();
+                _paletDetectado = null;
+                PaletSeleccionado = null;
+                PaletId = null;
+                MostrarOpcionesPaletSuelto = false;
+                OpcionPaletSeleccionada = false;
+                OpcionSueltoSeleccionada = false;
+                StockSuelto = 0;
+                OnPropertyChanged(nameof(MostrarSelectorPalets));
+                OnPropertyChanged(nameof(MostrarInfoPalet));
+                OnPropertyChanged(nameof(InformacionPalet));
+            }
+        }
+
+        partial void OnPaletSeleccionadoChanged(PaletDisponibleInfo? oldValue, PaletDisponibleInfo? newValue)
+        {
+            if (newValue != null)
+            {
+                PaletId = newValue.PaletId;
+                // Actualizar stock disponible con la cantidad del palet seleccionado
+                if (OpcionPaletSeleccionada)
+                {
+                    StockDisponible = newValue.Cantidad;
+                    OnPropertyChanged(nameof(StockDisponible));
+                }
+            }
+            else if (PaletsDisponibles.Count == 0)
+            {
+                PaletId = null;
+                // Si no hay palet seleccionado, recalcular stock disponible
+                _ = CargarStockDisponibleAsync();
+            }
+        }
+
+        partial void OnOpcionPaletSeleccionadaChanged(bool oldValue, bool newValue)
+        {
+            if (newValue)
+            {
+                OpcionSueltoSeleccionada = false;
+                // Si hay palet detectado, asignarlo
+                if (_paletDetectado != null)
+                {
+                    PaletId = _paletDetectado.PaletId;
+                    StockDisponible = _paletDetectado.Cantidad;
+                }
+                // Si hay palet seleccionado manualmente, usarlo
+                else if (PaletSeleccionado != null)
+                {
+                    PaletId = PaletSeleccionado.PaletId;
+                    StockDisponible = PaletSeleccionado.Cantidad;
+                }
+                OnPropertyChanged(nameof(StockDisponible));
+            }
+        }
+
+        partial void OnOpcionSueltoSeleccionadaChanged(bool oldValue, bool newValue)
+        {
+            if (newValue)
+            {
+                OpcionPaletSeleccionada = false;
+                PaletId = null; // Limpiar PaletId para usar stock suelto
+                StockDisponible = StockSuelto;
+                OnPropertyChanged(nameof(StockDisponible));
+            }
+        }
+
+        partial void OnMostrarOpcionesPaletSueltoChanged(bool oldValue, bool newValue)
+        {
+            OnPropertyChanged(nameof(MostrarSelectorPalets));
+            OnPropertyChanged(nameof(MostrarInfoPalet));
+            OnPropertyChanged(nameof(MensajeOpcionesPaletSuelto));
+        }
+
+        partial void OnStockSueltoChanged(decimal oldValue, decimal newValue)
+        {
+            OnPropertyChanged(nameof(MensajeOpcionesPaletSuelto));
         }
         #endregion
 
@@ -571,8 +742,9 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
+                CodigoArticuloDestino = articulo.CodigoArticulo;
                 DescripcionArticuloDestino = articulo.DescripcionArticulo ?? string.Empty;
-                MensajeEstado = string.Empty;
+                MensajeEstado = "Artículo destino encontrado.";
             }
             catch (Exception ex)
             {
@@ -714,13 +886,14 @@ namespace SGA_Desktop.ViewModels
             }
         }
 
-        private async Task CargarStockDisponibleAsync()
+        private async Task<decimal> CalcularStockTotalUbicacionAsync()
         {
             try
             {
-                // La ubicación puede ser cadena vacía para "Sin ubicar", así que solo validamos que no sea null
-                if (string.IsNullOrWhiteSpace(CodigoArticuloOrigen) || string.IsNullOrWhiteSpace(CodigoAlmacen) || Ubicacion == null)
-                    return;
+                if (string.IsNullOrWhiteSpace(CodigoArticuloOrigen) || 
+                    string.IsNullOrWhiteSpace(CodigoAlmacen) || 
+                    Ubicacion == null)
+                    return 0;
 
                 var empresa = SessionManager.EmpresaSeleccionada ?? 1;
 
@@ -735,46 +908,238 @@ namespace SGA_Desktop.ViewModels
                 var stockFiltrado = stock;
                 if (FechaCaducidadOrigen.HasValue)
                 {
-                    stockFiltrado = stock.Where(s => s.FechaCaducidad.HasValue && s.FechaCaducidad.Value.Date == FechaCaducidadOrigen.Value.Date).ToList();
+                    stockFiltrado = stock.Where(s => 
+                        s.FechaCaducidad.HasValue && 
+                        s.FechaCaducidad.Value.Date == FechaCaducidadOrigen.Value.Date).ToList();
                 }
 
-                StockDisponible = stockFiltrado.Sum(s => s.UnidadSaldo);
-                
-                // Obtener PaletId desde CodigoPalet si existe
-                var stockConPalet = stockFiltrado.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.CodigoPalet));
-                if (stockConPalet != null && !string.IsNullOrWhiteSpace(stockConPalet.CodigoPalet))
+                return stockFiltrado.Sum(s => s.UnidadSaldo);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private async Task CargarStockDisponibleAsync()
+        {
+            try
+            {
+                // La ubicación puede ser cadena vacía para "Sin ubicar", así que solo validamos que no sea null
+                if (string.IsNullOrWhiteSpace(CodigoArticuloOrigen) || string.IsNullOrWhiteSpace(CodigoAlmacen) || Ubicacion == null)
+                    return;
+
+                // Si hay opciones de palet/suelto y el usuario eligió suelto
+                if (MostrarOpcionesPaletSuelto && OpcionSueltoSeleccionada)
                 {
-                    try
-                    {
-                        var palets = await _paletService.ObtenerPaletsAsync(
-                            codigoEmpresa: (short)empresa,
-                            codigo: stockConPalet.CodigoPalet,
-                            limite: 1);
-                        
-                        var palet = palets.FirstOrDefault();
-                        if (palet != null)
-                        {
-                            PaletId = palet.Id;
-                        }
-                        else
-                        {
-                            PaletId = null; // Si no se encuentra el palet, dejar null
-                        }
-                    }
-                    catch
-                    {
-                        PaletId = null; // En caso de error, dejar null
-                    }
+                    StockDisponible = StockSuelto;
+                    return;
                 }
-                else
+
+                // Si hay opciones de palet/suelto y el usuario eligió palet
+                if (MostrarOpcionesPaletSuelto && OpcionPaletSeleccionada)
                 {
-                    PaletId = null; // Si no hay CodigoPalet, dejar null
+                    if (_paletDetectado != null)
+                    {
+                        StockDisponible = _paletDetectado.Cantidad;
+                    }
+                    else if (PaletSeleccionado != null)
+                    {
+                        StockDisponible = PaletSeleccionado.Cantidad;
+                    }
+                    return;
                 }
+
+                // Comportamiento actual (sin opciones)
+                // Si hay un palet detectado, usar su cantidad directamente
+                if (_paletDetectado != null)
+                {
+                    StockDisponible = _paletDetectado.Cantidad;
+                    return;
+                }
+
+                // Si hay un palet seleccionado manualmente (múltiples palets), usar su cantidad
+                if (PaletSeleccionado != null)
+                {
+                    StockDisponible = PaletSeleccionado.Cantidad;
+                    return;
+                }
+
+                // Si no hay palet, calcular stock total de la ubicación
+                StockDisponible = await CalcularStockTotalUbicacionAsync();
             }
             catch (Exception ex)
             {
                 StockDisponible = 0;
+            }
+        }
+
+        private async Task DetectarPaletAsync()
+        {
+            try
+            {
+                // Validar que todos los campos necesarios estén completos
+                // NOTA: Ubicacion puede ser string.Empty para "SIN UBICAR"
+                if (string.IsNullOrWhiteSpace(CodigoArticuloOrigen) || 
+                    string.IsNullOrWhiteSpace(CodigoAlmacen) || 
+                    Ubicacion == null || 
+                    string.IsNullOrWhiteSpace(Partida) || 
+                    !FechaCaducidadOrigen.HasValue)
+                {
+                    PaletsDisponibles.Clear();
+                    _paletDetectado = null;
+                    PaletSeleccionado = null;
+                    PaletId = null;
+                    OnPropertyChanged(nameof(MostrarSelectorPalets));
+                    OnPropertyChanged(nameof(MostrarInfoPalet));
+                    OnPropertyChanged(nameof(InformacionPalet));
+                    return;
+                }
+
+                var empresa = SessionManager.EmpresaSeleccionada ?? 1;
+                var ubicacionParam = Ubicacion ?? string.Empty;
+
+                System.Diagnostics.Debug.WriteLine($"🔍 DetectarPaletAsync: Artículo={CodigoArticuloOrigen}, Almacén={CodigoAlmacen}, Ubicación='{ubicacionParam}', Partida={Partida}, Fecha={FechaCaducidadOrigen.Value:yyyy-MM-dd}");
+
+                // Consultar palets disponibles con las características exactas
+                var palets = await _conteosService.ObtenerPaletsDisponiblesAsync(
+                    codigoEmpresa: (short)empresa,
+                    codigoAlmacen: CodigoAlmacen,
+                    ubicacion: ubicacionParam,
+                    codigoArticulo: CodigoArticuloOrigen,
+                    lote: Partida,
+                    fechaCaducidad: FechaCaducidadOrigen.Value);
+
+                System.Diagnostics.Debug.WriteLine($"📦 Palets encontrados: {palets?.Count ?? 0}");
+
+                PaletsDisponibles.Clear();
+                _paletDetectado = null;
+                PaletSeleccionado = null;
                 PaletId = null;
+                MostrarOpcionesPaletSuelto = false;
+                OpcionPaletSeleccionada = false;
+                OpcionSueltoSeleccionada = false;
+                StockSuelto = 0;
+
+                if (palets == null || palets.Count == 0)
+                {
+                    // No hay palets, stock suelto únicamente
+                    System.Diagnostics.Debug.WriteLine("ℹ️ No hay palets, stock suelto");
+                    OnPropertyChanged(nameof(MostrarSelectorPalets));
+                    OnPropertyChanged(nameof(MostrarInfoPalet));
+                    OnPropertyChanged(nameof(InformacionPalet));
+                    // Recalcular stock disponible para stock suelto
+                    await CargarStockDisponibleAsync();
+                    return;
+                }
+
+                // Agregar palets a la colección
+                foreach (var palet in palets)
+                {
+                    PaletsDisponibles.Add(palet);
+                    System.Diagnostics.Debug.WriteLine($"✅ Palet agregado: {palet.CodigoPalet} (ID: {palet.PaletId}), Cantidad: {palet.Cantidad}");
+                }
+
+                // Calcular stock total de la ubicación
+                var stockTotal = await CalcularStockTotalUbicacionAsync();
+                
+                // Calcular stock paletizado (suma de cantidades de palets)
+                var stockPaletizado = palets.Sum(p => p.Cantidad);
+                
+                // Calcular stock suelto
+                var stockSueltoCalculado = stockTotal - stockPaletizado;
+                
+                System.Diagnostics.Debug.WriteLine($"📊 Stock total: {stockTotal}, Stock paletizado: {stockPaletizado}, Stock suelto: {stockSueltoCalculado}");
+
+                if (stockSueltoCalculado > 0.0001m) // Hay stock suelto además de palets
+                {
+                    // Mostrar opciones para que el usuario elija
+                    StockSuelto = stockSueltoCalculado;
+                    MostrarOpcionesPaletSuelto = true;
+                    
+                    if (palets.Count == 1)
+                    {
+                        // Un solo palet detectado, pero hay stock suelto también
+                        _paletDetectado = palets[0];
+                        // No asignar PaletId automáticamente, esperar selección del usuario
+                        // Seleccionar opción palet por defecto
+                        OpcionPaletSeleccionada = true;
+                        StockDisponible = _paletDetectado.Cantidad;
+                    }
+                    else
+                    {
+                        // Múltiples palets y stock suelto
+                        // Seleccionar opción palet por defecto
+                        OpcionPaletSeleccionada = true;
+                        if (PaletSeleccionado != null)
+                        {
+                            StockDisponible = PaletSeleccionado.Cantidad;
+                        }
+                        else if (palets.Count > 0)
+                        {
+                            StockDisponible = palets.First().Cantidad;
+                        }
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"🔀 Mostrando opciones: Palet={stockPaletizado}, Suelto={stockSueltoCalculado}");
+                    OnPropertyChanged(nameof(StockDisponible));
+                }
+                else
+                {
+                    // Solo hay palets (sin stock suelto), usar automáticamente
+                    if (palets.Count == 1)
+                    {
+                        // Un solo palet: selección automática
+                        _paletDetectado = palets[0];
+                        PaletId = palets[0].PaletId;
+                        System.Diagnostics.Debug.WriteLine($"✅ Palet detectado y asignado: {_paletDetectado.CodigoPalet}");
+                        OnPropertyChanged(nameof(MostrarInfoPalet));
+                        OnPropertyChanged(nameof(InformacionPalet));
+                        // Actualizar stock disponible con la cantidad del palet
+                        StockDisponible = _paletDetectado.Cantidad;
+                        OnPropertyChanged(nameof(StockDisponible));
+                    }
+                    else
+                    {
+                        // Múltiples palets: mostrar selector
+                        System.Diagnostics.Debug.WriteLine($"📋 Múltiples palets, mostrar selector: {palets.Count}");
+                        OnPropertyChanged(nameof(MostrarSelectorPalets));
+                        // Si hay un palet seleccionado, usar su cantidad
+                        if (PaletSeleccionado != null)
+                        {
+                            PaletId = PaletSeleccionado.PaletId;
+                            StockDisponible = PaletSeleccionado.Cantidad;
+                            OnPropertyChanged(nameof(StockDisponible));
+                        }
+                        else if (palets.Count > 0)
+                        {
+                            // Seleccionar el primero por defecto
+                            PaletSeleccionado = palets.First();
+                            PaletId = PaletSeleccionado.PaletId;
+                            StockDisponible = PaletSeleccionado.Cantidad;
+                            OnPropertyChanged(nameof(StockDisponible));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // En caso de error, mostrar mensaje y limpiar palets y opciones
+                System.Diagnostics.Debug.WriteLine($"Error detectando palets: {ex.Message}");
+                MensajeEstado = $"Error al detectar palets: {ex.Message}";
+                PaletsDisponibles.Clear();
+                _paletDetectado = null;
+                PaletSeleccionado = null;
+                PaletId = null;
+                MostrarOpcionesPaletSuelto = false;
+                OpcionPaletSeleccionada = false;
+                OpcionSueltoSeleccionada = false;
+                StockSuelto = 0;
+                OnPropertyChanged(nameof(MostrarSelectorPalets));
+                OnPropertyChanged(nameof(MostrarInfoPalet));
+                OnPropertyChanged(nameof(InformacionPalet));
+                // Reset stock to total if an error occurs
+                await CargarStockDisponibleAsync();
             }
         }
 
@@ -809,6 +1174,42 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
 
+                // Validar selección de opción si hay ambas disponibles
+                if (MostrarOpcionesPaletSuelto)
+                {
+                    if (!OpcionPaletSeleccionada && !OpcionSueltoSeleccionada)
+                    {
+                        ShowDialog(new WarningDialog("Validación", 
+                            "Debe seleccionar si desea modificar sobre el palet o sobre el stock suelto."));
+                        return;
+                    }
+                    
+                    // Si seleccionó palet pero hay múltiples y no seleccionó uno
+                    if (OpcionPaletSeleccionada && MostrarSelectorPalets && PaletSeleccionado == null)
+                    {
+                        ShowDialog(new WarningDialog("Validación", 
+                            "Debe seleccionar un palet de la lista."));
+                        return;
+                    }
+                    
+                    // Asegurar PaletId según la opción seleccionada
+                    if (OpcionSueltoSeleccionada)
+                    {
+                        PaletId = null; // Forzar null para stock suelto
+                    }
+                    else if (OpcionPaletSeleccionada)
+                    {
+                        // Asegurar que PaletId esté asignado
+                        if (!PaletId.HasValue)
+                        {
+                            if (_paletDetectado != null)
+                                PaletId = _paletDetectado.PaletId;
+                            else if (PaletSeleccionado != null)
+                                PaletId = PaletSeleccionado.PaletId;
+                        }
+                    }
+                }
+
                 if (Cantidad > StockDisponible)
                 {
                     ShowDialog(new WarningDialog("Validación", $"La cantidad ({Cantidad:N2}) no puede ser mayor que el stock disponible ({StockDisponible:N2})."));
@@ -830,6 +1231,13 @@ namespace SGA_Desktop.ViewModels
                 if (EsCambioFecha && string.IsNullOrWhiteSpace(PartidaDestino))
                 {
                     ShowDialog(new WarningDialog("Validación", "Debe especificar la nueva partida (lote)."));
+                    return;
+                }
+
+                // Validar selección de palet si hay múltiples
+                if (MostrarSelectorPalets && PaletSeleccionado == null)
+                {
+                    ShowDialog(new WarningDialog("Validación", "Debe seleccionar un palet de la lista."));
                     return;
                 }
 

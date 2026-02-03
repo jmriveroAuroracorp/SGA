@@ -308,18 +308,24 @@ namespace SGA_Desktop.ViewModels
             if (item is not OperarioListaDto operario)
                 return false;
 
-            // Filtro por nombre (ignorando tildes y acentos)
-            if (!string.IsNullOrWhiteSpace(FiltroNombre))
-            {
-                var nombre = operario.Nombre ?? string.Empty;
-                var nombreNormalizado = NormalizarTexto(nombre);
-                var filtroNormalizado = NormalizarTexto(FiltroNombre);
-                
-                if (!nombreNormalizado.Contains(filtroNormalizado, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
+            // Si no hay filtro, mostrar todos
+            if (string.IsNullOrWhiteSpace(FiltroNombre))
+                return true;
 
-            return true;
+            var filtroNormalizado = NormalizarTexto(FiltroNombre);
+            
+            // Filtro por nombre (ignorando tildes y acentos)
+            var nombre = operario.Nombre ?? string.Empty;
+            var nombreNormalizado = NormalizarTexto(nombre);
+            if (nombreNormalizado.Contains(filtroNormalizado, StringComparison.OrdinalIgnoreCase))
+                return true;
+            
+            // Filtro por código (Id)
+            var codigo = operario.Id.ToString();
+            if (codigo.Contains(filtroNormalizado, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
         }
 
         private bool FiltrarEmpleado(object item)

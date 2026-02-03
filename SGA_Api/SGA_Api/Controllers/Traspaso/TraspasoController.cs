@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Traspasos;
@@ -10,6 +10,7 @@ using System.Linq;
 using System.Collections.Generic;
 using SGA_Api.Models.Stock;
 using SGA_Api.Models.Registro;
+using SGA_Api.Models.Notificaciones;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,6 +27,7 @@ public class TraspasosController : ControllerBase
 	private readonly IValidacionTraspasoService _validacionService;
 	private readonly ICalidadService _calidadService;
 	private readonly IServiceProvider _serviceProvider;
+	private readonly IValidacionAlergenosPaletService _validacionAlergenosPaletService;
 
 	public TraspasosController(
 		AuroraSgaDbContext context,
@@ -34,9 +36,11 @@ public class TraspasosController : ControllerBase
 		ILogger<TraspasosController> logger,
 		IValidacionTraspasoService validacionService,
 		ICalidadService calidadService,
-		IServiceProvider serviceProvider)
+		IServiceProvider serviceProvider,
+		IValidacionAlergenosPaletService validacionAlergenosPaletService)
 	{
 		_context = context;
+		_validacionAlergenosPaletService = validacionAlergenosPaletService;
 		_storageContext = storageContext;
 		_sageContext = sageContext;
 		_logger = logger;
@@ -228,6 +232,252 @@ public class TraspasosController : ControllerBase
 		{
 			_logger.LogWarning(ex, "Error al obtener información adicional del traspaso {TraspasoId}", traspasoId);
 			return "";
+		}
+	}
+
+	/// <summary>
+	/// Registra un bloqueo de sincronización de stock y notifica a administradores
+	/// </summary>
+	private async Task RegistrarBloqueoSincronizacionAsync(
+		short codigoEmpresa,
+		string codigoArticulo,
+		string partida,
+		string almacenOrigen,
+		string ubicacionOrigen,
+		decimal stockSage,
+		decimal stockStorageControl,
+		int usuarioId,
+		string tipoOperacion,
+		Guid? paletId = null,
+		string? codigoPalet = null)
+	{
+		// Usar un scope independiente para asegurar que el guardado persista
+		// incluso si la transacción principal hace rollback
+		using var scope = _serviceProvider.CreateScope();
+		var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+		
+		try
+		{
+			// Registrar en la tabla
+			var bloqueo = new BloqueoSincronizacionStock
+			{
+				CodigoEmpresa = codigoEmpresa,
+				CodigoArticulo = codigoArticulo,
+				Partida = partida,
+				CodigoAlmacen = almacenOrigen,
+				Ubicacion = ubicacionOrigen,
+				StockSage = stockSage,
+				StockStorageControl = stockStorageControl,
+				Diferencia = Math.Abs(stockSage - stockStorageControl),
+				FechaBloqueo = DateTime.Now,
+				UsuarioId = usuarioId,
+				TipoOperacion = tipoOperacion,
+				PaletId = paletId,
+				CodigoPalet = codigoPalet,
+				MensajeError = $"Stock no sincronizado: SAGE={stockSage:N6}, StorageControl={stockStorageControl:N6}",
+				Notificado = false
+			};
+
+			dbContext.BloqueosSincronizacionStock.Add(bloqueo);
+			await dbContext.SaveChangesAsync();
+			
+			_logger.LogInformation("✅ Bloqueo de sincronización registrado en BD - Id: {BloqueoId}, Artículo: {CodigoArticulo}, Partida: {Partida}",
+				bloqueo.Id, codigoArticulo, partida ?? "(sin partida)");
+
+			// Notificar a administradores (IdRol == 3)
+			var adminIds = await dbContext.Usuarios
+				.Where(u => u.IdRol == 3)
+				.Select(u => u.IdUsuario)
+				.ToListAsync();
+
+			if (adminIds.Any())
+			{
+				var mensaje = $"Bloqueo de sincronización detectado:\n" +
+					$"Artículo: {codigoArticulo}\n" +
+					$"Partida: {partida ?? "(sin partida)"}\n" +
+					$"Almacén: {almacenOrigen}\n" +
+					$"Ubicación: {ubicacionOrigen ?? "(sin ubicación)"}\n" +
+					$"SAGE: {stockSage:N6}\n" +
+					$"StorageControl: {stockStorageControl:N6}\n" +
+					$"Operación: {tipoOperacion}";
+
+				if (!string.IsNullOrWhiteSpace(codigoPalet))
+				{
+					mensaje += $"\nPalet: {codigoPalet}";
+				}
+
+				// Obtener servicio de notificaciones desde el ServiceProvider
+				var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+
+				foreach (var adminId in adminIds)
+				{
+					try
+					{
+						await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+							adminId,
+							"STOCK_SINCRONIZACION",
+							"Bloqueo de Sincronización de Stock",
+							mensaje,
+							paletId,
+							null,
+							"BLOQUEADO",
+							"error");
+
+						_logger.LogInformation("Notificación enviada a administrador {AdminId} sobre bloqueo de sincronización - Artículo: {CodigoArticulo}, Partida: {Partida}",
+							adminId, codigoArticulo, partida ?? "(sin partida)");
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, "Error al notificar administrador {AdminId} sobre bloqueo de sincronización", adminId);
+					}
+				}
+
+				// Marcar como notificado
+				bloqueo.Notificado = true;
+				await dbContext.SaveChangesAsync();
+				
+				_logger.LogInformation("✅ Bloqueo de sincronización marcado como notificado - Id: {BloqueoId}", bloqueo.Id);
+
+				// Notificar también por Teams usando las mismas reglas que traspasos
+				try
+				{
+					var notificacionesTeams = scope.ServiceProvider.GetRequiredService<INotificacionesTeamsService>();
+					var sageContext = scope.ServiceProvider.GetRequiredService<SageDbContext>();
+					
+					await notificacionesTeams.InsertarNotificacionBloqueoSincronizacionAsync(
+						sageContext,
+						codigoEmpresa,
+						codigoArticulo,
+						partida,
+						almacenOrigen,
+						ubicacionOrigen,
+						stockSage,
+						stockStorageControl,
+						tipoOperacion,
+						codigoPalet);
+					
+					_logger.LogInformation("Notificación Teams enviada para bloqueo de sincronización - Artículo: {CodigoArticulo}, Almacén: {AlmacenOrigen}", 
+						codigoArticulo, almacenOrigen);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Error al enviar notificación Teams para bloqueo de sincronización - Artículo: {CodigoArticulo}", codigoArticulo);
+					// No lanzar excepción para no interrumpir el flujo principal
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			// Log detallado del error para diagnóstico
+			_logger.LogError(ex, "❌ Error al registrar bloqueo de sincronización - Artículo: {CodigoArticulo}, Partida: {Partida}, TipoOperacion: {TipoOperacion}, Error: {Error}",
+				codigoArticulo, partida ?? "(sin partida)", tipoOperacion, ex.Message);
+			
+			// Si es un error de tabla no encontrada, loguear específicamente
+			if (ex.Message.Contains("Invalid object name") || ex.Message.Contains("does not exist"))
+			{
+				_logger.LogError("⚠️ La tabla BloqueosSincronizacionStock no existe en la base de datos. Ejecuta el script SQL para crearla.");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Valida la sincronización de stock entre SAGE y StorageControl
+	/// </summary>
+	private async Task<(bool EsValido, decimal StockSage, decimal StockStorageControl, string MensajeError)> 
+		ValidarSincronizacionStockAsync(
+			short codigoEmpresa,
+			string codigoArticulo,
+			string almacenOrigen,
+			string ubicacionOrigen,
+			string partida,
+			int usuarioId,
+			string tipoOperacion,
+			Guid? paletId = null,
+			string? codigoPalet = null)
+	{
+		try
+		{
+			// Obtener el ejercicio actual
+			var ejercicio = await _sageContext.Periodos
+				.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+				.OrderByDescending(p => p.Fechainicio)
+				.Select(p => p.Ejercicio)
+				.FirstOrDefaultAsync();
+
+			if (ejercicio == 0)
+			{
+				return (false, 0m, 0m, "No se encontró ejercicio válido para validación de sincronización");
+			}
+
+			// Consulta SAGE (AURORA.dbo.AcumuladoStock) - Periodo 99
+			var stockSage = await _sageContext.Database
+				.SqlQueryRaw<decimal?>(
+					@"SELECT SUM(UnidadSaldo) AS Value
+                      FROM AURORA.dbo.AcumuladoStock 
+                      WHERE Ejercicio = (SELECT TOP 1 Ejercicio FROM Aurora.dbo.Periodos 
+                                         WHERE CodigoEmpresa = {0} AND Fechainicio < GETDATE() 
+                                         ORDER BY fechainicio DESC) 
+                        AND Periodo = 99
+                        AND CodigoArticulo = {1} 
+                        AND CodigoAlmacen = {2} 
+                        AND Partida = {3} 
+                        AND CodigoEmpresa = {0}",
+					codigoEmpresa,
+					codigoArticulo,
+					almacenOrigen,
+					partida ?? (object)DBNull.Value)
+				.FirstOrDefaultAsync();
+
+			// Consulta StorageControl (StorageControl.dbo.AcumuladoStockUbicacion)
+			// Sumar TODAS las ubicaciones del almacén para comparar con SAGE (que no tiene ubicación)
+			var stockStorageControl = await _storageContext.Database
+				.SqlQueryRaw<decimal?>(
+					@"SELECT SUM(UnidadSaldo) AS Value
+                      FROM StorageControl.dbo.AcumuladoStockUbicacion 
+                      WHERE Ejercicio = (SELECT TOP 1 Ejercicio FROM Aurora.dbo.Periodos 
+                                         WHERE CodigoEmpresa = {0} AND Fechainicio < GETDATE() 
+                                         ORDER BY fechainicio DESC)  
+                        AND CodigoArticulo = {1} 
+                        AND CodigoAlmacen = {2} 
+                        AND CodigoEmpresa = {0} 
+                        AND Partida = {3}",
+					codigoEmpresa,
+					codigoArticulo,
+					almacenOrigen,
+					partida ?? (object)DBNull.Value)
+				.FirstOrDefaultAsync();
+
+			var stockSageValue = stockSage ?? 0m;
+			var stockStorageControlValue = stockStorageControl ?? 0m;
+
+			// Comparación 1 a 1 (sin tolerancia)
+			if (stockSageValue != stockStorageControlValue)
+			{
+				// Registrar bloqueo y notificar a administradores
+				await RegistrarBloqueoSincronizacionAsync(
+					codigoEmpresa,
+					codigoArticulo,
+					partida,
+					almacenOrigen,
+					ubicacionOrigen,
+					stockSageValue,
+					stockStorageControlValue,
+					usuarioId,
+					tipoOperacion,
+					paletId,
+					codigoPalet);
+
+				return (false, stockSageValue, stockStorageControlValue, 
+					$"Stock no sincronizado: SAGE={stockSageValue:N6}, StorageControl={stockStorageControlValue:N6}");
+			}
+
+			return (true, stockSageValue, stockStorageControlValue, null);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error al validar sincronización de stock - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}",
+				codigoArticulo, partida ?? "(sin partida)", almacenOrigen);
+			return (false, 0m, 0m, $"Error al validar sincronización: {ex.Message}");
 		}
 	}
 
@@ -737,6 +987,52 @@ public class TraspasosController : ControllerBase
 			if (dto.Cantidad > stock.Disponible)
 				return BadRequest($"No puedes traspasar más de lo disponible: {stock.Disponible:N2} unidades.");
 
+			// 🔷 VALIDACIÓN DE SINCRONIZACIÓN SAGE vs STORAGECONTROL
+			// Validar siempre antes de crear el traspaso (tanto Mobility como Desktop)
+			// Si el stock no coincide, el servicio externo no podrá formalizar el movimiento
+			_logger.LogWarning("🔍🔍🔍 INICIANDO VALIDACIÓN DE SINCRONIZACIÓN SAGE vs StorageControl - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}",
+				dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenOrigen);
+			
+			// Obtener código del palet si existe
+			string? codigoPalet = null;
+			if (dto.PaletIdOrigen.HasValue)
+			{
+				var palet = await _context.Palets.FindAsync(dto.PaletIdOrigen.Value);
+				codigoPalet = palet?.Codigo;
+			}
+
+			var resultadoSincronizacion = await ValidarSincronizacionStockAsync(
+				dto.CodigoEmpresa,
+				dto.CodigoArticulo,
+				dto.AlmacenOrigen,
+				dto.UbicacionOrigen,
+				dto.Partida,
+				dto.UsuarioId,
+				"CREAR_TRASPASO_ARTICULO",
+				dto.PaletIdOrigen,
+				codigoPalet);
+
+			if (!resultadoSincronizacion.EsValido)
+			{
+				_logger.LogWarning(
+					"🚫 Traspaso bloqueado: Stock no sincronizado entre SAGE y StorageControl - " +
+					"Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}, " +
+					"SAGE: {StockSage}, StorageControl: {StockStorageControl}, Finalizar: {Finalizar}",
+					dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenOrigen, 
+					resultadoSincronizacion.StockSage, resultadoSincronizacion.StockStorageControl, dto.Finalizar);
+
+				return BadRequest(
+					$"No se puede crear el traspaso: el stock no está sincronizado entre SAGE y StorageControl. " +
+					$"SAGE: {resultadoSincronizacion.StockSage:N6}, StorageControl: {resultadoSincronizacion.StockStorageControl:N6}. " +
+					$"Artículo: {dto.CodigoArticulo}, Partida: {dto.Partida ?? "(sin partida)"}, Almacén: {dto.AlmacenOrigen}. " +
+					$"Error: {resultadoSincronizacion.MensajeError}");
+			}
+
+			_logger.LogInformation(
+				"✅ Validación de sincronización OK - Artículo: {CodigoArticulo}, Partida: {Partida}, " +
+				"Almacen: {AlmacenOrigen}, Stock SAGE: {StockSage}, Stock StorageControl: {StockStorageControl}, Finalizar: {Finalizar}",
+				dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenOrigen, resultadoSincronizacion.StockSage, resultadoSincronizacion.StockStorageControl, dto.Finalizar);
+
 			// === NUEVA COMPROBACIÓN: ¿El stock está en un palet? ===
 			Guid? paletIdOrigen = null;
 			string codigoPaletOrigen = null;
@@ -1116,17 +1412,17 @@ public class TraspasosController : ControllerBase
 				}
 			}
 
-			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD: Si se finaliza inmediatamente, validar antes de crear
-			if (dto.Finalizar ?? true)
-			{
+			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD Y ALÉRGENOS
+			ValidacionTraspasoResult? resultadoValidacion = null;
+			var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+			
+			// Validar si hay destino (tanto Desktop como Mobility pueden tener destino al crear)
 				if (!string.IsNullOrWhiteSpace(dto.CodigoArticulo) && !string.IsNullOrWhiteSpace(dto.AlmacenDestino))
 				{
-					var ubicacionDestino = string.IsNullOrWhiteSpace(dto.UbicacionDestino) ? "" : dto.UbicacionDestino.Trim();
+				_logger.LogInformation("🔍 Validando traspaso en CrearTraspasoArticulo - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}, Finalizar: {Finalizar}",
+					dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenOrigen ?? "(null)", dto.UbicacionOrigen ?? "(null)", dto.AlmacenDestino, ubicacionDestino, dto.CodigoEmpresa, dto.Finalizar);
 					
-					_logger.LogInformation("🔍 Validando bloqueo de calidad en CrearTraspasoArticulo - Artículo: {CodigoArticulo}, Partida: {Partida}, Origen: {AlmacenOrigen}-{UbicacionOrigen}, Destino: {AlmacenDestino}-{UbicacionDestino}, Empresa: {CodigoEmpresa}",
-						dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenOrigen ?? "(null)", dto.UbicacionOrigen ?? "(null)", dto.AlmacenDestino, ubicacionDestino, dto.CodigoEmpresa);
-
-					var resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
+				resultadoValidacion = await _validacionService.ValidarTraspasoArticuloAsync(
 						dto.CodigoArticulo,
 						dto.AlmacenDestino,
 						ubicacionDestino,
@@ -1137,9 +1433,26 @@ public class TraspasosController : ControllerBase
 
 					if (!resultadoValidacion.EsValido)
 					{
-						_logger.LogWarning("🚫 Traspaso bloqueado por calidad en CrearTraspasoArticulo - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}",
+					// 🔷 NUEVO: Si es bloqueo de alérgenos y es flujo Mobility (Finalizar = false), crear en PENDIENTE
+					if (resultadoValidacion.TipoBloqueo == "ALERGENOS" && (dto.Finalizar == false))
+					{
+						_logger.LogWarning("⚠️ Traspaso bloqueado por alérgenos en CrearTraspasoArticulo (Mobility) - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino intentado: {AlmacenDestino}-{UbicacionDestino}, Motivo: {MotivoBloqueo}. Creando traspaso en PENDIENTE sin destino.",
 							dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.MotivoBloqueo);
-						return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede realizar el traspaso debido a un bloqueo de calidad.");
+						
+						// Crear traspaso en PENDIENTE (sin destino) para que el operario pueda elegir otra ubicación
+						dto.AlmacenDestino = null;
+						dto.UbicacionDestino = null;
+						dto.Finalizar = false;
+						
+						// Guardar el motivo para agregarlo al comentario del traspaso
+						// Continuar con la creación del traspaso (no retornar BadRequest)
+					}
+					else
+					{
+						// Desktop (Finalizar = true) o bloqueo de calidad: No crear el traspaso
+						_logger.LogWarning("🚫 Traspaso bloqueado en CrearTraspasoArticulo - Artículo: {CodigoArticulo}, Partida: {Partida}, Destino: {AlmacenDestino}-{UbicacionDestino}, Tipo: {TipoBloqueo}, Motivo: {MotivoBloqueo}",
+							dto.CodigoArticulo, dto.Partida ?? "(sin partida)", dto.AlmacenDestino, ubicacionDestino, resultadoValidacion.TipoBloqueo, resultadoValidacion.MotivoBloqueo);
+						return BadRequest(resultadoValidacion.MotivoBloqueo ?? "No se puede realizar el traspaso.");
 					}
 				}
 			}
@@ -1150,6 +1463,20 @@ public class TraspasosController : ControllerBase
 		
 		try
 		{
+			// 🔷 NUEVO: Si se creó en PENDIENTE por bloqueo de alérgenos, agregar advertencia al comentario
+			var comentarioFinal = dto.Comentario ?? "";
+			if (resultadoValidacion != null && resultadoValidacion.TipoBloqueo == "ALERGENOS" && dto.Finalizar == false && !string.IsNullOrWhiteSpace(resultadoValidacion.MotivoBloqueo))
+			{
+				if (string.IsNullOrWhiteSpace(comentarioFinal))
+				{
+					comentarioFinal = $"⚠️ {resultadoValidacion.MotivoBloqueo}";
+				}
+				else
+				{
+					comentarioFinal = $"{comentarioFinal}\n⚠️ {resultadoValidacion.MotivoBloqueo}";
+				}
+			}
+
 			var traspaso = new Traspaso
 			{
 				Id = Guid.NewGuid(),
@@ -1172,7 +1499,7 @@ public class TraspasosController : ControllerBase
 				CodigoEmpresa = dto.CodigoEmpresa,
 				PaletId = paletIdOrigen ?? Guid.Empty, // ASOCIA EL PALET DE ORIGEN SI EXISTE
 				CodigoPalet = codigoPaletOrigen, // OPCIONAL, para trazabilidad
-				Comentario = dto.Comentario,
+				Comentario = comentarioFinal,
 				OrigenTraspaso = "AuroraSGA"
 			};
 
@@ -1231,6 +1558,18 @@ public class TraspasosController : ControllerBase
 			// Si hay palet destino, agregar línea temporal POSITIVA
 			if (paletIdDestino != null)
 			{
+				// 🔷 NUEVO: Validar alérgenos del artículo vs alérgenos del palet destino
+				var resultadoValidacionAlergenos = await _validacionAlergenosPaletService.ValidarAlergenosPaletAsync(
+					paletIdDestino.Value,
+					dto.CodigoArticulo,
+					dto.CodigoEmpresa);
+
+				if (!resultadoValidacionAlergenos.EsValido)
+				{
+					_logger.LogWarning($"🚫 VALIDACIÓN ALÉRGENOS PALET - Bloqueado crear traspaso de artículo {dto.CodigoArticulo} a palet destino. Motivo: {resultadoValidacionAlergenos.MotivoBloqueo}");
+					return BadRequest(resultadoValidacionAlergenos.MotivoBloqueo);
+				}
+
 				var tempLinea = new TempPaletLinea
 				{
 					PaletId = paletIdDestino.Value,
@@ -1367,7 +1706,16 @@ public class TraspasosController : ControllerBase
 				"Traspaso de artículo creado",
 				detalleArticuloCreacion);
 			
-			return Ok(new { message = "Traspaso de artículo creado correctamente", traspaso.Id, traspaso.CodigoEstado, paletInfo });
+			// 🔷 NUEVO: Incluir advertencia si se creó en PENDIENTE por bloqueo de alérgenos
+			var advertencia = (resultadoValidacion != null && resultadoValidacion.TipoBloqueo == "ALERGENOS" && dto.Finalizar == false && !string.IsNullOrWhiteSpace(resultadoValidacion.MotivoBloqueo))
+				? resultadoValidacion.MotivoBloqueo
+				: null;
+			
+			var mensaje = advertencia != null 
+				? "Traspaso creado en estado PENDIENTE. " + advertencia + " Por favor, seleccione otra ubicación destino."
+				: "Traspaso de artículo creado correctamente";
+			
+			return Ok(new { message = mensaje, traspaso.Id, traspaso.CodigoEstado, paletInfo, advertencia });
 		}
 		catch (Exception ex)
 		{
@@ -1769,6 +2117,19 @@ public class TraspasosController : ControllerBase
 				traspaso.PaletId = palet.Id;
 				traspaso.CodigoPalet = palet.Codigo;
 
+				// 🔷 NUEVO: Validar alérgenos del artículo vs alérgenos del palet destino
+				var resultadoValidacionAlergenos = await _validacionAlergenosPaletService.ValidarAlergenosPaletAsync(
+					palet.Id,
+					traspaso.CodigoArticulo,
+					traspaso.CodigoEmpresa);
+
+				if (!resultadoValidacionAlergenos.EsValido)
+				{
+					await tx.RollbackAsync();
+					_logger.LogWarning($"🚫 VALIDACIÓN ALÉRGENOS PALET - Bloqueado finalizar traspaso de artículo {traspaso.CodigoArticulo} a palet destino. Motivo: {resultadoValidacionAlergenos.MotivoBloqueo}");
+					return BadRequest(resultadoValidacionAlergenos.MotivoBloqueo);
+				}
+
 				// Buscar la descripción del artículo en StockDisponible
 				string descripcionArticulo = null;
 				if (!string.IsNullOrWhiteSpace(traspaso.CodigoArticulo))
@@ -2025,6 +2386,7 @@ public class TraspasosController : ControllerBase
 
 			var almacenOrigen = ultimoTraspaso.AlmacenDestino ?? "";
 			var ubicacionOrigen = ultimoTraspaso.UbicacionDestino ?? "";
+			var ubicacionOrigenNormalizada = string.IsNullOrWhiteSpace(ubicacionOrigen) ? "" : ubicacionOrigen.Trim();
 
 			// 🔷 VALIDACIÓN DE BLOQUEOS DE CALIDAD TOTAL: Validar siempre antes de crear traspasos
 			// Si hay bloqueo TOTAL, no permitir crear el traspaso en estado PENDIENTE (PDA)
@@ -2032,7 +2394,6 @@ public class TraspasosController : ControllerBase
 			{
 				if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(linea.Lote) && !string.IsNullOrWhiteSpace(almacenOrigen))
 				{
-					var ubicacionOrigenNormalizada = string.IsNullOrWhiteSpace(ubicacionOrigen) ? "" : ubicacionOrigen.Trim();
 					
 					// Buscar bloqueo TOTAL en el origen
 					var queryBloqueo = _context.BloqueosCalidad
@@ -2142,6 +2503,50 @@ public class TraspasosController : ControllerBase
 					message = esFinalizado ? "Traspasos de palet creados y finalizados correctamente" : "Traspasos de palet creados correctamente", 
 					traspasosIds = idsDuplicados 
 				});
+			}
+
+			// 🔷 VALIDACIÓN DE SINCRONIZACIÓN DE STOCK: Validar todas las líneas antes de crear traspasos
+			var erroresSincronizacion = new List<string>();
+
+			foreach (var linea in lineas)
+			{
+				if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(linea.Lote) && !string.IsNullOrWhiteSpace(almacenOrigen))
+				{
+					_logger.LogWarning("🔍 INICIANDO VALIDACIÓN DE SINCRONIZACIÓN al mover palet - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}, Ubicacion: {UbicacionOrigen}",
+						linea.CodigoArticulo, linea.Lote, almacenOrigen, ubicacionOrigenNormalizada);
+
+					var resultadoSincronizacion = await ValidarSincronizacionStockAsync(
+						dto.CodigoEmpresa,
+						linea.CodigoArticulo,
+						almacenOrigen,
+						ubicacionOrigenNormalizada,
+						linea.Lote,
+						dto.UsuarioId,
+						"MOVER_PALET",
+						dto.PaletId,
+						dto.CodigoPalet);
+
+					if (!resultadoSincronizacion.EsValido)
+					{
+						var mensajeError = $"Artículo: {linea.CodigoArticulo}, Partida: {linea.Lote}, Almacen: {almacenOrigen}, Ubicacion: {ubicacionOrigenNormalizada}, SAGE: {resultadoSincronizacion.StockSage:N6}, StorageControl: {resultadoSincronizacion.StockStorageControl:N6}";
+						erroresSincronizacion.Add(mensajeError);
+						
+						_logger.LogWarning("🚫 MoverPalet BLOQUEADO: Stock no sincronizado entre SAGE y StorageControl - {MensajeError}",
+							mensajeError);
+					}
+				}
+			}
+
+			// Si hay errores de sincronización, no crear ningún traspaso
+			if (erroresSincronizacion.Any())
+			{
+				var mensajeCompleto = "No se puede mover el palet. Stock no sincronizado entre SAGE y StorageControl en las siguientes líneas:\n\n" +
+					string.Join("\n", erroresSincronizacion);
+				
+				_logger.LogWarning("🚫 MoverPalet BLOQUEADO: {CantidadErrores} líneas con stock desincronizado. No se crearán traspasos.",
+					erroresSincronizacion.Count);
+				
+				return BadRequest(mensajeCompleto);
 			}
 
 			var traspasosCreados = new List<Guid>();

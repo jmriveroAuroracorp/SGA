@@ -147,7 +147,8 @@ namespace SGA_Desktop.ViewModels
 					"No hay líneas para confirmar. Añade al menos una línea antes de confirmar.",
 					"\uE814"
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			var owner = Application.Current.Windows.OfType<Window>()
+				.FirstOrDefault(w => w.DataContext == this && w != warning)
 							 ?? Application.Current.MainWindow;
 				if (owner != null && owner != warning)
 					warning.Owner = owner;
@@ -158,42 +159,83 @@ namespace SGA_Desktop.ViewModels
 			bool todoOk = true;
 
 			foreach (var dto in LineasPendientes)
+		{
+			try
 			{
 				var (ok, mensaje) = await _paletService.AnhadirLineaPaletAsync(PaletId, dto);
 				if (!ok)
 				{
 					todoOk = false;
 					dto.TieneError = true;
+					dto.ErrorMessage = mensaje ?? "Error desconocido al agregar la línea.";
 				}
 				else
 				{
 					dto.TieneError = false;
+					dto.ErrorMessage = null;
+				}
+			}
+			catch (Exception ex)
+			{
+				todoOk = false;
+				dto.TieneError = true;
+				dto.ErrorMessage = $"Error al agregar la línea: {ex.Message}";
 				}
 			}
 
 			if (todoOk)
 			{
-				var confirm = new ConfirmationDialog(
+			var info = new WarningDialog(
 					"Artículo añadido",
 					$"El artículo ha sido añadido correctamente al palet {PaletCodigo}.",
 					"\uE8FB"
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			var owner = Application.Current.Windows.OfType<Window>()
+				.FirstOrDefault(w => w.DataContext == this && w != info)
 							 ?? Application.Current.MainWindow;
-				if (owner != null && owner != confirm)
-					confirm.Owner = owner;
-				confirm.ShowDialog();
+			if (owner != null && owner != info)
+				info.Owner = owner;
+			info.ShowDialog();
 				Application.Current.Windows.OfType<Window>()
 					.FirstOrDefault(w => w.DataContext == this)?.Close();
 			}
 			else
 			{
+			var lineasConError = LineasPendientes.Where(l => l.TieneError).ToList();
+			string mensajeError;
+			
+			if (lineasConError.Count == 1 && !string.IsNullOrWhiteSpace(lineasConError[0].ErrorMessage))
+			{
+				mensajeError = lineasConError[0].ErrorMessage;
+			}
+			else if (lineasConError.Count > 1)
+			{
+				var mensajes = lineasConError
+					.Where(l => !string.IsNullOrWhiteSpace(l.ErrorMessage))
+					.Select(l => l.ErrorMessage)
+					.ToList();
+				
+				if (mensajes.Any())
+				{
+					mensajeError = string.Join("\n\n", mensajes);
+				}
+				else
+				{
+					mensajeError = "Algunas líneas no se pudieron mover. Revisa los errores mostrados.";
+				}
+			}
+			else
+			{
+				mensajeError = "Algunas líneas no se pudieron mover. Revisa los errores mostrados.";
+			}
+			
 				var warning = new WarningDialog(
 					"Error en traspaso",
-					"Algunas líneas no se pudieron mover. Revisa los errores mostrados.",
+				mensajeError,
 					"\uE814"
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+			var owner = Application.Current.Windows.OfType<Window>()
+				.FirstOrDefault(w => w.DataContext == this && w != warning)
 							 ?? Application.Current.MainWindow;
 				if (owner != null && owner != warning)
 					warning.Owner = owner;
@@ -213,7 +255,8 @@ namespace SGA_Desktop.ViewModels
 					"Debes indicar una cantidad mayor que 0 para añadir al palet.",
 					"\uE814"
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				var owner = Application.Current.Windows.OfType<Window>()
+					.FirstOrDefault(w => w.DataContext == this && w != warning)
 							 ?? Application.Current.MainWindow;
 				if (owner != null && owner != warning)
 					warning.Owner = owner;
@@ -228,7 +271,8 @@ namespace SGA_Desktop.ViewModels
 					$"La cantidad a mover ({cantidad}) es mayor que la disponible ({dto.UnidadSaldo}).",
 					"\uE814"
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				var owner = Application.Current.Windows.OfType<Window>()
+					.FirstOrDefault(w => w.DataContext == this && w != warning)
 							 ?? Application.Current.MainWindow;
 				if (owner != null && owner != warning)
 					warning.Owner = owner;
@@ -252,7 +296,8 @@ namespace SGA_Desktop.ViewModels
 					"Ya has añadido esta línea antes al palet.",
 					"\uE814"
 				);
-				var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+				var owner = Application.Current.Windows.OfType<Window>()
+					.FirstOrDefault(w => w.DataContext == this && w != warning)
 							 ?? Application.Current.MainWindow;
 				if (owner != null && owner != warning)
 					warning.Owner = owner;

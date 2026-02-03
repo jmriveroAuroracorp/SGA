@@ -477,23 +477,33 @@ namespace SGA_Desktop.ViewModels
 				return;
 			}
 
-			// 🔷 Llama al servicio para cerrar, pasando destino, comentario, altura y peso
-			var ok = await _paletService.CerrarPaletAsync(
-				PaletSeleccionado.Id,
-				SessionManager.UsuarioActual.operario,
-				almacenOrigen,
-				almacenDestino.CodigoAlmacen,
-				ubicacionElegida.Ubicacion,
-				dlg.VM.Comentario, // Comentario
-				dlg.VM.Altura,     // Altura
-				dlg.VM.Peso        // Peso
-			);
+		// 🔷 Llama al servicio para cerrar, pasando destino, comentario, altura y peso
+		var (ok, mensaje) = await _paletService.CerrarPaletAsync(
+			PaletSeleccionado.Id,
+			SessionManager.UsuarioActual.operario,
+			almacenOrigen,
+			almacenDestino.CodigoAlmacen,
+			ubicacionElegida.Ubicacion,
+			dlg.VM.Comentario, // Comentario
+			dlg.VM.Altura,     // Altura
+			dlg.VM.Peso        // Peso
+		);
 
-			if (!ok)
-			{
-				ErrorMessage = "No se pudo cerrar el palet.";
-				return;
-			}
+		if (!ok)
+		{
+			var warning = new WarningDialog(
+				"Error al cerrar palet",
+				mensaje ?? "No se pudo cerrar el palet.",
+				"\uE814"
+			);
+			var owner = Application.Current.Windows.OfType<Window>()
+				.FirstOrDefault(w => w.DataContext == this && w != warning)
+				?? Application.Current.MainWindow;
+			if (owner != null && owner != warning)
+				warning.Owner = owner;
+			warning.ShowDialog();
+			return;
+		}
 
 			// 🔷 Trae el palet actualizado
 			var actualizado = await _paletService.ObtenerPaletPorIdAsync(PaletSeleccionado.Id);
@@ -518,24 +528,34 @@ namespace SGA_Desktop.ViewModels
 		{
 			if (PaletSeleccionado == null) return;
 
-			var confirm = new ConfirmationDialog(
-				"Reabrir palet",
-				$"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\n\nAl reabrir:\n• El traspaso pendiente asociado quedará CANCELADO.\n• Podrás añadir, modificar o eliminar líneas del palet.\n• Cuando lo cierres de nuevo, se generará un nuevo traspaso.\n\n¿Deseas continuar?",
-				"\uE7BA"
-			);
+		var confirm = new ConfirmationDialog(
+			"Reabrir palet",
+			$"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\n\nAl reabrir:\n• Podrás añadir, modificar o eliminar líneas del palet.\n• Cuando lo cierres de nuevo, se generará un nuevo traspaso.\n\n⚠️ Nota: Si el palet tiene traspasos pendientes, no se podrá reabrir hasta que se completen.\n\n¿Deseas continuar?",
+			"\uE7BA"
+		);
 			var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
 						 ?? Application.Current.MainWindow;
 			if (owner != null && owner != confirm)
 				confirm.Owner = owner;
 			if (confirm.ShowDialog() != true) return;
 
-			// Llama al servicio para reabrir
-			var ok = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
-			if (!ok)
-			{
-				ErrorMessage = "No se pudo reabrir el palet.";
-				return;
-			}
+		// Llama al servicio para reabrir
+		var (ok, mensajeError) = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
+		if (!ok)
+		{
+		var warning = new WarningDialog(
+			"Error al reabrir palet",
+			mensajeError ?? "No se pudo reabrir el palet.",
+			"\uE814"
+		);
+			owner = Application.Current.Windows.OfType<Window>()
+				.FirstOrDefault(w => w.DataContext == this && w != warning)
+				?? Application.Current.MainWindow;
+			if (owner != null && owner != warning)
+				warning.Owner = owner;
+			warning.ShowDialog();
+			return;
+		}
 
 			// 🔷 Trae el palet completo actualizado
 			var actualizado = await _paletService.ObtenerPaletPorIdAsync(PaletSeleccionado.Id);

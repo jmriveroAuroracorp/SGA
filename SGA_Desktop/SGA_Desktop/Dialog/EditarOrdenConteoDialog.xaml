@@ -240,7 +240,7 @@
                             <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Margin="0,10,0,0"
                                         Visibility="{Binding EsPeriodico, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="Fecha de Próxima Renovación *" FontWeight="Bold" Margin="0,0,0,5"/>
-                                <TextBlock Text="Configure la fecha en la que se ejecutará la próxima renovación del conteo periódico. Debe ser del día siguiente en adelante." 
+                                <TextBlock Text="Configure la fecha en la que se ejecutará la próxima renovación del conteo periódico" 
                                            FontSize="11" 
                                            Foreground="#6C757D" 
                                            FontStyle="Italic" 
@@ -248,8 +248,7 @@
                                            TextWrapping="Wrap"/>
                                 <DatePicker SelectedDate="{Binding FechaProximaRenovacion}"
                                            Height="35"
-                                           FontSize="14"
-                                           DisplayDateStart="{Binding FechaMinimaRenovacion}"/>
+                                           FontSize="14"/>
                             </StackPanel>
 
                             <!-- Frecuencia (días) - solo para conteos periódicos -->

@@ -1,5 +1,7 @@
 using SGA_Desktop.ViewModels;
+using SGA_Desktop.Models;
 using System.Windows;
+using System.Windows.Input;
 
 namespace SGA_Desktop.Dialog
 {

@@ -277,6 +277,11 @@ namespace SGA_Desktop.Services
 						// 🔷 NUEVO: Fecha del último traspaso
 						FechaUltimoTraspaso = jObject["fechaUltimoTraspaso"]?.ToObject<DateTime?>(),
 						
+						// 🔷 NUEVO: Información de desincronización de stock
+						TieneDesincronizacion = jObject["tieneDesincronizacion"]?.ToObject<bool?>(),
+						StockSage = jObject["stockSage"]?.ToObject<decimal?>(),
+						StockStorageControl = jObject["stockStorageControl"]?.ToObject<decimal?>(),
+						
 						// 🔷 NUEVO: Inicializar CantidadAMoverTexto con el valor máximo disponible
 						// 🔷 CAMBIADO: Usar formato adaptativo que muestra solo decimales significativos
 						CantidadAMoverTexto = Helpers.DecimalFormatHelper.FormatearCantidad(jObject["disponible"]?.ToObject<decimal>() ?? 0)

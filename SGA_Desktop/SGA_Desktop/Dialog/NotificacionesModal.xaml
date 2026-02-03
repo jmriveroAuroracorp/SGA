@@ -8,7 +8,16 @@
         AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="False"
-        ResizeMode="CanResize">
+        ResizeMode="CanResize"
+        Topmost="True">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/SGA_Desktop;component/Resources/Estilos.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Border CornerRadius="8"
             Background="{StaticResource BrushFondo}"
@@ -139,6 +148,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         
                                         <TextBlock Grid.Column="0"
@@ -148,7 +158,33 @@
                                                    FontFamily="{StaticResource FuentePrincipal}"
                                                    Foreground="{Binding Color, Converter={StaticResource ColorToBrushConverter}}"/>
                                         
+                                        <!-- Botón Ver Inventario -->
                                         <Button Grid.Column="1"
+                                                Content="👁️ Ver"
+                                                Command="{Binding DataContext.VerInventarioCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource EstiloBotonSecundario}"
+                                                Width="70" Height="30"
+                                                FontSize="11"
+                                                Margin="5,0"
+                                                ToolTip="Ver inventario"
+                                                Visibility="{Binding EsInventarioCerrado, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                IsEnabled="{Binding EsInventarioCerrado}"/>
+                                        
+                                        <!-- Botón Ver Orden Conteo -->
+                                        <Button Grid.Column="1"
+                                                Content="👁️ Ver"
+                                                Command="{Binding DataContext.VerOrdenConteoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource EstiloBotonSecundario}"
+                                                Width="70" Height="30"
+                                                FontSize="11"
+                                                Margin="5,0"
+                                                ToolTip="Ver orden de conteo"
+                                                Visibility="{Binding EsOrdenConteoCerrada, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                IsEnabled="{Binding EsOrdenConteoCerrada}"/>
+                                        
+                                        <Button Grid.Column="2"
                                                 Content="✓"
                                                 Command="{Binding DataContext.MarcarComoLeidaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
@@ -159,7 +195,7 @@
                                                 ToolTip="Marcar como leída"
                                                 IsEnabled="{Binding Leida, Converter={StaticResource InverseBooleanConverter}}"/>
                                         
-                                        <TextBlock Grid.Column="2"
+                                        <TextBlock Grid.Column="3"
                                                    Text="{Binding FechaCreacion, StringFormat='{}{0:HH:mm}'}" 
                                                    Foreground="Gray" 
                                                    FontSize="12" 

@@ -243,8 +243,67 @@ namespace SGA_Desktop
 			Mensaje = e.Mensaje ?? "Sin mensaje",
 			Tipo = e.TipoPopup ?? "info",
 			UsuarioId = SessionManager.UsuarioActual?.operario ?? 0,
-			FechaCreacion = DateTime.Now
+			FechaCreacion = DateTime.Now,
+			TipoNotificacion = e.TipoNotificacion // Mapear TipoNotificacion desde EventArgs
 		};
+
+		// Intentar extraer ProcesoId y CodigoEmpresa de DatosCompletos si están disponibles
+		if (e.DatosCompletos != null)
+		{
+			try
+			{
+				var jsonString = e.DatosCompletos.ToString() ?? "";
+				var datos = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(jsonString);
+				
+				// Extraer ProcesoId (puede venir como procesoId o ProcesoId)
+				if (datos?.ProcesoId != null)
+				{
+					if (Guid.TryParse(datos.ProcesoId.ToString(), out Guid procesoId))
+					{
+						notificacion.ProcesoId = procesoId;
+					}
+				}
+				else if (datos?.procesoId != null)
+				{
+					if (Guid.TryParse(datos.procesoId.ToString(), out Guid procesoId))
+					{
+						notificacion.ProcesoId = procesoId;
+					}
+				}
+				
+				// Extraer CodigoEmpresa (puede venir como CodigoEmpresa o codigoEmpresa)
+				if (datos?.CodigoEmpresa != null)
+				{
+					if (int.TryParse(datos.CodigoEmpresa.ToString(), out int codigoEmpresa))
+					{
+						notificacion.CodigoEmpresa = codigoEmpresa;
+					}
+				}
+				else if (datos?.codigoEmpresa != null)
+				{
+					if (int.TryParse(datos.codigoEmpresa.ToString(), out int codigoEmpresa))
+					{
+						notificacion.CodigoEmpresa = codigoEmpresa;
+					}
+				}
+				
+				// Si TipoNotificacion no está en EventArgs pero sí en DatosCompletos, usarlo
+				if (string.IsNullOrEmpty(notificacion.TipoNotificacion) || notificacion.TipoNotificacion == "Popup")
+				{
+					var tipoNotif = datos?.TipoNotificacion?.ToString() ?? datos?.tipoNotificacion?.ToString();
+					if (!string.IsNullOrEmpty(tipoNotif) && tipoNotif != "Popup")
+					{
+						notificacion.TipoNotificacion = tipoNotif;
+					}
+				}
+				
+				System.Diagnostics.Debug.WriteLine($"🔍 [MainWindow] Notificación convertida - TipoNotificacion: {notificacion.TipoNotificacion}, ProcesoId: {notificacion.ProcesoId}, CodigoEmpresa: {notificacion.CodigoEmpresa}, EsInventarioCerrado: {notificacion.EsInventarioCerrado}");
+			}
+			catch (Exception ex)
+			{
+				System.Diagnostics.Debug.WriteLine($"⚠️ Error al extraer ProcesoId/CodigoEmpresa: {ex.Message}");
+			}
+		}
 
 		// Extraer información adicional del mensaje si es posible
 		ExtraerInformacionAdicional(notificacion, e.Mensaje);

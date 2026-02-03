@@ -319,5 +319,75 @@ namespace SGA_Api.Controllers.Calidad
             }
         }
 
+        /// <summary>
+        /// Obtiene estadísticas de bloqueos de calidad
+        /// </summary>
+        /// <param name="codigoEmpresa">Código de empresa</param>
+        /// <returns>Estadísticas de bloqueos</returns>
+        [HttpGet("estadisticas")]
+        [ProducesResponseType(typeof(EstadisticasCalidadDto), 200)]
+        [ProducesResponseType(typeof(ProblemDetails), 400)]
+        [ProducesResponseType(typeof(ProblemDetails), 403)]
+        [ProducesResponseType(typeof(ProblemDetails), 500)]
+        public async Task<IActionResult> ObtenerEstadisticas([FromQuery] short codigoEmpresa)
+        {
+            try
+            {
+                // 1. Obtener usuario desde token
+                var usuarioId = await UsuarioHelper.ObtenerUsuarioDesdeTokenAsync(HttpContext, _auroraSgaContext);
+                if (!usuarioId.HasValue)
+                {
+                    return Unauthorized(new ProblemDetails
+                    {
+                        Title = "No autorizado",
+                        Detail = "Token de sesión inválido",
+                        Status = 401
+                    });
+                }
+
+                // 2. Verificar permiso 16 (Calidad)
+                if (!await _calidadService.VerificarPermisoCalidadAsync(usuarioId.Value))
+                {
+                    return Unauthorized(new ProblemDetails
+                    {
+                        Title = "Sin permisos",
+                        Detail = "No tiene permisos para acceder a Calidad",
+                        Status = 403
+                    });
+                }
+
+                // 3. Verificar que el usuario tiene acceso a la empresa
+                if (!await _calidadService.VerificarAccesoEmpresaAsync(usuarioId.Value, codigoEmpresa))
+                {
+                    return Unauthorized(new ProblemDetails
+                    {
+                        Title = "Sin acceso",
+                        Detail = "No tiene acceso a esta empresa",
+                        Status = 403
+                    });
+                }
+
+                // 4. Obtener estadísticas
+                var estadisticas = await _calidadService.ObtenerEstadisticasAsync(codigoEmpresa);
+
+                _logger.LogInformation("Consulta de estadísticas ejecutada para usuario {UsuarioId}, empresa {CodigoEmpresa}",
+                    usuarioId.Value, codigoEmpresa);
+
+                return Ok(estadisticas);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en consulta de estadísticas para empresa {CodigoEmpresa}",
+                    codigoEmpresa);
+
+                return StatusCode(500, new ProblemDetails
+                {
+                    Title = "Error interno del servidor",
+                    Detail = "Ocurrió un error al consultar las estadísticas",
+                    Status = 500
+                });
+            }
+        }
+
     }
 }

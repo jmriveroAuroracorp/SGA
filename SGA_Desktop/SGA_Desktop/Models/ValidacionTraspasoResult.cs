@@ -19,8 +19,12 @@ namespace SGA_Desktop.Models
         [JsonPropertyName("ubicacionDestino")]
         public string UbicacionDestino { get; set; } = string.Empty;
 
+        // 🔷 NUEVO: Tipo de bloqueo para distinguir entre calidad y alérgenos
+        [JsonPropertyName("tipoBloqueo")]
+        public string TipoBloqueo { get; set; } = "CALIDAD"; // Por defecto "CALIDAD" para mantener compatibilidad
+
         // 🔷 NUEVO: Métodos estáticos para crear instancias
         public static ValidacionTraspasoResult Valido() => new ValidacionTraspasoResult { EsValido = true };
-        public static ValidacionTraspasoResult Bloqueado(string motivo) => new ValidacionTraspasoResult { EsValido = false, MotivoBloqueo = motivo };
+        public static ValidacionTraspasoResult Bloqueado(string motivo, string tipoBloqueo = "CALIDAD") => new ValidacionTraspasoResult { EsValido = false, MotivoBloqueo = motivo, TipoBloqueo = tipoBloqueo };
     }
 }

@@ -73,6 +73,13 @@ namespace SGA_Desktop.ViewModels
 			ResultadosStockPorUbicacionView = CollectionViewSource.GetDefaultView(ResultadosStockPorUbicacion);
 			ResultadosStockPorUbicacionView.Filter = FiltroStock;
 
+			// 🔷 NUEVO: Recalcular indicadores de desincronización/negativos cuando cambia la colección
+			ResultadosStockPorUbicacion.CollectionChanged += (s, e) =>
+			{
+				OnPropertyChanged(nameof(HayDesincronizadosUbicacion));
+				OnPropertyChanged(nameof(HayNegativosUbicacion));
+			};
+
 			if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()))
 				_ = InitializeAsync();
 		}
@@ -98,6 +105,10 @@ namespace SGA_Desktop.ViewModels
 	
 	// 🔷 NUEVO: Colección para artículos agrupados con expanders
 	public ObservableCollection<ArticuloStockGroup> ArticulosConUbicaciones { get; } = new();
+
+	// 🔷 NUEVOS: Indicadores para habilitar/deshabilitar filtros avanzados en modo ubicación
+	public bool HayDesincronizadosUbicacion => ResultadosStockPorUbicacion.Any(s => s.TieneDesincronizacion == true);
+	public bool HayNegativosUbicacion => ResultadosStockPorUbicacion.Any(s => s.UnidadSaldo < 0);
 	
 	// Vista filtrable para almacenes combo
 	public ICollectionView AlmacenesComboView { get; private set; }
@@ -126,11 +137,14 @@ namespace SGA_Desktop.ViewModels
 		[ObservableProperty]
 		private bool isArticleMode = true;
 
-		[ObservableProperty]
-		private bool isLocationMode = false;
+	[ObservableProperty]
+	private bool isLocationMode = false;
 
-		[ObservableProperty]
-		private bool isPaletMode = false;
+	[ObservableProperty]
+	private bool isPaletMode = false;
+
+	[ObservableProperty]
+	private bool isLoading;
 
 		[ObservableProperty]
 		private string filtroDescripcion;
@@ -230,6 +244,14 @@ namespace SGA_Desktop.ViewModels
 			}
 		}
 
+		// 🔷 NUEVO: Checkbox para filtrar solo desincronizados
+		[ObservableProperty]
+		private bool soloDesincronizados = false;
+
+		// 🔷 NUEVO: Checkbox para filtrar solo negativos
+		[ObservableProperty]
+		private bool soloNegativos = false;
+
 		public Visibility ArticleFiltersVisibility => IsArticleMode ? Visibility.Visible : Visibility.Collapsed;
 		public Visibility LocationFiltersVisibility => IsLocationMode ? Visibility.Visible : Visibility.Collapsed;
 		public Visibility PaletFiltersVisibility => IsPaletMode ? Visibility.Visible : Visibility.Collapsed;
@@ -287,6 +309,8 @@ namespace SGA_Desktop.ViewModels
 							   (AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas"))) ||
 			(IsLocationMode && (!string.IsNullOrWhiteSpace(FiltroUbicacion) || 
 								!string.IsNullOrWhiteSpace(FiltroBusqueda) ||
+								SoloDesincronizados ||
+								SoloNegativos ||
 								(AlmacenSeleccionadoCombo?.CodigoAlmacen != "Todas"))) ||
 			(IsPaletMode && (!string.IsNullOrWhiteSpace(FiltroArticuloPalet) || 
 							 !string.IsNullOrWhiteSpace(FiltroCodigoPalet) ||
@@ -531,6 +555,8 @@ namespace SGA_Desktop.ViewModels
 				AlmacenSeleccionado = TODAS;
 				FiltroUbicacion = string.Empty;
 				FiltroBusqueda = string.Empty;
+				SoloDesincronizados = false;
+				SoloNegativos = false;
 				AlmacenSeleccionadoCombo = AlmacenesCombo.FirstOrDefault(a => a.CodigoAlmacen == TODAS);
 			}
 			else if (IsPaletMode)
@@ -566,13 +592,15 @@ namespace SGA_Desktop.ViewModels
 		}
 
 
-		[RelayCommand]
-		private async Task BuscarPorArticuloAsync()
+	[RelayCommand]
+	private async Task BuscarPorArticuloAsync()
+	{
+		try
 		{
-			try
-			{
-				// 0) Validación básica
-				if (string.IsNullOrWhiteSpace(FiltroArticulo))
+			IsLoading = true; // 🔷 NUEVO: Indicador de carga
+			
+			// 0) Validación básica
+			if (string.IsNullOrWhiteSpace(FiltroArticulo))
 				{
 					var advertencia = new WarningDialog(
 						"Buscar artículo",
@@ -702,29 +730,41 @@ namespace SGA_Desktop.ViewModels
 						FechaBloqueoCalidad = s.FechaBloqueoCalidad,
 						TipoBloqueoCalidad = s.TipoBloqueoCalidad ?? "TOTAL", // 🔷 NUEVO
 						// 🔷 NUEVO: Fecha del último traspaso
-						FechaUltimoTraspaso = s.FechaUltimoTraspaso
+						FechaUltimoTraspaso = s.FechaUltimoTraspaso,
+						// 🔷 NUEVO: Alérgenos del artículo
+						Alergenos = s.Alergenos,
+						// 🔷 NUEVO: Información de desincronización de stock
+						TieneDesincronizacion = s.TieneDesincronizacion,
+						StockSage = s.StockSage,
+						StockStorageControl = s.StockStorageControl
 					};
 				}).ToList();
 				_stockDisponibleArticuloBase = stockDisponible;
 
 				ActualizarPartidasDisponibles();
 
-				AplicarFiltroPartidaArticulo();
+			AplicarFiltroPartidaArticulo();
 
-			}
-			catch (Exception ex)
-			{
-				new WarningDialog("Error al consultar por artículo", ex.Message, "\uE783").ShowDialog();
-			}
 		}
-
-		[RelayCommand]
-		private async Task BuscarPorUbicacionAsync()
+		catch (Exception ex)
 		{
-			try
-			{
-				var almacen = AlmacenSeleccionadoCombo ?? AlmacenesCombo
-					.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
+			new WarningDialog("Error al consultar por artículo", ex.Message, "\uE783").ShowDialog();
+		}
+		finally
+		{
+			IsLoading = false; // 🔷 NUEVO: Finalizar indicador de carga
+		}
+	}
+
+	[RelayCommand]
+	private async Task BuscarPorUbicacionAsync()
+	{
+		try
+		{
+			IsLoading = true; // 🔷 NUEVO: Indicador de carga
+			
+			var almacen = AlmacenSeleccionadoCombo ?? AlmacenesCombo
+				.FirstOrDefault(a => a.CodigoAlmacen == AlmacenSeleccionado);
 
 				if (almacen == null || almacen.CodigoAlmacen == TODAS)
 				{
@@ -765,21 +805,27 @@ namespace SGA_Desktop.ViewModels
 
 				// 🔷 MODIFICADO: Ahora siempre filtramos por permisos usando la nueva lógica
 				LlenarResultados(lista, filterByPermissions: true);
-				OnPropertyChanged(nameof(CanRefresh));
-				OnPropertyChanged(nameof(CanExportExcel));
-			}
-			catch (Exception ex)
-			{
-				MostrarError("Error al consultar por ubicación", ex);
-			}
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanExportExcel));
 		}
-
-		[RelayCommand]
-		private async Task BuscarPorPaletAsync()
+		catch (Exception ex)
 		{
-			try
-			{
-			// Validación: Al menos un filtro debe estar presente
+			MostrarError("Error al consultar por ubicación", ex);
+		}
+		finally
+		{
+			IsLoading = false; // 🔷 NUEVO: Finalizar indicador de carga
+		}
+	}
+
+	[RelayCommand]
+	private async Task BuscarPorPaletAsync()
+	{
+		try
+		{
+			IsLoading = true; // 🔷 NUEVO: Indicador de carga
+			
+		// Validación: Al menos un filtro debe estar presente
 			bool tieneArticulo = !string.IsNullOrWhiteSpace(FiltroArticuloPalet);
 			bool tieneAlmacen = AlmacenSeleccionadoCombo != null && AlmacenSeleccionadoCombo.CodigoAlmacen != TODAS;
 			// 🔷 MODIFICADO: Validar que el código de palet tenga al menos 3 caracteres Y que haya un almacén válido
@@ -1147,7 +1193,13 @@ namespace SGA_Desktop.ViewModels
 									EstadoPalet = palet.EstadoPalet,
 									PaletId = palet.PaletId,
 									// 🔷 NUEVO: Fecha del último traspaso
-									FechaUltimoTraspaso = s.FechaUltimoTraspaso
+									FechaUltimoTraspaso = s.FechaUltimoTraspaso,
+									// 🔷 NUEVO: Alérgenos del artículo
+									Alergenos = s.Alergenos,
+									// 🔷 NUEVO: Información de desincronización de stock
+									TieneDesincronizacion = s.TieneDesincronizacion,
+									StockSage = s.StockSage,
+									StockStorageControl = s.StockStorageControl
 								});
 							}
 						}
@@ -1175,7 +1227,13 @@ namespace SGA_Desktop.ViewModels
 								EstadoPalet = null,
 								PaletId = null,
 								// 🔷 NUEVO: Fecha del último traspaso
-								FechaUltimoTraspaso = s.FechaUltimoTraspaso
+								FechaUltimoTraspaso = s.FechaUltimoTraspaso,
+								// 🔷 NUEVO: Alérgenos del artículo
+								Alergenos = s.Alergenos,
+								// 🔷 NUEVO: Información de desincronización de stock
+								TieneDesincronizacion = s.TieneDesincronizacion,
+								StockSage = s.StockSage,
+								StockStorageControl = s.StockStorageControl
 							});
 						}
 					}
@@ -1402,7 +1460,11 @@ namespace SGA_Desktop.ViewModels
 							FechaBloqueoCalidad = s.FechaBloqueoCalidad,
 							TipoBloqueoCalidad = s.TipoBloqueoCalidad ?? "TOTAL",
 							// 🔷 NUEVO: Fecha del último traspaso
-							FechaUltimoTraspaso = s.FechaUltimoTraspaso
+							FechaUltimoTraspaso = s.FechaUltimoTraspaso,
+							// 🔷 NUEVO: Información de desincronización de stock
+							TieneDesincronizacion = s.TieneDesincronizacion,
+							StockSage = s.StockSage,
+							StockStorageControl = s.StockStorageControl
 						};
 					})
 					.ToList();
@@ -1419,14 +1481,18 @@ namespace SGA_Desktop.ViewModels
 
 				// Llenar resultados en modo palet (usa ResultadosStockPorPalet)
 				LlenarResultados(lista, filterByPermissions: false); // Ya filtrado por permisos arriba
-				OnPropertyChanged(nameof(CanRefresh));
-				OnPropertyChanged(nameof(CanExportExcel));
-			}
-			catch (Exception ex)
-			{
-				MostrarError("Error al consultar por palet", ex);
-			}
+			OnPropertyChanged(nameof(CanRefresh));
+			OnPropertyChanged(nameof(CanExportExcel));
 		}
+		catch (Exception ex)
+		{
+			MostrarError("Error al consultar por palet", ex);
+		}
+		finally
+		{
+			IsLoading = false; // 🔷 NUEVO: Finalizar indicador de carga
+		}
+	}
 
 
 
@@ -1845,15 +1911,34 @@ namespace SGA_Desktop.ViewModels
 					return;
 				}
 
-				// 🔷 NUEVO: Solo una opción genérica para ambos modos
+			// 🔷 MODIFICADO: Comportamiento diferente según el modo
+			if (IsArticleMode)
+			{
+				// En modo artículo: Añadir "Sin ubicación" primero
+				Ubicaciones.Add(SIN_UBICACION);
+				
+				// Luego añadir ubicaciones reales (sin "Todo el almacén")
+				var ubicacionesConValor = lista
+					.Where(u => !string.IsNullOrEmpty(u.Ubicacion))
+					.Select(u => u.Ubicacion)
+					.Distinct()
+					.OrderBy(u => u);
+
+				foreach (var ubic in ubicacionesConValor)
+				{
+					Ubicaciones.Add(ubic);
+				}
+
+				// En modo artículo: No seleccionar nada por defecto (dejar vacío)
+				FiltroUbicacion = "";
+			}
+			else
+			{
+				// En modo ubicación: Añadir "Todo el almacén" como primera opción
 				Ubicaciones.Add(TODO_ALMACEN);
 				
-				// 🔷 CORREGIDO: Solo añadir "Sin ubicación" en modo ubicación
-				if (!IsArticleMode)
-				{
-					// En modo ubicación: "Sin ubicación"
-					Ubicaciones.Add(SIN_UBICACION);
-				}
+				// En modo ubicación: Añadir "Sin ubicación"
+				Ubicaciones.Add(SIN_UBICACION);
 
 				// �� SIMPLIFICADO: Solo añadir ubicaciones con valor (sin duplicados)
 				var ubicacionesConValor = lista
@@ -1867,8 +1952,17 @@ namespace SGA_Desktop.ViewModels
 					Ubicaciones.Add(ubic);
 				}
 
-			// 🔷 NUEVO: No seleccionar nada por defecto
-			FiltroUbicacion = "";
+				// En modo ubicación: Seleccionar "Todo el almacén" por defecto
+				if (Ubicaciones.Count > 0)
+				{
+					FiltroUbicacion = Ubicaciones[0]; // Será TODO_ALMACEN
+				}
+				else
+				{
+					FiltroUbicacion = "";
+				}
+			}
+			
 			FiltroUbicaciones = "";
 			FiltroUbicacionesUbicacion = "";
 			
@@ -2149,14 +2243,31 @@ namespace SGA_Desktop.ViewModels
 
 
 
-		private bool FiltroStock(object obj)
+	private bool FiltroStock(object obj)
+	{
+		if (obj is not StockDto stock) return false;
+		
+		// 🔷 Filtrar por desincronización si está activado
+		if (SoloDesincronizados)
 		{
-			if (obj is not StockDto stock) return false;
-			if (string.IsNullOrWhiteSpace(FiltroBusqueda)) return true;
-
-			return (stock.CodigoArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false)
-				|| (stock.DescripcionArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
+			if (!(stock.TieneDesincronizacion == true))
+				return false;
 		}
+
+		// 🔷 NUEVO: Filtrar por negativos si está activado
+		// Usamos UnidadSaldo, que es la cantidad que representa el disponible por ubicación
+		if (SoloNegativos)
+		{
+			if (stock.UnidadSaldo >= 0)
+				return false;
+		}
+		
+		// Filtrar por búsqueda de texto
+		if (string.IsNullOrWhiteSpace(FiltroBusqueda)) return true;
+
+		return (stock.CodigoArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false)
+			|| (stock.DescripcionArticulo?.Contains(FiltroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false);
+	}
 
 	
 	// Métodos para filtrado de almacenes (modo artículo)
@@ -2181,6 +2292,20 @@ namespace SGA_Desktop.ViewModels
 		// Usar el mismo filtro que el modo artículo
 		FiltroAlmacenesCombo = value;
 		AlmacenesComboArticleView?.Refresh();
+	}
+
+	// 🔷 NUEVO: Método para manejar cambios en el checkbox de solo negativos
+	partial void OnSoloNegativosChanged(bool oldValue, bool newValue)
+	{
+		ResultadosStockPorUbicacionView?.Refresh();
+		OnPropertyChanged(nameof(CanClearFilters));
+	}
+
+	// 🔷 NUEVO: Método para manejar cambios en el checkbox de solo desincronizados
+	partial void OnSoloDesincronizadosChanged(bool oldValue, bool newValue)
+	{
+		ResultadosStockPorUbicacionView?.Refresh();
+		OnPropertyChanged(nameof(CanClearFilters));
 	}
 	
 	// Comandos para controlar dropdown (ambos modos usan el mismo)

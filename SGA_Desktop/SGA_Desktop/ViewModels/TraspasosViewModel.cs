@@ -1085,7 +1085,7 @@ namespace SGA_Desktop.ViewModels
             }
 
             // 🔷 Llama al servicio para cerrar, pasando destino, comentario, altura y peso
-            var ok = await _paletService.CerrarPaletAsync(
+            var (ok, mensaje) = await _paletService.CerrarPaletAsync(
                 PaletSeleccionado.Id,
                 SessionManager.UsuarioActual.operario,
                 almacenOrigen,
@@ -1098,7 +1098,17 @@ namespace SGA_Desktop.ViewModels
 
             if (!ok)
             {
-                ErrorMessage = "No se pudo cerrar el palet.";
+                var warning = new WarningDialog(
+                    "Error al cerrar palet",
+                    mensaje ?? "No se pudo cerrar el palet.",
+                    "\uE814"
+                );
+                var owner = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.DataContext == this && w != warning)
+                    ?? Application.Current.MainWindow;
+                if (owner != null && owner != warning)
+                    warning.Owner = owner;
+                warning.ShowDialog();
                 return;
             }
 
@@ -1123,7 +1133,7 @@ namespace SGA_Desktop.ViewModels
 
             var confirm = new ConfirmationDialog(
                 "Reabrir palet",
-                $"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\n\nAl reabrir podrás añadir líneas al palet.\n\n¿Deseas continuar?",
+                $"¿Estás seguro de reabrir el palet {PaletSeleccionado.Codigo}?\n\nAl reabrir podrás añadir líneas al palet.\n\n⚠️ Nota: Si el palet tiene traspasos pendientes, no se podrá reabrir hasta que se completen.\n\n¿Deseas continuar?",
                 "\uE7BA"
             );
             var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
@@ -1133,10 +1143,20 @@ namespace SGA_Desktop.ViewModels
             if (confirm.ShowDialog() != true) return;
 
             // Llama al servicio para reabrir
-            var ok = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
+            var (ok, mensajeError) = await _paletService.ReabrirPaletAsync(PaletSeleccionado.Id, SessionManager.UsuarioActual.operario);
             if (!ok)
             {
-                ErrorMessage = "No se pudo reabrir el palet.";
+                var warning = new WarningDialog(
+                    "Error al reabrir palet",
+                    mensajeError ?? "No se pudo reabrir el palet.",
+                    "\uE814"
+                );
+                owner = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive && w != warning)
+                    ?? Application.Current.MainWindow;
+                if (owner != null && owner != warning)
+                    warning.Owner = owner;
+                warning.ShowDialog();
                 return;
             }
 

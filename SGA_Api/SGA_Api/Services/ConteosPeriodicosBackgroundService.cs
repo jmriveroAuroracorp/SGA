@@ -134,8 +134,8 @@ namespace SGA_Api.Services
 
                 // Crear nueva orden basada en la original
                 // Añadir fecha al título para diferenciar las renovaciones
-                var fechaRenovacion = DateTime.Now.ToString("dd/MM/yyyy");
-                var tituloConFecha = $"{ordenOriginal.Titulo} - {fechaRenovacion}";
+                var fechaRenovacionStr = DateTime.Now.ToString("dd/MM/yyyy");
+                var tituloConFecha = $"{ordenOriginal.Titulo} - {fechaRenovacionStr}";
                 
                 var nuevaOrden = new OrdenConteo
                 {
@@ -172,11 +172,22 @@ namespace SGA_Api.Services
                 dbContext.OrdenesConteo.Add(nuevaOrden);
 
                 // Actualizar orden original
-                ordenOriginal.FechaUltimaRenovacion = DateTime.Now;
+                var fechaRenovacion = DateTime.Now;
+                // Guardar la fecha anterior antes de actualizarla para usarla en el cálculo
+                var fechaUltimaRenovacionAnterior = ordenOriginal.FechaUltimaRenovacion;
+                ordenOriginal.FechaUltimaRenovacion = fechaRenovacion;
                 if (ordenOriginal.FrecuenciaDias.HasValue)
                 {
-                    // Calcular próxima renovación solo por fecha (día), sin hora específica
-                    ordenOriginal.FechaProximaRenovacion = DateTime.Now.Date.AddDays(ordenOriginal.FrecuenciaDias.Value);
+                    // Calcular próxima renovación desde la fecha de la última renovación (o fecha de creación si es la primera)
+                    // para mantener el mismo día de la semana en las renovaciones
+                    var fechaBase = fechaUltimaRenovacionAnterior.HasValue 
+                        ? fechaUltimaRenovacionAnterior.Value.Date 
+                        : ordenOriginal.FechaCreacion.Date;
+                    
+                    ordenOriginal.FechaProximaRenovacion = fechaBase.AddDays(ordenOriginal.FrecuenciaDias.Value);
+                    
+                    logger.LogInformation("Próxima renovación calculada desde {FechaBase} + {Frecuencia} días = {FechaProximaRenovacion}", 
+                        fechaBase, ordenOriginal.FrecuenciaDias.Value, ordenOriginal.FechaProximaRenovacion);
                 }
 
                 await dbContext.SaveChangesAsync();

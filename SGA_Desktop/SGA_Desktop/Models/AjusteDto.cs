@@ -98,7 +98,12 @@ namespace SGA_Desktop.Models
         {
             "INVENTARIO" => "Inventario",
             "CONTEO" => "Conteo",
-            "CAMBIO_ARTICULO" => "Cambio de Artículo",
+            "CAMBIO_ARTICULO" => TipoCambioArticulo switch
+            {
+                "CAMBIO_CODIGO" => "Cambio de Código",
+                "AMPLIACION" => "Ampliación",
+                _ => "Cambio de Artículo"
+            },
             _ => ""
         };
 

@@ -905,8 +905,12 @@ namespace SGA_Desktop.ViewModels
                 Debug.WriteLine($"PRIMER CHECK - Estado en interfaz: '{orden.Estado}'");
                 Debug.WriteLine($"PRIMER CHECK - Estado actual en BD: '{ordenActual.Estado}'");
                 Debug.WriteLine($"PRIMER CHECK - Estado formateado: '{ordenActual.EstadoFormateado}'");
+                Debug.WriteLine($"PRIMER CHECK - Es periódico: '{ordenActual.EsPeriodico}'");
                 
-                if (ordenActual.Estado != "PLANIFICADO" && ordenActual.Estado != "ASIGNADO")
+                // Para conteos periódicos, permitir edición independientemente del estado
+                // porque los cambios solo afectan a la plantilla para futuras renovaciones
+                // Para conteos normales, solo permitir edición si está en PLANIFICADO o ASIGNADO
+                if (!ordenActual.EsPeriodico && ordenActual.Estado != "PLANIFICADO" && ordenActual.Estado != "ASIGNADO")
                 {
                     Debug.WriteLine($"PRIMER CHECK - BLOQUEANDO edición porque estado actual '{ordenActual.Estado}' no es editable");
                     var dialog = new WarningDialog(
@@ -920,7 +924,7 @@ namespace SGA_Desktop.ViewModels
                     return;
                 }
                 
-                Debug.WriteLine($"PRIMER CHECK - PERMITIENDO edición porque estado actual '{ordenActual.Estado}' es editable");
+                Debug.WriteLine($"PRIMER CHECK - PERMITIENDO edición porque estado actual '{ordenActual.Estado}' es editable o es periódico");
 
                 // Crear el ViewModel del diálogo de edición
                 var dialogViewModel = new EditarOrdenConteoDialogViewModel(_conteosService, _stockService, new LoginService(), new InventarioService(), new UbicacionesService());
@@ -1189,6 +1193,47 @@ namespace SGA_Desktop.ViewModels
                 var errorDialog = new WarningDialog(
                     "Error al desactivar periodicidad",
                     $"No se pudo desactivar la periodicidad: {ex.Message}");
+                ShowCenteredDialog(errorDialog);
+            }
+        }
+
+        [RelayCommand]
+        private async Task RelanzarConteoPeriodico(ConteoPeriodicoDto conteo)
+        {
+            if (conteo == null) return;
+
+            try
+            {
+                // Confirmar acción
+                var confirmDialog = new ConfirmationDialog(
+                    "Relanzar conteo periódico",
+                    $"¿Está seguro de que desea relanzar el conteo periódico '{conteo.Titulo}' ahora mismo?\n\nSe creará una nueva orden de conteo inmediatamente, independientemente de la fecha programada.");
+                
+                var mainWindow = Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+                
+                if (mainWindow != null)
+                    confirmDialog.Owner = mainWindow;
+
+                var result = confirmDialog.ShowDialog();
+                if (result != true) return;
+
+                // Realizar la renovación
+                var nuevaOrden = await _conteosService.RenovarConteoPeriodicoAsync(conteo.GuidID);
+                
+                // Recargar la lista para obtener datos actualizados
+                await CargarConteosPeriodicos();
+                
+                var successDialog = new WarningDialog(
+                    "Conteo relanzado",
+                    $"El conteo periódico '{conteo.Titulo}' ha sido relanzado correctamente.\n\nSe ha creado una nueva orden de conteo con el título: '{nuevaOrden.Titulo}'");
+                ShowCenteredDialog(successDialog);
+            }
+            catch (Exception ex)
+            {
+                var errorDialog = new WarningDialog(
+                    "Error al relanzar conteo periódico",
+                    $"No se pudo relanzar el conteo periódico: {ex.Message}");
                 ShowCenteredDialog(errorDialog);
             }
         }

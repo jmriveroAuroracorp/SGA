@@ -7,6 +7,8 @@ using SGA_Api.Models.Palet;
 using SGA_Api.Models.Traspasos;
 using SGA_Api.Models.UsuarioConf;
 using SGA_Api.Models.Registro;
+using SGA_Api.Models.Stock;
+using SGA_Api.Models.Notificaciones;
 using SGA_Api.Services;
 using System;
 using System.Collections.Generic;
@@ -27,6 +29,7 @@ public class PaletController : ControllerBase
 	private readonly ILogger<PaletController> _logger;
 	private readonly IServiceProvider _serviceProvider;
 	private readonly IValidacionTraspasoService _validacionService;
+	private readonly IValidacionAlergenosPaletService _validacionAlergenosPaletService;
 
 	public PaletController(
 		AuroraSgaDbContext auroraSgaContext,
@@ -34,9 +37,11 @@ public class PaletController : ControllerBase
 		StorageControlDbContext storageContext,
 		ILogger<PaletController> logger,
 		IServiceProvider serviceProvider,
-		IValidacionTraspasoService validacionService)
+		IValidacionTraspasoService validacionService,
+		IValidacionAlergenosPaletService validacionAlergenosPaletService)
 	{
 		_auroraSgaContext = auroraSgaContext;
+		_validacionAlergenosPaletService = validacionAlergenosPaletService;
 		_sageContext = sageContext;
 		_storageContext = storageContext;
 		_logger = logger;
@@ -597,6 +602,67 @@ public class PaletController : ControllerBase
 
 		if (dto.Cantidad > stock.Disponible)
 			return BadRequest($"No puedes reservar más de lo disponible: {stock.Disponible:N2} unidades.");
+
+		// 🔷 VALIDACIÓN DE SINCRONIZACIÓN SAGE vs STORAGECONTROL
+		// Validar antes de agregar la línea al palet
+		_logger.LogWarning("🔍🔍🔍 INICIANDO VALIDACIÓN DE SINCRONIZACIÓN al agregar línea al palet - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {CodigoAlmacen}, Ubicacion: {Ubicacion}",
+			dto.CodigoArticulo, dto.Lote ?? "(sin partida)", dto.CodigoAlmacen, dto.Ubicacion);
+
+		try
+		{
+			var resultadoSincronizacion = await ValidarSincronizacionStockAsync(
+				dto.CodigoEmpresa,
+				dto.CodigoArticulo,
+				dto.CodigoAlmacen,
+				dto.Ubicacion,
+				dto.Lote,
+				dto.UsuarioId,
+				"ANHADIR_LINEA_PALET",
+				id,
+				palet.Codigo);
+
+			if (!resultadoSincronizacion.EsValido)
+			{
+				await transaction.RollbackAsync();
+				_logger.LogWarning(
+					"🚫 Agregar línea al palet BLOQUEADO: Stock no sincronizado entre SAGE y StorageControl - " +
+					"Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {CodigoAlmacen}, Ubicacion: {Ubicacion}, " +
+					"SAGE: {StockSage}, StorageControl: {StockStorageControl}",
+					dto.CodigoArticulo, dto.Lote ?? "(sin partida)", dto.CodigoAlmacen, dto.Ubicacion,
+					resultadoSincronizacion.StockSage, resultadoSincronizacion.StockStorageControl);
+
+				return BadRequest(
+					$"No se puede agregar la línea al palet: el stock no está sincronizado entre SAGE y StorageControl. " +
+					$"SAGE: {resultadoSincronizacion.StockSage:N6}, StorageControl: {resultadoSincronizacion.StockStorageControl:N6}. " +
+					$"Artículo: {dto.CodigoArticulo}, Partida: {dto.Lote ?? "(sin partida)"}, Almacén: {dto.CodigoAlmacen}, Ubicación: {dto.Ubicacion ?? "(sin ubicación)"}");
+			}
+
+			_logger.LogInformation(
+				"✅ Validación de sincronización OK al agregar línea al palet - Artículo: {CodigoArticulo}, Partida: {Partida}, " +
+				"Almacen: {CodigoAlmacen}, Ubicacion: {Ubicacion}, Stock: {Stock}",
+				dto.CodigoArticulo, dto.Lote ?? "(sin partida)", dto.CodigoAlmacen, dto.Ubicacion, resultadoSincronizacion.StockSage);
+		}
+		catch (Exception ex)
+		{
+			await transaction.RollbackAsync();
+			_logger.LogError(ex, 
+				"Error al validar sincronización de stock al agregar línea al palet - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {CodigoAlmacen}",
+				dto.CodigoArticulo, dto.Lote ?? "(sin partida)", dto.CodigoAlmacen);
+			return BadRequest($"Error al validar la sincronización del stock: {ex.Message}");
+		}
+
+		// 🔷 NUEVO: Validar alérgenos del artículo vs alérgenos del palet
+		var resultadoValidacionAlergenos = await _validacionAlergenosPaletService.ValidarAlergenosPaletAsync(
+			id, 
+			dto.CodigoArticulo, 
+			dto.CodigoEmpresa);
+
+		if (!resultadoValidacionAlergenos.EsValido)
+		{
+			await transaction.RollbackAsync();
+			_logger.LogWarning($"🚫 VALIDACIÓN ALÉRGENOS PALET - Bloqueado añadir artículo {dto.CodigoArticulo} al palet {palet.Codigo}. Motivo: {resultadoValidacionAlergenos.MotivoBloqueo}");
+			return BadRequest(resultadoValidacionAlergenos.MotivoBloqueo);
+		}
 
 		// === US-002: SOLO crear línea negativa si Android especifica PaletIdOrigen ===
 		// Si el usuario NO especifica PaletIdOrigen, significa que quiere material SUELTO
@@ -1328,6 +1394,58 @@ public class PaletController : ControllerBase
 					.ToListAsync();
 			}
 
+			// 🔷 VALIDACIÓN DE SINCRONIZACIÓN DE STOCK: Validar todas las líneas antes de crear traspasos
+			var erroresSincronizacion = new List<string>();
+
+			foreach (var linea in lineasParaTraspaso)
+			{
+				// Omitir líneas negativas (son compensatorias)
+				if (linea.Cantidad <= 0)
+					continue;
+
+				if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(linea.Lote) && !string.IsNullOrWhiteSpace(linea.CodigoAlmacen))
+				{
+					var codigoAlmacenLinea = (linea.CodigoAlmacen ?? string.Empty).Trim();
+					var ubicacionLinea = NormalizarUbicacion(linea.Ubicacion);
+
+					_logger.LogWarning("🔍 INICIANDO VALIDACIÓN DE SINCRONIZACIÓN al cerrar palet (Desktop) - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}, Ubicacion: {UbicacionOrigen}",
+						linea.CodigoArticulo, linea.Lote, codigoAlmacenLinea, ubicacionLinea);
+
+					var resultadoSincronizacion = await ValidarSincronizacionStockAsync(
+						linea.CodigoEmpresa,
+						linea.CodigoArticulo,
+						codigoAlmacenLinea,
+						ubicacionLinea,
+						linea.Lote,
+						dto.UsuarioId,
+						"CERRAR_PALET",
+						palet.Id,
+						palet.Codigo);
+
+					if (!resultadoSincronizacion.EsValido)
+					{
+						var mensajeError = $"Artículo: {linea.CodigoArticulo}, Partida: {linea.Lote}, Almacen: {codigoAlmacenLinea}, Ubicacion: {ubicacionLinea}, SAGE: {resultadoSincronizacion.StockSage:N6}, StorageControl: {resultadoSincronizacion.StockStorageControl:N6}";
+						erroresSincronizacion.Add(mensajeError);
+						
+						_logger.LogWarning("🚫 CerrarPalet (Desktop) BLOQUEADO: Stock no sincronizado entre SAGE y StorageControl - {MensajeError}",
+							mensajeError);
+					}
+				}
+			}
+
+			// Si hay errores de sincronización, no crear traspasos ni cerrar el palet
+			if (erroresSincronizacion.Any())
+			{
+				await transaction.RollbackAsync();
+				var mensajeCompleto = "No se puede cerrar el palet. Stock no sincronizado entre SAGE y StorageControl en las siguientes líneas:\n\n" +
+					string.Join("\n", erroresSincronizacion);
+				
+				_logger.LogWarning("🚫 CerrarPalet (Desktop) BLOQUEADO: {CantidadErrores} líneas con stock desincronizado. El palet permanecerá abierto.",
+					erroresSincronizacion.Count);
+				
+				return BadRequest(mensajeCompleto);
+			}
+
 			var traspasosCreados = new List<Guid>();
 
 			// Usar OrdenTrabajoId del palet si existe, sino usar el comentario del DTO
@@ -1567,6 +1685,23 @@ public class PaletController : ControllerBase
 		if (string.Equals(palet.Estado, "Abierto", StringComparison.OrdinalIgnoreCase))
 			return BadRequest("El palet ya está abierto.");
 
+		// 🔷 VALIDACIÓN: Verificar si hay traspasos pendientes (no completados)
+		var traspasosPendientes = await _auroraSgaContext.Traspasos
+			.Where(t => t.PaletId == id && t.CodigoEstado != "COMPLETADO")
+			.ToListAsync();
+
+		if (traspasosPendientes.Any())
+		{
+			var estadosPendientes = traspasosPendientes
+				.Select(t => t.CodigoEstado)
+				.Distinct()
+				.ToList();
+			
+			var mensajeEstados = string.Join(", ", estadosPendientes);
+			return BadRequest($"No se puede reabrir el palet porque tiene {traspasosPendientes.Count} traspaso(s) pendiente(s) de completar (estados: {mensajeEstados}). Debe finalizar todos los traspasos antes de reabrir el palet.");
+		}
+
+		// Si no hay traspasos pendientes, proceder a reabrir el palet
 		palet.Estado = "Abierto";
 		palet.FechaApertura = DateTime.Now;
 		palet.UsuarioAperturaId = usuarioId;
@@ -1582,33 +1717,10 @@ public class PaletController : ControllerBase
 			Detalle = "Palet reabierto por el usuario: " + usuarioId
 		});
 
-		// Cancela traspaso pendiente si lo hay
-		var traspaso = await _auroraSgaContext.Traspasos
-			.Where(t => t.PaletId == id && t.CodigoEstado == "PENDIENTE")
-			.FirstOrDefaultAsync();
-
-		if (traspaso != null)
-		{
-			traspaso.CodigoEstado = "CANCELADO";
-			traspaso.FechaFinalizacion = DateTime.Now;
-			traspaso.UsuarioFinalizacionId = usuarioId;
-			traspaso.UbicacionDestino = "N/A";
-			_auroraSgaContext.Traspasos.Update(traspaso);
-
-			_auroraSgaContext.LogPalet.Add(new LogPalet
-			{
-				PaletId = palet.Id,
-				Fecha = DateTime.Now,
-				IdUsuario = usuarioId,
-				Accion = "CancelarTraspaso",
-				Detalle = $"Traspaso {traspaso.Id} cancelado al reabrir el palet"
-			});
-		}
-
 		_auroraSgaContext.Palets.Update(palet);
 		await _auroraSgaContext.SaveChangesAsync();
 
-		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente. Traspaso pendiente cancelado." });
+		return Ok(new { message = $"Palet {palet.Codigo} reabierto correctamente." });
 	}
 
 	#endregion
@@ -1858,6 +1970,58 @@ public class PaletController : ControllerBase
 		var lineasTemporales = await _auroraSgaContext.TempPaletLineas
 			.Where(l => l.PaletId == id && l.Procesada == false)
 			.ToListAsync();
+
+		// 🔷 VALIDACIÓN DE SINCRONIZACIÓN DE STOCK: Validar todas las líneas antes de cerrar el palet y crear traspasos
+		var erroresSincronizacion = new List<string>();
+
+		foreach (var linea in lineasTemporales)
+		{
+			// Omitir líneas negativas (son compensatorias)
+			if (linea.Cantidad <= 0)
+				continue;
+
+			if (!string.IsNullOrWhiteSpace(linea.CodigoArticulo) && !string.IsNullOrWhiteSpace(linea.Lote) && !string.IsNullOrWhiteSpace(linea.CodigoAlmacen))
+			{
+				var codigoAlmacenLinea = (linea.CodigoAlmacen ?? string.Empty).Trim();
+				var ubicacionLinea = NormalizarUbicacion(linea.Ubicacion);
+
+				_logger.LogWarning("🔍 INICIANDO VALIDACIÓN DE SINCRONIZACIÓN al cerrar palet - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}, Ubicacion: {UbicacionOrigen}",
+					linea.CodigoArticulo, linea.Lote, codigoAlmacenLinea, ubicacionLinea);
+
+				var resultadoSincronizacion = await ValidarSincronizacionStockAsync(
+					linea.CodigoEmpresa,
+					linea.CodigoArticulo,
+					codigoAlmacenLinea,
+					ubicacionLinea,
+					linea.Lote,
+					dto.UsuarioId,
+					"CERRAR_PALET_MOBILITY",
+					palet.Id,
+					palet.Codigo);
+
+				if (!resultadoSincronizacion.EsValido)
+				{
+					var mensajeError = $"Artículo: {linea.CodigoArticulo}, Partida: {linea.Lote}, Almacen: {codigoAlmacenLinea}, Ubicacion: {ubicacionLinea}, SAGE: {resultadoSincronizacion.StockSage:N6}, StorageControl: {resultadoSincronizacion.StockStorageControl:N6}";
+					erroresSincronizacion.Add(mensajeError);
+					
+					_logger.LogWarning("🚫 CerrarPaletMobility BLOQUEADO: Stock no sincronizado entre SAGE y StorageControl - {MensajeError}",
+						mensajeError);
+				}
+			}
+		}
+
+		// Si hay errores de sincronización, no cerrar el palet ni crear traspasos
+		if (erroresSincronizacion.Any())
+		{
+			await transaction.RollbackAsync();
+			var mensajeCompleto = "No se puede cerrar el palet. Stock no sincronizado entre SAGE y StorageControl en las siguientes líneas:\n\n" +
+				string.Join("\n", erroresSincronizacion);
+			
+			_logger.LogWarning("🚫 CerrarPaletMobility BLOQUEADO: {CantidadErrores} líneas con stock desincronizado. El palet permanecerá abierto.",
+				erroresSincronizacion.Count);
+			
+			return BadRequest(mensajeCompleto);
+		}
 
 		// Cierra el palet
 		palet.Estado = "Cerrado";
@@ -3169,6 +3333,252 @@ public class RelanzarTraspasoDto
 			}
 		}
 		return null;
+	}
+
+	/// <summary>
+	/// Registra un bloqueo de sincronización de stock y notifica a administradores
+	/// </summary>
+	private async Task RegistrarBloqueoSincronizacionAsync(
+		short codigoEmpresa,
+		string codigoArticulo,
+		string partida,
+		string almacenOrigen,
+		string ubicacionOrigen,
+		decimal stockSage,
+		decimal stockStorageControl,
+		int usuarioId,
+		string tipoOperacion,
+		Guid? paletId = null,
+		string? codigoPalet = null)
+	{
+		// Usar un scope independiente para asegurar que el guardado persista
+		// incluso si la transacción principal hace rollback
+		using var scope = _serviceProvider.CreateScope();
+		var dbContext = scope.ServiceProvider.GetRequiredService<AuroraSgaDbContext>();
+		
+		try
+		{
+			// Registrar en la tabla
+			var bloqueo = new BloqueoSincronizacionStock
+			{
+				CodigoEmpresa = codigoEmpresa,
+				CodigoArticulo = codigoArticulo,
+				Partida = partida,
+				CodigoAlmacen = almacenOrigen,
+				Ubicacion = ubicacionOrigen,
+				StockSage = stockSage,
+				StockStorageControl = stockStorageControl,
+				Diferencia = Math.Abs(stockSage - stockStorageControl),
+				FechaBloqueo = DateTime.Now,
+				UsuarioId = usuarioId,
+				TipoOperacion = tipoOperacion,
+				PaletId = paletId,
+				CodigoPalet = codigoPalet,
+				MensajeError = $"Stock no sincronizado: SAGE={stockSage:N6}, StorageControl={stockStorageControl:N6}",
+				Notificado = false
+			};
+
+			dbContext.BloqueosSincronizacionStock.Add(bloqueo);
+			await dbContext.SaveChangesAsync();
+			
+			_logger.LogInformation("✅ Bloqueo de sincronización registrado en BD - Id: {BloqueoId}, Artículo: {CodigoArticulo}, Partida: {Partida}",
+				bloqueo.Id, codigoArticulo, partida ?? "(sin partida)");
+
+			// Notificar a administradores (IdRol == 3)
+			var adminIds = await dbContext.Usuarios
+				.Where(u => u.IdRol == 3)
+				.Select(u => u.IdUsuario)
+				.ToListAsync();
+
+			if (adminIds.Any())
+			{
+				var mensaje = $"Bloqueo de sincronización detectado:\n" +
+					$"Artículo: {codigoArticulo}\n" +
+					$"Partida: {partida ?? "(sin partida)"}\n" +
+					$"Almacén: {almacenOrigen}\n" +
+					$"Ubicación: {ubicacionOrigen ?? "(sin ubicación)"}\n" +
+					$"SAGE: {stockSage:N6}\n" +
+					$"StorageControl: {stockStorageControl:N6}\n" +
+					$"Operación: {tipoOperacion}";
+
+				if (!string.IsNullOrWhiteSpace(codigoPalet))
+				{
+					mensaje += $"\nPalet: {codigoPalet}";
+				}
+
+				// Obtener servicio de notificaciones desde el ServiceProvider
+				var notificacionesUnificadas = scope.ServiceProvider.GetRequiredService<INotificacionesUnificadasService>();
+
+				foreach (var adminId in adminIds)
+				{
+					try
+					{
+						await notificacionesUnificadas.CrearYEnviarNotificacionUsuarioAsync(
+							adminId,
+							"STOCK_SINCRONIZACION",
+							"Bloqueo de Sincronización de Stock",
+							mensaje,
+							paletId,
+							null,
+							"BLOQUEADO",
+							"error");
+
+						_logger.LogInformation("Notificación enviada a administrador {AdminId} sobre bloqueo de sincronización - Artículo: {CodigoArticulo}, Partida: {Partida}",
+							adminId, codigoArticulo, partida ?? "(sin partida)");
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, "Error al notificar administrador {AdminId} sobre bloqueo de sincronización", adminId);
+					}
+				}
+
+				// Marcar como notificado
+				bloqueo.Notificado = true;
+				await dbContext.SaveChangesAsync();
+				
+				_logger.LogInformation("✅ Bloqueo de sincronización marcado como notificado - Id: {BloqueoId}", bloqueo.Id);
+
+				// Notificar también por Teams usando las mismas reglas que traspasos
+				try
+				{
+					var notificacionesTeams = scope.ServiceProvider.GetRequiredService<INotificacionesTeamsService>();
+					var sageContext = scope.ServiceProvider.GetRequiredService<SageDbContext>();
+					
+					await notificacionesTeams.InsertarNotificacionBloqueoSincronizacionAsync(
+						sageContext,
+						codigoEmpresa,
+						codigoArticulo,
+						partida,
+						almacenOrigen,
+						ubicacionOrigen,
+						stockSage,
+						stockStorageControl,
+						tipoOperacion,
+						codigoPalet);
+					
+					_logger.LogInformation("Notificación Teams enviada para bloqueo de sincronización - Artículo: {CodigoArticulo}, Almacén: {AlmacenOrigen}", 
+						codigoArticulo, almacenOrigen);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Error al enviar notificación Teams para bloqueo de sincronización - Artículo: {CodigoArticulo}", codigoArticulo);
+					// No lanzar excepción para no interrumpir el flujo principal
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			// Log detallado del error para diagnóstico
+			_logger.LogError(ex, "❌ Error al registrar bloqueo de sincronización - Artículo: {CodigoArticulo}, Partida: {Partida}, TipoOperacion: {TipoOperacion}, Error: {Error}",
+				codigoArticulo, partida ?? "(sin partida)", tipoOperacion, ex.Message);
+			
+			// Si es un error de tabla no encontrada, loguear específicamente
+			if (ex.Message.Contains("Invalid object name") || ex.Message.Contains("does not exist"))
+			{
+				_logger.LogError("⚠️ La tabla BloqueosSincronizacionStock no existe en la base de datos. Ejecuta el script SQL para crearla.");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Valida la sincronización de stock entre SAGE y StorageControl
+	/// </summary>
+	private async Task<(bool EsValido, decimal StockSage, decimal StockStorageControl, string MensajeError)> 
+		ValidarSincronizacionStockAsync(
+			short codigoEmpresa,
+			string codigoArticulo,
+			string almacenOrigen,
+			string ubicacionOrigen,
+			string partida,
+			int usuarioId,
+			string tipoOperacion,
+			Guid? paletId = null,
+			string? codigoPalet = null)
+	{
+		try
+		{
+			// Obtener el ejercicio actual
+			var ejercicio = await _sageContext.Periodos
+				.Where(p => p.CodigoEmpresa == codigoEmpresa && p.Fechainicio <= DateTime.Now)
+				.OrderByDescending(p => p.Fechainicio)
+				.Select(p => p.Ejercicio)
+				.FirstOrDefaultAsync();
+
+			if (ejercicio == 0)
+			{
+				return (false, 0m, 0m, "No se encontró ejercicio válido para validación de sincronización");
+			}
+
+			// Consulta SAGE (AURORA.dbo.AcumuladoStock) - Periodo 99
+			var stockSage = await _sageContext.Database
+				.SqlQueryRaw<decimal?>(
+					@"SELECT SUM(UnidadSaldo) AS Value
+                      FROM AURORA.dbo.AcumuladoStock 
+                      WHERE Ejercicio = (SELECT TOP 1 Ejercicio FROM Aurora.dbo.Periodos 
+                                         WHERE CodigoEmpresa = {0} AND Fechainicio < GETDATE() 
+                                         ORDER BY fechainicio DESC) 
+                        AND Periodo = 99
+                        AND CodigoArticulo = {1} 
+                        AND CodigoAlmacen = {2} 
+                        AND Partida = {3} 
+                        AND CodigoEmpresa = {0}",
+					codigoEmpresa,
+					codigoArticulo,
+					almacenOrigen,
+					partida ?? (object)DBNull.Value)
+				.FirstOrDefaultAsync();
+
+			// Consulta StorageControl (StorageControl.dbo.AcumuladoStockUbicacion)
+			// Sumar TODAS las ubicaciones del almacén para comparar con SAGE (que no tiene ubicación)
+			var stockStorageControl = await _storageContext.Database
+				.SqlQueryRaw<decimal?>(
+					@"SELECT SUM(UnidadSaldo) AS Value
+                      FROM StorageControl.dbo.AcumuladoStockUbicacion 
+                      WHERE Ejercicio = (SELECT TOP 1 Ejercicio FROM Aurora.dbo.Periodos 
+                                         WHERE CodigoEmpresa = {0} AND Fechainicio < GETDATE() 
+                                         ORDER BY fechainicio DESC)  
+                        AND CodigoArticulo = {1} 
+                        AND CodigoAlmacen = {2} 
+                        AND CodigoEmpresa = {0} 
+                        AND Partida = {3}",
+					codigoEmpresa,
+					codigoArticulo,
+					almacenOrigen,
+					partida ?? (object)DBNull.Value)
+				.FirstOrDefaultAsync();
+
+			var stockSageValue = stockSage ?? 0m;
+			var stockStorageControlValue = stockStorageControl ?? 0m;
+
+			// Comparación 1 a 1 (sin tolerancia)
+			if (stockSageValue != stockStorageControlValue)
+			{
+				// Registrar bloqueo y notificar a administradores
+				await RegistrarBloqueoSincronizacionAsync(
+					codigoEmpresa,
+					codigoArticulo,
+					partida,
+					almacenOrigen,
+					ubicacionOrigen,
+					stockSageValue,
+					stockStorageControlValue,
+					usuarioId,
+					tipoOperacion,
+					paletId,
+					codigoPalet);
+
+				return (false, stockSageValue, stockStorageControlValue, 
+					$"Stock no sincronizado: SAGE={stockSageValue:N6}, StorageControl={stockStorageControlValue:N6}");
+			}
+
+			return (true, stockSageValue, stockStorageControlValue, null);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error al validar sincronización de stock - Artículo: {CodigoArticulo}, Partida: {Partida}, Almacen: {AlmacenOrigen}",
+				codigoArticulo, partida ?? "(sin partida)", almacenOrigen);
+			return (false, 0m, 0m, $"Error al validar sincronización: {ex.Message}");
+		}
 	}
 
 }

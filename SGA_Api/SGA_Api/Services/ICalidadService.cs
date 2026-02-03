@@ -80,5 +80,12 @@ namespace SGA_Api.Services
             string? ubicacionOrigen,
             string almacenDestino,
             string? ubicacionDestino);
+
+        /// <summary>
+        /// Obtiene estadísticas de bloqueos de calidad
+        /// </summary>
+        /// <param name="codigoEmpresa">Código de empresa</param>
+        /// <returns>Estadísticas de bloqueos</returns>
+        Task<EstadisticasCalidadDto> ObtenerEstadisticasAsync(short codigoEmpresa);
     }
 }
