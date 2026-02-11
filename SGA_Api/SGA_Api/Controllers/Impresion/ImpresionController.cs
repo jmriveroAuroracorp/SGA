@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Data;
 using SGA_Api.Models.Impresion;
@@ -74,7 +74,10 @@ namespace SGA_Api.Controllers.Impresion
 					Altura = dto.Altura,
 					Estanteria = dto.Estanteria,
 					Pasillo = dto.Pasillo,
-					Posicion = dto.Posicion
+					Posicion = dto.Posicion,
+
+					// Almacén destino (órdenes de trabajo / traspasos)
+					CodigoAlmacenDestino = dto.CodigoAlmacenDestino
 				};
 
 				_context.LogImpresiones.Add(log);

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Alergenos;
 using SGA_Api.Models.Calidad;
 using SGA_Api.Models.Impresion;
@@ -141,6 +141,7 @@ namespace SGA_Api.Data
 				ent.Property(e => e.Estanteria).HasColumnName("estanteria");
 				ent.Property(e => e.Pasillo).HasColumnName("pasillo");
 				ent.Property(e => e.Posicion).HasColumnName("posicion");
+				ent.Property(e => e.CodigoAlmacenDestino).HasColumnName("codigoAlmacenDestino");
 			});
 
 			//Tabla Usuarios. Configuración por defecto
@@ -474,6 +475,7 @@ namespace SGA_Api.Data
                 ent.Property(c => c.TipoCambio).HasColumnName("TipoCambio").HasMaxLength(20);
                 ent.Property(c => c.Comentario).HasColumnName("Comentario").HasMaxLength(500).IsRequired(false);
                 ent.Property(c => c.Estado).HasColumnName("Estado").HasMaxLength(20);
+                ent.Property(c => c.OperarioAsignadoId).HasColumnName("OperarioAsignadoId").IsRequired(false);
             });
 
             modelBuilder.Entity<InventarioAlmacenes>(ent =>

@@ -1511,18 +1511,33 @@ namespace SGA_Api.Services
 		{
 			try
 			{
-				// Obtener traspasos que pueden cambiar de estado
-				// - PENDIENTE_ERP: Puede cambiar a COMPLETADO o ERROR_ERP
-				// - PENDIENTE: Puede cambiar a PENDIENTE_ERP, COMPLETADO o ERROR_ERP
-				// - COMPLETADO: Estado final exitoso (se incluye para detectar la transici�n)
-				// - ERROR_ERP: Estado final con error (se incluye para detectar la transici�n)
-				// - Excluir solo CANCELADO (estado final que no interesa notificar)
-				var traspasosActivos = await dbContext.Traspasos
+                // Obtener traspasos que pueden cambiar de estado
+                // - PENDIENTE_ERP: Puede cambiar a COMPLETADO o ERROR_ERP
+                // - PENDIENTE: Puede cambiar a PENDIENTE_ERP, COMPLETADO o ERROR_ERP
+                // - COMPLETADO: Estado final exitoso (se incluye para detectar la transici�n)
+                // - ERROR_ERP: Estado final con error (se incluye para detectar la transici�n)
+                // - Excluir solo CANCELADO (estado final que no interesa notificar)
+                /*var traspasosActivos = await dbContext.Traspasos
 					.Where(t => t.CodigoEstado != "CANCELADO" && 
 							   t.UsuarioInicioId > 0 &&
 							   (t.TipoTraspaso == "ARTICULO" || t.TipoTraspaso == "PALET")) // Solo traspasos v�lidos
 					.Select(t => new { t.Id, t.CodigoEstado, t.TipoTraspaso, t.UsuarioInicioId, t.CodigoPalet, t.CodigoArticulo })
-					.ToListAsync();
+					.ToListAsync();*/
+
+                var hace5Minutos = DateTime.Now.AddMinutes(-5);
+
+                var traspasosActivos = await dbContext.Traspasos
+                    .Where(t => t.CodigoEstado != "CANCELADO" &&
+                               t.UsuarioInicioId > 0 &&
+                               (t.TipoTraspaso == "ARTICULO" || t.TipoTraspaso == "PALET") &&
+                               // Incluir traspasos en estados transitorios (siempre pueden cambiar)
+                               ((t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "PENDIENTE_ERP") ||
+                                // O traspasos COMPLETADO/ERROR_ERP muy recientes (últimos 5 minutos) para detectar transiciones
+                                ((t.CodigoEstado == "COMPLETADO" || t.CodigoEstado == "ERROR_ERP") &&
+                                 t.FechaFinalizacion.HasValue && t.FechaFinalizacion.Value >= hace5Minutos)))
+                    .Select(t => new { t.Id, t.CodigoEstado, t.TipoTraspaso, t.UsuarioInicioId, t.CodigoPalet, t.CodigoArticulo })
+                    .Take(2000) // Límite máximo para evitar sobrecarga
+                    .ToListAsync();
 
                 // Solo log cuando hay muchos traspasos activos (para evitar spam)
                 if (traspasosActivos.Count > 10)

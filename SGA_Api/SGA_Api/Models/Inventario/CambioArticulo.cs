@@ -17,6 +17,12 @@ namespace SGA_Api.Models.Inventario
         [Required]
         public int UsuarioId { get; set; }
 
+        /// <summary>
+        /// Operario asignado para ejecutar la conversión/ampliación.
+        /// Puede ser null cuando el cambio se realiza directamente desde escritorio.
+        /// </summary>
+        public int? OperarioAsignadoId { get; set; }
+
         [Required]
         public DateTime Fecha { get; set; } = DateTime.Now;
 

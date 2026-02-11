@@ -803,9 +803,14 @@ namespace SGA_Api.Services
 				.ToList();
 		}
 
-		// Excluir almacén 004 (camión de transporte entre almacenes)
+		// Excluir almacenes 004 y 005 (camiones de transporte entre almacenes)
 		stockArticulo = stockArticulo
-			.Where(s => !string.Equals(NormalizeAlmacen(s.CodigoAlmacen), "004", StringComparison.OrdinalIgnoreCase))
+			.Where(s =>
+			{
+				var alm = NormalizeAlmacen(s.CodigoAlmacen);
+				return !string.Equals(alm, "004", StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(alm, "005", StringComparison.OrdinalIgnoreCase);
+			})
 			.ToList();
 
 		var ubicacionesPulmon = await ObtenerUbicacionesPulmonAsync(
@@ -1900,9 +1905,14 @@ namespace SGA_Api.Services
 					.ToList();
 			}
 
-			// Excluir almacén 004 (camión de transporte entre almacenes)
+			// Excluir almacenes 004 y 005 (camiones de transporte entre almacenes)
 			stockDisponible = stockDisponible
-				.Where(s => !string.Equals(NormalizeAlmacen(s.CodigoAlmacen), "004", StringComparison.OrdinalIgnoreCase))
+				.Where(s =>
+				{
+					var alm = NormalizeAlmacen(s.CodigoAlmacen);
+					return !string.Equals(alm, "004", StringComparison.OrdinalIgnoreCase)
+						&& !string.Equals(alm, "005", StringComparison.OrdinalIgnoreCase);
+				})
 				.ToList();
 
 			var ubicacionesPulmon = await ObtenerUbicacionesPulmonAsync(
@@ -2360,9 +2370,14 @@ namespace SGA_Api.Services
                     .ToList();
             }
 
-            // Excluir almacén 004 (camión de transporte entre almacenes)
+            // Excluir almacenes 004 y 005 (camiones de transporte entre almacenes)
             stockDisponible = stockDisponible
-                .Where(s => !string.Equals(NormalizeAlmacen(s.CodigoAlmacen), "004", StringComparison.OrdinalIgnoreCase))
+                .Where(s =>
+                {
+                    var alm = NormalizeAlmacen(s.CodigoAlmacen);
+                    return !string.Equals(alm, "004", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(alm, "005", StringComparison.OrdinalIgnoreCase);
+                })
                 .ToList();
 
             var ubicacionesPulmon = await ObtenerUbicacionesPulmonAsync(
@@ -2976,7 +2991,8 @@ namespace SGA_Api.Services
 					s.CodigoEmpresa == orden.CodigoEmpresa &&
 					s.CodigoArticulo == artLinea &&
 					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) == almLinea &&
-					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) != "004" && // Excluir almacén 004 (camión)
+					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) != "004" && // Excluir almacenes 004 y 005 (camiones)
+					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) != "005" &&
 					((s.Ubicacion ?? string.Empty).Trim().ToUpper()) == ubiLinea &&
 					((s.Partida ?? string.Empty).Trim().ToUpper()) == parLinea);
 

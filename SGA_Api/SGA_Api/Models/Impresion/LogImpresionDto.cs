@@ -1,4 +1,4 @@
-﻿namespace SGA_Api.Models.Impresion
+namespace SGA_Api.Models.Impresion
 {
 	public class LogImpresionDto
 	{
@@ -26,5 +26,8 @@
 		public int? Estanteria { get; set; }
 		public int? Pasillo { get; set; }
 		public int? Posicion { get; set; }
+		
+		// Campo de almacén destino (órdenes de traspaso)
+		public string? CodigoAlmacenDestino { get; set; }
 	}
 }

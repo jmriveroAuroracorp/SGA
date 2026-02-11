@@ -970,8 +970,9 @@ namespace SGA_Api.Controllers.Stock
         }
 
         // 🔷 NUEVO: Obtener validación de sincronización desde diccionario
-        var keySincronizacion = (item.CodigoArticulo, item.Partida ?? "", item.CodigoAlmacen);
-        var (tieneDesincronizacion, stockSage, stockStorageControl) = validacionesSincronizacion.GetValueOrDefault(
+        //var keySincronizacion = (item.CodigoArticulo, item.Partida ?? "", item.CodigoAlmacen);
+                var keySincronizacion = (item.CodigoArticulo, (item.Partida ?? "").Trim().ToUpper(), item.CodigoAlmacen);
+                var (tieneDesincronizacion, stockSage, stockStorageControl) = validacionesSincronizacion.GetValueOrDefault(
             keySincronizacion, 
             (false, 0m, 0m));
 

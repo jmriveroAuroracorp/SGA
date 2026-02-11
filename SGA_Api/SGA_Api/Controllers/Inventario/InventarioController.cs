@@ -3905,6 +3905,552 @@ namespace SGA_Api.Controllers.Inventario
         }
 
 		/// <summary>
+		/// POST /api/Inventario/planificar-cambio
+		/// Crea un registro en CambioArticulo asignado a un operario, pero sin ejecutar aún los ajustes de inventario.
+		/// Este flujo está pensado para que el backoffice planifique y el operario ejecute desde movilidad.
+		/// </summary>
+		[HttpPost("planificar-cambio")]
+		public async Task<IActionResult> PlanificarCambio([FromBody] PlanificarCambioArticuloDto dto)
+		{
+			try
+			{
+				// Validar que se especifique cambio de código o fecha
+				bool cambioCodigo = !string.IsNullOrWhiteSpace(dto.CodigoArticuloDestino);
+				bool cambioFecha = dto.FechaCaducidadDestino.HasValue;
+
+				if (!cambioCodigo && !cambioFecha)
+				{
+					return BadRequest("Debe especificarse un cambio de código o de fecha de caducidad");
+				}
+
+				if (cambioCodigo && cambioFecha)
+				{
+					return BadRequest("No se puede cambiar código y fecha simultáneamente");
+				}
+
+				// Validar existencia del artículo origen
+				var articuloOrigen = await _sageDbContext.Articulos
+					.FirstOrDefaultAsync(a => a.CodigoEmpresa == dto.CodigoEmpresa &&
+											   a.CodigoArticulo == dto.CodigoArticuloOrigen);
+
+				if (articuloOrigen == null)
+				{
+					return NotFound($"Artículo origen no encontrado: {dto.CodigoArticuloOrigen}");
+				}
+
+				// Si es cambio de código, validar existencia del artículo destino
+				if (cambioCodigo)
+				{
+					var articuloDestino = await _sageDbContext.Articulos
+						.FirstOrDefaultAsync(a => a.CodigoEmpresa == dto.CodigoEmpresa &&
+												   a.CodigoArticulo == dto.CodigoArticuloDestino);
+
+					if (articuloDestino == null)
+					{
+						return NotFound($"Artículo destino no encontrado: {dto.CodigoArticuloDestino}");
+					}
+				}
+
+				// Normalizar fechas
+				DateTime? fechaCaducidadOrigen = dto.FechaCaducidadOrigen?.Date;
+				DateTime? fechaCaducidadDestino = dto.FechaCaducidadDestino?.Date;
+
+				var cambioArticulo = new CambioArticulo
+				{
+					IdCambioArticulo = Guid.NewGuid(),
+					CodigoEmpresa = dto.CodigoEmpresa,
+					UsuarioId = dto.UsuarioId,
+					Fecha = DateTime.Now,
+					CodigoArticuloOrigen = dto.CodigoArticuloOrigen,
+					CodigoAlmacen = dto.CodigoAlmacen,
+					Ubicacion = dto.Ubicacion,
+					PartidaOrigen = dto.Partida,
+					FechaCaducidadOrigen = fechaCaducidadOrigen,
+					Cantidad = dto.Cantidad,
+					PaletId = dto.PaletId,
+					CodigoArticuloDestino = cambioCodigo ? dto.CodigoArticuloDestino : null,
+					FechaCaducidadDestino = cambioFecha ? fechaCaducidadDestino : null,
+					PartidaDestino = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : null,
+					TipoCambio = cambioCodigo ? "CAMBIO_CODIGO" : "AMPLIACION",
+					Comentario = dto.Comentario,
+					Estado = "PENDIENTE",
+					OperarioAsignadoId = dto.OperarioAsignadoId
+				};
+
+				_context.CambioArticulo.Add(cambioArticulo);
+				await _context.SaveChangesAsync();
+
+				return Ok(new
+				{
+					cambioArticulo.IdCambioArticulo,
+					cambioArticulo.TipoCambio,
+					cambioArticulo.OperarioAsignadoId,
+					Mensaje = "Cambio de artículo planificado correctamente."
+				});
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Error al planificar cambio de artículo: CodigoOrigen={CodigoOrigen}", dto.CodigoArticuloOrigen);
+				return StatusCode(500, "Error interno al planificar el cambio de artículo");
+			}
+		}
+
+		/// <summary>
+		/// GET /api/Inventario/cambios-pendientes-operario/{operarioId}
+		/// Devuelve los cambios de artículo (CAMBIO_CODIGO / AMPLIACION) pendientes para un operario.
+		/// Opcionalmente se puede filtrar por empresa.
+		/// </summary>
+		[HttpGet("cambios-pendientes-operario/{operarioId}")]
+		public async Task<ActionResult<IEnumerable<CambioArticuloPendienteDto>>> GetCambiosPendientesOperario(
+			int operarioId,
+			[FromQuery] short? codigoEmpresa = null)
+		{
+			var query = _context.CambioArticulo
+				.AsNoTracking()
+				.Where(c => c.OperarioAsignadoId == operarioId && c.Estado == "PENDIENTE");
+
+			if (codigoEmpresa.HasValue)
+			{
+				query = query.Where(c => c.CodigoEmpresa == codigoEmpresa.Value);
+			}
+
+			var list = await query.OrderBy(c => c.Fecha).ToListAsync();
+
+			// 1. Primero permisos funcionales: conversión (23) / ampliación (24) según MRH_accesosOperariosSGA
+			var codigosPermiso = await _sageDbContext.AccesosOperarios
+				.Where(a => a.Operario == operarioId && a.CodigoEmpresa == 1)
+				.Select(a => a.MRH_CodigoAplicacion)
+				.ToListAsync();
+
+			bool puedeConversion = codigosPermiso.Contains((short)23);
+			bool puedeAmpliacion = codigosPermiso.Contains((short)24);
+
+			list = list
+				.Where(c =>
+					(c.TipoCambio == "CAMBIO_CODIGO" && puedeConversion) ||
+					(c.TipoCambio == "AMPLIACION" && puedeAmpliacion))
+				.ToList();
+
+			// 2. Luego permisos de almacén: solo almacenes a los que el operario tiene acceso (MRH_OperariosAlmacenes)
+			var almacenesOperario = await _sageDbContext.OperariosAlmacenes
+				.Where(oa => oa.Operario == operarioId)
+				.Select(oa => new { oa.CodigoEmpresa, CodigoAlmacen = oa.CodigoAlmacen ?? "" })
+				.ToListAsync();
+
+			list = list
+				.Where(c => almacenesOperario.Any(a =>
+					a.CodigoEmpresa == c.CodigoEmpresa &&
+					a.CodigoAlmacen == (c.CodigoAlmacen ?? "")))
+				.ToList();
+
+			// Códigos de palé para los PaletId de la lista
+			var paletIds = list.Where(c => c.PaletId.HasValue).Select(c => c.PaletId!.Value).Distinct().ToList();
+			var codigoPaletPorId = new Dictionary<Guid, string>();
+			if (paletIds.Count > 0)
+			{
+				var palets = await _context.Palets
+					.AsNoTracking()
+					.Where(p => paletIds.Contains(p.Id))
+					.Select(p => new { p.Id, p.Codigo })
+					.ToListAsync();
+				foreach (var p in palets)
+					codigoPaletPorId[p.Id] = p.Codigo ?? "";
+			}
+
+			var result = list.Select(c => new CambioArticuloPendienteDto
+			{
+				IdCambioArticulo = c.IdCambioArticulo,
+				CodigoEmpresa = c.CodigoEmpresa,
+				CodigoArticuloOrigen = c.CodigoArticuloOrigen ?? string.Empty,
+				CodigoArticuloDestino = c.CodigoArticuloDestino,
+				CodigoAlmacen = c.CodigoAlmacen ?? string.Empty,
+				Ubicacion = c.Ubicacion,
+				PartidaOrigen = c.PartidaOrigen,
+				PartidaDestino = c.PartidaDestino,
+				FechaCaducidadOrigen = c.FechaCaducidadOrigen,
+				FechaCaducidadDestino = c.FechaCaducidadDestino,
+				Cantidad = c.Cantidad,
+				PaletId = c.PaletId,
+				CodigoPalet = c.PaletId.HasValue && codigoPaletPorId.TryGetValue(c.PaletId.Value, out var codigo) ? codigo : null,
+				TipoCambio = c.TipoCambio ?? string.Empty,
+				Estado = c.Estado ?? string.Empty,
+				Comentario = c.Comentario,
+				OperarioAsignadoId = c.OperarioAsignadoId,
+				Fecha = c.Fecha
+			}).ToList();
+
+			return Ok(result);
+		}
+
+		/// <summary>
+		/// POST /api/Inventario/cambios/{idCambioArticulo}/ejecutar
+		/// Ejecuta un cambio de artículo previamente planificado, generando los ajustes de inventario correspondientes.
+		/// </summary>
+		[HttpPost("cambios/{idCambioArticulo}/ejecutar")]
+		public async Task<IActionResult> EjecutarCambioArticulo(Guid idCambioArticulo, [FromBody] EjecutarCambioArticuloDto dto)
+		{
+			using var transaction = await _context.Database.BeginTransactionAsync();
+			try
+			{
+				// Cargar el cambio planificado
+				var cambio = await _context.CambioArticulo
+					.FirstOrDefaultAsync(c => c.IdCambioArticulo == idCambioArticulo);
+
+				if (cambio == null)
+				{
+					return NotFound($"CambioArticulo no encontrado: {idCambioArticulo}");
+				}
+
+				if (!string.Equals(cambio.Estado, "PENDIENTE", StringComparison.OrdinalIgnoreCase))
+				{
+					return BadRequest($"El cambio no está en estado PENDIENTE (estado actual: {cambio.Estado}).");
+				}
+
+				// Determinar tipo de cambio a partir de los datos almacenados
+				bool cambioCodigo = !string.IsNullOrWhiteSpace(cambio.CodigoArticuloDestino);
+				bool cambioFecha = cambio.FechaCaducidadDestino.HasValue;
+
+				if (!cambioCodigo && !cambioFecha)
+				{
+					return BadRequest("El cambio planificado no contiene ni cambio de código ni de fecha de caducidad.");
+				}
+
+				if (cambioCodigo && cambioFecha)
+				{
+					return BadRequest("El cambio planificado contiene cambio de código y de fecha simultáneamente, lo cual no es válido.");
+				}
+
+				// Validar existencia del artículo origen
+				var articuloOrigen = await _sageDbContext.Articulos
+					.FirstOrDefaultAsync(a => a.CodigoEmpresa == cambio.CodigoEmpresa &&
+											   a.CodigoArticulo == cambio.CodigoArticuloOrigen);
+
+				if (articuloOrigen == null)
+				{
+					return NotFound($"Artículo origen no encontrado: {cambio.CodigoArticuloOrigen}");
+				}
+
+				// Si es cambio de código, validar existencia del artículo destino
+				if (cambioCodigo)
+				{
+					var articuloDestino = await _sageDbContext.Articulos
+						.FirstOrDefaultAsync(a => a.CodigoEmpresa == cambio.CodigoEmpresa &&
+												   a.CodigoArticulo == cambio.CodigoArticuloDestino);
+
+					if (articuloDestino == null)
+					{
+						return NotFound($"Artículo destino no encontrado: {cambio.CodigoArticuloDestino}");
+					}
+				}
+
+				// Obtener ejercicio actual
+				var ejercicio = await _sageDbContext.Periodos
+					.Where(p => p.CodigoEmpresa == cambio.CodigoEmpresa && p.Fechainicio <= DateTime.Now)
+					.OrderByDescending(p => p.Fechainicio)
+					.Select(p => p.Ejercicio)
+					.FirstOrDefaultAsync();
+
+				if (ejercicio == 0)
+				{
+					return BadRequest("Sin ejercicio válido");
+				}
+
+				// Validar stock disponible del artículo origen
+				decimal stockDisponible = 0;
+
+				if (cambio.PaletId.HasValue)
+				{
+					// Stock del palet específico
+					stockDisponible = await _context.PaletLineas
+						.Where(pl => pl.PaletId == cambio.PaletId.Value &&
+									 pl.CodigoEmpresa == cambio.CodigoEmpresa &&
+									 pl.CodigoArticulo == cambio.CodigoArticuloOrigen &&
+									 pl.CodigoAlmacen == cambio.CodigoAlmacen &&
+									 (pl.Ubicacion == cambio.Ubicacion || (pl.Ubicacion == null && cambio.Ubicacion == null)) &&
+									 (pl.Lote == cambio.PartidaOrigen || (pl.Lote == null && cambio.PartidaOrigen == null)) &&
+									 (pl.FechaCaducidad == cambio.FechaCaducidadOrigen || (pl.FechaCaducidad == null && cambio.FechaCaducidadOrigen == null)))
+						.SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+				}
+				else
+				{
+					// Stock suelto en la ubicación
+					var totalUbicacion = await _storageContext.AcumuladoStockUbicacion
+						.Where(s => s.CodigoEmpresa == cambio.CodigoEmpresa &&
+									s.Ejercicio == ejercicio &&
+									s.CodigoAlmacen == cambio.CodigoAlmacen &&
+									s.CodigoArticulo == cambio.CodigoArticuloOrigen &&
+									s.Ubicacion == cambio.Ubicacion &&
+									(s.Partida == cambio.PartidaOrigen || (s.Partida == null && cambio.PartidaOrigen == null)) &&
+									(s.FechaCaducidad == cambio.FechaCaducidadOrigen || (s.FechaCaducidad == null && cambio.FechaCaducidadOrigen == null)))
+						.SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
+
+					var paletizado = await _context.PaletLineas
+						.Where(pl => pl.CodigoEmpresa == cambio.CodigoEmpresa &&
+									 pl.CodigoAlmacen == cambio.CodigoAlmacen &&
+									 pl.Ubicacion == cambio.Ubicacion &&
+									 pl.CodigoArticulo == cambio.CodigoArticuloOrigen &&
+									 (pl.Lote == cambio.PartidaOrigen || (pl.Lote == null && cambio.PartidaOrigen == null)) &&
+									 (pl.FechaCaducidad == cambio.FechaCaducidadOrigen || (pl.FechaCaducidad == null && cambio.FechaCaducidadOrigen == null)))
+						.SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
+
+					stockDisponible = totalUbicacion - paletizado;
+				}
+
+				if (stockDisponible < cambio.Cantidad)
+				{
+					return BadRequest($"Stock insuficiente. Disponible: {stockDisponible:N2}, Solicitado: {cambio.Cantidad:N2}");
+				}
+
+				// Normalizar fechas para evitar problemas de conversión en SQL
+				DateTime? fechaCaducidadOrigen = cambio.FechaCaducidadOrigen?.Date;
+				DateTime? fechaCaducidadDestino = cambio.FechaCaducidadDestino?.Date;
+
+				// Obtener código de palet si existe
+				string? codigoPalet = null;
+				if (cambio.PaletId.HasValue)
+				{
+					try
+					{
+						codigoPalet = await _context.Palets
+							.Where(p => p.Id == cambio.PaletId.Value)
+							.Select(p => p.Codigo)
+							.FirstOrDefaultAsync();
+					}
+					catch { }
+				}
+
+				InventarioAjustes ajusteEntrada;
+				InventarioAjustes ajusteSalida;
+
+				// Si hay palet, crear primero la entrada (positivo) y luego la salida (negativo) con delay
+				// Esto asegura que el palet no quede vacío durante el procesamiento
+				if (cambio.PaletId.HasValue)
+				{
+					// PRIMERO: Crear ajuste positivo (entrada) del artículo destino
+					ajusteEntrada = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = cambioCodigo ? cambio.CodigoArticuloDestino! : cambio.CodigoArticuloOrigen,
+						CodigoUbicacion = cambio.Ubicacion ?? string.Empty,
+						Diferencia = cambio.Cantidad, // Positivo = entrada
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now,
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambio.IdCambioArticulo,
+						CodigoEmpresa = cambio.CodigoEmpresa,
+						CodigoAlmacen = cambio.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+						Partida = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(cambio.PartidaDestino) ? cambio.PartidaDestino : cambio.PartidaOrigen,
+						PaletId = cambio.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					_context.InventarioAjustes.Add(ajusteEntrada);
+					await _context.SaveChangesAsync(); // Guardar entrada primero
+
+					_logger.LogInformation("⏳ Ejecución de cambio de artículo con palet: Ajuste de entrada creado. Esperando 15 segundos antes de crear ajuste de salida.");
+
+					// Delay para asegurar que el ajuste de entrada se procese antes que el de salida
+					await Task.Delay(15000); // Delay real de 15 segundos
+
+					// SEGUNDO: Crear ajuste negativo (salida) del artículo origen
+					ajusteSalida = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = cambio.CodigoArticuloOrigen,
+						CodigoUbicacion = cambio.Ubicacion ?? string.Empty,
+						Diferencia = -cambio.Cantidad, // Negativo = salida
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now, // Fecha posterior por el delay
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambio.IdCambioArticulo,
+						CodigoEmpresa = cambio.CodigoEmpresa,
+						CodigoAlmacen = cambio.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = fechaCaducidadOrigen,
+						Partida = cambio.PartidaOrigen,
+						PaletId = cambio.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					_context.InventarioAjustes.Add(ajusteSalida);
+					_logger.LogInformation("✅ Ejecución de cambio de artículo con palet: Ajuste de salida creado después del delay.");
+				}
+				else
+				{
+					// Si NO hay palet, crear ambos ajustes normalmente (sin delay)
+					ajusteSalida = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = cambio.CodigoArticuloOrigen,
+						CodigoUbicacion = cambio.Ubicacion ?? string.Empty,
+						Diferencia = -cambio.Cantidad, // Negativo = salida
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now,
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambio.IdCambioArticulo,
+						CodigoEmpresa = cambio.CodigoEmpresa,
+						CodigoAlmacen = cambio.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = fechaCaducidadOrigen,
+						Partida = cambio.PartidaOrigen,
+						PaletId = cambio.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					ajusteEntrada = new InventarioAjustes
+					{
+						IdAjuste = Guid.NewGuid(),
+						IdInventario = null, // Ajuste sin inventario asociado
+						CodigoArticulo = cambioCodigo ? cambio.CodigoArticuloDestino! : cambio.CodigoArticuloOrigen,
+						CodigoUbicacion = cambio.Ubicacion ?? string.Empty,
+						Diferencia = cambio.Cantidad, // Positivo = entrada
+						UsuarioId = dto.UsuarioId,
+						Fecha = DateTime.Now,
+						IdConteo = Guid.Empty, // Seguir patrón: Guid.Empty cuando no es conteo
+						IdCambioArticulo = cambio.IdCambioArticulo,
+						CodigoEmpresa = cambio.CodigoEmpresa,
+						CodigoAlmacen = cambio.CodigoAlmacen,
+						Estado = "PENDIENTE_ERP",
+						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+						Partida = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(cambio.PartidaDestino) ? cambio.PartidaDestino : cambio.PartidaOrigen,
+						PaletId = cambio.PaletId,
+						CodigoPalet = codigoPalet,
+						ProcesadoPalet = false
+					};
+
+					_context.InventarioAjustes.Add(ajusteSalida);
+					_context.InventarioAjustes.Add(ajusteEntrada);
+				}
+
+				// Crear TempPaletLineas si hay palet (igual que en inventarios/conteos)
+				if (cambio.PaletId.HasValue)
+				{
+					// Obtener descripción del artículo origen desde Sage
+					string? descripcionArticuloOrigen = null;
+					try
+					{
+						descripcionArticuloOrigen = await _sageDbContext.Articulos
+							.Where(a => a.CodigoEmpresa == cambio.CodigoEmpresa &&
+										a.CodigoArticulo == cambio.CodigoArticuloOrigen)
+							.Select(a => a.DescripcionArticulo)
+							.FirstOrDefaultAsync();
+					}
+					catch
+					{
+						_logger.LogWarning("No se pudo obtener descripción del artículo origen {CodigoArticulo} para TempPaletLinea (ejecución)", cambio.CodigoArticuloOrigen);
+					}
+
+					// Obtener descripción del artículo destino (si es cambio de código)
+					string? descripcionArticuloDestino = null;
+					if (cambioCodigo && !string.IsNullOrWhiteSpace(cambio.CodigoArticuloDestino))
+					{
+						try
+						{
+							descripcionArticuloDestino = await _sageDbContext.Articulos
+								.Where(a => a.CodigoEmpresa == cambio.CodigoEmpresa &&
+											a.CodigoArticulo == cambio.CodigoArticuloDestino)
+								.Select(a => a.DescripcionArticulo)
+								.FirstOrDefaultAsync();
+						}
+						catch
+						{
+							_logger.LogWarning("No se pudo obtener descripción del artículo destino {CodigoArticulo} para TempPaletLinea (ejecución)", cambio.CodigoArticuloDestino);
+						}
+					}
+
+					// TempPaletLinea para ajuste de salida (negativo)
+					var tempPaletLineaSalida = new TempPaletLinea
+					{
+						Id = Guid.NewGuid(),
+						PaletId = cambio.PaletId.Value,
+						CodigoEmpresa = cambio.CodigoEmpresa,
+						CodigoArticulo = cambio.CodigoArticuloOrigen,
+						DescripcionArticulo = descripcionArticuloOrigen,
+						Cantidad = -cambio.Cantidad, // Negativo = salida
+						UnidadMedida = "UN",
+						Lote = cambio.PartidaOrigen,
+						FechaCaducidad = fechaCaducidadOrigen,
+						CodigoAlmacen = cambio.CodigoAlmacen,
+						Ubicacion = cambio.Ubicacion ?? string.Empty,
+						UsuarioId = dto.UsuarioId,
+						FechaAgregado = DateTime.Now,
+						Observaciones = $"Cambio de artículo (ejecución) - {cambio.TipoCambio}",
+						TraspasoId = null,
+						ConteoId = null,
+						InventarioId = null,
+						CambioArticuloId = cambio.IdCambioArticulo,
+						Procesada = false,
+						EsHeredada = false
+					};
+					_context.TempPaletLineas.Add(tempPaletLineaSalida);
+
+					// TempPaletLinea para ajuste de entrada (positivo)
+					var tempPaletLineaEntrada = new TempPaletLinea
+					{
+						Id = Guid.NewGuid(),
+						PaletId = cambio.PaletId.Value,
+						CodigoEmpresa = cambio.CodigoEmpresa,
+						CodigoArticulo = cambioCodigo ? cambio.CodigoArticuloDestino! : cambio.CodigoArticuloOrigen,
+						DescripcionArticulo = cambioCodigo ? descripcionArticuloDestino : descripcionArticuloOrigen,
+						Cantidad = cambio.Cantidad, // Positivo = entrada
+						UnidadMedida = "UN",
+						Lote = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(cambio.PartidaDestino) ? cambio.PartidaDestino : cambio.PartidaOrigen,
+						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
+						CodigoAlmacen = cambio.CodigoAlmacen,
+						Ubicacion = cambio.Ubicacion ?? string.Empty,
+						UsuarioId = dto.UsuarioId,
+						FechaAgregado = DateTime.Now,
+						Observaciones = $"Cambio de artículo (ejecución) - {cambio.TipoCambio}",
+						TraspasoId = null,
+						ConteoId = null,
+						InventarioId = null,
+						CambioArticuloId = cambio.IdCambioArticulo,
+						Procesada = false,
+						EsHeredada = false
+					};
+					_context.TempPaletLineas.Add(tempPaletLineaEntrada);
+
+					_logger.LogInformation("✅ Creadas TempPaletLineas (ejecución) para cambio de artículo: PaletId={PaletId}, CambioArticuloId={CambioArticuloId}, Salida={Salida}, Entrada={Entrada}",
+						cambio.PaletId, cambio.IdCambioArticulo, -cambio.Cantidad, cambio.Cantidad);
+				}
+
+				// Marcar el cambio como completado
+				cambio.Estado = "COMPLETADO";
+				await _context.SaveChangesAsync();
+				await transaction.CommitAsync();
+
+				_logger.LogInformation(
+					"Cambio de artículo ejecutado: Origen={CodigoOrigen}, Destino={CodigoDestino}, Cantidad={Cantidad}, UsuarioEjecucion={UsuarioId}",
+					cambio.CodigoArticuloOrigen,
+					cambioCodigo ? cambio.CodigoArticuloDestino : "Mismo código",
+					cambio.Cantidad,
+					dto.UsuarioId);
+
+				return Ok(new
+				{
+					cambio.IdCambioArticulo,
+					AjusteSalidaId = ajusteSalida.IdAjuste,
+					AjusteEntradaId = ajusteEntrada.IdAjuste,
+					Mensaje = "Cambio de artículo ejecutado correctamente. Los ajustes se sincronizarán con el ERP."
+				});
+			}
+			catch (Exception ex)
+			{
+				await transaction.RollbackAsync();
+				_logger.LogError(ex, "Error al ejecutar cambio de artículo planificado: CambioArticuloId={IdCambioArticulo}", idCambioArticulo);
+				return StatusCode(500, "Error interno al ejecutar el cambio de artículo");
+			}
+		}
+
+		/// <summary>
 		/// POST /api/Inventario/cambiar-articulo
 		/// Crea ajustes de inventario para cambiar código de artículo o fecha de caducidad
 		/// Genera una salida del artículo/fecha origen y una entrada del artículo/fecha destino
