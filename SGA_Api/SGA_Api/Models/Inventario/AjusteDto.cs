@@ -83,6 +83,9 @@ namespace SGA_Api.Models.Inventario
         [JsonPropertyName("tipoCambioArticulo")]
         public string? TipoCambioArticulo { get; set; } // "CAMBIO_CODIGO" o "AMPLIACION"
 
+        [JsonPropertyName("comentario")]
+        public string? Comentario { get; set; } // Comentario del cambio de artículo (si aplica)
+
         // Propiedad calculada para el origen
         [JsonPropertyName("origen")]
         public string Origen

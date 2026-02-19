@@ -414,29 +414,39 @@ namespace SGA_Desktop.Services
         }
 
         /// <summary>
-        /// Guarda el conteo de un inventario
-        /// </summary>
-        public async Task<bool> GuardarConteoInventarioAsync(GuardarConteoInventarioDto conteo)
+/// Guarda el conteo de inventario y devuelve las líneas actualizadas
+/// </summary>
+public async Task<List<LineaTemporalInventarioDto>?> GuardarConteoInventarioAsync(GuardarConteoInventarioDto conteo)
+{
+    try
+    {
+        var response = await _httpClient.PostAsJsonAsync("Inventario/guardar-conteo", conteo);
+       
+        if (!response.IsSuccessStatusCode)
         {
-            try
-            {
-                var response = await _httpClient.PostAsJsonAsync("Inventario/guardar-conteo", conteo);
-                
-                if (!response.IsSuccessStatusCode)
-                {
-                    // Capturar el mensaje específico del error del backend
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    var errorMessage = !string.IsNullOrEmpty(errorContent) ? errorContent : response.ReasonPhrase;
-                    throw new Exception($"Error al guardar conteo: {errorMessage}");
-                }
-                
-                return true;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error al guardar conteo: {ex.Message}", ex);
-            }
+            // Capturar el mensaje específico del error del backend
+            var errorContent = await response.Content.ReadAsStringAsync();
+            var errorMessage = !string.IsNullOrEmpty(errorContent) ? errorContent : response.ReasonPhrase;
+            throw new Exception($"Error al guardar conteo: {errorMessage}");
         }
+       
+        // 🔷 OPTIMIZACIÓN: Leer respuesta con líneas actualizadas
+        var json = await response.Content.ReadAsStringAsync();
+        var resultado = JsonConvert.DeserializeObject<dynamic>(json);
+       
+        if (resultado?.lineasActualizadas != null)
+        {
+            var lineasActualizadas = resultado.lineasActualizadas.ToObject<List<LineaTemporalInventarioDto>>();
+            return lineasActualizadas ?? new List<LineaTemporalInventarioDto>();
+        }
+       
+        return new List<LineaTemporalInventarioDto>();
+    }
+    catch (Exception ex)
+    {
+        throw new Exception($"Error al guardar conteo: {ex.Message}", ex);
+    }
+}
 
         /// <summary>
         /// Obtiene las líneas temporales de un inventario

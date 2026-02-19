@@ -26,7 +26,7 @@ namespace SGA_Api.Models.OrdenTraspaso
         public DateTime? FechaCaducidad { get; set; }
         
         [Required]
-        [Column(TypeName = "decimal(18,4)")]
+        [Column(TypeName = "decimal(18,6)")]
         public decimal CantidadPlan { get; set; }
 
         // Origen
@@ -60,7 +60,7 @@ namespace SGA_Api.Models.OrdenTraspaso
         public string Estado { get; set; } = "PENDIENTE"; // 'PENDIENTE','EN_PROGRESO','COMPLETADA'
         
         [Required]
-        [Column(TypeName = "decimal(18,4)")]
+        [Column(TypeName = "decimal(18,6)")]
         public decimal CantidadMovida { get; set; } = 0;
         
         [Required]

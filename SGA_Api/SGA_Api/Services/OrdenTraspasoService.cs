@@ -21,6 +21,12 @@ namespace SGA_Api.Services
     {
 		private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> _lineaLocks = new();
 		private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> _ordenLocks = new();
+
+		/// <summary>Almacenes que no se tienen en consideración para crear líneas hijas.</summary>
+		private static readonly HashSet<string> AlmacenesExcluidosLineasHijas = new(StringComparer.OrdinalIgnoreCase)
+		{
+			"004", "005", "211", "241", "240", "140", "340", "440", "V000"
+		};
         private readonly AuroraSgaDbContext _context;
         private readonly SageDbContext _sageContext;
         private readonly ILogger<OrdenTraspasoService> _logger;
@@ -681,10 +687,12 @@ namespace SGA_Api.Services
 
         public async Task<IEnumerable<OrdenTraspasoDto>> GetOrdenesPorOperarioAsync(int idOperario, short codigoEmpresa)
         {
+            var hoy = DateTime.Today;
             var ordenes = await _context.OrdenTraspasoCabecera
                 .Include(o => o.Lineas)
                 .Where(o => o.CodigoEmpresa == codigoEmpresa && 
                            o.Estado != "CANCELADA" && // Excluir órdenes canceladas
+                           (o.Estado != "COMPLETADA" || (o.FechaFinalizacion.HasValue && o.FechaFinalizacion.Value.Date == hoy)) && // Completadas: solo las de hoy
                            o.Lineas.Any(l => l.IdOperarioAsignado == idOperario))
                 .OrderByDescending(o => o.Prioridad)
                 .ThenBy(o => o.FechaPlan)
@@ -803,14 +811,9 @@ namespace SGA_Api.Services
 				.ToList();
 		}
 
-		// Excluir almacenes 004 y 005 (camiones de transporte entre almacenes)
+		// Excluir almacenes que no se consideran para líneas hijas (004, 005, 211, 241, 240, 140, 340, 440, V000)
 		stockArticulo = stockArticulo
-			.Where(s =>
-			{
-				var alm = NormalizeAlmacen(s.CodigoAlmacen);
-				return !string.Equals(alm, "004", StringComparison.OrdinalIgnoreCase)
-					&& !string.Equals(alm, "005", StringComparison.OrdinalIgnoreCase);
-			})
+			.Where(s => !AlmacenesExcluidosLineasHijas.Contains(NormalizeAlmacen(s.CodigoAlmacen)))
 			.ToList();
 
 		var ubicacionesPulmon = await ObtenerUbicacionesPulmonAsync(
@@ -1905,14 +1908,9 @@ namespace SGA_Api.Services
 					.ToList();
 			}
 
-			// Excluir almacenes 004 y 005 (camiones de transporte entre almacenes)
+			// Excluir almacenes que no se consideran para líneas hijas (004, 005, 211, 241, 240, 140, 340, 440, V000)
 			stockDisponible = stockDisponible
-				.Where(s =>
-				{
-					var alm = NormalizeAlmacen(s.CodigoAlmacen);
-					return !string.Equals(alm, "004", StringComparison.OrdinalIgnoreCase)
-						&& !string.Equals(alm, "005", StringComparison.OrdinalIgnoreCase);
-				})
+				.Where(s => !AlmacenesExcluidosLineasHijas.Contains(NormalizeAlmacen(s.CodigoAlmacen)))
 				.ToList();
 
 			var ubicacionesPulmon = await ObtenerUbicacionesPulmonAsync(
@@ -2132,16 +2130,16 @@ namespace SGA_Api.Services
             // Calcular cantidad restante: SOLO CantidadMovida de hijas COMPLETADAS
             // Importante:
             // - Evitar crear líneas hijas con cantidades residuales que, al persistir (p.ej. 4 decimales), quedan en 0.0000.
-            // - Evitar asignar más que el stock disponible (p.ej. 17.99999 → 18.0000). Por eso TRUNCAMOS a 4 decimales,
+            // - Evitar asignar más que el stock disponible (p.ej. 17.99999 → 18.0000). Por eso TRUNCAMOS a 6 decimales,
             //   no redondeamos.
-            static decimal Truncar4(decimal valor)
+            static decimal Truncar6(decimal valor)
             {
-                const decimal factor = 10000m;
+                const decimal factor = 1000000m;
                 return Math.Truncate(valor * factor) / factor;
             }
             var consumoTotal = lineasCompletadas.Sum(l => l.CantidadMovida);
             var cantidadRestante = lineaPadre.CantidadPlan - consumoTotal;
-            var cantidadRestanteTruncada = Truncar4(cantidadRestante);
+            var cantidadRestanteTruncada = Truncar6(cantidadRestante);
             _logger.LogError($"💰 Consumo total (solo COMPLETADAS): {consumoTotal}, Cantidad restante: {cantidadRestante} (Plan padre: {lineaPadre.CantidadPlan})");
 
             if (cantidadRestanteTruncada <= 0)
@@ -2162,9 +2160,9 @@ namespace SGA_Api.Services
             // Si la línea padre tiene partida, filtrar también por partida
             if (!string.IsNullOrWhiteSpace(lineaPadre.Partida))
             {
-                var partidaNormalizada = lineaPadre.Partida.Trim().ToUpperInvariant();
+                var partidaNormalizada = lineaPadre.Partida.Trim().ToUpper();
                 queryLineas = queryLineas.Where(l => l.Partida != null && 
-                                                     l.Partida.Trim().ToUpperInvariant() == partidaNormalizada);
+                                                     l.Partida.Trim().ToUpper() == partidaNormalizada);
             }
 
             var lineasConTraspaso = await queryLineas
@@ -2184,9 +2182,9 @@ namespace SGA_Api.Services
                 // Si la línea padre tiene partida, filtrar también por partida en traspasos
                 if (!string.IsNullOrWhiteSpace(lineaPadre.Partida))
                 {
-                    var partidaNormalizada = lineaPadre.Partida.Trim().ToUpperInvariant();
+                    var partidaNormalizada = lineaPadre.Partida.Trim().ToUpper();
                     queryTraspasos = queryTraspasos.Where(t => t.Partida != null && 
-                                                               t.Partida.Trim().ToUpperInvariant() == partidaNormalizada);
+                                                               t.Partida.Trim().ToUpper() == partidaNormalizada);
                 }
 
                 var traspasos = await queryTraspasos
@@ -2249,7 +2247,7 @@ namespace SGA_Api.Services
 
 				// Tomar el mínimo entre lo que queda por mover y lo que hay disponible (ajustado)
 				var cantidadAsignada = Math.Min(cantidadRestante, disponibleAjustado);
-				var cantidadAsignadaTruncada = Truncar4(cantidadAsignada);
+				var cantidadAsignadaTruncada = Truncar6(cantidadAsignada);
 				if (cantidadAsignadaTruncada <= 0) continue;
 
 				_logger.LogError($"✅ Creando línea hija: Padre={lineaPadre.IdLineaOrdenTraspaso}, Art={lineaPadre.CodigoArticulo}, Stock seleccionado: Alm={stock.CodigoAlmacen}, Ubi={stock.Ubicacion}, Part={stock.Partida}, Tipo={stock.TipoStock}, Palet={stock.CodigoPalet ?? "N/A"}, Cant={cantidadAsignada}");
@@ -2370,14 +2368,9 @@ namespace SGA_Api.Services
                     .ToList();
             }
 
-            // Excluir almacenes 004 y 005 (camiones de transporte entre almacenes)
+            // Excluir almacenes que no se consideran para líneas hijas (004, 005, 241, 240, 140, 340, 440, V000)
             stockDisponible = stockDisponible
-                .Where(s =>
-                {
-                    var alm = NormalizeAlmacen(s.CodigoAlmacen);
-                    return !string.Equals(alm, "004", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(alm, "005", StringComparison.OrdinalIgnoreCase);
-                })
+                .Where(s => !AlmacenesExcluidosLineasHijas.Contains(NormalizeAlmacen(s.CodigoAlmacen)))
                 .ToList();
 
             var ubicacionesPulmon = await ObtenerUbicacionesPulmonAsync(
@@ -2580,16 +2573,16 @@ namespace SGA_Api.Services
             // Calcular cantidad restante
             // Importante:
             // - Evitar crear líneas hijas con cantidades residuales que, al persistir (p.ej. 4 decimales), quedan en 0.0000.
-            // - Evitar asignar más que el stock disponible (p.ej. 17.99999 → 18.0000). Por eso TRUNCAMOS a 4 decimales,
+            // - Evitar asignar más que el stock disponible (p.ej. 17.99999 → 18.0000). Por eso TRUNCAMOS a 6 decimales,
             //   no redondeamos.
-            static decimal Truncar4(decimal valor)
+            static decimal Truncar6(decimal valor)
             {
-                const decimal factor = 10000m;
+                const decimal factor = 1000000m;
                 return Math.Truncate(valor * factor) / factor;
             }
             var consumoTotal = lineasCompletadas.Sum(l => l.CantidadMovida);
             var cantidadRestante = lineaPadre.CantidadPlan - consumoTotal;
-            var cantidadRestanteTruncada = Truncar4(cantidadRestante);
+            var cantidadRestanteTruncada = Truncar6(cantidadRestante);
 
             if (cantidadRestanteTruncada <= 0)
             {
@@ -2609,9 +2602,9 @@ namespace SGA_Api.Services
             // Si la línea padre tiene partida, filtrar también por partida
             if (!string.IsNullOrWhiteSpace(lineaPadre.Partida))
             {
-                var partidaNormalizada = lineaPadre.Partida.Trim().ToUpperInvariant();
+                var partidaNormalizada = lineaPadre.Partida.Trim().ToUpper();
                 queryLineas = queryLineas.Where(l => l.Partida != null && 
-                                                     l.Partida.Trim().ToUpperInvariant() == partidaNormalizada);
+                                                     l.Partida.Trim().ToUpper() == partidaNormalizada);
             }
 
             var lineasConTraspaso = await queryLineas
@@ -2631,9 +2624,9 @@ namespace SGA_Api.Services
                 // Si la línea padre tiene partida, filtrar también por partida en traspasos
                 if (!string.IsNullOrWhiteSpace(lineaPadre.Partida))
                 {
-                    var partidaNormalizada = lineaPadre.Partida.Trim().ToUpperInvariant();
+                    var partidaNormalizada = lineaPadre.Partida.Trim().ToUpper();
                     queryTraspasos = queryTraspasos.Where(t => t.Partida != null && 
-                                                               t.Partida.Trim().ToUpperInvariant() == partidaNormalizada);
+                                                               t.Partida.Trim().ToUpper() == partidaNormalizada);
                 }
 
                 var traspasos = await queryTraspasos
@@ -2693,7 +2686,7 @@ namespace SGA_Api.Services
 
                 // Tomar el mínimo entre lo que queda por mover y lo que hay disponible (ajustado)
                 var cantidadAsignada = Math.Min(cantidadRestante, disponibleAjustado);
-                var cantidadAsignadaTruncada = Truncar4(cantidadAsignada);
+                var cantidadAsignadaTruncada = Truncar6(cantidadAsignada);
                 if (cantidadAsignadaTruncada <= 0) continue;
 
                 _logger.LogInformation("✅ Creando línea hija nueva: Padre={PadreId}, Art={Art}, Stock seleccionado: Alm={Almacen}, Ubi={Ubicacion}, Part={Partida}, Tipo={Tipo}, Palet={Palet}, Cant={Cantidad}", 
@@ -2974,9 +2967,9 @@ namespace SGA_Api.Services
 
 			// Normalizar claves para evitar falsos "sin stock" por espacios/mayúsculas o null/""
 			static string Norm(string? s) => (s ?? string.Empty).Trim().ToUpper();
-			static decimal Truncar4(decimal valor)
+			static decimal Truncar6(decimal valor)
 			{
-				const decimal factor = 10000m;
+				const decimal factor = 1000000m;
 				return Math.Truncate(valor * factor) / factor;
 			}
 
@@ -2985,14 +2978,16 @@ namespace SGA_Api.Services
 			var ubiLinea = Norm(lineaHijaActiva.UbicacionOrigen);
 			var parLinea = Norm(lineaHijaActiva.Partida);
 
+			// vStockDisponible puede ser lenta; aumentar timeout para evitar SqlException
+			_context.Database.SetCommandTimeout(90);
+
 			// Nota: NO filtramos por Disponible en SQL para poder comparar con la misma regla de 4 decimales
 			var stockDisponible = await _context.StockDisponible
 				.FirstOrDefaultAsync(s =>
 					s.CodigoEmpresa == orden.CodigoEmpresa &&
 					s.CodigoArticulo == artLinea &&
 					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) == almLinea &&
-					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) != "004" && // Excluir almacenes 004 y 005 (camiones)
-					((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) != "005" &&
+					!AlmacenesExcluidosLineasHijas.Contains((s.CodigoAlmacen ?? string.Empty).Trim().ToUpper()) &&
 					((s.Ubicacion ?? string.Empty).Trim().ToUpper()) == ubiLinea &&
 					((s.Partida ?? string.Empty).Trim().ToUpper()) == parLinea);
 
@@ -3031,7 +3026,7 @@ namespace SGA_Api.Services
 				"AsegurarLineaHijaActivaAsync: Stock bruto={Bruto}, MovidoPorOrden={Movido}, Stock ajustado={Ajustado} para {Art} {Alm}-{Ubi} Part={Part}",
 				disponibleBruto, movidoPorOrdenAEstaUbicacion, disponibleAjustado, artLinea, almLinea, ubiLinea, parLinea);
 
-			var hayStockSuficiente = stockDisponible != null && Truncar4(disponibleAjustado) >= lineaHijaActiva.CantidadPlan;
+			var hayStockSuficiente = stockDisponible != null && Truncar6(disponibleAjustado) >= lineaHijaActiva.CantidadPlan;
 
 			if (!hayStockSuficiente || estaBloqueado)
 			{

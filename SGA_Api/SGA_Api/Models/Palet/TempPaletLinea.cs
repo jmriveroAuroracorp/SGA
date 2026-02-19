@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.Palet
 {
@@ -9,9 +9,7 @@ namespace SGA_Api.Models.Palet
 		public short CodigoEmpresa { get; set; }
 		public string CodigoArticulo { get; set; } = null!;
 		public string? DescripcionArticulo { get; set; }
-		/// <summary>
-		/// 🔷 ACTUALIZADO: Precisión de 6 decimales para preservar valores exactos
-		/// </summary>
+
 		[Column(TypeName = "decimal(18,6)")]
 		public decimal Cantidad { get; set; }
 		public string? UnidadMedida { get; set; }
@@ -26,8 +24,13 @@ namespace SGA_Api.Models.Palet
 		public Guid? TraspasoId { get; set; }
 		public Guid? ConteoId { get; set; }
 		public Guid? InventarioId { get; set; }
+
 		public Guid? CambioArticuloId { get; set; }
 		public bool EsHeredada { get; set; } = false;
+		/// <summary>
+		/// Número de cajas en la línea (packing list, etc.). Se copia a PaletLinea al procesar.
+		/// </summary>
+		public int? Cajas { get; set; }
 
 		//navegacion
 		public Palet? Palet { get; set; }

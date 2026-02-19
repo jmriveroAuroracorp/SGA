@@ -1,4 +1,4 @@
-﻿namespace SGA_Api.Middleware
+namespace SGA_Api.Middleware
 {
     using Microsoft.AspNetCore.Http;
     using Microsoft.EntityFrameworkCore;
@@ -24,7 +24,8 @@
                 path.Contains("/login") ||
                 path.Contains("/dispositivo/registrar") ||
                 path.Contains("/dispositivo/activo") ||
-                path.StartsWith("/api/version");
+                path.StartsWith("/api/version") ||
+                path.StartsWith("/api/packinglist");  // escritorio / pruebas sin token
 
             if (!rutaExenta)
             {

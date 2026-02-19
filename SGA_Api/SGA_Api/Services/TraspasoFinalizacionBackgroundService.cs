@@ -1,4 +1,4 @@
-﻿using SGA_Api.Data;
+using SGA_Api.Data;
 using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Palet;
 using SGA_Api.Models.Notificaciones;
@@ -109,7 +109,7 @@ namespace SGA_Api.Services
                                 }
                                 else if (aj.IdCambioArticulo.HasValue && aj.IdCambioArticulo.Value != Guid.Empty)
                                 {
-                                    // Para cambio de artículo, buscar la TempPaletLinea que coincida con el signo del ajuste
+                                    // Para cambio de artículo (flujo antiguo) o OrdenConversion (flujo nuevo), buscar TempPaletLinea por CambioArticuloId
                                     var tempLinea = await dbContext.TempPaletLineas
                                         .Where(tpl => tpl.PaletId == paletId && 
                                                      tpl.CambioArticuloId == aj.IdCambioArticulo.Value &&
@@ -146,7 +146,8 @@ namespace SGA_Api.Services
                                     UsuarioId = aj.UsuarioId,
                                     FechaAgregado = DateTime.Now,
                                     Observaciones = "AjusteInventario",
-                                    TraspasoId = null
+                                    TraspasoId = null,
+                                    Cajas = null
                                 });
                             }
                         }
@@ -537,7 +538,7 @@ namespace SGA_Api.Services
 						
 						if (temp.CambioArticuloId != null && temp.CambioArticuloId != Guid.Empty)
 						{
-							// Línea de cambio de artículo - no procesar aquí, esperar a que el ajuste esté COMPLETADO
+							// Línea de cambio de artículo u OrdenConversion - no procesar aquí, esperar a que el ajuste esté COMPLETADO
 							continue;
 						}
 
@@ -737,6 +738,8 @@ namespace SGA_Api.Services
 								existente.UsuarioId = temp.UsuarioId;
 								existente.Observaciones = temp.Observaciones?.Trim();
 								existente.TraspasoId = traspaso.Id;
+								if (temp.Cajas.HasValue)
+									existente.Cajas = temp.Cajas;
 								
 								// Propagar/Completar DescripcionArticulo
 								if (!string.IsNullOrWhiteSpace(temp.DescripcionArticulo))
@@ -807,7 +810,8 @@ namespace SGA_Api.Services
 									UsuarioId = temp.UsuarioId,
 									FechaAgregado = temp.FechaAgregado,
 									Observaciones = temp.Observaciones?.Trim(),
-									TraspasoId = traspaso.Id
+									TraspasoId = traspaso.Id,
+									Cajas = temp.Cajas
 								};
 								
 								// 🔷 DEBUG: Log después de crear el objeto
@@ -1524,19 +1528,18 @@ namespace SGA_Api.Services
 					.Select(t => new { t.Id, t.CodigoEstado, t.TipoTraspaso, t.UsuarioInicioId, t.CodigoPalet, t.CodigoArticulo })
 					.ToListAsync();*/
 
-                var hace5Minutos = DateTime.Now.AddMinutes(-5);
+                var hace1Hora = DateTime.Now.AddHours(-1);
 
                 var traspasosActivos = await dbContext.Traspasos
                     .Where(t => t.CodigoEstado != "CANCELADO" &&
                                t.UsuarioInicioId > 0 &&
                                (t.TipoTraspaso == "ARTICULO" || t.TipoTraspaso == "PALET") &&
-                               // Incluir traspasos en estados transitorios (siempre pueden cambiar)
-                               ((t.CodigoEstado == "PENDIENTE" || t.CodigoEstado == "PENDIENTE_ERP") ||
-                                // O traspasos COMPLETADO/ERROR_ERP muy recientes (últimos 5 minutos) para detectar transiciones
-                                ((t.CodigoEstado == "COMPLETADO" || t.CodigoEstado == "ERROR_ERP") &&
-                                 t.FechaFinalizacion.HasValue && t.FechaFinalizacion.Value >= hace5Minutos)))
+                               // Solo traspasos de la última hora (por FechaInicio o FechaFinalizacion)
+                               (t.FechaInicio >= hace1Hora ||
+                                (t.FechaFinalizacion.HasValue && t.FechaFinalizacion.Value >= hace1Hora)))
+                    .OrderByDescending(t => t.FechaInicio) // Priorizar traspasos más recientes
                     .Select(t => new { t.Id, t.CodigoEstado, t.TipoTraspaso, t.UsuarioInicioId, t.CodigoPalet, t.CodigoArticulo })
-                    .Take(2000) // Límite máximo para evitar sobrecarga
+                    .Take(5000) // Límite máximo para evitar sobrecarga
                     .ToListAsync();
 
                 // Solo log cuando hay muchos traspasos activos (para evitar spam)

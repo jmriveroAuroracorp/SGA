@@ -100,6 +100,7 @@ builder.Services.AddSwaggerGen(c =>
     c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 });
 builder.Services.AddScoped<IPesajeService, PesajeLogic>();
+builder.Services.AddScoped<IPackingListService, PackingListService>();
 builder.Services.AddScoped<IConteosService>(provider => 
     new ConteosService(
         provider.GetRequiredService<AuroraSgaDbContext>(),

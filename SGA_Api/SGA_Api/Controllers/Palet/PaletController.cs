@@ -728,7 +728,8 @@ public class PaletController : ControllerBase
 				FechaAgregado = DateTime.Now,
 				Procesada = false,
 				EsHeredada = false,
-				TraspasoId = null // Sin TraspasoId - se asignará después
+				TraspasoId = null, // Sin TraspasoId - se asignará después
+				Cajas = dto.Cajas
 			};
 			
 			_auroraSgaContext.TempPaletLineas.Add(lineaNegativa);
@@ -755,7 +756,8 @@ public class PaletController : ControllerBase
 			FechaAgregado = DateTime.Now,
 			Procesada = false,
 			EsHeredada = false,
-			TraspasoId = null
+			TraspasoId = null,
+			Cajas = dto.Cajas
 		};
 
 		_logger.LogInformation("🔍 DEBUG Cantidad asignada a TempPaletLinea: {Cantidad} (formato completo: {CantidadFormato})", 
@@ -822,7 +824,8 @@ public class PaletController : ControllerBase
 				UsuarioId = l.UsuarioId,
 				FechaAgregado = l.FechaAgregado,
 				Observaciones = l.Observaciones,
-				TraspasoId = l.TraspasoId  // 🔷 NUEVO: Incluir TraspasoId
+				TraspasoId = l.TraspasoId,
+				Cajas = l.Cajas
 			})
 			.ToListAsync();
 
@@ -845,7 +848,8 @@ public class PaletController : ControllerBase
 				UsuarioId = l.UsuarioId,
 				FechaAgregado = l.FechaAgregado,
 				Observaciones = l.Observaciones,
-				TraspasoId = l.TraspasoId  // 🔷 NUEVO: Incluir TraspasoId
+				TraspasoId = l.TraspasoId,
+				Cajas = l.Cajas
 			})
 			.ToListAsync();
 
@@ -884,7 +888,8 @@ public class PaletController : ControllerBase
 					Ubicacion = ultimaLinea.Ubicacion,
 					UsuarioId = ultimaLinea.UsuarioId,
 					FechaAgregado = ultimaLinea.FechaAgregado,
-					Observaciones = ultimaLinea.Observaciones
+					Observaciones = ultimaLinea.Observaciones,
+					Cajas = first.Cajas
 				};
 		})
 		.ToList();

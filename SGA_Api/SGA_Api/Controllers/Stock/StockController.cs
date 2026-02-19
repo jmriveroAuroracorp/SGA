@@ -162,8 +162,14 @@ namespace SGA_Api.Controllers.Stock
 			if (!string.IsNullOrWhiteSpace(codigoAlmacen))
 				q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
 
-			if (!string.IsNullOrWhiteSpace(codigoUbicacion))
+			// Manejar ubicación: solo filtrar si se envía con un valor específico
+			// Si NO se envía el parámetro o está vacío → buscar en todo el almacén (sin filtro)
+			if (Request.Query.ContainsKey("codigoUbicacion") && !string.IsNullOrWhiteSpace(codigoUbicacion))
+			{
+				// Se envió el parámetro CON valor → Ubicación específica
 				q = q.Where(a => a.Ubicacion == codigoUbicacion);
+			}
+			// Si no se envió el parámetro o está vacío, no aplicamos filtro de ubicación (todo el almacén)
 
 			var datos = await q.ToListAsync();
 			var resultado = await ProjectToDtoConBloqueosAsync(datos, codigoEmpresa);
@@ -829,25 +835,14 @@ namespace SGA_Api.Controllers.Stock
     if (!string.IsNullOrWhiteSpace(codigoAlmacen))
         q = q.Where(a => a.CodigoAlmacen == codigoAlmacen);
 
-    // 🔷 LÓGICA FINAL: Diferenciar entre todo el almacén, sin ubicación y ubicación específica
-    var queryString = Request.QueryString.ToString();
-    var tieneParametroUbicacion = queryString.Contains("codigoUbicacion=");
-
-    if (!tieneParametroUbicacion)
+    // Manejar ubicación: solo filtrar si se envía con un valor específico
+    // Si NO se envía el parámetro o está vacío → buscar en todo el almacén (sin filtro)
+    if (Request.Query.ContainsKey("codigoUbicacion") && !string.IsNullOrWhiteSpace(codigoUbicacion))
     {
-        // No se envió el parámetro → Sin filtro de ubicación (todas las ubicaciones)
-        // No aplicamos ningún filtro adicional
-    }
-    else if (codigoUbicacion == null || codigoUbicacion == "")
-    {
-        // Se envió el parámetro pero es null o vacío → Solo artículos sin ubicar
-        q = q.Where(a => string.IsNullOrEmpty(a.Ubicacion));
-    }
-    else
-    {
-        // Se envió el parámetro con valor → Ubicación específica
+        // Se envió el parámetro CON valor → Ubicación específica
         q = q.Where(a => a.Ubicacion == codigoUbicacion);
     }
+    // Si no se envió el parámetro o está vacío, no aplicamos filtro de ubicación (todo el almacén)
 
     // 🔷 aquí filtramos solo los registros con disponible > 0
     q = q.Where(a => a.Disponible > 0);
@@ -1078,13 +1073,7 @@ namespace SGA_Api.Controllers.Stock
 		if (!string.IsNullOrWhiteSpace(descripcion)) detalleConsulta += $", Descripcion={descripcion}";
 		if (!string.IsNullOrWhiteSpace(partida)) detalleConsulta += $", Partida={partida}";
 		if (!string.IsNullOrWhiteSpace(codigoAlmacen)) detalleConsulta += $", Almacen={codigoAlmacen}";
-		if (tieneParametroUbicacion)
-		{
-			if (string.IsNullOrWhiteSpace(codigoUbicacion))
-				detalleConsulta += ", Ubicacion=(sin ubicar)";
-			else
-				detalleConsulta += $", Ubicacion={codigoUbicacion}";
-		}
+		if (!string.IsNullOrWhiteSpace(codigoUbicacion)) detalleConsulta += $", Ubicacion={codigoUbicacion}";
 		detalleConsulta += $", Resultados={resultado.Count}";
 		
 		RegistrarEventoConsultaStockAsync(

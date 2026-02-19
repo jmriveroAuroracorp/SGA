@@ -63,6 +63,10 @@ namespace SGA_Api.Data
 		public DbSet<OrdenTraspasoCabecera> OrdenTraspasoCabecera { get; set; }
 		public DbSet<OrdenTraspasoLinea> OrdenTraspasoLinea { get; set; }
 
+		// Entidades de Órdenes de Conversión
+		public DbSet<OrdenConversionCabecera> OrdenConversionCabecera { get; set; }
+		public DbSet<OrdenConversionLineas> OrdenConversionLineas { get; set; }
+
 		// Entidades de Notificaciones
 		public DbSet<Notificacion> Notificaciones { get; set; }
 		public DbSet<NotificacionDestinatario> NotificacionesDestinatarios { get; set; }
@@ -476,6 +480,25 @@ namespace SGA_Api.Data
                 ent.Property(c => c.Comentario).HasColumnName("Comentario").HasMaxLength(500).IsRequired(false);
                 ent.Property(c => c.Estado).HasColumnName("Estado").HasMaxLength(20);
                 ent.Property(c => c.OperarioAsignadoId).HasColumnName("OperarioAsignadoId").IsRequired(false);
+            });
+
+            // Órdenes de Conversión
+            modelBuilder.Entity<OrdenConversionCabecera>(ent =>
+            {
+                ent.ToTable("OrdenConversionCabecera");
+                ent.HasKey(c => c.IdOrdenConversion);
+                ent.HasMany(c => c.Lineas)
+                    .WithOne(l => l.OrdenConversion)
+                    .HasForeignKey(l => l.IdOrdenConversion)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<OrdenConversionLineas>(ent =>
+            {
+                ent.ToTable("OrdenConversionLineas");
+                ent.HasKey(l => l.IdLinea);
+                ent.Property(l => l.Cantidad).HasColumnType("decimal(18,6)");
+                ent.Property(l => l.CantidadFinal).HasColumnType("decimal(18,6)");
             });
 
             modelBuilder.Entity<InventarioAlmacenes>(ent =>

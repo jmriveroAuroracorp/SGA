@@ -1279,14 +1279,16 @@ namespace SGA_Api.Controllers.Inventario
                     .ToListAsync();
 
                 var cambioArticuloDict = new Dictionary<Guid, string>();
+                var cambioArticuloComentarioDict = new Dictionary<Guid, string?>();
                 if (cambioArticuloIds.Any())
                 {
                     var cambios = await _context.CambioArticulo
                         .Where(c => cambioArticuloIds.Contains(c.IdCambioArticulo))
-                        .Select(c => new { c.IdCambioArticulo, c.TipoCambio })
+                        .Select(c => new { c.IdCambioArticulo, c.TipoCambio, c.Comentario })
                         .ToListAsync();
 
                     cambioArticuloDict = cambios.ToDictionary(c => c.IdCambioArticulo, c => c.TipoCambio);
+                    cambioArticuloComentarioDict = cambios.ToDictionary(c => c.IdCambioArticulo, c => c.Comentario);
                 }
 
                 // Obtener ajustes
@@ -1399,6 +1401,13 @@ namespace SGA_Api.Controllers.Inventario
                         cambioArticuloDict.TryGetValue(ajuste.IdCambioArticulo.Value, out var tipoCambio))
                     {
                         ajuste.TipoCambioArticulo = tipoCambio;
+                    }
+
+                    // Comentario del cambio de artículo
+                    if (ajuste.IdCambioArticulo.HasValue && ajuste.IdCambioArticulo.Value != Guid.Empty &&
+                        cambioArticuloComentarioDict.TryGetValue(ajuste.IdCambioArticulo.Value, out var comentario))
+                    {
+                        ajuste.Comentario = comentario;
                     }
                 }
 
@@ -2640,15 +2649,21 @@ namespace SGA_Api.Controllers.Inventario
                 {
                     // 5.1. Obtener líneas de palet (definitivas y temporales no procesadas) que coincidan con la posición lógica
                     // 🔷 CORREGIDO: Quitamos el filtro de FechaCaducidad para detectar palets con fechas diferentes
+                    // 🔷 NUEVO: Excluir palets vaciados del inventario
                     var lineasPaletDef = await _context.PaletLineas
-                        .Where(pl => pl.CodigoEmpresa == inventario.CodigoEmpresa
-                                     && pl.CodigoAlmacen == k.CodigoAlmacen
-                                     && pl.Ubicacion == k.Ubicacion
-                                     && pl.CodigoArticulo == k.CodigoArticulo
-                                     && (pl.Lote == k.Partida || (pl.Lote == null && k.Partida == null))
-                                     // 🔷 QUITADO: Filtro de FechaCaducidad para detectar palets con fechas diferentes
-                                     && pl.Cantidad > 0)
-                        .Select(pl => new { pl.PaletId, pl.Cantidad, pl.Lote, pl.FechaCaducidad })
+                        .Join(_context.Palets,
+                              pl => pl.PaletId,
+                              p => p.Id,
+                              (pl, p) => new { pl, p })
+                        .Where(x => x.pl.CodigoEmpresa == inventario.CodigoEmpresa
+                                     && x.pl.CodigoAlmacen == k.CodigoAlmacen
+                                     && x.pl.Ubicacion == k.Ubicacion
+                                     && x.pl.CodigoArticulo == k.CodigoArticulo
+                                     && (x.pl.Lote == k.Partida || (x.pl.Lote == null && k.Partida == null))
+                                     && x.pl.Cantidad > 0
+                                     && x.p.Estado != "Vaciado"
+                                     && !x.p.IsVaciado)
+                        .Select(x => new { x.pl.PaletId, x.pl.Cantidad, x.pl.Lote, x.pl.FechaCaducidad })
                         .ToListAsync();
 
                     // Importante: Para el inventario usamos SOLO líneas definitivas del palet,
@@ -2857,16 +2872,23 @@ namespace SGA_Api.Controllers.Inventario
             try
             {
                 // Obtener todas las líneas de palets (definitivas y temporales) que coincidan con las líneas de inventario
+                // 🔷 NUEVO: Excluir palets vaciados
                 var lineasPalets = await _context.PaletLineas
-                    .Where(pl => pl.CodigoEmpresa == codigoEmpresa)
-                    .Select(pl => new
+                    .Join(_context.Palets,
+                          pl => pl.PaletId,
+                          p => p.Id,
+                          (pl, p) => new { pl, p })
+                    .Where(x => x.pl.CodigoEmpresa == codigoEmpresa
+                                 && x.p.Estado != "Vaciado"
+                                 && !x.p.IsVaciado)
+                    .Select(x => new
                     {
-                        pl.PaletId,
-                        pl.CodigoArticulo,
-                        pl.Ubicacion,
-                        pl.Lote,
-                        pl.Cantidad,
-                        pl.CodigoAlmacen
+                        x.pl.PaletId,
+                        x.pl.CodigoArticulo,
+                        x.pl.Ubicacion,
+                        x.pl.Lote,
+                        x.pl.Cantidad,
+                        x.pl.CodigoAlmacen
                     })
                     .ToListAsync();
 
@@ -3427,13 +3449,21 @@ namespace SGA_Api.Controllers.Inventario
             try
             {
                 // Obtener todas las líneas de palets (definitivas y temporales) que coincidan
+                // 🔷 NUEVO: Excluir palets vaciados
                 var lineasPalets = await _context.PaletLineas
-                    .Where(pl => pl.CodigoEmpresa == codigoEmpresa &&
-                                 pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
-                                 pl.Ubicacion == lineaTemp.CodigoUbicacion &&
-                                 pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
-                                 (pl.Lote == lineaTemp.Partida || (pl.Lote == null && lineaTemp.Partida == null)) &&
-                                 (pl.FechaCaducidad == lineaTemp.FechaCaducidad || (pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)))
+                    .Join(_context.Palets,
+                          pl => pl.PaletId,
+                          p => p.Id,
+                          (pl, p) => new { pl, p })
+                    .Where(x => x.pl.CodigoEmpresa == codigoEmpresa &&
+                                 x.pl.CodigoAlmacen == lineaTemp.CodigoAlmacen &&
+                                 x.pl.Ubicacion == lineaTemp.CodigoUbicacion &&
+                                 x.pl.CodigoArticulo == lineaTemp.CodigoArticulo &&
+                                 (x.pl.Lote == lineaTemp.Partida || (x.pl.Lote == null && lineaTemp.Partida == null)) &&
+                                 (x.pl.FechaCaducidad == lineaTemp.FechaCaducidad || (x.pl.FechaCaducidad == null && lineaTemp.FechaCaducidad == null)) &&
+                                 x.p.Estado != "Vaciado" &&
+                                 !x.p.IsVaciado)
+                    .Select(x => x.pl)
                     .ToListAsync();
 
                 var lineasTempPalets = await _context.TempPaletLineas
@@ -4510,6 +4540,10 @@ namespace SGA_Api.Controllers.Inventario
 					return BadRequest("Sin ejercicio válido");
 				}
 
+				// Normalizar ubicación: string.Empty y null se tratan igual (sin ubicar)
+				// En la BD "sin ubicar" es string.Empty (""), no null
+				var ubicacionNormalizada = string.IsNullOrEmpty(dto.Ubicacion) ? string.Empty : dto.Ubicacion;
+
 				// Validar stock disponible del artículo origen
 				decimal stockDisponible = 0;
 
@@ -4521,7 +4555,7 @@ namespace SGA_Api.Controllers.Inventario
 									 pl.CodigoEmpresa == dto.CodigoEmpresa &&
 									 pl.CodigoArticulo == dto.CodigoArticuloOrigen &&
 									 pl.CodigoAlmacen == dto.CodigoAlmacen &&
-									 (pl.Ubicacion == dto.Ubicacion || (pl.Ubicacion == null && dto.Ubicacion == null)) &&
+									 pl.Ubicacion == ubicacionNormalizada &&
 									 (pl.Lote == dto.Partida || (pl.Lote == null && dto.Partida == null)) &&
 									 (pl.FechaCaducidad == dto.FechaCaducidadOrigen || (pl.FechaCaducidad == null && dto.FechaCaducidadOrigen == null)))
 						.SumAsync(pl => (decimal?)pl.Cantidad) ?? 0m;
@@ -4534,7 +4568,7 @@ namespace SGA_Api.Controllers.Inventario
 									s.Ejercicio == ejercicio &&
 									s.CodigoAlmacen == dto.CodigoAlmacen &&
 									s.CodigoArticulo == dto.CodigoArticuloOrigen &&
-									s.Ubicacion == dto.Ubicacion &&
+									s.Ubicacion == ubicacionNormalizada &&
 									(s.Partida == dto.Partida || (s.Partida == null && dto.Partida == null)) &&
 									(s.FechaCaducidad == dto.FechaCaducidadOrigen || (s.FechaCaducidad == null && dto.FechaCaducidadOrigen == null)))
 						.SumAsync(s => (decimal?)s.UnidadSaldo) ?? 0m;
@@ -4542,7 +4576,7 @@ namespace SGA_Api.Controllers.Inventario
 					var paletizado = await _context.PaletLineas
 						.Where(pl => pl.CodigoEmpresa == dto.CodigoEmpresa &&
 									 pl.CodigoAlmacen == dto.CodigoAlmacen &&
-									 pl.Ubicacion == dto.Ubicacion &&
+									 pl.Ubicacion == ubicacionNormalizada &&
 									 pl.CodigoArticulo == dto.CodigoArticuloOrigen &&
 									 (pl.Lote == dto.Partida || (pl.Lote == null && dto.Partida == null)) &&
 									 (pl.FechaCaducidad == dto.FechaCaducidadOrigen || (pl.FechaCaducidad == null && dto.FechaCaducidadOrigen == null)))
@@ -4583,7 +4617,7 @@ namespace SGA_Api.Controllers.Inventario
 					Fecha = DateTime.Now,
 					CodigoArticuloOrigen = dto.CodigoArticuloOrigen,
 					CodigoAlmacen = dto.CodigoAlmacen,
-					Ubicacion = dto.Ubicacion,
+					Ubicacion = ubicacionNormalizada,
 					PartidaOrigen = dto.Partida,
 					FechaCaducidadOrigen = fechaCaducidadOrigen,
 					Cantidad = dto.Cantidad,
@@ -4611,7 +4645,7 @@ namespace SGA_Api.Controllers.Inventario
 						IdAjuste = Guid.NewGuid(),
 						IdInventario = null, // Ajuste sin inventario asociado
 						CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
-						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						CodigoUbicacion = ubicacionNormalizada,
 						Diferencia = dto.Cantidad, // Positivo = entrada
 						UsuarioId = dto.UsuarioId,
 						Fecha = DateTime.Now,
@@ -4641,7 +4675,7 @@ namespace SGA_Api.Controllers.Inventario
 						IdAjuste = Guid.NewGuid(),
 						IdInventario = null, // Ajuste sin inventario asociado
 						CodigoArticulo = dto.CodigoArticuloOrigen,
-						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						CodigoUbicacion = ubicacionNormalizada,
 						Diferencia = -dto.Cantidad, // Negativo = salida
 						UsuarioId = dto.UsuarioId,
 						Fecha = DateTime.Now, // Fecha posterior por el delay
@@ -4668,7 +4702,7 @@ namespace SGA_Api.Controllers.Inventario
 						IdAjuste = Guid.NewGuid(),
 						IdInventario = null, // Ajuste sin inventario asociado
 						CodigoArticulo = dto.CodigoArticuloOrigen,
-						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						CodigoUbicacion = ubicacionNormalizada,
 						Diferencia = -dto.Cantidad, // Negativo = salida
 						UsuarioId = dto.UsuarioId,
 						Fecha = DateTime.Now,
@@ -4689,7 +4723,7 @@ namespace SGA_Api.Controllers.Inventario
 						IdAjuste = Guid.NewGuid(),
 						IdInventario = null, // Ajuste sin inventario asociado
 						CodigoArticulo = cambioCodigo ? dto.CodigoArticuloDestino! : dto.CodigoArticuloOrigen,
-						CodigoUbicacion = dto.Ubicacion ?? string.Empty,
+						CodigoUbicacion = ubicacionNormalizada,
 						Diferencia = dto.Cantidad, // Positivo = entrada
 						UsuarioId = dto.UsuarioId,
 						Fecha = DateTime.Now,
@@ -4758,7 +4792,7 @@ namespace SGA_Api.Controllers.Inventario
 						Lote = dto.Partida,
 						FechaCaducidad = fechaCaducidadOrigen,
 						CodigoAlmacen = dto.CodigoAlmacen,
-						Ubicacion = dto.Ubicacion ?? string.Empty,
+						Ubicacion = ubicacionNormalizada,
 						UsuarioId = dto.UsuarioId,
 						FechaAgregado = DateTime.Now,
 						Observaciones = $"Cambio de artículo - {cambioArticulo.TipoCambio}",
@@ -4784,7 +4818,7 @@ namespace SGA_Api.Controllers.Inventario
 						Lote = (cambioCodigo || cambioFecha) && !string.IsNullOrWhiteSpace(dto.PartidaDestino) ? dto.PartidaDestino : dto.Partida,
 						FechaCaducidad = cambioFecha ? fechaCaducidadDestino : fechaCaducidadOrigen,
 						CodigoAlmacen = dto.CodigoAlmacen,
-						Ubicacion = dto.Ubicacion ?? string.Empty,
+						Ubicacion = ubicacionNormalizada,
 						UsuarioId = dto.UsuarioId,
 						FechaAgregado = DateTime.Now,
 						Observaciones = $"Cambio de artículo - {cambioArticulo.TipoCambio}",

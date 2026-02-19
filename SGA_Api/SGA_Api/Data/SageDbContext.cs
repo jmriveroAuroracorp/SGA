@@ -1,9 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SGA_Api.Models.Almacen;
 using SGA_Api.Models.Login;
 using SGA_Api.Models.Pesaje;
 using SGA_Api.Models.Stock;
 using SGA_Api.Models.Notificaciones;
+using SGA_Api.Models.PackingList;
 
 namespace SGA_Api.Data
 {
@@ -33,6 +34,12 @@ namespace SGA_Api.Data
 		// Entidades de Notificaciones MRH
 		public DbSet<MrhTipoNotificacion> MrhTipoNotificaciones { get; set; }
 		public DbSet<MrhNotificacion> MrhNotificaciones { get; set; }
+
+		// Packing list (OrdenesFabricacion, CabeceraPedidoCliente, OrdenesTrabajo, Incidencias)
+		public DbSet<OrdenFabricacion> OrdenesFabricacion { get; set; }
+		public DbSet<CabeceraPedidoCliente> CabeceraPedidoCliente { get; set; }
+		public DbSet<OrdenTrabajo> OrdenesTrabajo { get; set; }
+		public DbSet<Incidencia> Incidencias { get; set; }
 
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -226,6 +233,47 @@ namespace SGA_Api.Data
 				entity.Property(e => e.TelegramID).HasColumnName("TelegramID").HasMaxLength(100);
 				entity.Property(e => e.FechaConfirmadaEnvioT).HasColumnName("FechaConfirmadaEnvioT");
 				entity.Property(e => e.CanalTeams).HasColumnName("CanalTeams").HasMaxLength(500);
+			});
+
+			// Packing list: OrdenesFabricacion (tipos según BD: smallint, varchar 10/20, int, datetime)
+			modelBuilder.Entity<OrdenFabricacion>(entity =>
+			{
+				entity.ToTable("OrdenesFabricacion");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.EjercicioFabricacion, e.SerieFabricacion, e.NumeroFabricacion });
+				entity.Property(e => e.EjercicioFabricacion).HasColumnType("smallint");
+				entity.Property(e => e.EjercicioPedido).HasColumnType("smallint");
+				entity.Property(e => e.CodigoArticulo).HasMaxLength(20);
+				entity.Property(e => e.SerieFabricacion).HasMaxLength(10);
+				entity.Property(e => e.SeriePedido).HasMaxLength(10);
+				entity.Property(e => e.FechaRegistro).HasColumnType("datetime");
+			});
+
+			// Packing list: CabeceraPedidoCliente (join por EjercicioPedido/SeriePedido/NumeroPedido)
+			modelBuilder.Entity<CabeceraPedidoCliente>(entity =>
+			{
+				entity.ToTable("CabeceraPedidoCliente");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.EjercicioPedido, e.SeriePedido, e.NumeroPedido });
+				entity.Property(e => e.SeriePedido).HasMaxLength(10);
+				entity.Property(e => e.CodigoCliente).HasMaxLength(15);
+				entity.Property(e => e.RazonSocial).HasMaxLength(40);
+			});
+
+			// Packing list: OrdenesTrabajo (CodigoAlmacen varchar 4; clave OF + EjercicioTrabajo/NumeroTrabajo)
+			modelBuilder.Entity<OrdenTrabajo>(entity =>
+			{
+				entity.ToTable("OrdenesTrabajo");
+				entity.HasKey(e => new { e.CodigoEmpresa, e.EjercicioFabricacion, e.SerieFabricacion, e.NumeroFabricacion, e.EjercicioTrabajo, e.NumeroTrabajo });
+				entity.Property(e => e.SerieFabricacion).HasMaxLength(10);
+				entity.Property(e => e.CodigoArticulo).HasMaxLength(20);
+				entity.Property(e => e.CodigoAlmacen).HasMaxLength(4);
+			});
+
+			// Packing list: Incidencias (Partidas por CodigoEmpresa, EjercicioTrabajo, NumeroTrabajo)
+			modelBuilder.Entity<Incidencia>(entity =>
+			{
+				entity.ToTable("Incidencias");
+				entity.HasNoKey();
+				entity.Property(e => e.Partida).HasMaxLength(50);
 			});
 
 		}

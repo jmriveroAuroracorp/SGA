@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SGA_Api.Models.Palet
 {
@@ -23,6 +23,10 @@ namespace SGA_Api.Models.Palet
 		public DateTime FechaAgregado { get; set; }
 		public string? Observaciones { get; set; }
 		public Guid? TraspasoId { get; set; }
+		/// <summary>
+		/// Número de cajas en la línea (packing list, etc.).
+		/// </summary>
+		public int? Cajas { get; set; }
 
 		//navegacion
 		public Palet? Palet { get; set; } 

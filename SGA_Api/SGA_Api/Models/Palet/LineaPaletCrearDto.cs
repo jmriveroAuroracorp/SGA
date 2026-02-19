@@ -1,4 +1,4 @@
-﻿namespace SGA_Api.Models.Palet
+namespace SGA_Api.Models.Palet
 {
 	public class LineaPaletCrearDto
 	{
@@ -12,6 +12,10 @@
 		public string Ubicacion { get; set; } = null!;
 		public int UsuarioId { get; set; }
 		public string? Observaciones { get; set; }
+		/// <summary>
+		/// Número de cajas (opcional, para packing list).
+		/// </summary>
+		public int? Cajas { get; set; }
 		/// <summary>
 		/// Opcional: Palet origen explícito desde el que se desea extraer material.
 		/// Si se informa, el backend usará este palet como origen para crear la línea negativa.

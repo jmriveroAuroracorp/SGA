@@ -1,4 +1,4 @@
-﻿namespace SGA_Api.Models.Palet
+namespace SGA_Api.Models.Palet
 {
 	public class LineaPaletDto
 	{
@@ -16,6 +16,7 @@
 		public int UsuarioId { get; set; }
 		public DateTime FechaAgregado { get; set; }
 		public string? Observaciones { get; set; }
+		public int? Cajas { get; set; }
 
 		// 🔷 NUEVO: Indicadores de bloqueo por calidad
 		public bool IsBloqueadoCalidad { get; set; }
